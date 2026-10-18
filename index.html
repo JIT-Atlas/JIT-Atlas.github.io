@@ -147,7 +147,8 @@ main{min-width:0;padding:0 56px 0}
 .finder{margin-top:22px}
 .lbl{display:block;font:600 14px var(--sans);margin-bottom:8px}
 .field{display:flex;align-items:center;gap:12px;border:1px solid var(--ink-2);background:var(--field);height:50px;padding:0 14px}
-.field:focus-within{outline:2px solid var(--red);outline-offset:2px}
+.field{transition:border-color .2s ease,box-shadow .2s ease}
+.field:focus-within{border-color:var(--ink);box-shadow:0 0 0 3px color-mix(in srgb,var(--ink) 14%,transparent)}
 .field svg{width:20px;height:20px;flex:none;color:var(--ink-2)}
 .field input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:400 17px var(--serif);color:var(--ink)}
 .field input::placeholder{color:var(--ph)}
