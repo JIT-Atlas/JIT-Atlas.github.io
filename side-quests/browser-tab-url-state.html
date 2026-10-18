@@ -1,0 +1,2212 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inside the Browser Tab · The URL Is Your State</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+
+:root{
+  --node:#f6b365;   --node-soft:rgba(246,179,101,.14);   /* Server Action  */
+  --express:#81c995;--express-soft:rgba(129,201,149,.14);/* Server Component */
+  --next:#8ab4f8;   --next-soft:rgba(138,180,248,.14);   /* Route Handler  */
+  --tq:#c79bf2;     --tq-soft:rgba(199,155,242,.14);     /* TanStack Query */
+  --warn:#fdd663;   --warn-soft:rgba(253,214,99,.14);    /* DAL            */
+  --danger:#f28b82; --danger-soft:rgba(242,139,130,.14);
+  --r:4px; --maxw:1440px;
+  --mono:'Roboto Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --serif:'Roboto',-apple-system,BlinkMacSystemFont,sans-serif;
+}
+html[data-theme="dark"]{
+  --bg:#05080f; --bg2:#0a1322; --panel:#0f1a31; --panel2:#18243f;
+  --ink:#f3f6fb; --ink2:#c4cddd; --ink3:#8a97ac;
+  --line:#243248; --line2:#36486a;
+  --node:#ffc06b; --express:#67e6a0; --next:#5aa6ff; --tq:#c79bf2; --warn:#ffd95e;
+  --node-soft:rgba(255,192,107,.16); --express-soft:rgba(103,230,160,.16); --next-soft:rgba(90,166,255,.18);
+  --tq-soft:rgba(199,155,242,.16); --warn-soft:rgba(255,217,94,.13);
+  --accent:#4d9bff; --accent-soft:rgba(77,155,255,.18); --glow:rgba(77,155,255,.40);
+  --danger:#ff6b9d; --danger-soft:rgba(255,107,157,.16);
+  --shadow:0 16px 40px -16px rgba(0,0,0,.85);
+  --text:var(--ink); --muted:var(--ink2); --faint:var(--ink3); --panelb:var(--panel2);
+}
+html[data-theme="light"]{
+  --bg:#f6f9ff; --bg2:#eef3fc; --panel:#ffffff; --panel2:#ffffff;
+  --ink:#0e1b33; --ink2:#3a4a66; --ink3:#6b7a93;
+  --line:#dbe5f5; --line2:#bccbe9;
+  --node:#bf7400; --express:#108a4d; --next:#1f6fe5; --tq:#7b35c0; --warn:#9c7c00;
+  --node-soft:rgba(191,116,0,.10); --express-soft:rgba(16,138,77,.10); --next-soft:rgba(31,111,229,.12);
+  --tq-soft:rgba(123,53,192,.10); --warn-soft:rgba(156,124,0,.10);
+  --accent:#1f6fe5; --accent-soft:rgba(31,111,229,.14); --glow:rgba(31,111,229,.40);
+  --danger:#d70022; --danger-soft:rgba(215,0,34,.08);
+  --shadow:0 14px 34px -16px rgba(31,111,229,.22);
+  --text:var(--ink); --muted:var(--ink2); --faint:var(--ink3); --panelb:var(--panel2);
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+/* ---- muted scrollbars: thin, theme-matched, quiet in narrow windows ---- */
+*{scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-corner{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:999px;border:3px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:var(--line2);border:3px solid transparent;background-clip:padding-box}
+html{scroll-behavior:smooth;scrollbar-gutter:stable;overflow-x:clip}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--serif);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;transition:background-color .25s,color .25s}
+body.fs-lock{overflow:hidden}
+::selection{background:var(--next-soft);color:var(--ink)}
+.mono{font-family:var(--mono)}
+code,pre{font-family:var(--mono)}
+
+/* --- no horizontal scroll --- */
+main{min-width:0}
+img,svg,table,canvas{max-width:100%}
+.dial,.stepcol,.kv,.wbody{min-width:0}
+.kv .v{word-break:break-word}
+.codeline,td code{overflow-wrap:anywhere}
+pre.wire{max-width:100%}
+.philo{min-height:80px}
+.caption{min-height:96px}
+
+header.top{position:sticky;top:0;z-index:60;background:var(--panel);border-bottom:1px solid var(--line)}
+.top-inner{max-width:var(--maxw);margin:0 auto;padding:8px 24px;display:flex;align-items:center;gap:16px;min-height:36px}
+.brand{font-family:var(--mono);font-weight:500;letter-spacing:.02em;font-size:12px;display:flex;align-items:center;gap:8px;color:var(--ink2)}
+.brand .dot{width:8px;height:8px;border-radius:50%;background:var(--next);box-shadow:0 0 0 3px var(--next-soft);animation:pulse 3s infinite}
+.brand .arr{color:var(--ink3)} .brand .eng{color:var(--express)} .brand .sa{color:var(--node)}
+@keyframes pulse{50%{box-shadow:0 0 0 6px transparent}}
+.top-spacer{flex:1}
+.theme-btn{font-family:var(--mono);font-size:11px;letter-spacing:.04em;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);padding:4px 10px;border-radius:2px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:border-color .15s,color .15s;min-width:78px;justify-content:center}
+.theme-btn:hover{color:var(--ink);border-color:var(--next)}
+.theme-btn svg{width:13px;height:13px}
+
+.shell{max-width:var(--maxw);margin:0 auto;padding:0 24px;display:grid;grid-template-columns:228px minmax(0,1fr);gap:48px;transition:grid-template-columns .25s ease,gap .25s ease}
+.shell[data-toc="collapsed"]{grid-template-columns:44px minmax(0,1fr);gap:32px}
+.shell[data-toc="hidden"]{grid-template-columns:0 minmax(0,1fr);gap:0}
+.shell[data-toc="hidden"] nav.toc{opacity:0;pointer-events:none;visibility:hidden}
+nav.toc{position:sticky;top:64px;align-self:start;height:calc(100vh - 80px);padding-top:14px;font-family:var(--mono);font-size:12.5px;overflow:hidden;display:flex;flex-direction:column;transition:opacity .2s ease}
+.toc-toggle{display:flex;align-items:center;gap:8px;background:transparent;border:1px solid var(--line);border-radius:2px;color:var(--ink3);font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:6px 8px;cursor:pointer;margin:0 0 14px;transition:color .15s,border-color .15s;flex-shrink:0}
+.toc-toggle:hover{color:var(--ink);border-color:var(--next)}
+.toc-toggle svg{width:12px;height:12px;flex-shrink:0;transition:transform .25s ease}
+.shell[data-toc="collapsed"] .toc-toggle{padding:6px;justify-content:center}
+.shell[data-toc="collapsed"] .toc-toggle svg{transform:rotate(180deg)}
+.shell[data-toc="collapsed"] .toc-toggle .lbl{display:none}
+.toc-list{overflow:auto;flex:1;margin-left:-2px}
+nav.toc a{display:flex;gap:10px;align-items:baseline;color:var(--ink3);text-decoration:none;padding:6px 0;border-left:2px solid transparent;padding-left:14px;transition:color .15s,border-color .15s;letter-spacing:.02em;white-space:nowrap}
+nav.toc a .num{color:var(--ink3);font-weight:700;font-size:11px;flex-shrink:0}
+nav.toc a:hover{color:var(--ink)}
+nav.toc a.active{color:var(--ink);border-left-color:var(--next)}
+nav.toc a.active .num{color:var(--next)}
+.shell[data-toc="collapsed"] nav.toc a{padding-left:10px;justify-content:center}
+.shell[data-toc="collapsed"] nav.toc a .lbl{opacity:0;width:0;overflow:hidden;display:inline-block}
+.shell[data-toc="collapsed"] nav.toc a .num{font-size:12px}
+main{padding:40px 0 140px;min-width:0}
+
+.kicker{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--express);display:flex;align-items:center;gap:10px;margin:0 0 12px}
+.kicker .ix{color:var(--next);font-weight:700}
+.kicker::after{content:"";flex:1;height:1px;background:var(--line)}
+h1.hero-h{font-weight:500;font-size:clamp(28px,4vw,44px);line-height:1.12;letter-spacing:-.01em;margin:0 0 14px}
+h1.hero-h .a{color:var(--node)} h1.hero-h .b{color:var(--express)} h1.hero-h .c{color:var(--next)} h1.hero-h .d{color:var(--tq)}
+h2{font-weight:500;font-size:clamp(20px,2.4vw,25px);letter-spacing:-.005em;margin:0 0 14px;line-height:1.25}
+h2 em{font-style:italic;color:var(--ink)}
+h2 em.nd{color:var(--node)} h2 em.nx{color:var(--next)} h2 em.ex{color:var(--express)} h2 em.tq{color:var(--tq)}
+h3{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2);margin:26px 0 10px}
+.lead{font-size:17px;color:var(--ink2);max-width:66ch;line-height:1.55}
+.prose{max-width:68ch;font-size:15px;line-height:1.65}
+.prose p{margin:0 0 14px} .prose strong{color:var(--ink);font-weight:500}
+.prose code,.lead code,td code{font-size:12.5px;color:var(--ink);background:var(--panel);border:1px solid var(--line);padding:1px 5px;border-radius:3px}
+section.block{padding:48px 0;border-bottom:1px solid var(--line);scroll-margin-top:72px}
+section.block:first-of-type{padding-top:24px}
+
+.term{cursor:help;border-bottom:1px dotted currentColor;color:inherit;transition:background .15s,border-color .15s}
+.term:hover{background:var(--next-soft)}
+#tip{position:fixed;z-index:900;max-width:368px;background:var(--panel2);border:1px solid var(--line2);border-radius:4px;padding:12px 14px;box-shadow:var(--shadow);font-size:13px;line-height:1.55;color:var(--ink2);pointer-events:none;opacity:0;transform:translateY(4px);transition:opacity .14s,transform .14s;font-family:var(--serif)}
+#tip.show{opacity:1;transform:translateY(0)}
+#tip .t-name{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--express);text-transform:uppercase;display:block;margin-bottom:5px}
+#tip .t-kind{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--next);text-transform:uppercase;float:right}
+#tip .t-more{display:block;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);color:var(--ink3);font-size:12px;line-height:1.5}
+#tip .t-more b{color:var(--ink2);font-weight:600}
+#tip em{color:var(--ink);font-style:italic}
+#tip::after{content:"";position:absolute;left:var(--ax,20px);bottom:-7px;width:12px;height:12px;background:var(--panel2);border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);transform:rotate(45deg)}
+#tip.flip::after{bottom:auto;top:-7px;transform:rotate(225deg)}
+
+.callout{position:relative;border:1px solid var(--line);border-radius:12px;background:linear-gradient(135deg,var(--cl-tint),transparent 58%),var(--panel);padding:18px 20px 18px 26px;margin:24px 0;font-size:15px;line-height:1.65;box-shadow:0 12px 32px -20px var(--cl-glow);--cl-accent:var(--next);--cl-tint:var(--next-soft);--cl-glow:var(--glow)}
+.callout::before{content:"";position:absolute;left:8px;top:15px;bottom:15px;width:4px;border-radius:999px;background:var(--cl-accent)}
+.callout.eng{--cl-accent:var(--express);--cl-tint:var(--express-soft);--cl-glow:rgba(103,230,160,.4)}
+.callout.node{--cl-accent:var(--node);--cl-tint:var(--node-soft);--cl-glow:rgba(255,192,107,.4)}
+.callout.tq{--cl-accent:var(--tq);--cl-tint:var(--tq-soft);--cl-glow:rgba(199,155,242,.4)}
+.callout.bad{--cl-accent:var(--danger);--cl-tint:var(--danger-soft);--cl-glow:rgba(255,107,157,.4)}
+.callout.dal{--cl-accent:var(--warn);--cl-tint:var(--warn-soft);--cl-glow:rgba(255,217,94,.35)}
+.callout .lbl{display:inline-flex;align-items:center;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--bg);background:var(--cl-accent);padding:3px 11px;border-radius:999px;margin-bottom:11px;font-weight:700;box-shadow:0 3px 12px -3px var(--cl-accent)}
+.callout code{font-size:12.5px;background:var(--bg2);border:1px solid var(--line);padding:1px 5px;border-radius:4px}
+
+pre.wire{font-family:var(--mono);font-size:12.5px;line-height:1.62;background:var(--bg2);border:1px solid var(--line);border-radius:4px;padding:14px 16px;overflow:auto;color:var(--ink2);margin:0}
+pre.wire .k{color:var(--next)} pre.wire .v{color:var(--express)} pre.wire .c{color:var(--ink3)} pre.wire .n{color:var(--node)}
+
+table.spec{width:100%;border-collapse:collapse;font-size:13.5px;margin:8px 0 4px;font-family:var(--mono)}
+table.spec th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line2)}
+table.spec td{padding:11px 14px;border-bottom:1px solid var(--line);color:var(--ink2);vertical-align:top;line-height:1.55}
+table.spec td:first-child{color:var(--ink);font-weight:500}
+table.spec tr:hover td{background:var(--panel)}
+.pill{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;padding:2px 8px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.pill.sa{color:var(--node);background:var(--node-soft)} .pill.sc{color:var(--express);background:var(--express-soft)}
+.pill.rh{color:var(--next);background:var(--next-soft)} .pill.tq{color:var(--tq);background:var(--tq-soft)}
+.pill.dal{color:var(--warn);background:var(--warn-soft)} .pill.none{color:var(--ink3)}
+.pill.no{color:var(--danger);background:var(--danger-soft)} .pill.yes{color:var(--express);background:var(--express-soft)}
+
+.figure{margin:24px 0;border:1px solid var(--line);border-radius:4px;background:var(--panel);overflow:hidden}
+.figure.fs{position:fixed;inset:12px;z-index:400;margin:0;max-width:none;display:flex;flex-direction:column}
+.fig-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.fig-bar .title{font-family:var(--mono);font-size:12px;letter-spacing:.05em;color:var(--ink2);text-transform:uppercase}
+.fig-bar .grow{flex:1}
+.fbtn{font-family:var(--mono);font-size:11px;letter-spacing:.02em;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);padding:4px 9px;border-radius:2px;cursor:pointer;transition:border-color .15s,color .15s;display:inline-flex;align-items:center;gap:6px}
+.fbtn:hover{color:var(--ink);border-color:var(--next)}
+.fbtn svg{width:13px;height:13px}
+.canvas{position:relative}
+.figure.fs .canvas{flex:1;min-height:0}
+svg.diagram{display:block;width:100%;height:auto;touch-action:auto}
+.figure.fs svg.diagram{height:100%;touch-action:none}
+.figure:not(.fs) .canvas[data-zoom]{cursor:zoom-in}
+.figure.fs .canvas{cursor:grab}
+.figure.fs .canvas:active{cursor:grabbing}
+.zoomctl{position:absolute;right:12px;bottom:12px;display:none;flex-direction:column;gap:6px;z-index:5}
+.figure.fs .zoomctl{display:flex}
+.zoomctl button{width:34px;height:34px;border-radius:8px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);font-family:var(--mono);font-size:15px;cursor:pointer;line-height:1;transition:.15s;display:grid;place-items:center}
+.zoomctl button:hover{color:var(--ink);border-color:var(--express)}
+.zlevel{position:absolute;left:12px;bottom:12px;display:none;font-family:var(--mono);font-size:11px;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:5;user-select:none}
+.figure.fs .zlevel{display:block}
+.zhint{position:absolute;left:12px;top:12px;display:none;font-family:var(--mono);font-size:10px;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:5;opacity:.85;pointer-events:none}
+.figure.fs .zhint{display:block}
+.inspect-hint{position:absolute;right:12px;top:12px;font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:4;pointer-events:none;opacity:0;transition:opacity .2s}
+.figure:not(.fs) .canvas:hover .inspect-hint{opacity:.9}
+.figure.fs .inspect-hint{display:none}
+
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;color:var(--ink2);margin:18px 0 0}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+/* ---- chip switchers & dials ---- */
+.switch{display:flex;gap:6px;flex-wrap:wrap;margin:18px 0 14px}
+.chip{font-family:var(--mono);font-size:11.5px;letter-spacing:.02em;border:1px solid var(--line2);background:var(--panel);color:var(--ink3);padding:6px 12px;border-radius:999px;cursor:pointer;transition:.15s}
+.chip:hover{color:var(--ink);border-color:var(--next)}
+.chip.on{color:var(--bg);background:var(--next);border-color:var(--next)}
+.triad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.triad.two{grid-template-columns:repeat(2,1fr)}
+.triad.four{grid-template-columns:repeat(2,1fr)}
+.dial{border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--panel)}
+.dial .dh{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:9px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.dial.sa .dh{color:var(--node)} .dial.sc .dh{color:var(--express)} .dial.rh .dh{color:var(--next)} .dial.tqd .dh{color:var(--tq)} .dial.bad .dh{color:var(--danger)} .dial.dald .dh{color:var(--warn)}
+.dial .dh i{width:8px;height:8px;border-radius:50%;background:currentColor;flex-shrink:0}
+.dial pre.wire{border:0;border-radius:0;background:var(--bg2);min-height:120px}
+.philo{font-family:var(--serif);font-size:14px;color:var(--ink2);background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--express);border-radius:0 4px 4px 0;padding:12px 16px;margin-top:14px}
+.philo b{color:var(--ink);font-weight:500}
+.switchrow{display:flex;align-items:center;justify-content:space-between;gap:12px 16px;flex-wrap:wrap;margin:18px 0 14px}
+.switchrow .switch{margin:0}
+.vmode{display:inline-flex;border:1px solid var(--line2);border-radius:999px;overflow:hidden;background:var(--panel)}
+.vmode .vm{font-family:var(--mono);font-size:11px;letter-spacing:.02em;color:var(--ink3);background:transparent;border:0;padding:6px 12px;cursor:pointer;white-space:nowrap;transition:.15s}
+.vmode .vm+.vm{border-left:1px solid var(--line)}
+.vmode .vm:hover{color:var(--ink)}
+.vmode .vm.on{background:var(--accent-soft);color:var(--ink)}
+.vmode.sm .vm{font-size:10.5px;padding:5px 10px}
+
+/* ---- stepper ---- */
+.player{display:flex;align-items:center;gap:10px;padding:14px 16px;border-top:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.pbtn{width:40px;height:40px;border-radius:50%;border:1px solid var(--line2);background:var(--panel);color:var(--ink);cursor:pointer;display:grid;place-items:center;transition:.18s}
+.pbtn:hover{border-color:var(--next);color:var(--next)}
+.pbtn.play{background:var(--next);border-color:var(--next);color:var(--bg);width:46px;height:46px}
+.pbtn.play:hover{filter:brightness(1.08);color:var(--bg)}
+.pbtn svg{width:18px;height:18px}
+.scrub{flex:1;min-width:160px;height:6px;border-radius:999px;background:var(--line);position:relative;cursor:pointer}
+.scrub .fill{position:absolute;left:0;top:0;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--next),var(--node));width:0%}
+.stepno{font-family:var(--mono);font-size:12px;color:var(--ink3);min-width:72px;text-align:right}
+.stepcols{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line)}
+.stepcol{background:var(--panel);padding:16px}
+.stepcol .sc-h{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px}
+.stepcol.two .sc-h{color:var(--next)} .stepcol.one .sc-h{color:var(--node)}
+.trip-tag{font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:999px;border:1px solid currentColor;min-width:86px;text-align:center;flex-shrink:0}
+.codeline{font-family:var(--mono);font-size:12px;padding:6px 10px;border-radius:3px;background:var(--bg2);border:1px solid var(--line);color:var(--ink3);margin-bottom:6px;white-space:pre-wrap;transition:.2s;opacity:.4}
+.codeline.on{opacity:1;color:var(--ink2)}
+.stepcol.two .codeline.on{border-color:var(--next)} .stepcol.one .codeline.on{border-color:var(--node)}
+.obj{margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--ink3);border-top:1px dashed var(--line);padding-top:10px;min-height:118px}
+.obj .row{margin:3px 0} .obj .row b{color:var(--ink2);font-weight:500}
+.obj .empty{color:var(--ink3);opacity:.6;font-style:italic}
+.obj .stamp{display:inline-block;margin-top:8px;font-size:10.5px;padding:2px 8px;border-radius:999px}
+.obj .stamp.sa{background:var(--node-soft);color:var(--node)} .obj .stamp.rh{background:var(--next-soft);color:var(--next)} .obj .stamp.ok{background:var(--express-soft);color:var(--express)} .obj .stamp.stale{background:var(--danger-soft);color:var(--danger)}
+.caption{padding:16px 20px;border-top:1px solid var(--line)}
+.caption .cn{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--next);margin-bottom:6px}
+.caption .cb{color:var(--ink2);font-size:15px;margin:0;max-width:80ch}
+
+/* ---- interactive svg nodes ---- */
+.node{cursor:pointer}
+.node .nbox{transition:filter .18s,stroke-width .18s}
+.node:hover .nbox{filter:brightness(1.14) drop-shadow(0 0 6px var(--line2));stroke-width:2.4}
+.node:active .nbox{filter:brightness(1.25)}
+.door.lit .nbox{filter:drop-shadow(0 0 12px var(--glow)) brightness(1.2);stroke-width:2.6}
+.figclue{font-family:var(--mono);font-size:11px;color:var(--ink3);padding:10px 16px;border-top:1px solid var(--line);background:var(--panel2);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.figclue b{color:var(--express)}
+
+/* ---- doorway send strip & wire log ---- */
+.sendstrip{border-top:1px solid var(--line);background:var(--panel2);padding:12px 16px 14px}
+.ss-head{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin-bottom:9px}
+.ss-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.sbtn{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);padding:6px 13px;border-radius:999px;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:7px}
+.sbtn i{width:8px;height:8px;border-radius:50%;background:currentColor}
+.sbtn.sc{color:var(--express)} .sbtn.rh{color:var(--next)} .sbtn.sa{color:var(--node)}
+.sbtn:hover{border-color:currentColor;background:var(--panel2)}
+.sbtn:disabled{opacity:.45;cursor:wait}
+.sbtn.ghost{color:var(--ink3)} .sbtn.ghost:hover{color:var(--ink)}
+.wirelog{margin-top:11px;font-family:var(--mono);font-size:12px;background:var(--bg2);border:1px solid var(--line);border-radius:5px;padding:10px 12px;min-height:92px;max-height:180px;overflow:auto;line-height:1.7}
+.wirelog .placeholder{color:var(--ink3);opacity:.6;font-style:italic}
+.logline{padding:1px 0;color:var(--ink2);animation:fadein .25s}
+.logline .c{color:var(--ink3)} .logline .ok{color:var(--express)} .logline .n{color:var(--node)} .logline .b{color:var(--next)} .logline .p{color:var(--tq)} .logline .err{color:var(--danger)} .logline .w{color:var(--warn)}
+@keyframes fadein{from{opacity:0;transform:translateX(-4px)}to{opacity:1}}
+
+/* ---- build splitter ---- */
+.bsplit{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:stretch;margin:16px 0}
+.bs-src{grid-column:1 / -1}
+.bs-mid{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;grid-column:1 / -1;padding:2px 0}
+.bs-btn{font-family:var(--mono);font-size:12px;letter-spacing:.04em;border:1px solid var(--line2);background:var(--panel);color:var(--ink);padding:9px 20px;border-radius:999px;cursor:pointer;transition:.2s;display:inline-flex;align-items:center;gap:8px}
+.bs-btn:hover{border-color:var(--next);color:var(--next);box-shadow:0 0 0 4px var(--next-soft)}
+.bs-btn:disabled{opacity:.5;cursor:default;box-shadow:none}
+.bs-out{display:grid;grid-template-columns:1fr 1fr;gap:14px;grid-column:1 / -1;opacity:0;transform:translateY(8px);transition:opacity .45s ease,transform .45s ease;pointer-events:none;max-height:0;overflow:hidden}
+.bsplit.built .bs-out{opacity:1;transform:none;pointer-events:auto;max-height:700px}
+.bs-note{font-family:var(--mono);font-size:10.5px;color:var(--ink3);letter-spacing:.04em}
+@media(max-width:760px){ .bs-out{grid-template-columns:1fr} }
+
+/* ---- attack console ---- */
+.wdemo{margin:16px 0 20px;border:1px solid var(--line);border-radius:5px;background:var(--bg2);overflow:hidden}
+.wbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--panel2)}
+.wbar .wt{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin-right:auto}
+.wbtn{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);padding:5px 11px;border-radius:999px;cursor:pointer;transition:.15s}
+.wbtn:hover{color:var(--ink);border-color:var(--next)}
+.wbtn.on{color:var(--bg);background:var(--next);border-color:var(--next)}
+.wbtn.ok.on{background:var(--express);border-color:var(--express)}
+.wbtn.danger.on{background:var(--danger);border-color:var(--danger)}
+.wbtn:disabled{opacity:.4;cursor:not-allowed}
+.wbody{padding:13px 15px;font-family:var(--mono);font-size:12.5px;color:var(--ink2);line-height:1.7}
+.wbody .wlabel{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin:0 0 6px}
+.wbody .wlabel:not(:first-child){margin-top:12px}
+.atklog{min-height:120px;max-height:240px;overflow:auto}
+.atkrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.atkrow .al{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3)}
+
+/* ---- tradeoff cards ---- */
+.tcards{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.tcard{border:1px solid var(--line);border-radius:5px;background:var(--panel);overflow:hidden}
+.tcard .th{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:10px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.tcard .th i{width:8px;height:8px;border-radius:50%;background:currentColor}
+.tcard.sc .th{color:var(--express)} .tcard.rh .th{color:var(--next)} .tcard.sa .th{color:var(--node)} .tcard.tqc .th{color:var(--tq)}
+.tcard .tb{padding:12px 14px;font-family:var(--mono);font-size:12px;line-height:1.85}
+.tline{display:flex;gap:9px;align-items:baseline}
+.tline .sig{flex-shrink:0;font-weight:700}
+.tline.plus .sig{color:var(--express)} .tline.minus .sig{color:var(--danger)}
+.tline span:last-child{color:var(--ink2)}
+.tcard .tb .tdiv{border-top:1px dashed var(--line);margin:9px 0}
+
+/* ---- smell detector / verdicts ---- */
+.exbody{padding:18px}
+.cf-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.cf-chip{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line2);background:var(--panel);color:var(--ink3);padding:6px 12px;border-radius:999px;cursor:pointer;transition:.15s}
+.cf-chip:hover{color:var(--ink);border-color:var(--next)}
+.cf-chip.on{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+.cf-out{border:1px solid var(--line);border-radius:9px;padding:14px 16px;background:var(--bg2)}
+.cf-verdict{display:flex;align-items:center;gap:9px;font-size:14px;color:var(--ink);margin-bottom:8px;flex-wrap:wrap}
+.cf-verdict b{font-weight:600}
+.cf-why{font-family:var(--serif);font-size:13.5px;color:var(--ink2);line-height:1.55;margin:0 0 12px;max-width:80ch}
+.cf-why code{font-family:var(--mono);font-size:11px;background:var(--panel);border:1px solid var(--line);padding:0 4px;border-radius:4px;color:var(--ink)}
+.smell-flag{font-family:var(--mono);font-size:10.5px;padding:2px 9px;border-radius:999px;background:var(--danger-soft);color:var(--danger)}
+.good-flag{font-family:var(--mono);font-size:10.5px;padding:2px 9px;border-radius:999px;background:var(--express-soft);color:var(--express)}
+
+/* ---- decision tree ---- */
+.dtree{padding:18px}
+.dt-q{border:1px solid var(--line2);border-radius:9px;background:var(--panel);padding:14px 16px;margin-bottom:10px;transition:.25s;position:relative}
+.dt-q.answered{opacity:.62;border-color:var(--line)}
+.dt-q.active{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.dt-qn{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:5px}
+.dt-qt{font-size:15px;color:var(--ink);margin:0 0 4px;line-height:1.5}
+.dt-hint{font-family:var(--mono);font-size:11px;color:var(--ink3);margin:0 0 10px}
+.dt-btns{display:flex;gap:8px;flex-wrap:wrap}
+.dt-yn{font-family:var(--mono);font-size:12px;border:1px solid var(--line2);background:var(--bg2);color:var(--ink2);padding:7px 22px;border-radius:999px;cursor:pointer;transition:.15s}
+.dt-yn:hover{border-color:var(--express);color:var(--express)}
+.dt-yn.no:hover{border-color:var(--danger);color:var(--danger)}
+.dt-yn.picked{background:var(--express);border-color:var(--express);color:var(--bg)}
+.dt-yn.no.picked{background:var(--danger-soft);border-color:var(--danger);color:var(--danger)}
+.dt-arrow{text-align:center;color:var(--ink3);font-family:var(--mono);font-size:11px;margin:2px 0 10px;opacity:.7}
+.dt-verdict{border-radius:10px;border:1px solid var(--v,var(--line2));background:linear-gradient(135deg,var(--vs,transparent),transparent 60%),var(--panel);padding:16px 18px;animation:fadein .3s}
+.dt-verdict .vh{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.dt-verdict .vh b{font-size:16px;color:var(--v)}
+.dt-verdict p{margin:0 0 12px;color:var(--ink2);font-size:14px;line-height:1.6;max-width:78ch}
+.dt-reset{font-family:var(--mono);font-size:11px;border:1px solid var(--line2);background:var(--panel);color:var(--ink3);padding:6px 14px;border-radius:999px;cursor:pointer;transition:.15s;margin-top:4px}
+.dt-reset:hover{color:var(--ink);border-color:var(--next)}
+
+/* ---- file tree ---- */
+pre.ftree{font-size:12.5px}
+pre.ftree .dir{color:var(--ink)} pre.ftree .an{color:var(--ink3);font-style:italic}
+pre.ftree .fsc{color:var(--express)} pre.ftree .fsa{color:var(--node)} pre.ftree .frh{color:var(--next)} pre.ftree .ftq{color:var(--tq)} pre.ftree .fdal{color:var(--warn)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:14px 0;font-family:var(--mono);font-size:12.5px}
+.kv .k{white-space:nowrap;font-weight:700}
+.kv .k.sc{color:var(--express)} .kv .k.rh{color:var(--next)} .kv .k.sa{color:var(--node)} .kv .k.tq{color:var(--tq)} .kv .k.dal{color:var(--warn)}
+.kv .v{color:var(--ink2)}
+
+/* wide reference table → scroll on small screens */
+.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table.spec.axis{min-width:820px}
+table.spec.axis th{white-space:nowrap}
+table.spec.axis td:first-child{white-space:nowrap}
+
+/* ---- modal ---- */
+.scrim{position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.6);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;pointer-events:none;transition:opacity .22s}
+.scrim.open{opacity:1;pointer-events:auto}
+.modal{position:relative;background:var(--panel2);border:1px solid var(--line2);border-radius:6px;max-width:780px;width:100%;max-height:88vh;overflow:auto;box-shadow:var(--shadow);transform:translateY(10px) scale(.99);transition:transform .22s}
+.scrim.open .modal{transform:none}
+.modal .mhead{padding:26px 32px 0}
+.modal .mtag{font-family:var(--mono);font-size:11px;letter-spacing:.13em;text-transform:uppercase;display:flex;gap:9px;align-items:center;color:var(--ink3)}
+.modal .mtag .nm{font-weight:700}
+.modal .mtag.sa .nm{color:var(--node)} .modal .mtag.sc .nm{color:var(--express)} .modal .mtag.rh .nm{color:var(--next)} .modal .mtag.tq .nm{color:var(--tq)} .modal .mtag.dal .nm{color:var(--warn)} .modal .mtag.neutral .nm{color:var(--ink)}
+.modal h4{font-size:24px;font-weight:600;margin:9px 0 0;letter-spacing:-.01em;max-width:42ch}
+.modal .mbody{padding:14px 32px 30px;color:var(--ink2);font-size:15px;line-height:1.6}
+.modal .mbody>p{margin:0 0 14px;max-width:74ch}
+.modal .mbody code{font-size:12.5px;color:var(--ink);background:var(--panel);border:1px solid var(--line);padding:1px 5px;border-radius:3px}
+.modal .mbody b{color:var(--ink);font-weight:600}
+.mclose{position:absolute;right:15px;top:15px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);cursor:pointer;font-size:16px;line-height:1;z-index:3}
+.mclose:hover{color:var(--ink);border-color:var(--danger)}
+.why{border-left:3px solid var(--express);background:var(--express-soft);padding:13px 17px;border-radius:0 4px 4px 0;font-size:14px;line-height:1.6;margin-top:4px;max-width:76ch}
+.why .wl{font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--express);display:block;margin-bottom:5px}
+.deep-h{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3);margin-bottom:12px}
+.deep{display:grid;gap:12px;grid-template-columns:1fr 1fr}
+.deep .dcol{border:1px solid var(--line);border-radius:4px;padding:13px 15px;background:var(--bg2)}
+.deep .dcol .dl{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;display:block;margin-bottom:6px;color:var(--ink3)}
+.deep .dcol p{font-size:13px;margin:0;line-height:1.55;color:var(--ink2)}
+.deep code{font-size:12px;color:var(--ink);background:var(--panel);padding:1px 4px;border-radius:2px;border:1px solid var(--line)}
+
+/* modal flow widget */
+.flowline{display:flex;gap:9px;align-items:baseline;padding:5px 9px;border:1px solid var(--line);border-radius:4px;margin-bottom:5px;background:var(--panel);opacity:.35;transition:.25s;font-size:12px;font-family:var(--mono)}
+.flowline.on{opacity:1;border-color:var(--line2)}
+.flowline.cur{border-color:var(--next);background:var(--next-soft)}
+.flowline .fn{color:var(--ink3);flex-shrink:0;font-size:10px;padding-top:2px}
+.wstep{font-family:var(--mono);font-size:11px;color:var(--ink3)}
+
+footer{max-width:var(--maxw);margin:0 auto;padding:40px 24px 80px;font-family:var(--mono);font-size:12px;color:var(--ink3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;border-top:1px solid var(--line)}
+
+/* ---- syntax tokens ---- */
+html[data-theme="dark"]{--tk-com:#5f6f8a;--tk-str:#86e0a4;--tk-kw:#c79bf2;--tk-num:#ffbd6b;--tk-type:#5fd6cf;--tk-fn:#f0cd74;--tk-prop:#79b8ff;--tk-var:#dfe7f3;--tk-punc:#93a1ba}
+html[data-theme="light"]{--tk-com:#8a93a6;--tk-str:#157a3c;--tk-kw:#7b35c0;--tk-num:#b5650a;--tk-type:#0c7a82;--tk-fn:#8a5e00;--tk-prop:#1f5fc0;--tk-var:#1a2740;--tk-punc:#5d6c86}
+.tk-com{color:var(--tk-com);font-style:italic}
+.tk-str{color:var(--tk-str)}
+.tk-kw{color:var(--tk-kw)}
+.tk-num{color:var(--tk-num)}
+.tk-type{color:var(--tk-type)}
+.tk-fn{color:var(--tk-fn)}
+.tk-prop{color:var(--tk-prop)}
+.tk-var{color:var(--tk-var)}
+.tk-punc{color:var(--tk-punc)}
+
+@media(max-width:1268px){
+  .shell{grid-template-columns:212px minmax(0,1fr)}
+  .shell[data-toc="collapsed"]{grid-template-columns:44px minmax(0,1fr)}
+  .shell[data-toc="hidden"]{grid-template-columns:0 minmax(0,1fr)}
+}
+@media(max-width:920px){
+  .shell{grid-template-columns:1fr;gap:0}
+  nav.toc{display:none}
+  body{font-size:17px}
+  main{padding:24px 0 100px}
+  .triad,.triad.two,.triad.four{grid-template-columns:1fr}
+  .stepcols{grid-template-columns:1fr}
+  .tcards{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+  html{scroll-behavior:auto}
+}
+
+/* ============================================================
+   EXTRA — widgets specific to this guide
+   ============================================================ */
+/* --- simulated browser chrome --- */
+.chrome{border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--panel)}
+.chrome-bar{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--panel2);border-bottom:1px solid var(--line)}
+.chrome-bar .cbtn{font-family:var(--mono);font-size:13px;width:32px;height:28px;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);border-radius:4px;cursor:pointer;transition:.15s;display:flex;align-items:center;justify-content:center}
+.chrome-bar .cbtn:hover:not(:disabled){color:var(--ink);border-color:var(--next)}
+.chrome-bar .cbtn:disabled{opacity:.3;cursor:not-allowed}
+.chrome-url{flex:1;display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line2);border-radius:999px;padding:5px 14px;min-width:0}
+.chrome-url .lock{color:var(--express);font-size:11px;flex-shrink:0}
+.chrome-url input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--ink);font-family:var(--mono);font-size:12.5px;padding:2px 0}
+.chrome-url:focus-within{border-color:var(--next);box-shadow:0 0 0 3px var(--next-soft)}
+.chrome-links{display:flex;gap:6px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+.chrome-links .clink{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);padding:5px 11px;border-radius:4px;cursor:pointer;transition:.15s}
+.chrome-links .clink:hover{color:var(--ink);border-color:var(--express)}
+.chrome-links .clink i{font-style:normal;color:var(--express)}
+.chrome-page{padding:16px;background:var(--bg2);min-height:118px}
+.cp-route{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+.cp-title{font-size:19px;font-weight:500;color:var(--ink);margin-bottom:10px}
+.cp-kv{display:flex;gap:6px;flex-wrap:wrap}
+.cp-kv .pill{cursor:default}
+.cp-note{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:10px}
+/* --- history stack strip --- */
+.stackstrip{padding:13px 14px;border-top:1px solid var(--line);background:var(--panel2)}
+.ss-title{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:9px;display:flex;gap:10px;align-items:center}
+.ss-title .cnt{color:var(--node)}
+.entries{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 8px;scroll-behavior:smooth}
+.entry{flex-shrink:0;font-family:var(--mono);font-size:11px;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);border-radius:5px;padding:7px 10px;position:relative;transition:opacity .3s,border-color .2s,transform .3s;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.entry .ix{color:var(--faint);margin-right:6px;font-size:10px}
+.entry.cur{border-color:var(--node);color:var(--ink);background:var(--node-soft);box-shadow:0 0 0 3px var(--node-soft)}
+.entry.cur::after{content:"▲ current";position:absolute;left:50%;transform:translateX(-50%);bottom:-2px;font-size:0}
+.entry.future{opacity:.38;border-style:dashed}
+.entry.dying{opacity:0;transform:translateY(-8px) scale(.92)}
+.entry.born{animation:entryIn .35s ease}
+@keyframes entryIn{from{opacity:0;transform:translateY(8px) scale(.94)}to{opacity:1;transform:none}}
+.ss-cursor{font-family:var(--mono);font-size:10.5px;color:var(--node);margin-top:2px}
+/* --- entry inspector --- */
+.einspect{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px}
+.einspect .kv{margin:0}
+/* --- params lab --- */
+.plab-io{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.plab-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.plab input[type=text]{font-family:var(--mono);font-size:12.5px;background:var(--bg2);border:1px solid var(--line2);border-radius:4px;color:var(--ink);padding:8px 11px;outline:0;min-width:0}
+.plab input[type=text]:focus{border-color:var(--tq);box-shadow:0 0 0 3px var(--tq-soft)}
+.plab .qsin{flex:1;min-width:220px}
+.plab .kin{width:110px}.plab .vin{width:130px}
+.opbtn{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);padding:7px 12px;border-radius:4px;cursor:pointer;transition:.15s;white-space:nowrap}
+.opbtn:hover{color:var(--ink);border-color:var(--tq)}
+.opbtn.mut{border-color:var(--tq)}
+.opbtn.mut:hover{background:var(--tq-soft)}
+.pairs{border:1px solid var(--line);border-radius:6px;background:var(--bg2);padding:12px 14px;font-family:var(--mono);font-size:12.5px;min-height:86px}
+.pairs .ph{color:var(--faint);font-style:italic}
+.pair{display:flex;gap:8px;align-items:center;padding:3px 0;animation:entryIn .3s ease}
+.pair .k{color:var(--tq)}.pair .eq{color:var(--faint)}.pair .v{color:var(--ink)}
+.pair .dup{margin-left:8px;font-size:9.5px;letter-spacing:.06em;color:var(--warn);background:var(--warn-soft);border-radius:999px;padding:1px 7px}
+.pair.hot{background:var(--tq-soft);border-radius:4px;margin:0 -6px;padding-left:6px;padding-right:6px}
+/* --- flag matrix --- */
+.flagrow{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
+.flagrow .cf-chip{border-radius:4px}
+/* --- cycle player --- */
+.cycle{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:0;border-top:1px solid var(--line)}
+.cycle-stages{padding:16px;display:flex;flex-direction:column;gap:7px;border-right:1px solid var(--line)}
+.stage{display:flex;align-items:center;gap:11px;font-family:var(--mono);font-size:12.5px;color:var(--ink3);border:1px solid var(--line);border-radius:5px;padding:9px 12px;transition:.2s;background:var(--panel)}
+.stage .sn{font-size:10px;color:var(--faint);width:18px;flex-shrink:0}
+.stage .arr{margin-left:auto;color:var(--faint);opacity:0}
+.stage.on{color:var(--ink);border-color:var(--next);background:var(--next-soft);box-shadow:0 0 0 3px var(--next-soft)}
+.stage.on .arr{opacity:1;color:var(--next)}
+.stage.done{color:var(--ink2);border-color:var(--line2)}
+.cycle-state{padding:16px;font-family:var(--mono);font-size:12px;background:var(--bg2)}
+.cs-block{margin-bottom:14px}
+.cs-h{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:6px}
+.cs-url{color:var(--express);word-break:break-all;transition:.2s}
+.cs-url.flash{color:var(--ink);background:var(--express-soft);border-radius:3px;padding:1px 4px}
+.cs-obj{color:var(--ink2);white-space:pre;line-height:1.7}
+.cs-obj .chg{color:var(--warn);font-weight:700}
+.cycle-cap{grid-column:1/-1;border-top:1px solid var(--line);padding:13px 16px;font-size:13.5px;color:var(--ink2);min-height:64px;background:var(--panel)}
+.cycle-cap b{color:var(--ink);font-weight:500}
+/* --- route matcher --- */
+.rt-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
+.rt-table th{text-align:left;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding:7px 10px;border-bottom:1px solid var(--line)}
+.rt-table td{padding:8px 10px;border-bottom:1px solid var(--line);color:var(--ink2);transition:.2s}
+.rt-table tr.checking td{background:var(--warn-soft)}
+.rt-table tr.no td{color:var(--faint)}
+.rt-table tr.no .verdict{color:var(--danger)}
+.rt-table tr.yes td{background:var(--express-soft);color:var(--ink)}
+.rt-table tr.yes .verdict{color:var(--express);font-weight:700}
+.rt-result{border:1px solid var(--line);border-radius:6px;background:var(--bg2);padding:13px 15px;margin-top:12px;font-family:var(--mono);font-size:12.5px;min-height:96px}
+.rt-result .ph{color:var(--faint);font-style:italic}
+.rt-result .lay{color:var(--warn)}
+.rt-result .prm{color:var(--tq)}
+/* --- misc --- */
+.two-dials{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media(max-width:860px){.two-dials{grid-template-columns:1fr}.cycle{grid-template-columns:1fr}.cycle-stages{border-right:0;border-bottom:1px solid var(--line)}}
+.urlparts{font-family:var(--mono);font-size:clamp(12px,1.9vw,15.5px);background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:16px;overflow-x:auto;white-space:nowrap}
+.urlparts .seg{padding:3px 2px;border-radius:3px;cursor:help;transition:.15s;border-bottom:2px solid transparent}
+.urlparts .seg:hover,.urlparts .seg.hot{background:var(--panel2)}
+.urlparts .sg-proto{color:var(--ink3);border-bottom-color:var(--ink3)}
+.urlparts .sg-host{color:var(--warn);border-bottom-color:var(--warn)}
+.urlparts .sg-path{color:var(--express);border-bottom-color:var(--express)}
+.urlparts .sg-query{color:var(--tq);border-bottom-color:var(--tq)}
+.urlparts .sg-hash{color:var(--next);border-bottom-color:var(--next)}
+.urlparts .bad{color:var(--danger)}
+.partgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-top:14px}
+.partcard{border:1px solid var(--line);border-radius:6px;padding:11px 13px;background:var(--panel);transition:.15s;cursor:default}
+.partcard.hot{border-color:var(--line2);box-shadow:0 0 0 3px var(--accent-soft)}
+.partcard .pc-k{font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;margin-bottom:5px;display:flex;align-items:center;gap:7px}
+.partcard .pc-k i{width:8px;height:8px;border-radius:50%;background:currentColor}
+.partcard .pc-v{font-family:var(--mono);font-size:12.5px;color:var(--ink);word-break:break-all;margin-bottom:5px;min-height:17px}
+.partcard .pc-d{font-size:12px;color:var(--ink3);line-height:1.45}
+.pc-proto .pc-k{color:var(--ink3)}.pc-host .pc-k{color:var(--warn)}.pc-path .pc-k{color:var(--express)}.pc-query .pc-k{color:var(--tq)}.pc-hash .pc-k{color:var(--next)}
+.bigin{width:100%;font-family:var(--mono);font-size:13px;background:var(--bg2);border:1px solid var(--line2);border-radius:5px;color:var(--ink);padding:10px 13px;outline:0}
+.bigin:focus{border-color:var(--express);box-shadow:0 0 0 3px var(--express-soft)}
+.console{margin-top:11px;font-family:var(--mono);font-size:12px;background:var(--bg2);border:1px solid var(--line);border-radius:5px;padding:10px 12px;min-height:70px;max-height:170px;overflow:auto;line-height:1.75}
+.console .in{color:var(--faint)}
+.console .out{color:var(--ink)}
+.console .out .s{color:var(--express)}.console .out .n{color:var(--node)}.console .out .b{color:var(--next)}
+/* yes/no table cells */
+table.spec td.yes{color:var(--express)} table.spec td.no{color:var(--faint)}
+.rt-table td.verdict{font-weight:700}
+.node.lit .nbox{filter:drop-shadow(0 0 12px var(--glow)) brightness(1.2);stroke-width:2.6}
+
+/* main keeps its reading width and centers when the nav rail is collapsed or hidden
+   (1fr column would otherwise stretch it): cap = maxw - 2*24 padding - 228 rail - 48 gap */
+.shell[data-toc="collapsed"] main,.shell[data-toc="hidden"] main{width:100%;max-width:calc(var(--maxw) - 324px);justify-self:center}
+@media(max-width:919px){.shell[data-toc="collapsed"] main,.shell[data-toc="hidden"] main{max-width:none;justify-self:stretch}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <button class="theme-btn" id="navBtn" aria-label="toggle navigation" title="Show or hide the navigation rail">
+      <svg id="navIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="1"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
+      <span id="navTxt">NAV</span>
+    </button>
+    <div class="brand"><span class="dot"></span><span style="color:var(--node)">stack</span><span class="arr">·</span><span class="eng">url</span><span class="arr">·</span><span style="color:var(--next)">router</span>&nbsp; inside the browser tab</div>
+    <div class="top-spacer"></div>
+    <button class="theme-btn" id="themeBtn" aria-label="toggle theme">
+      <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>
+      <span id="themeTxt">DARK</span>
+    </button>
+  </div>
+</header>
+
+<div class="shell" id="shell">
+  <nav class="toc" id="toc">
+    <button class="toc-toggle" id="tocToggle" aria-label="toggle navigation">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      <span class="lbl">Collapse</span>
+    </button>
+    <div class="toc-list">
+      <a href="#machine"><span class="num">00</span><span class="lbl"> The timeline machine</span></a>
+      <a href="#anatomy"><span class="num">01</span><span class="lbl"> Anatomy of a URL</span></a>
+      <a href="#stack"><span class="num">02</span><span class="lbl"> A simulated browser</span></a>
+      <a href="#pushreplace"><span class="num">03</span><span class="lbl"> push vs replace</span></a>
+      <a href="#params"><span class="num">04</span><span class="lbl"> URLSearchParams lab</span></a>
+      <a href="#truth"><span class="num">05</span><span class="lbl"> URL as source of truth</span></a>
+      <a href="#router"><span class="num">06</span><span class="lbl"> The route table</span></a>
+      <a href="#decide"><span class="num">07</span><span class="lbl"> Where state lives</span></a>
+      <a href="#smells"><span class="num">08</span><span class="lbl"> Bug detector</span></a>
+      <a href="#canonical"><span class="num">09</span><span class="lbl"> Canonical &amp; cache</span></a>
+      <a href="#table"><span class="num">10</span><span class="lbl"> The tables</span></a>
+      <a href="#rule"><span class="num">11</span><span class="lbl"> The rule</span></a>
+    </div>
+  </nav>
+
+  <main>
+
+    <!-- ===== 00 HERO + TIMELINE MACHINE ===== -->
+    <section class="block" id="machine" style="border-bottom:none">
+      <p class="kicker"><span class="ix">00</span> An explorable guide · the History API · URLSearchParams · routers</p>
+      <h1 class="hero-h"><span class="a">Stack</span>. <span class="b">URL</span>. <span class="c">Router</span>.<br>The browser tab is a state machine.</h1>
+      <p class="lead">A tab looks like a document viewer, but it's really a small runtime with a timeline. The <span class="term" data-term="history stack">history stack</span> owns where the tab has been and can go; the <span class="term" data-term="URL bar">URL bar</span> is a live <em>view</em> of the current entry and an <em>input</em> for the next one; the <span class="term" data-term="History API">History API</span> gives JavaScript levers over that timeline; and a <span class="term" data-term="router">router</span> teaches your app to speak it. The deep idea: the URL isn't just where your app is — <strong>it's what your app currently means</strong>. Press a button below to send a navigation through the machine, then click any box to go deeper.</p>
+
+      <div class="figure" id="machFig">
+        <div class="fig-bar">
+          <span class="title">▤ One tab, four mechanisms</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-inspect="machSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="machSvg">
+          <svg class="diagram" id="machSvg" viewBox="0 0 1060 500" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Diagram of the browser tab as a state machine: user actions drive the history stack, URL bar, History API and router, which render the UI; full navigations reach the server">
+            <defs>
+              <marker id="arrG" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--express)"/></marker>
+              <marker id="arrB" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--next)"/></marker>
+              <marker id="arrO" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--node)"/></marker>
+              <marker id="arrY" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--warn)"/></marker>
+            </defs>
+            <g class="viewport" id="machVP">
+              <!-- tab outline -->
+              <g class="node" data-node="tab">
+                <rect class="nbox" x="272" y="18" width="500" height="464" rx="14" fill="none" stroke="var(--line2)" stroke-width="1.4" stroke-dasharray="7 6" opacity=".8"/>
+                <text x="522" y="40" text-anchor="middle" fill="var(--faint)" font-size="11" letter-spacing=".12em" font-family="'Roboto Mono',monospace">BROWSER TAB · A TINY OS</text>
+              </g>
+
+              <!-- paths -->
+              <path id="p-u-rtr" d="M226,236 C 300,244 486,246 560,237" fill="none" stroke="var(--next)" stroke-width="1.6" opacity=".55" marker-end="url(#arrB)"/>
+              <path id="p-u-stk" d="M226,218 C 260,190 262,140 298,132" fill="none" stroke="var(--node)" stroke-width="1.6" opacity=".55" marker-end="url(#arrO)"/>
+              <path id="p-u-bar" d="M226,248 C 260,278 262,318 298,324" fill="none" stroke="var(--express)" stroke-width="1.6" opacity=".55" marker-end="url(#arrG)"/>
+              <path id="p-rtr-stk" d="M560,196 C 540,178 528,158 506,142" fill="none" stroke="var(--node)" stroke-width="1.5" stroke-dasharray="5 4" opacity=".65" marker-end="url(#arrO)"/>
+              <path id="p-stk-rtr" d="M506,158 C 530,176 542,192 560,204" fill="none" stroke="var(--next)" stroke-width="1.5" stroke-dasharray="5 4" opacity=".65" marker-end="url(#arrB)"/>
+              <path id="p-stk-bar" d="M402,226 L402,300" fill="none" stroke="var(--express)" stroke-width="1.5" stroke-dasharray="5 4" opacity=".7" marker-end="url(#arrG)"/>
+              <path id="p-rtr-ui" d="M746,236 L826,236" fill="none" stroke="var(--next)" stroke-width="1.6" opacity=".7" marker-end="url(#arrB)"/>
+              <path id="p-bar-srv" d="M506,336 C 648,356 706,406 826,416" fill="none" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="5 4" opacity=".65" marker-end="url(#arrY)"/>
+              <path id="p-srv-ui" d="M924,392 L924,290" fill="none" stroke="var(--warn)" stroke-width="1.5" opacity=".7" marker-end="url(#arrY)"/>
+
+              <!-- path labels -->
+              <text x="248" y="170" fill="var(--node)" font-size="10" font-family="'Roboto Mono',monospace" text-anchor="end">Back / Forward</text>
+              <text x="430" y="268" fill="var(--next)" font-size="10" font-family="'Roboto Mono',monospace">click &lt;Link&gt;</text>
+              <text x="246" y="304" fill="var(--express)" font-size="10" font-family="'Roboto Mono',monospace" text-anchor="end">type an address</text>
+              <text x="636" y="414" fill="var(--warn)" font-size="10" font-family="'Roboto Mono',monospace" text-anchor="middle">GET path?query</text>
+              <text x="786" y="226" fill="var(--next)" font-size="10" font-family="'Roboto Mono',monospace" text-anchor="middle">render</text>
+
+              <!-- USER -->
+              <g class="node" data-node="user">
+                <rect class="nbox" x="40" y="196" width="186" height="72" rx="11" fill="var(--panelb)" stroke="var(--line2)" stroke-width="1.5"/>
+                <text x="133" y="226" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="700" font-family="'Roboto Mono',monospace">User intent</text>
+                <text x="133" y="246" text-anchor="middle" fill="var(--muted)" font-size="10.5" font-family="'Roboto'">clicks · types · Back · Forward</text>
+              </g>
+
+              <!-- HISTORY STACK -->
+              <g class="node" data-node="stack">
+                <rect class="nbox" x="298" y="58" width="208" height="168" rx="11" fill="var(--node-soft)" stroke="var(--node)" stroke-width="1.6"/>
+                <text x="402" y="82" text-anchor="middle" fill="var(--node)" font-size="13.5" font-weight="700" font-family="'Roboto Mono',monospace">History Stack</text>
+                <text x="402" y="99" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="'Roboto'">the tab's timeline · entries + a cursor</text>
+                <g font-family="'Roboto Mono',monospace" font-size="10.5">
+                  <rect x="314" y="110" width="176" height="22" rx="4" fill="var(--panel)" stroke="var(--line2)"/>
+                  <text x="322" y="125" fill="var(--muted)">0 · /</text>
+                  <rect x="314" y="138" width="176" height="22" rx="4" fill="var(--panel)" stroke="var(--line2)"/>
+                  <text x="322" y="153" fill="var(--muted)">1 · /products</text>
+                  <rect id="stkCurRect" x="314" y="166" width="176" height="22" rx="4" fill="var(--panel)" stroke="var(--node)" stroke-width="1.6"/>
+                  <text x="322" y="181" fill="var(--text)">2 · /products?page=2</text>
+                  <text id="stkCursor" x="402" y="206" text-anchor="middle" fill="var(--node)" font-size="10">▲ current entry</text>
+                </g>
+              </g>
+
+              <!-- URL BAR -->
+              <g class="node" data-node="bar">
+                <rect class="nbox" x="298" y="300" width="208" height="64" rx="11" fill="var(--express-soft)" stroke="var(--express)" stroke-width="1.6"/>
+                <text x="402" y="326" text-anchor="middle" fill="var(--express)" font-size="13.5" font-weight="700" font-family="'Roboto Mono',monospace">URL Bar</text>
+                <text x="402" y="346" text-anchor="middle" fill="var(--muted)" font-size="10.5" font-family="'Roboto'">view of current entry · input for next</text>
+              </g>
+
+              <!-- ROUTER -->
+              <g class="node" data-node="router">
+                <rect class="nbox" x="560" y="180" width="186" height="106" rx="11" fill="var(--next-soft)" stroke="var(--next)" stroke-width="1.6"/>
+                <text x="653" y="208" text-anchor="middle" fill="var(--next)" font-size="13.5" font-weight="700" font-family="'Roboto Mono',monospace">History API</text>
+                <text x="653" y="226" text-anchor="middle" fill="var(--next)" font-size="12" font-weight="700" font-family="'Roboto Mono',monospace">+ Router</text>
+                <text x="653" y="248" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="'Roboto'">pushState · replaceState · popstate</text>
+                <text x="653" y="264" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="'Roboto'">match URL → params → components</text>
+              </g>
+
+              <!-- ROUTE TABLE tag under router -->
+              <g class="node" data-node="rtable">
+                <rect class="nbox" x="586" y="308" width="134" height="40" rx="8" fill="var(--panelb)" stroke="var(--tq)" stroke-width="1.3"/>
+                <text x="653" y="326" text-anchor="middle" fill="var(--tq)" font-size="11" font-weight="700" font-family="'Roboto Mono',monospace">route table</text>
+                <text x="653" y="340" text-anchor="middle" fill="var(--muted)" font-size="9" font-family="'Roboto'">from files or code</text>
+              </g>
+              <path d="M653,308 L653,290" fill="none" stroke="var(--tq)" stroke-width="1.3" stroke-dasharray="4 4" opacity=".6"/>
+
+              <!-- UI -->
+              <g class="node" data-node="ui">
+                <rect class="nbox" x="826" y="186" width="196" height="100" rx="11" fill="var(--panelb)" stroke="var(--line2)" stroke-width="1.5"/>
+                <text x="924" y="218" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="700" font-family="'Roboto Mono',monospace">Rendered UI</text>
+                <text x="924" y="240" text-anchor="middle" fill="var(--muted)" font-size="10.5" font-family="'Roboto'">Products · page 2</text>
+                <text x="924" y="258" text-anchor="middle" fill="var(--muted)" font-size="10.5" font-family="'Roboto Mono',monospace">UI = f(URL)</text>
+              </g>
+
+              <!-- SERVER -->
+              <g class="node" data-node="server">
+                <rect class="nbox" x="826" y="392" width="196" height="76" rx="11" fill="var(--warn-soft)" stroke="var(--warn)" stroke-width="1.4"/>
+                <text x="924" y="422" text-anchor="middle" fill="var(--warn)" font-size="13.5" font-weight="700" font-family="'Roboto Mono',monospace">Server</text>
+                <text x="924" y="442" text-anchor="middle" fill="var(--muted)" font-size="10.5" font-family="'Roboto'">reads path + query · renders HTML</text>
+              </g>
+            </g>
+          </svg>
+        </div>
+
+        <div class="sendstrip">
+          <div class="switchrow" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:11px">
+            <div class="switch vmode" id="machPace">
+              <button class="vm on" data-dm="auto">▶ auto-play</button>
+              <button class="vm" data-dm="manual">✦ step manually</button>
+            </div>
+            <button class="fbtn" id="machBack" hidden>◀ back</button>
+            <button class="fbtn" id="machStep" hidden>step ▶</button>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="sbtn sc" data-send="full"><i></i>⏎ type an address</button>
+            <button class="sbtn rh" data-send="link"><i></i>① click a link</button>
+            <button class="sbtn sa" data-send="back"><i></i>② press Back</button>
+            <button class="sbtn" style="color:var(--tq)" data-send="replace"><i></i>③ refine (replaceState)</button>
+            <button class="sbtn ghost" data-send="clear">clear</button>
+          </div>
+          <div class="wirelog" id="machLog"><span class="placeholder">— the tab is idle · send a navigation above —</span></div>
+        </div>
+      </div>
+
+      <p class="figclue">Every route through the machine ends the same way: <b>the router reads the current URL and repaints</b>. Full navigations detour through the server for a fresh document; client navigations, Back/Forward and refinements never leave the tab — they just move or edit the timeline, then re-render. Click the <b>History Stack</b>, <b>URL Bar</b>, <b>Router</b> or <b>Server</b> boxes for the deep dive.</p>
+    </section>
+
+    <!-- ===== 01 ANATOMY ===== -->
+    <section class="block" id="anatomy">
+      <p class="kicker"><span class="ix">01</span> First principles · one structured string</p>
+      <h2>A URL is <em class="ex">layered state</em>, not just an address.</h2>
+      <div class="prose">
+        <p>Every part of a URL answers a different question — and each layer carries a different <em>kind</em> of state. The <b style="color:var(--express)">path</b> is identity-level state: <em>what thing am I looking at?</em> The <b style="color:var(--tq)">query string</b> is modifier state: <em>viewed how — filtered, sorted, paginated?</em> The <b style="color:var(--next)">hash</b> is client-side fragment state: <em>which section, which substate?</em> One subtlety worth locking in: the hash is <strong>never sent to the server</strong> — <code>GET /products/shoes?brand=nike</code> goes over the wire; <code>#reviews</code> stays in the tab.</p>
+      </div>
+
+      <div class="figure">
+        <div class="fig-bar"><span class="title">▤ Live URL dissector — edit it, break it, watch it re-parse</span></div>
+        <div style="padding:16px">
+          <input class="bigin" id="anaIn" value="https://shop.example.com/products/shoes?brand=nike&sort=price-asc&page=2#reviews" spellcheck="false" aria-label="URL to dissect">
+          <div class="urlparts" id="anaParts" style="margin-top:12px"></div>
+          <div class="partgrid" id="anaGrid"></div>
+        </div>
+        <p class="figclue">Hover a colored segment to spotlight its card — this is exactly what <b>new URL(string)</b> computes. Try deleting the <span style="color:var(--tq)">query</span>, adding a second <code>brand=</code>, or removing the protocol to see the parser reject it.</p>
+      </div>
+
+      <div class="callout"><b>Read it as a sentence.</b> <code>https://shop.example.com/products/shoes?brand=nike&sort=price-asc&page=2#reviews</code> means: use HTTPS → go to <code>shop.example.com</code> → request <em>the shoes listing</em> → apply view state <code>brand=nike, sort=price-asc, page=2</code> → then, client-side only, focus the <code>#reviews</code> section.</div>
+    </section>
+
+    <!-- ===== 02 SIMULATED BROWSER ===== -->
+    <section class="block" id="stack">
+      <p class="kicker"><span class="ix">02</span> Mechanism one · the timeline</p>
+      <h2>The history stack is a list <em class="nd">plus a cursor</em>.</h2>
+      <div class="prose">
+        <p>Every navigation creates a <span class="term" data-term="history entry">history entry</span> — not just a string, but a URL plus a state object, a scroll position, and restore info. <b>Back</b> and <b>Forward</b> don't create anything: they move the cursor along entries that already exist. And the stack's one ruthless rule: <strong>navigate anywhere new while the cursor sits mid-timeline, and the future is discarded</strong>. Drive the browser below and watch all three behaviors.</p>
+      </div>
+
+      <div class="figure">
+        <div class="fig-bar"><span class="title">▤ A simulated browser — the page below is rendered <i>only</i> from the current entry's URL</span></div>
+        <div style="padding:14px">
+          <div class="chrome">
+            <div class="chrome-bar">
+              <button class="cbtn" id="simBack" title="Back" aria-label="Back">◀</button>
+              <button class="cbtn" id="simFwd" title="Forward" aria-label="Forward">▶</button>
+              <div class="chrome-url"><span class="lock">⬤ shop.example.com</span><input id="simUrl" spellcheck="false" aria-label="address bar — type a path and press Enter"></div>
+            </div>
+            <div class="chrome-links">
+              <button class="clink" data-nav="/">Home</button>
+              <button class="clink" data-nav="/products">Products</button>
+              <button class="clink" data-nav="/products/42">Product <i>42</i></button>
+              <button class="clink" data-merge="brand=nike">+ filter <i>brand=nike</i></button>
+              <button class="clink" data-merge="page=2">+ <i>page=2</i></button>
+              <button class="clink" data-nav="/cart">Cart</button>
+              <button class="clink" data-hash="#reviews">jump to <i>#reviews</i></button>
+            </div>
+            <div class="chrome-page" id="simPage"></div>
+            <div class="stackstrip">
+              <div class="ss-title">history stack <span class="cnt" id="simCnt"></span><span class="grow"></span><span style="letter-spacing:0;text-transform:none;color:var(--faint)">click an entry to history.go(n)</span></div>
+              <div class="entries" id="simEntries"></div>
+            </div>
+          </div>
+          <div class="einspect" id="simInspect"></div>
+          <div class="wirelog" id="simLog" style="margin-top:12px"><span class="placeholder">— navigate to write the log —</span></div>
+        </div>
+        <p class="figclue"><b>Try the future-discard:</b> visit a few pages, press ◀ Back twice, then click any link — the dashed future entries vanish. Notice the filter buttons <b>merge onto</b> the current query instead of clobbering it: that's <code>url.searchParams.set()</code>, the fix for bug #1 in section 08.</p>
+      </div>
+    </section>
+
+    <!-- ===== 03 PUSH VS REPLACE ===== -->
+    <section class="block" id="pushreplace">
+      <p class="kicker"><span class="ix">03</span> Mechanism three · the levers</p>
+      <h2><em class="nx">pushState</em> creates a moment. <em class="nx">replaceState</em> edits the current one.</h2>
+      <div class="prose">
+        <p>The History API is tiny — <code>pushState</code>, <code>replaceState</code>, <code>back</code>, <code>forward</code>, <code>go</code>, and one event: <span class="term" data-term="popstate">popstate</span>. The classic trap is a search box that calls <code>pushState</code> on every keystroke: typing <code>nike</code> plants four back-button stops, and escaping the page means walking back through <code>nik → ni → n</code>. The rule: <b>replace while refining, push on intent</b>. Type in the box below under each strategy and watch what the stack — and your Back button — inherit.</p>
+      </div>
+
+      <div class="figure">
+        <div class="fig-bar">
+          <span class="title">▤ The keystroke trap</span>
+          <span class="grow"></span>
+          <div class="switch vmode sm" id="prMode">
+            <button class="vm on" data-m="push">pushState every keystroke</button>
+            <button class="vm" data-m="replace">replaceState while typing</button>
+            <button class="vm" data-m="smart">smart: replace + push on ⏎</button>
+          </div>
+        </div>
+        <div style="padding:14px">
+          <div class="plab">
+            <div class="plab-row">
+              <input type="text" class="qsin" id="prIn" placeholder="type a search… e.g. nike  (⏎ = submit intent)" spellcheck="false" aria-label="search input">
+              <button class="opbtn" id="prBackBtn">◀ Back</button>
+              <button class="opbtn" id="prReset">↺ reset</button>
+            </div>
+          </div>
+          <div class="stackstrip" style="border:1px solid var(--line);border-radius:6px;margin-top:12px">
+            <div class="ss-title">history stack <span class="cnt" id="prCnt"></span></div>
+            <div class="entries" id="prEntries"></div>
+          </div>
+          <div class="wirelog" id="prLog"><span class="placeholder">— events appear here · note when popstate fires and when it doesn't —</span></div>
+        </div>
+        <p class="figclue"><b>The popstate detail:</b> calling <b>pushState</b> changes the URL and stack but fires <i>no</i> event — your code did it, your code knows. <b>popstate</b> fires only when an <i>existing</i> entry is activated: Back, Forward, <code>history.go()</code>. Routers listen to popstate to re-render on Back.</p>
+      </div>
+
+      <div class="triad two" style="margin-top:16px">
+        <div class="dial rh"><div class="dh"><i></i>push — a meaningful step</div><pre class="wire" data-code>// user changed page, opened a product,
+// applied a major filter, moved a wizard step
+const url = new URL(location.href)
+url.searchParams.set('page', '2')
+history.pushState(null, '', url)
+// stack: [ …, ?page=1, ?page=2 ]  ← new stop</pre></div>
+        <div class="dial sc"><div class="dh"><i></i>replace — refine the current step</div><pre class="wire" data-code>// typing, cleaning invalid params,
+// filling defaults, noisy intermediate state
+const url = new URL(location.href)
+url.searchParams.set('q', input.value)
+history.replaceState(null, '', url)
+// stack: [ …, ?q=nike ]  ← same stop, edited</pre></div>
+      </div>
+    </section>
+
+    <!-- ===== 04 URLSEARCHPARAMS LAB ===== -->
+    <section class="block" id="params">
+      <p class="kicker"><span class="ix">04</span> The parser · the browser's built-in state (de)serializer</p>
+      <h2><em class="tq">URLSearchParams</em> is a list of pairs, not an object.</h2>
+      <div class="prose">
+        <p>A query string is text; your app wants structure. <span class="term" data-term="URLSearchParams">URLSearchParams</span> converts both ways — but its internal model is <code>[[key, value], …]</code>, <em>not</em> <code>{key: value}</code>. That's deliberate: query strings allow <strong>duplicate keys</strong> (<code>?brand=nike&brand=adidas</code>), which is why <code>.get()</code> returns only the first match and <code>.getAll()</code> exists. And every value is a <strong>string</strong> — <code>?page=2&inStock=false</code> gives you <code>"2"</code> and <code>"false"</code>; your app supplies the meaning.</p>
+      </div>
+
+      <div class="figure">
+        <div class="fig-bar"><span class="title">▤ The params lab — one live URLSearchParams instance</span></div>
+        <div style="padding:14px" class="plab">
+          <div class="plab-row" style="margin-bottom:11px">
+            <span class="mono" style="font-size:12px;color:var(--faint)">?</span>
+            <input type="text" class="qsin" id="plQs" value="q=nike&brand=nike&brand=adidas&page=2&inStock=false" spellcheck="false" aria-label="query string">
+          </div>
+          <div class="pairs" id="plPairs" aria-live="polite"></div>
+          <div class="plab-row" style="margin:13px 0 9px">
+            <input type="text" class="kin" id="plKey" value="brand" placeholder="key" spellcheck="false" aria-label="key">
+            <input type="text" class="vin" id="plVal" value="puma" placeholder="value" spellcheck="false" aria-label="value">
+          </div>
+          <div class="plab-row">
+            <button class="opbtn" data-op="get">.get(key)</button>
+            <button class="opbtn" data-op="getAll">.getAll(key)</button>
+            <button class="opbtn" data-op="has">.has(key)</button>
+            <button class="opbtn mut" data-op="set">.set(k, v)</button>
+            <button class="opbtn mut" data-op="append">.append(k, v)</button>
+            <button class="opbtn mut" data-op="delete">.delete(key)</button>
+            <button class="opbtn mut" data-op="sort">.sort()</button>
+            <button class="opbtn" data-op="toString">.toString()</button>
+          </div>
+          <div class="console" id="plOut"><span class="in">// results print here — try .get('brand') vs .getAll('brand')</span></div>
+        </div>
+        <p class="figclue"><b>.set replaces every duplicate with one value · .append adds another ·</b> mutations rewrite the query string above in real time — the pairs list <i>is</i> the source, the string is just its serialization.</p>
+      </div>
+
+      <h3>Encoding is the whole point</h3>
+      <div class="prose"><p><code>&</code>, <code>=</code>, <code>?</code> and <code>#</code> are <em>syntax</em>. When a value contains them, hand-concatenated strings become ambiguous — does <code>?redirect=/dash?tab=billing&mode=edit</code> have two params or one? <code>URLSearchParams</code> escapes on the way out and decodes on the way in, which is why you should never build query strings with <code>+</code> concatenation.</p></div>
+      <div class="figure">
+        <div class="fig-bar"><span class="title">▤ Live encoder — params.set('q', yourValue).toString()</span></div>
+        <div style="padding:14px" class="plab">
+          <div class="plab-row">
+            <input type="text" class="qsin" id="encIn" value="nike shoes & socks 50% off?" spellcheck="false" aria-label="raw value to encode">
+          </div>
+          <div class="console" id="encOut" style="min-height:52px"></div>
+        </div>
+        <p class="figclue">space → <b>+</b> · &amp; → <b>%26</b> · = → <b>%3D</b> · # → <b>%23</b> — try pasting a whole URL as the value: nested URLs are the classic case for <code>redirect=</code> params.</p>
+      </div>
+
+      <h3>Present, empty, missing — three different facts</h3>
+      <div class="prose"><p>These five URLs look interchangeable and aren't. Click each to interrogate the instance:</p></div>
+      <div class="flagrow" id="flagRow">
+        <button class="cf-chip on" data-q="">/products</button>
+        <button class="cf-chip" data-q="discount">/products?discount</button>
+        <button class="cf-chip" data-q="discount=">/products?discount=</button>
+        <button class="cf-chip" data-q="discount=true">/products?discount=true</button>
+        <button class="cf-chip" data-q="discount=false">/products?discount=false</button>
+      </div>
+      <div class="console" id="flagOut" style="max-width:560px"></div>
+      <div class="callout" style="margin-top:14px"><b>The Boolean trap.</b> <code>Boolean(params.get('inStock'))</code> is <code>true</code> for <code>"false"</code> — any non-empty string is truthy. Decode explicitly: <code>params.get('inStock') === 'true'</code>, and for numbers validate: <code>Number.isInteger(n) && n > 0 ? n : 1</code>. Section 08 turns this into a bug hunt.</div>
+    </section>
+
+    <!-- ===== 05 URL AS SOURCE OF TRUTH ===== -->
+    <section class="block" id="truth">
+      <p class="kicker"><span class="ix">05</span> The architecture · one loop, no sync code</p>
+      <h2>Don't sync state <em>to</em> the URL. <em class="ex">Derive</em> state <em>from</em> it.</h2>
+      <div class="prose">
+        <p>The failure mode is duplicated truth: the URL says <code>?page=2</code>, a hidden <code>useState</code> says <code>page = 5</code>, and an effect tries to keep them married. The strong model treats the URL like reducer state: a user action doesn't set component state — it <strong>proposes a new URL</strong>. The browser records it; the app re-derives everything. One direction, no reconciliation, and Back/Forward work for free because <em>the browser already saw every state</em>. Play the loop:</p>
+      </div>
+
+      <div class="figure">
+        <div class="fig-bar"><span class="title">▤ The URL state cycle — user clicks “next page”</span></div>
+        <div class="cycle">
+          <div class="cycle-stages" id="cyStages"></div>
+          <div class="cycle-state">
+            <div class="cs-block"><div class="cs-h">address bar</div><div class="cs-url" id="cyUrl"></div></div>
+            <div class="cs-block"><div class="cs-h">derived app state</div><div class="cs-obj" id="cyState"></div></div>
+            <div class="cs-block"><div class="cs-h">history stack</div><div class="cs-obj" id="cyStack"></div></div>
+          </div>
+          <div class="cycle-cap" id="cyCap"></div>
+        </div>
+        <div class="player">
+          <button class="pbtn" id="cyPrev" aria-label="previous step"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button>
+          <button class="pbtn play" id="cyPlay" aria-label="play"><svg id="cyPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+          <button class="pbtn" id="cyNext" aria-label="next step"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></button>
+          <div class="scrub" id="cyScrub"><div class="fill" id="cyFill"></div></div>
+          <span class="stepno" id="cyStepNo">1 / 8</span>
+        </div>
+        <p class="figclue"><b>UI = f(URL)</b> — more completely, <code>UI = render(data(parse(match(URL))))</code>. When the URL changes for <i>any</i> reason — click, Back, bookmark, pasted link, edited address bar — the same function runs. That's the whole trick.</p>
+      </div>
+
+      <div class="triad two" style="margin-top:16px">
+        <div class="dial bad"><div class="dh"><i></i>weak — two sources of truth</div><pre class="wire" data-code>// React state is "truth"; URL tries to keep up
+const [page, setPage] = useState(1)
+useEffect(() => {
+  // sync… sometimes… hopefully
+  history.replaceState(null, '', `?page=${page}`)
+}, [page])
+// Back button → URL changes → state doesn't → 🐛</pre></div>
+        <div class="dial sc"><div class="dh"><i></i>strong — URL is truth, UI derives</div><pre class="wire" data-code>// read: derive from the URL every render
+const params = useSearchParams()
+const page = parsePositiveInt(params.get('page'), 1)
+
+// write: propose the next URL — that's the action
+function nextPage() {
+  const url = new URL(location.href)
+  url.searchParams.set('page', String(page + 1))
+  router.push(url.pathname + url.search)
+}</pre></div>
+      </div>
+    </section>
+
+    <!-- ===== 06 ROUTE TABLE ===== -->
+    <section class="block" id="router">
+      <p class="kicker"><span class="ix">06</span> The interpreter · from address to component tree</p>
+      <h2>The browser sees URLs. The <em class="nx">route table</em> gives them meaning.</h2>
+      <div class="prose">
+        <p>The browser has no idea <code>/products/:id</code> means “render <code>ProductDetailPage</code> with a param.” That mapping — pattern → component (plus layouts, loaders, boundaries) — is the <span class="term" data-term="route table">route table</span>, and a router is essentially <code>render(match(url))</code>. Feed the matcher below and watch it walk the table:</p>
+      </div>
+
+      <div class="figure">
+        <div class="fig-bar"><span class="title">▤ The route matcher</span></div>
+        <div style="padding:14px" class="plab">
+          <div class="plab-row" style="margin-bottom:8px">
+            <input type="text" class="qsin" id="rtIn" value="/dashboard/orders/123?tab=events" spellcheck="false" aria-label="URL to match">
+            <button class="opbtn mut" id="rtGo">match ▶</button>
+          </div>
+          <div class="flagrow" style="margin:0 0 12px">
+            <button class="cf-chip" data-rt="/">/</button>
+            <button class="cf-chip" data-rt="/products">/products</button>
+            <button class="cf-chip" data-rt="/products/abc123">/products/abc123</button>
+            <button class="cf-chip" data-rt="/dashboard/orders/123?tab=events">/dashboard/orders/123?tab=events</button>
+            <button class="cf-chip" data-rt="/pricing">/pricing (no match)</button>
+          </div>
+          <div class="tablewrap"><table class="rt-table" id="rtTable">
+            <thead><tr><th>pattern</th><th>renders</th><th style="width:70px">match?</th></tr></thead>
+            <tbody>
+              <tr data-pat="/"><td>/</td><td>HomePage</td><td class="verdict"></td></tr>
+              <tr data-pat="/products"><td>/products</td><td>ProductListPage</td><td class="verdict"></td></tr>
+              <tr data-pat="/products/:id"><td>/products/:id</td><td>ProductDetailPage</td><td class="verdict"></td></tr>
+              <tr data-pat="/dashboard"><td>/dashboard</td><td>DashboardPage</td><td class="verdict"></td></tr>
+              <tr data-pat="/dashboard/orders/:id"><td>/dashboard/orders/:id</td><td>OrderDetailPage</td><td class="verdict"></td></tr>
+            </tbody>
+          </table></div>
+          <div class="rt-result" id="rtResult"><span class="ph">— match a URL to extract params, search, and the layout chain —</span></div>
+        </div>
+        <p class="figclue">Patterns are checked for the <b>most specific</b> win; dynamic segments like <code>:id</code> capture into <code>params</code>; the query never participates in matching — it arrives separately as <code>searchParams</code>.</p>
+      </div>
+
+      <h3>Two roads to the same table</h3>
+      <div class="prose"><p><span class="term" data-term="file-based routing">File-based routing</span> treats the filesystem as a route DSL — <code>[id]</code> means dynamic segment, <code>page.tsx</code> means leaf, <code>layout.tsx</code> nests. Code-based routing declares the same table as data. The framework scans folders <em>at build time</em>; the browser never sees them. Toggle:</p></div>
+      <div class="switch vmode" id="rtSwitch">
+        <button class="vm on" data-v="file">file-based (Next.js App Router)</button>
+        <button class="vm" data-v="code">code-based (React Router / TanStack)</button>
+      </div>
+      <div class="two-dials" id="rtDials"></div>
+      <div class="philo" id="rtPhilo"></div>
+    </section>
+
+    <!-- ===== 07 DECISION WIZARD ===== -->
+    <section class="block" id="decide">
+      <p class="kicker"><span class="ix">07</span> The judgement call · not everything belongs in the address bar</p>
+      <h2>Answer three questions. Learn <em class="tq">where the state lives</em>.</h2>
+      <div class="prose"><p>Search queries, filters, pagination, tabs, date ranges: URL. Hover state, drag state, half-typed input: memory. Theme preference: <code>localStorage</code>. Session identity: cookie. Orders and profiles: database. When it's not obvious, run the decision — or click a preset to see it answered:</p></div>
+
+      <div class="cf-chips" id="dtPresets">
+        <button class="cf-chip" data-p="search">search query</button>
+        <button class="cf-chip" data-p="page">page number</button>
+        <button class="cf-chip" data-p="tab">selected tab</button>
+        <button class="cf-chip" data-p="hover">hover state</button>
+        <button class="cf-chip" data-p="draft">unsaved form draft</button>
+        <button class="cf-chip" data-p="theme">theme preference</button>
+        <button class="cf-chip" data-p="token">auth token</button>
+        <button class="cf-chip" data-p="mouse">mouse coordinates</button>
+        <button class="cf-chip" data-p="daterange">dashboard date range</button>
+      </div>
+
+      <div class="dtree" id="dtree">
+        <div class="dt-q" data-q="0">
+          <div class="dt-qn">Q1</div>
+          <div class="dt-qt">Does it change <b>what the user is looking at</b> — the page, the data, the view?</div>
+          <div class="dt-btns"><button class="dt-yn" data-a="yes">yes</button><button class="dt-yn no" data-a="no">no</button></div>
+        </div>
+        <div class="dt-q" data-q="1">
+          <div class="dt-qn">Q2</div>
+          <div class="dt-qt">Should it <b>survive reload</b>, be <b>shareable</b> in a link, and restore on <b>Back</b>?</div>
+          <div class="dt-btns"><button class="dt-yn" data-a="yes">yes</button><button class="dt-yn no" data-a="no">no</button></div>
+        </div>
+        <div class="dt-q" data-q="2">
+          <div class="dt-qn">Q3</div>
+          <div class="dt-qt">Is it <b>sensitive</b>, <b>huge</b>, or <b>changing every frame</b>?</div>
+          <div class="dt-btns"><button class="dt-yn" data-a="yes">yes</button><button class="dt-yn no" data-a="no">no</button></div>
+        </div>
+        <div class="dt-verdict" id="dtVerdict"><span class="ph" style="color:var(--faint);font-style:italic">— answer the questions or pick a preset —</span></div>
+        <button class="dt-reset" id="dtReset">↺ start over</button>
+      </div>
+      <div class="callout node" style="margin-top:18px"><b>Never in the URL, no matter the answers:</b> passwords, tokens, API keys, card details. URLs leak — into history, logs, analytics, <code>Referer</code> headers, screenshots, and every shared link. That's bug #6 next door.</div>
+    </section>
+
+    <!-- ===== 08 BUG DETECTOR ===== -->
+    <section class="block" id="smells">
+      <p class="kicker"><span class="ix">08</span> The failure modes · every one of these ships weekly</p>
+      <h2>Point the bug detector at a <em>symptom</em>.</h2>
+      <div class="prose"><p>URL-state bugs are recognizable from the outside. Pick the complaint as a user would say it; get the diagnosis, the offending line, and the fix.</p></div>
+
+      <div class="cf-chips" id="smChips"></div>
+      <div class="cf-out" id="smOut">
+        <div class="cf-verdict" id="smVerdict"><span style="color:var(--faint);font-style:italic">— pick a symptom above —</span></div>
+        <p class="cf-why" id="smWhy"></p>
+        <div class="two-dials" id="smDials" hidden>
+          <div class="dial bad"><div class="dh"><i></i>the bug</div><pre class="wire" id="smBad"></pre></div>
+          <div class="dial sc"><div class="dh"><i></i>the fix</div><pre class="wire" id="smFix"></pre></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 09 CANONICAL & CACHE ===== -->
+    <section class="block" id="canonical">
+      <p class="kicker"><span class="ix">09</span> The consequence · URLs are cache keys</p>
+      <h2>Different string, <em class="dald" style="color:var(--warn)">different cache entry</em> — even when the meaning is identical.</h2>
+      <div class="prose">
+        <p>To the server, the CDN, and the browser cache, <code>?brand=nike&sort=price-asc</code> and <code>?sort=price-asc&brand=nike</code> are two different resources. Add a noisy <code>trackingId</code> and every visitor computes the page from scratch. The cure is a <span class="term" data-term="canonical URL">canonical URL</span>: strip the noise, <code>params.sort()</code>, and logically-equal states collapse into one key — better cache hits, cleaner SEO, deduplicated bookmarks, reproducible tests. Watch four requests hit a cache, then canonicalize them:</p>
+      </div>
+
+      <div class="figure">
+        <div class="fig-bar">
+          <span class="title">▤ The cache-key collapse</span>
+          <span class="grow"></span>
+          <button class="fbtn" id="canRun">▶ send 4 requests</button>
+          <button class="fbtn" id="canFix" disabled>✦ canonicalize + resend</button>
+        </div>
+        <div style="padding:14px">
+          <div class="console" id="canLog" style="min-height:150px;max-height:280px"><span class="in">// four users ask for the same shoes…</span></div>
+        </div>
+        <p class="figclue"><b>canonicalize(url)</b> = drop params not in the schema · omit defaults (<code>page=1</code>, <code>sort=relevance</code>) · <code>params.sort()</code> for stable order. Prefer <code>/products</code> over <code>/products?q=&page=1&sort=relevance</code> — let the parser fill defaults.</p>
+      </div>
+
+      <div class="triad two" style="margin-top:16px">
+        <div class="dial dald"><div class="dh"><i></i>the canonicalizer</div><pre class="wire" data-code>const SCHEMA = new Set(['q','brand','sort','page'])
+const DEFAULTS = { page: '1', sort: 'relevance' }
+
+function canonicalize(href) {
+  const url = new URL(href)
+  for (const key of [...url.searchParams.keys()]) {
+    if (!SCHEMA.has(key)) url.searchParams.delete(key)   // noise out
+    else if (url.searchParams.get(key) === DEFAULTS[key])
+      url.searchParams.delete(key)                       // defaults out
+  }
+  url.searchParams.sort()                                // stable order
+  return url.pathname + url.search
+}</pre></div>
+        <div class="dial sc"><div class="dh"><i></i>the same idea, server-side</div><pre class="wire" data-code>// URL state pairs naturally with SSR:
+// the server sees path + query BEFORE any JS runs
+export default async function Page({ searchParams }) {
+  const params = await searchParams          // Next.js 15+
+  const brand = params.brand ?? 'all'
+  const page  = parsePositiveInt(params.page, 1)
+  // HTML arrives already filtered — no client
+  // fetch, no flash of unfiltered content
+  const products = await getProducts({ brand, page })
+  return &lt;ProductGrid products={products} /&gt;
+}</pre></div>
+      </div>
+    </section>
+
+    <!-- ===== 10 TABLES ===== -->
+    <section class="block" id="table">
+      <p class="kicker"><span class="ix">10</span> Reference · pin these to the wall</p>
+      <h2>Where state can live — and the params API on one card.</h2>
+      <div class="tablewrap">
+      <table class="spec axis">
+        <thead><tr><th>location</th><th>visible in URL?</th><th>survives reload?</th><th>server can read?</th><th>shareable?</th><th>reach for it when…</th></tr></thead>
+        <tbody>
+          <tr><td><code>useState</code> / memory</td><td class="no">no</td><td class="no">no</td><td class="no">no</td><td class="no">no</td><td>hover, drag, open dropdowns, unsaved keystrokes</td></tr>
+          <tr><td style="color:var(--tq)"><b>URL query</b></td><td class="yes">yes</td><td class="yes">yes</td><td class="yes">yes</td><td class="yes">yes</td><td>search · filters · sort · page · tabs · date ranges</td></tr>
+          <tr><td style="color:var(--next)"><b>URL hash</b></td><td class="yes">yes</td><td class="yes">yes</td><td class="no">usually no</td><td class="yes">yes</td><td>section anchors, pure client substate</td></tr>
+          <tr><td><code>localStorage</code></td><td class="no">no</td><td class="yes">yes</td><td class="no">no</td><td class="no">no</td><td>theme, drafts, device-specific preferences</td></tr>
+          <tr><td>cookie</td><td class="no">no</td><td class="yes">yes</td><td class="yes">yes</td><td class="no">no</td><td>session identity, server-readable prefs, A/B bucket</td></tr>
+          <tr><td>database</td><td class="no">no</td><td class="yes">yes</td><td class="yes">yes</td><td class="no">no</td><td>orders, profiles, saved settings, permissions</td></tr>
+        </tbody>
+      </table>
+      </div>
+
+      <h3>URLSearchParams — the whole API you actually use</h3>
+      <div class="tablewrap">
+      <table class="spec">
+        <thead><tr><th>call</th><th>returns</th><th>the catch</th></tr></thead>
+        <tbody>
+          <tr><td><code>new URLSearchParams(str | obj | pairs)</code></td><td>instance</td><td>leading <code>?</code> optional; everything becomes strings</td></tr>
+          <tr><td><code>.get(key)</code></td><td><code>string | null</code></td><td><b>first</b> value only when keys repeat</td></tr>
+          <tr><td><code>.getAll(key)</code></td><td><code>string[]</code></td><td>the duplicate-keys API — <code>?brand=nike&brand=adidas</code></td></tr>
+          <tr><td><code>.has(key)</code></td><td><code>boolean</code></td><td><code>?discount</code> → <code>has</code> true, <code>get</code> <code>""</code></td></tr>
+          <tr><td><code>.set(key, v)</code></td><td>—</td><td>replaces <b>all</b> existing values with one</td></tr>
+          <tr><td><code>.append(key, v)</code></td><td>—</td><td>adds another value, keeps existing</td></tr>
+          <tr><td><code>.delete(key)</code></td><td>—</td><td>removes every value for the key</td></tr>
+          <tr><td><code>.sort()</code></td><td>—</td><td>canonical ordering for cache keys</td></tr>
+          <tr><td><code>.toString()</code></td><td><code>string</code></td><td>encodes: space→<code>+</code>, <code>&</code>→<code>%26</code></td></tr>
+          <tr><td><code>for (const [k, v] of params)</code></td><td>pairs</td><td>iterates duplicates too — it's a list, not an object</td></tr>
+          <tr><td><code>url.searchParams</code></td><td>live view</td><td>mutations update <code>url.href</code>; a <b>standalone</b> instance updates nothing — you must push it</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+
+    <!-- ===== 11 RULE ===== -->
+    <section class="block" id="rule" style="border-bottom:none">
+      <p class="kicker"><span class="ix">11</span> Lock it in</p>
+      <h2>The router doesn't replace the browser's state machine.<br>It teaches your app to speak it.</h2>
+      <div class="prose">
+        <p>Everything in this guide is one loop wearing different hats. The <b style="color:var(--node)">history stack</b> owns the timeline. The <b style="color:var(--express)">URL bar</b> shows the current state and accepts the next one. The <b style="color:var(--next)">History API</b> is the set of levers; the <b style="color:var(--next)">router</b> interprets the address through a <b style="color:var(--tq)">route table</b> built from files or code. And <b style="color:var(--tq)">URLSearchParams</b> is the serializer that lets your state ride inside the address.</p>
+      </div>
+      <pre class="wire" data-code>Strong architecture
+  URL → parse → validate → derived state → data → UI
+  UI event → next URL → (the same pipeline)
+
+Weak architecture
+  memory state → effects → sync URL maybe → fetch maybe → fix Back button maybe
+
+The deep idea
+  The URL is not just where your app is.
+  The URL is what your app currently means.</pre>
+      <div class="callout eng" style="margin-top:18px"><b>The final test.</b> Open your app, copy the address, paste it into a private window. If the screen that appears isn't the screen you left — the state you cared about lived in the wrong place.</div>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <span>inside the browser tab · an explorable guide to URLs, history &amp; routing</span>
+  <span>stack · url · router — the URL is your state</span>
+</footer>
+
+<!-- modal -->
+<div class="scrim" id="scrim">
+  <div class="modal" role="dialog" aria-modal="true">
+    <button class="mclose" id="mclose" aria-label="close">✕</button>
+    <div class="mhead"><div class="mtag" id="mtag"></div><h4 id="mh4"></h4></div>
+    <div class="mbody" id="mbody"></div>
+  </div>
+</div>
+
+<div id="tip" role="tooltip"></div>
+<script>
+/* ============================================================
+   SYNTAX HIGHLIGHTER  (shared machinery)
+   ============================================================ */
+const SYN_KW=new Set(['const','let','var','function','return','await','async','new','class','extends','implements','import','export','from','as','default','if','else','for','of','in','typeof','instanceof','this','super','void','yield','try','catch','finally','throw','switch','case','break','continue','do','while','delete','static','get','set']);
+const SYN_CONST=new Set(['true','false','null','undefined','NaN','Infinity']);
+function tkEsc(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function hl(src){
+  const re=/(\/\/[^\n]*)|('(?:[^'\\]|\\.)*')|("(?:[^"\\]|\\.)*")|(`(?:[^`\\]|\\.)*`)|(\b\d+(?:\.\d+)?\b)|(\.?)([A-Za-z_$][\w$]*)/g;
+  let out='',last=0,m;
+  while((m=re.exec(src))){
+    out+=tkEsc(src.slice(last,m.index));
+    last=re.lastIndex;
+    if(m[1]) out+='<span class="tk-com">'+tkEsc(m[1])+'</span>';
+    else if(m[2]||m[3]||m[4]){ out+='<span class="tk-str">'+tkEsc(m[2]||m[3]||m[4])+'</span>'; }
+    else if(m[5]) out+='<span class="tk-num">'+tkEsc(m[5])+'</span>';
+    else{
+      const dot=m[6], name=m[7], call=/^\s*\(/.test(src.slice(re.lastIndex));
+      let cls;
+      if(dot) cls=call?'tk-fn':'tk-prop';
+      else if(SYN_KW.has(name)) cls='tk-kw';
+      else if(SYN_CONST.has(name)) cls='tk-num';
+      else if(/^[A-Z]/.test(name)) cls='tk-type';
+      else if(call) cls='tk-fn';
+      else cls='tk-var';
+      out+=(dot?'<span class="tk-punc">.</span>':'')+'<span class="'+cls+'">'+tkEsc(name)+'</span>';
+    }
+  }
+  out+=tkEsc(src.slice(last));
+  return out;
+}
+function hlCodeIn(scope){
+  if(!scope) return;
+  scope.querySelectorAll('code').forEach(c=>{ if(c.dataset.hl) return; c.dataset.hl='1'; c.innerHTML=hl(c.textContent); });
+}
+document.querySelectorAll('pre[data-code]').forEach(p=>{ p.innerHTML=hl(p.textContent.replace(/^\n/,'')); });
+const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const escQ=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+/* ============================================================
+   GLOSSARY · TERMS · TOOLTIP
+   ============================================================ */
+const KIND_LABEL={browser:'browser',api:'history api',router:'routing',params:'url state',arch:'architecture'};
+const GLOSSARY={
+  'history stack':['browser','The tab\u2019s session timeline: an ordered list of <b>entries plus a cursor</b>. Back and Forward move the cursor; navigating anywhere new while mid-timeline <b>discards the forward entries</b>. The stack is the source of truth for where the tab <em>can go</em>; its current entry is the truth for what the app should show.'],
+  'history entry':['browser','One saved moment of navigation. Conceptually <code>{ url, state, scrollPosition, restoreInfo }</code> — the URL matters most for routing, but the browser also restores scroll and (sometimes) form state when the entry is re-activated.'],
+  'URL bar':['browser','Two things at once: a <b>view</b> that reflects the current history entry\u2019s URL, and an <b>input</b> that creates a brand-new navigation when you type. It belongs to the browser, not your app — which is exactly why it makes an honest state inspector.'],
+  'History API':['api','The browser\u2019s levers over the stack: <code>pushState</code> (add an entry), <code>replaceState</code> (edit the current one), <code>back</code>/<code>forward</code>/<code>go</code> (move the cursor), and the <code>popstate</code> event (an existing entry was activated).'],
+  'pushState':['api','<code>history.pushState(state, \'\', url)</code> — adds a <b>new</b> history entry without a document load. Use it for meaningful steps: changing page, opening a product, applying a major filter. Every push is a future Back-button stop.'],
+  'replaceState':['api','<code>history.replaceState(state, \'\', url)</code> — <b>edits the current</b> entry in place. Use it for refinement: keystrokes in a search box, cleaning invalid params, filling defaults. No new Back-button stop is created.'],
+  'popstate':['api','Fires when an <b>existing</b> entry is activated — Back, Forward, <code>history.go()</code>. Crucially it does <b>not</b> fire for your own <code>pushState</code>/<code>replaceState</code> calls; routers listen to it to re-render when the user time-travels.'],
+  'router':['router','An interpreter between URL state and UI: match the pathname against a route table, extract <code>params</code> and <code>searchParams</code>, pick layouts and components, load data, render. Essentially <code>render(match(url))</code> plus loading states, prefetching and scroll management.'],
+  'route table':['router','The mapping from URL patterns to UI — <code>/products/:id → ProductDetailPage</code>. File-based frameworks generate it by scanning folders at build time; code-based routers declare it as data. At runtime both feed the identical matcher.'],
+  'file-based routing':['router','The filesystem as a route DSL: <code>app/products/[id]/page.tsx</code> <em>declares</em> <code>/products/:id</code>. <code>[id]</code> = dynamic segment, <code>layout.tsx</code> = persistent nested layout, <code>loading.tsx</code>/<code>error.tsx</code> = boundaries. The browser never sees your folders — the framework compiles them into a route manifest.'],
+  'client-side navigation':['router','The document stays alive: the router intercepts the click, calls <code>pushState</code>, and re-renders components — optionally fetching data. Fast, preserves client state, powers SPAs.'],
+  'full document navigation':['browser','The classic kind: browser sends <code>GET path?query</code>, server responds with a new document, the old page is torn down. The hash fragment never crosses the wire.'],
+  'URLSearchParams':['params','The built-in parser/serializer for query strings. Internal model: an ordered <b>list of pairs</b> — which is why duplicate keys work, <code>.get()</code> returns the first match, and <code>.getAll()</code> exists. Every value is a string; your app assigns meaning.'],
+  'query string':['params','Everything after <code>?</code>: <code>key=value&key=value</code>. The URL\u2019s modifier-state payload — <em>how</em> to view the resource the path identifies. Duplicate keys are legal and often better than comma-joining.'],
+  'hash':['params','Everything after <code>#</code>. Client-side fragment state — traditionally a scroll anchor to an element <code>id</code>. It is <b>not sent to the server</b> in the HTTP request.'],
+  'canonical URL':['arch','One blessed serialization for each logical state: schema-known keys only, defaults omitted, <code>params.sort()</code> for stable order. Collapses cache keys, deduplicates SEO, makes shared links and tests reproducible.'],
+  'source of truth':['arch','The single place a fact lives; everything else derives from it. For shareable, reloadable, Back-button-aware view state, that place should be the URL — React state derived by parsing, never a second copy maintained by effects.']
+};
+const tip=document.getElementById('tip');
+function tagTerms(scope){
+  const terms=Object.keys(GLOSSARY).sort((a,b)=>b.length-a.length);
+  const used=new Set();
+  const walker=document.createTreeWalker(scope,NodeFilter.SHOW_TEXT,{acceptNode(n){
+    if(!n.nodeValue.trim())return NodeFilter.FILTER_REJECT;
+    if(n.parentNode.closest('code,pre,svg,button,a,input,.term,h1,h2,h3,.kicker,nav,.pill,.console,.wirelog,.pairs,.chrome,.rt-result'))return NodeFilter.FILTER_REJECT;
+    return NodeFilter.FILTER_ACCEPT;}});
+  const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
+  const esc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  nodes.forEach(node=>{
+    const text=node.nodeValue;
+    for(const term of terms){
+      if(used.has(term.toLowerCase())) continue;
+      const re=new RegExp('\\b'+esc(term)+'\\b','i');
+      const m=re.exec(text);
+      if(m){
+        used.add(term.toLowerCase());
+        const frag=document.createDocumentFragment();
+        const before=text.slice(0,m.index), after=text.slice(m.index+m[0].length);
+        if(before) frag.appendChild(document.createTextNode(before));
+        const span=document.createElement('span');
+        span.className='term'; span.dataset.term=term; span.textContent=m[0];
+        frag.appendChild(span);
+        if(after) frag.appendChild(document.createTextNode(after));
+        node.parentNode.replaceChild(frag,node);
+        return;
+      }
+    }
+  });
+}
+let tipHideT;
+function showTip(el){
+  const key=el.dataset.term;
+  const entry=GLOSSARY[key]||GLOSSARY[Object.keys(GLOSSARY).find(k=>k.toLowerCase()===key.toLowerCase())];
+  if(!entry) return;
+  clearTimeout(tipHideT);
+  tip.innerHTML='<span class="t-kind">'+KIND_LABEL[entry[0]]+'</span><span class="t-name">'+key+'</span>'+entry[1];
+  hlCodeIn(tip);
+  tip.classList.add('show');
+  const r=el.getBoundingClientRect();
+  const tw=Math.min(368,tip.offsetWidth||368), th=tip.offsetHeight;
+  let left=r.left+r.width/2-tw/2;
+  left=Math.max(12,Math.min(left,window.innerWidth-tw-12));
+  let top=r.top-th-12, flip=false;
+  if(top<10){top=r.bottom+12;flip=true;}
+  tip.style.left=left+'px'; tip.style.top=top+'px';
+  tip.style.setProperty('--ax',(r.left+r.width/2-left-6)+'px');
+  tip.classList.toggle('flip',flip);
+}
+function hideTip(){tipHideT=setTimeout(()=>tip.classList.remove('show'),60);}
+document.addEventListener('mouseover',e=>{const t=e.target.closest('.term');if(t)showTip(t);});
+document.addEventListener('mouseout',e=>{if(e.target.closest('.term'))hideTip();});
+document.addEventListener('click',e=>{const t=e.target.closest('.term');if(t){showTip(t);setTimeout(hideTip,2800);}});
+</script>
+<script>
+/* ============================================================
+   00 · TIMELINE MACHINE — packet animation
+   ============================================================ */
+(function(){
+  const svg=document.getElementById('machSvg'), vp=document.getElementById('machVP'), log=document.getElementById('machLog');
+  if(!svg) return;
+  const NS='http://www.w3.org/2000/svg';
+  const btns=[...document.querySelectorAll('#machFig [data-send]')];
+  const RUNS={
+    full:{color:'var(--express)', nodes:['bar','server','ui','stack'], legs:[
+      {pid:'p-u-bar', msg:'<span class="ok">→</span> you type <b>/products?category=shoes</b> ⏎ — the URL bar is in <b>input mode</b>'},
+      {pid:'p-bar-srv', msg:'<span class="w">→</span> full document navigation · <b>GET /products?category=shoes</b> — path + query cross the wire, the <b>#hash never does</b>'},
+      {pid:'p-srv-ui', msg:'<span class="w">←</span> server reads path + query, renders HTML — the page arrives <b>already filtered</b>'},
+      {pid:null, msg:'<span class="n">◆</span> history stack pushes a new entry · old document torn down · <span class="ok">✓</span> UI = f(URL), computed on the server'}]},
+    link:{color:'var(--next)', nodes:['router','stack','bar','ui'], legs:[
+      {pid:'p-u-rtr', msg:'<span class="b">→</span> click <b>&lt;Link href="?page=2"&gt;</b> — the router <b>intercepts</b>; no request leaves the tab'},
+      {pid:'p-rtr-stk', msg:'<span class="n">◆</span> router calls <b>history.pushState(null, \'\', \'?page=2\')</b> — a new entry, cursor moves to it · <b>no popstate fires</b>'},
+      {pid:'p-stk-bar', msg:'<span class="ok">◆</span> URL bar updates — it\u2019s a <b>view</b> of the current entry'},
+      {pid:'p-rtr-ui', msg:'<span class="b">→</span> router re-reads the URL: match route → params → components · <span class="ok">✓</span> page 2 painted, document never reloaded'}]},
+    back:{color:'var(--node)', nodes:['stack','router','bar','ui'], legs:[
+      {pid:'p-u-stk', msg:'<span class="n">→</span> you press <b>Back</b> — nothing is created; the <b>cursor moves left</b> to an existing entry'},
+      {pid:'p-stk-rtr', msg:'<span class="b">◆</span> browser activates the previous entry → URL bar updates → <b>popstate fires</b>'},
+      {pid:'p-rtr-ui', msg:'<span class="b">→</span> router hears popstate, re-renders from the restored URL · <span class="ok">✓</span> page 1, filters, tab — all back, because <b>the URL carried them</b>'}]},
+    replace:{color:'var(--tq)', nodes:['router','stack','bar'], legs:[
+      {pid:'p-u-rtr', msg:'<span style="color:var(--tq)">→</span> you type <b>"nik"</b> in a search box — noisy intermediate state, not a destination'},
+      {pid:'p-rtr-stk', msg:'<span class="n">◆</span> <b>history.replaceState(null, \'\', \'?q=nik\')</b> — the <b>current entry is edited</b>; the stack does not grow'},
+      {pid:'p-stk-bar', msg:'<span class="ok">◆</span> URL bar shows <b>?q=nik</b> · Back still points at the page you came from · <span class="ok">✓</span> refine with replace, commit with push'}]}
+  };
+  let mode='auto', run=null, animating=false;
+  const stepBtn=document.getElementById('machStep'), backBtn=document.getElementById('machBack'), paceBar=document.getElementById('machPace');
+  const NAMES={full:'⏎ full navigation (type an address)',link:'① client navigation (click a link)',back:'② Back — time travel',replace:'③ refinement — replaceState'};
+  function line(html){
+    const ph=log.querySelector('.placeholder'); if(ph) ph.remove();
+    const d=document.createElement('div'); d.className='logline'; d.innerHTML=html;
+    log.appendChild(d); log.scrollTop=log.scrollHeight;
+  }
+  function rmLastLine(){ const ls=log.querySelectorAll('.logline'); if(ls.length) ls[ls.length-1].remove(); }
+  function litNodes(R,on){ (R.nodes||[]).forEach(n=>{ const g=svg.querySelector('.node[data-node="'+n+'"]'); if(g) g.classList.toggle('lit',on); }); }
+  function paintCtl(){
+    const man=mode==='manual';
+    stepBtn.hidden=!man; backBtn.hidden=!man;
+    stepBtn.disabled=!man||!run||animating||run.idx>=run.seq.length;
+    backBtn.disabled=!man||!run||animating||run.idx<=0;
+    btns.forEach(b=>{ if(b.dataset.send&&b.dataset.send!=='clear') b.disabled=(mode==='auto'&&run!=null); });
+  }
+  function mkDot(color){
+    const d=document.createElementNS(NS,'circle');
+    d.setAttribute('r','7'); d.setAttribute('fill',color);
+    d.setAttribute('stroke','var(--bg)'); d.setAttribute('stroke-width','2');
+    vp.appendChild(d); return d;
+  }
+  function measurable(p){ return p&&typeof p.getTotalLength==='function'; }
+  function placeDot(s,t01){
+    if(!run||!run.dot||!s.pid){ if(run&&run.dot&&!s.pid) run.dot.setAttribute('opacity','0'); return; }
+    run.dot.setAttribute('opacity','1');
+    const p=document.getElementById(s.pid); if(!measurable(p)) return;
+    let len; try{ len=p.getTotalLength(); }catch(_){ return; }
+    const pt=p.getPointAtLength(t01*len);
+    run.dot.setAttribute('cx',pt.x); run.dot.setAttribute('cy',pt.y);
+  }
+  function animateLeg(s,backwards,done){
+    if(!s.pid){ placeDot(s,1); done(); return; }
+    const p=document.getElementById(s.pid);
+    if(reducedMotion||!measurable(p)){ placeDot(s,backwards?0:1); done(); return; }
+    let len; try{ len=p.getTotalLength(); }catch(_){ done(); return; }
+    const dur=Math.max(650,len*3.4), t0=performance.now();
+    animating=true; paintCtl();
+    function tick(now){
+      let t=Math.min(1,(now-t0)/dur);
+      const e=t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+      placeDot(s, backwards?1-e:e);
+      if(t<1) requestAnimationFrame(tick); else { animating=false; done(); paintCtl(); }
+    }
+    requestAnimationFrame(tick);
+  }
+  function endRun(){
+    if(!run) return;
+    if(run.dot) run.dot.remove();
+    litNodes(run.R,false);
+    run=null; animating=false; paintCtl();
+  }
+  function startRun(kind){
+    const R=RUNS[kind]; if(!R) return;
+    endRun();
+    run={R,kind,seq:R.legs,idx:0,dot:mkDot(R.color)};
+    litNodes(R,true);
+    line('<span class="c">──</span> <b style="color:'+R.color+'">'+NAMES[kind]+'</b>'+(mode==='manual'?' <span class="c">· manual — use step ▶ / ◀ back</span>':'')+' <span class="c">──</span>');
+    placeDot(run.seq[0],0);
+    paintCtl();
+    if(mode==='auto') autoNext();
+  }
+  function autoNext(){
+    if(!run) return;
+    if(run.idx>=run.seq.length){ endRun(); return; }
+    const s=run.seq[run.idx];
+    line(s.msg);
+    animateLeg(s,false,()=>{ if(!run) return; run.idx++; setTimeout(autoNext, reducedMotion?0:620); });
+  }
+  function stepFwd(){
+    if(!run||animating||run.idx>=run.seq.length) return;
+    const s=run.seq[run.idx];
+    line(s.msg);
+    animateLeg(s,false,()=>{ if(!run) return; run.idx++; paintCtl(); });
+  }
+  function stepBack(){
+    if(!run||animating||run.idx<=0) return;
+    run.idx--;
+    rmLastLine();
+    animateLeg(run.seq[run.idx],true,()=>paintCtl());
+  }
+  paceBar.querySelectorAll('.vm').forEach(b=>b.onclick=()=>{
+    if(b.dataset.dm===mode) return;
+    mode=b.dataset.dm;
+    paceBar.querySelectorAll('.vm').forEach(x=>x.classList.toggle('on',x===b));
+    endRun(); paintCtl();
+  });
+  stepBtn.onclick=stepFwd; backBtn.onclick=stepBack;
+  btns.forEach(b=>b.addEventListener('click',()=>{
+    if(b.dataset.send==='clear'){ endRun(); log.innerHTML='<span class="placeholder">— the tab is idle · send a navigation above —</span>'; return; }
+    startRun(b.dataset.send);
+  }));
+  paintCtl();
+})();
+
+/* ============================================================
+   01 · LIVE URL DISSECTOR
+   ============================================================ */
+(function(){
+  const inp=document.getElementById('anaIn'), parts=document.getElementById('anaParts'), grid=document.getElementById('anaGrid');
+  if(!inp) return;
+  const CARDS=[
+    ['proto','Protocol','How do we access it? Scheme + transport.'],
+    ['host','Host','Which server / origin answers?'],
+    ['path','Path','Identity: which resource, route, screen?'],
+    ['query','Query','Modifier state: filters · sort · page — parsed by URLSearchParams.'],
+    ['hash','Hash','Client-side fragment. Never sent to the server.']
+  ];
+  function render(){
+    let url;
+    try{ url=new URL(inp.value.trim()); }
+    catch(_){
+      parts.innerHTML='<span class="bad">✗ new URL() threw — not a parseable absolute URL.</span> <span style="color:var(--faint)">A scheme like https:// is required; relative paths need a base: new URL(path, location.origin)</span>';
+      grid.innerHTML=''; return;
+    }
+    const segs=[
+      ['sg-proto','proto',url.protocol],
+      ['sg-proto','proto','//'],
+      ['sg-host','host',url.host],
+      ['sg-path','path',url.pathname],
+      ['sg-query','query',url.search],
+      ['sg-hash','hash',url.hash]
+    ].filter(s=>s[2]);
+    parts.innerHTML=segs.map(s=>'<span class="seg '+s[0]+'" data-part="'+s[1]+'">'+escQ(s[2])+'</span>').join('');
+    const vals={proto:url.protocol, host:url.host, path:url.pathname, query:url.search||'—', hash:url.hash||'—'};
+    const extra={query:url.search? ' · '+[...url.searchParams].map(([k,v])=>'<b style="color:var(--tq)">'+escQ(k)+'</b>='+escQ(v)).join(' · '):''};
+    grid.innerHTML=CARDS.map(([k,label,desc])=>
+      '<div class="partcard pc-'+k+'" data-part="'+k+'"><div class="pc-k"><i></i>'+label+'</div><div class="pc-v">'+escQ(vals[k])+'</div><div class="pc-d">'+desc+(extra[k]||'')+'</div></div>').join('');
+  }
+  inp.addEventListener('input',render);
+  document.getElementById('anatomy').addEventListener('mouseover',e=>{
+    const s=e.target.closest('[data-part]'); if(!s) return;
+    const p=s.dataset.part;
+    parts.querySelectorAll('.seg').forEach(x=>x.classList.toggle('hot',x.dataset.part===p));
+    grid.querySelectorAll('.partcard').forEach(x=>x.classList.toggle('hot',x.dataset.part===p));
+  });
+  document.getElementById('anatomy').addEventListener('mouseout',e=>{
+    if(e.target.closest('[data-part]')){
+      parts.querySelectorAll('.hot').forEach(x=>x.classList.remove('hot'));
+      grid.querySelectorAll('.hot').forEach(x=>x.classList.remove('hot'));
+    }
+  });
+  render();
+})();
+
+/* ============================================================
+   02 · SIMULATED BROWSER
+   ============================================================ */
+(function(){
+  const $=id=>document.getElementById(id);
+  const urlIn=$('simUrl'), page=$('simPage'), entriesEl=$('simEntries'), cnt=$('simCnt'),
+        back=$('simBack'), fwd=$('simFwd'), log=$('simLog'), inspect=$('simInspect');
+  if(!urlIn) return;
+  let entries=[{url:'/',state:null,scroll:0}], cur=0;
+  const scrollFor=u=>Math.abs([...u].reduce((a,c)=>a+c.charCodeAt(0),0)*37%900);
+  function addLog(html){
+    const ph=log.querySelector('.placeholder'); if(ph) ph.remove();
+    const d=document.createElement('div'); d.className='logline'; d.innerHTML=html;
+    log.appendChild(d); log.scrollTop=log.scrollHeight;
+    while(log.children.length>40) log.removeChild(log.firstChild);
+  }
+  function parse(u){
+    return new URL(u,'https://shop.example.com');
+  }
+  function titleFor(url){
+    const p=url.pathname;
+    if(p==='/') return ['/', 'Home'];
+    if(p==='/products') return ['/products','Products'];
+    const m=p.match(/^\/products\/(\w+)$/);
+    if(m) return ['/products/:id','Product #'+m[1]];
+    if(p==='/cart') return ['/cart','Your cart'];
+    return [p,'404 — no route matched'];
+  }
+  function render(){
+    const e=entries[cur], url=parse(e.url);
+    urlIn.value=e.url;
+    const [route,title]=titleFor(url);
+    const pills=[...url.searchParams].map(([k,v])=>'<span class="pill" style="color:var(--tq);background:var(--tq-soft)">'+escQ(k)+' = '+escQ(v)+'</span>').join('');
+    page.innerHTML='<div class="cp-route">route '+escQ(route)+' — derived 100% from the URL</div>'
+      +'<div class="cp-title">'+escQ(title)+(url.hash?' <span style="color:var(--next);font-size:13px;font-family:var(--mono)">⚓ scrolled to '+escQ(url.hash)+'</span>':'')+'</div>'
+      +'<div class="cp-kv">'+(pills||'<span class="cp-note">no query state — defaults apply</span>')+'</div>'
+      +'<div class="cp-note">reload this entry, share it, bookmark it — this exact screen comes back</div>';
+    entriesEl.innerHTML=entries.map((en,i)=>'<button class="entry'+(i===cur?' cur':'')+(i>cur?' future':'')+'" data-i="'+i+'"><span class="ix">'+i+'</span>'+escQ(en.url)+'</button>').join('');
+    const curEl=entriesEl.querySelector('.cur'); if(curEl) curEl.scrollIntoView({block:'nearest',inline:'nearest'});
+    cnt.textContent=entries.length+' entries · cursor @ '+cur;
+    back.disabled=cur<=0; fwd.disabled=cur>=entries.length-1;
+    inspect.innerHTML=
+      '<div class="kv"><span class="k sa">entry.url</span><span class="v">'+escQ(e.url)+'</span>'
+      +'<span class="k sa">entry.state</span><span class="v">'+escQ(JSON.stringify(e.state))+'</span>'
+      +'<span class="k sa">entry.scroll</span><span class="v">{ x: 0, y: '+e.scroll+' } — restored on Back</span>'
+      +'<span class="k rh">location.search</span><span class="v">'+escQ(url.search||'""')+'</span>'
+      +'<span class="k rh">location.hash</span><span class="v">'+escQ(url.hash||'""')+' <i style="color:var(--faint)">(not sent to server)</i></span></div>';
+  }
+  function navigate(href,why){
+    const discarded=entries.length-1-cur;
+    entries=entries.slice(0,cur+1);
+    const u=parse(href);
+    const rel=u.pathname+u.search+u.hash;
+    entries.push({url:rel,state:why==='type'?null:{from:'router'},scroll:scrollFor(rel)});
+    cur++;
+    if(discarded>0) addLog('<span class="err">✂ '+discarded+' forward '+(discarded===1?'entry':'entries')+' discarded</span> — you branched the timeline');
+    addLog((why==='type'?'<span class="ok">⏎ typed</span> full navigation → ':'<span class="b">pushState</span> → ')+'<b>'+escQ(rel)+'</b> · new entry #'+cur+' · <span class="c">no popstate</span>');
+    render();
+  }
+  back.onclick=()=>{ if(cur>0){ cur--; addLog('<span class="n">◀ Back</span> → cursor to #'+cur+' <b>'+escQ(entries[cur].url)+'</b> · <span class="w">popstate fired</span> · scroll restored to y='+entries[cur].scroll); render(); } };
+  fwd.onclick=()=>{ if(cur<entries.length-1){ cur++; addLog('<span class="n">▶ Forward</span> → cursor to #'+cur+' <b>'+escQ(entries[cur].url)+'</b> · <span class="w">popstate fired</span>'); render(); } };
+  entriesEl.addEventListener('click',e=>{
+    const b=e.target.closest('.entry'); if(!b) return;
+    const i=+b.dataset.i; if(i===cur) return;
+    const d=i-cur; cur=i;
+    addLog('<span class="n">history.go('+d+')</span> → cursor to #'+cur+' <b>'+escQ(entries[cur].url)+'</b> · <span class="w">popstate fired</span>');
+    render();
+  });
+  document.querySelectorAll('#stack .clink').forEach(b=>b.addEventListener('click',()=>{
+    if(b.dataset.nav) navigate(b.dataset.nav,'link');
+    else if(b.dataset.merge){
+      const u=parse(entries[cur].url);
+      if(u.pathname==='/'||u.pathname==='/cart') u.pathname='/products';
+      const [k,v]=b.dataset.merge.split('=');
+      u.searchParams.set(k,v);                     // merge, don't clobber
+      navigate(u.pathname+u.search+u.hash,'link');
+    }
+    else if(b.dataset.hash){
+      const u=parse(entries[cur].url); u.hash=b.dataset.hash;
+      navigate(u.pathname+u.search+u.hash,'link');
+      addLog('<span class="c">· hash-only change — the request line would be identical; #reviews stays client-side</span>');
+    }
+  }));
+  urlIn.addEventListener('keydown',e=>{ if(e.key==='Enter'){ navigate(urlIn.value.trim()||'/','type'); urlIn.blur(); } });
+  render();
+})();
+</script>
+<script>
+/* ============================================================
+   03 · PUSH VS REPLACE — the keystroke trap
+   ============================================================ */
+(function(){
+  const $=id=>document.getElementById(id);
+  const inp=$('prIn'), entriesEl=$('prEntries'), cnt=$('prCnt'), log=$('prLog'),
+        backBtn=$('prBackBtn'), resetBtn=$('prReset'), modeBar=$('prMode');
+  if(!inp) return;
+  let mode='push', entries=['/products'], cur=0;
+  function addLog(html){
+    const ph=log.querySelector('.placeholder'); if(ph) ph.remove();
+    const d=document.createElement('div'); d.className='logline'; d.innerHTML=html;
+    log.appendChild(d); log.scrollTop=log.scrollHeight;
+    while(log.children.length>40) log.removeChild(log.firstChild);
+  }
+  function render(){
+    entriesEl.innerHTML=entries.map((u,i)=>'<span class="entry'+(i===cur?' cur':'')+(i>cur?' future':'')+'">'+'<span class="ix">'+i+'</span>'+escQ(u)+'</span>').join('');
+    const c=entriesEl.querySelector('.cur'); if(c) c.scrollIntoView({block:'nearest',inline:'nearest'});
+    cnt.textContent=entries.length+' entries · cursor @ '+cur+(entries.length>4?' · Back must cross '+cur+' stops to leave':'');
+  }
+  function urlFor(q){ return q ? '/products?q='+encodeURIComponent(q).replace(/%20/g,'+') : '/products'; }
+  function push(u,label){
+    entries=entries.slice(0,cur+1); entries.push(u); cur++;
+    addLog('<span class="b">pushState</span> → <b>'+escQ(u)+'</b> · entry #'+cur+' created · <span class="c">no popstate</span>'+(label?' · '+label:''));
+    render();
+  }
+  function replace(u,label){
+    entries[cur]=u;
+    addLog('<span class="ok">replaceState</span> → <b>'+escQ(u)+'</b> · entry #'+cur+' <b>edited in place</b> · <span class="c">no popstate</span>'+(label?' · '+label:''));
+    render();
+  }
+  inp.addEventListener('input',()=>{
+    const u=urlFor(inp.value.trim());
+    if(u===entries[cur]) return;
+    if(mode==='push') push(u);
+    else replace(u);
+  });
+  inp.addEventListener('keydown',e=>{
+    if(e.key!=='Enter') return;
+    const u=urlFor(inp.value.trim());
+    if(mode==='smart'){ push(u,'<span class="w">⏎ intent — commit as a real stop</span>'); }
+    else addLog('<span class="c">⏎ — in "'+mode+'" mode Enter changes nothing; try the smart strategy</span>');
+  });
+  backBtn.onclick=()=>{
+    if(cur<=0){ addLog('<span class="err">◀ Back — nothing left; you\u2019d leave the site</span>'); return; }
+    cur--;
+    addLog('<span class="n">◀ Back</span> → cursor to #'+cur+' <b>'+escQ(entries[cur])+'</b> · <span class="w">popstate fired</span> — the router re-renders this state');
+    inp.value=decodeURIComponent((entries[cur].split('q=')[1]||'').replace(/\+/g,' '));
+    render();
+  };
+  resetBtn.onclick=()=>{
+    entries=['/products']; cur=0; inp.value='';
+    log.innerHTML='<span class="placeholder">— events appear here · note when popstate fires and when it doesn\u2019t —</span>';
+    render();
+  };
+  modeBar.querySelectorAll('.vm').forEach(b=>b.onclick=()=>{
+    mode=b.dataset.m;
+    modeBar.querySelectorAll('.vm').forEach(x=>x.classList.toggle('on',x===b));
+    addLog('<span class="c">── strategy: <b>'+({push:'pushState every keystroke — watch the stack bloat',replace:'replaceState while typing — one editable stop',smart:'replace while typing, push on ⏎ — the production answer'})[mode]+'</b> ──</span>');
+  });
+  render();
+})();
+
+/* ============================================================
+   04 · URLSEARCHPARAMS LAB
+   ============================================================ */
+(function(){
+  const $=id=>document.getElementById(id);
+  const qs=$('plQs'), pairsEl=$('plPairs'), keyIn=$('plKey'), valIn=$('plVal'), out=$('plOut');
+  if(!qs) return;
+  let params=new URLSearchParams(qs.value);
+  function fmt(v){
+    if(v===null) return '<span class="b">null</span>';
+    if(Array.isArray(v)) return '[ '+v.map(x=>'<span class="s">"'+escQ(x)+'"</span>').join(', ')+' ]';
+    if(typeof v==='boolean') return '<span class="n">'+v+'</span>';
+    return '<span class="s">"'+escQ(v)+'"</span>';
+  }
+  function print(call,res){
+    const d=document.createElement('div');
+    d.innerHTML='<span class="in">&gt; params.'+escQ(call)+'</span><br><span class="out">'+(res===undefined?'<span style="color:var(--faint)">undefined · (mutated — see the string above)</span>':fmt(res))+'</span>';
+    out.appendChild(d); out.scrollTop=out.scrollHeight;
+    while(out.children.length>14) out.removeChild(out.firstChild);
+  }
+  function renderPairs(hotKey){
+    const list=[...params];
+    if(!list.length){ pairsEl.innerHTML='<span class="ph">// internal model: [] — no pairs</span>'; return; }
+    const seen={};
+    list.forEach(([k])=>seen[k]=(seen[k]||0)+1);
+    pairsEl.innerHTML='<div style="color:var(--faint);margin-bottom:5px">// internal model — an ordered list of pairs</div>'
+      +list.map(([k,v],i)=>'<div class="pair'+(hotKey===k?' hot':'')+'"><span style="color:var(--faint)">'+i+'</span> [ <span class="k">"'+escQ(k)+'"</span><span class="eq">,</span> <span class="v">"'+escQ(v)+'"</span> ]'
+        +(seen[k]>1?'<span class="dup">duplicate key — .get() sees only the first</span>':'')+'</div>').join('');
+  }
+  function syncString(hotKey){ qs.value=params.toString(); renderPairs(hotKey); }
+  qs.addEventListener('input',()=>{ params=new URLSearchParams(qs.value); renderPairs(); });
+  document.querySelectorAll('#params [data-op]').forEach(b=>b.addEventListener('click',()=>{
+    const op=b.dataset.op, k=keyIn.value.trim(), v=valIn.value;
+    switch(op){
+      case 'get':      print("get('"+k+"')", params.get(k)); renderPairs(k); break;
+      case 'getAll':   print("getAll('"+k+"')", params.getAll(k)); renderPairs(k); break;
+      case 'has':      print("has('"+k+"')", params.has(k)); renderPairs(k); break;
+      case 'set':      params.set(k,v);    print("set('"+k+"', '"+v+"')"); syncString(k); break;
+      case 'append':   params.append(k,v); print("append('"+k+"', '"+v+"')"); syncString(k); break;
+      case 'delete':   params.delete(k);   print("delete('"+k+"')"); syncString(); break;
+      case 'sort':     params.sort();      print('sort()'); syncString(); break;
+      case 'toString': print('toString()', params.toString()); break;
+    }
+  }));
+  renderPairs();
+
+  /* live encoder */
+  const encIn=$('encIn'), encOut=$('encOut');
+  function enc(){
+    const p=new URLSearchParams(); p.set('q',encIn.value);
+    encOut.innerHTML='<span class="in">&gt; new URLSearchParams().set(\'q\', value).toString()</span><br><span class="out"><span class="s">"'+escQ(p.toString())+'"</span></span>';
+  }
+  encIn.addEventListener('input',enc); enc();
+
+  /* flag matrix */
+  const flagRow=$('flagRow'), flagOut=$('flagOut');
+  function flag(q){
+    const p=new URLSearchParams(q);
+    flagOut.innerHTML='<span class="in">&gt; const p = new URLSearchParams(<span class="s">"'+escQ(q)+'"</span>)</span><br>'
+      +'<span class="out">p.has(\'discount\') → <span class="n">'+p.has('discount')+'</span></span><br>'
+      +'<span class="out">p.get(\'discount\') → '+fmt(p.get('discount'))+'</span>';
+  }
+  flagRow.querySelectorAll('.cf-chip').forEach(b=>b.addEventListener('click',()=>{
+    flagRow.querySelectorAll('.cf-chip').forEach(x=>x.classList.toggle('on',x===b));
+    flag(b.dataset.q);
+  }));
+  flag('');
+})();
+
+/* ============================================================
+   05 · URL STATE CYCLE — player
+   ============================================================ */
+(function(){
+  const $=id=>document.getElementById(id);
+  const stagesEl=$('cyStages'); if(!stagesEl) return;
+  const urlEl=$('cyUrl'), stateEl=$('cyState'), stackEl=$('cyStack'), capEl=$('cyCap');
+  const prev=$('cyPrev'), play=$('cyPlay'), playIcon=$('cyPlayIcon'), next=$('cyNext'),
+        scrub=$('cyScrub'), fill=$('cyFill'), stepNo=$('cyStepNo');
+  const STAGES=['URL','parse','derived state','render UI','user action','serialize','pushState','re-render'];
+  const U1='/products?category=shoes&page=1', U2='/products?category=shoes&page=2';
+  const S1='{\n  category: "shoes",\n  page:     1\n}';
+  const S2='{\n  category: "shoes",\n  page:     <span class="chg">2</span>\n}';
+  const K1='[ '+U1+' ]  ← current';
+  const K2='[ '+U1+',\n  <span class="chg">'+U2+'</span> ]  ← current';
+  const STEPS=[
+    {st:0,url:U1,state:S1,stack:K1,cap:'<b>The URL is the input.</b> It arrived from anywhere — a click, a bookmark, a pasted link, a Back press. The pipeline doesn\u2019t care.'},
+    {st:1,url:U1,state:S1,stack:K1,cap:'<b>Parse.</b> <code>new URL(href)</code> splits the layers; <code>url.searchParams</code> hands the query to URLSearchParams. Then <em>validate</em> — params are user input.'},
+    {st:2,url:U1,state:S1,stack:K1,cap:'<b>Derive.</b> <code>page = parsePositiveInt(params.get(\'page\'), 1)</code>. No useState copy — this object is recomputed from the URL, every time.'},
+    {st:3,url:U1,state:S1,stack:K1,cap:'<b>Render.</b> Shoes, page 1. <code>UI = f(URL)</code> — the screen is a pure projection of the address bar.'},
+    {st:4,url:U1,state:S1,stack:K1,cap:'<b>Action.</b> The user clicks “next page”. The handler does <em>not</em> call <code>setPage(2)</code> — it proposes a transition: <code>NEXT_PAGE</code>.'},
+    {st:5,url:U1,state:S1,stack:K1,cap:'<b>Serialize.</b> Reducer-style: read <code>page=1</code>, compute <code>page=2</code>, <em>preserve everything else</em> with <code>url.searchParams.set(\'page\',\'2\')</code>.'},
+    {st:6,url:U2,state:S1,stack:K2,cap:'<b>pushState.</b> The browser records the new entry. The stack now holds <em>both</em> states — that\u2019s Back/Forward support, for free, with zero restoration code.'},
+    {st:7,url:U2,state:S2,stack:K2,cap:'<b>Re-render.</b> The same pipeline runs on the new URL: parse → derive → paint page 2. Press ◀ on the player to watch it in reverse — that\u2019s exactly what the Back button does.'}
+  ];
+  stagesEl.innerHTML=STAGES.map((s,i)=>'<div class="stage" data-i="'+i+'"><span class="sn">'+String(i).padStart(2,'0')+'</span>'+s+'<span class="arr">◀</span></div>').join('');
+  const stageEls=[...stagesEl.children];
+  let k=0, timer=null;
+  function paint(){
+    const s=STEPS[k];
+    stageEls.forEach((el,i)=>{ el.classList.toggle('on',i===s.st); el.classList.toggle('done',i<s.st); });
+    const changed=urlEl.textContent!==s.url;
+    urlEl.textContent=s.url;
+    urlEl.classList.toggle('flash',changed&&k>0);
+    stateEl.innerHTML=s.state;
+    stackEl.innerHTML=s.stack;
+    capEl.innerHTML=s.cap;
+    fill.style.width=(k/(STEPS.length-1)*100)+'%';
+    stepNo.textContent=(k+1)+' / '+STEPS.length;
+    hlCodeIn(capEl);
+  }
+  function stop(){ if(timer){clearInterval(timer);timer=null;} playIcon.innerHTML='<path d="M8 5v14l11-7z"/>'; }
+  function go(n){ k=Math.max(0,Math.min(STEPS.length-1,n)); paint(); }
+  prev.onclick=()=>{stop();go(k-1);};
+  next.onclick=()=>{stop();go(k+1);};
+  play.onclick=()=>{
+    if(timer){stop();return;}
+    if(k>=STEPS.length-1)k=-1;
+    playIcon.innerHTML='<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
+    timer=setInterval(()=>{ if(k>=STEPS.length-1){stop();return;} go(k+1); }, reducedMotion?1200:2600);
+    go(k+1);
+  };
+  function scrubTo(e){
+    const r=scrub.getBoundingClientRect();
+    const t=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
+    stop(); go(Math.round(t*(STEPS.length-1)));
+  }
+  scrub.addEventListener('pointerdown',e=>{scrubTo(e);
+    const mv=ev=>scrubTo(ev), up=()=>{window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',up);};
+    window.addEventListener('pointermove',mv); window.addEventListener('pointerup',up);
+  });
+  paint();
+})();
+
+/* ============================================================
+   06 · ROUTE MATCHER + FILE VS CODE
+   ============================================================ */
+(function(){
+  const $=id=>document.getElementById(id);
+  const inp=$('rtIn'); if(!inp) return;
+  const tbl=$('rtTable'), res=$('rtResult'), go=$('rtGo');
+  const rows=[...tbl.querySelectorAll('tbody tr')];
+  const LAYOUTS={
+    '/':['RootLayout','HomePage'],
+    '/products':['RootLayout','ProductListPage'],
+    '/products/:id':['RootLayout','ProductDetailPage'],
+    '/dashboard':['RootLayout','DashboardLayout','DashboardPage'],
+    '/dashboard/orders/:id':['RootLayout','DashboardLayout','OrdersLayout','OrderDetailPage']
+  };
+  let busy=false;
+  function match(pat,path){
+    const ps=pat.split('/').filter(Boolean), us=path.split('/').filter(Boolean);
+    if(pat==='/') return us.length===0?{}:null;
+    if(ps.length!==us.length) return null;
+    const params={};
+    for(let i=0;i<ps.length;i++){
+      if(ps[i].startsWith(':')) params[ps[i].slice(1)]=us[i];
+      else if(ps[i]!==us[i]) return null;
+    }
+    return params;
+  }
+  function run(){
+    if(busy) return; busy=true;
+    rows.forEach(r=>{r.className='';r.querySelector('.verdict').textContent='';});
+    res.innerHTML='<span class="ph">— matching… the router walks the table top-down —</span>';
+    let url;
+    try{ url=new URL(inp.value.trim(),'https://x'); }catch(_){ res.innerHTML='<span style="color:var(--danger)">✗ unparseable</span>'; busy=false; return; }
+    const path=url.pathname;
+    let i=0, winner=null, params=null;
+    const step=()=>{
+      if(i>0){ const prevRow=rows[i-1];
+        prevRow.classList.remove('checking');
+        prevRow.classList.add(prevRow.dataset.hit==='1'?'yes':'no');
+        prevRow.querySelector('.verdict').textContent=prevRow.dataset.hit==='1'?'✓ match':'✗';
+      }
+      if(winner!==null||i>=rows.length){ finish(); return; }
+      const r=rows[i]; r.classList.add('checking');
+      const m=match(r.dataset.pat,path);
+      r.dataset.hit=m?'1':'0';
+      if(m){ winner=r.dataset.pat; params=m; }
+      i++;
+      setTimeout(step, reducedMotion?0:340);
+    };
+    const finish=()=>{
+      busy=false;
+      if(winner===null){
+        res.innerHTML='<span style="color:var(--danger)">✗ no route matched '+escQ(path)+'</span><br><span style="color:var(--faint)">→ the router renders its NotFound boundary (a route like any other)</span>';
+        return;
+      }
+      const chain=LAYOUTS[winner]||['RootLayout','Page'];
+      const search=[...url.searchParams];
+      res.innerHTML=
+        '<div><span style="color:var(--faint)">matched</span> <b style="color:var(--express)">'+escQ(winner)+'</b></div>'
+        +'<div style="margin-top:7px"><span style="color:var(--faint)">params </span><span class="prm">'+escQ(JSON.stringify(params))+'</span>'
+        +' · <span style="color:var(--faint)">searchParams </span><span class="prm">'+escQ(JSON.stringify(Object.fromEntries(search)))+'</span>'
+        +(url.hash?' · <span style="color:var(--faint)">hash </span><span class="prm">'+escQ(url.hash)+'</span> <span style="color:var(--faint)">(client-only)</span>':'')+'</div>'
+        +'<div style="margin-top:9px;color:var(--faint)">rendered tree — nested layouts persist across sibling navigations:</div>'
+        +'<div style="margin-top:4px">'+chain.map((c,d)=>'<div style="padding-left:'+(d*18)+'px"><span class="lay">'+(d<chain.length-1?'└ '+c:'└ <b>'+c+'</b>')+'</span></div>').join('')+'</div>';
+    };
+    step();
+  }
+  go.onclick=run;
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')run();});
+  document.querySelectorAll('#router [data-rt]').forEach(b=>b.addEventListener('click',()=>{ inp.value=b.dataset.rt; run(); }));
+
+  /* file vs code switcher */
+  const FILE_TREE='app/\n├─ layout.tsx                 <span class="an">← RootLayout, wraps everything</span>\n├─ page.tsx                   <span class="fsc">/</span>\n├─ products/\n│  ├─ page.tsx                <span class="fsc">/products</span>\n│  └─ [id]/\n│     └─ page.tsx             <span class="fsc">/products/:id</span>\n└─ dashboard/\n   ├─ layout.tsx              <span class="an">← DashboardLayout for /dashboard/*</span>\n   ├─ page.tsx                <span class="fsc">/dashboard</span>\n   └─ orders/\n      ├─ layout.tsx           <span class="an">← OrdersLayout</span>\n      └─ [id]/\n         └─ page.tsx          <span class="fsc">/dashboard/orders/:id</span>';
+  const CODE_SRC="const router = createBrowserRouter([\n  { path: '/', element: <RootLayout />, children: [\n    { index: true, element: <HomePage /> },\n    { path: 'products', element: <ProductListPage /> },\n    { path: 'products/:id', element: <ProductDetailPage /> },\n    { path: 'dashboard', element: <DashboardLayout />, children: [\n      { index: true, element: <DashboardPage /> },\n      { path: 'orders/:id', element: <OrderDetailPage /> },\n    ]},\n  ]},\n])";
+  const TABLE_SRC='// either way, the build/runtime product is the same:\n/                      → HomePage\n/products              → ProductListPage\n/products/:id          → ProductDetailPage\n/dashboard             → DashboardLayout > DashboardPage\n/dashboard/orders/:id  → DashboardLayout > OrdersLayout > OrderDetailPage';
+  const sw=$('rtSwitch'), dials=$('rtDials'), philo=$('rtPhilo');
+  const VIEWS={
+    file:{a:['dald','the filesystem is the DSL','<pre class="wire ftree">'+FILE_TREE+'</pre>'],
+          philo:'<b>File-based routing is compile-time structure.</b> The framework scans folders at build time and emits a route manifest — <code>[id]</code> means dynamic segment, <code>layout.tsx</code> nests. URLs and code layout stay aligned, discovery is trivial, and the browser never sees a folder. Cost: conventions are the contract — move a file, change a URL.'},
+    code:{a:['rh','routes are just data','<pre class="wire">'+hl(CODE_SRC)+'</pre>'],
+          philo:'<b>Code-based routing is declaration structure.</b> The table is an object tree you can compose, generate from variables, and type-check — natural for dynamic route sets. Cost: discipline; nothing forces the config to mirror your file layout.'}
+  };
+  function paintSwitch(v){
+    const V=VIEWS[v];
+    dials.innerHTML='<div class="dial '+V.a[0]+'"><div class="dh"><i></i>'+V.a[1]+'</div>'+V.a[2]+'</div>'
+      +'<div class="dial tqd"><div class="dh"><i></i>the route table — same machine either way</div><pre class="wire">'+hl(TABLE_SRC)+'</pre></div>';
+    philo.innerHTML=V.philo;
+    hlCodeIn(philo);
+  }
+  sw.querySelectorAll('.vm').forEach(b=>b.onclick=()=>{
+    sw.querySelectorAll('.vm').forEach(x=>x.classList.toggle('on',x===b));
+    paintSwitch(b.dataset.v);
+  });
+  paintSwitch('file');
+  run();
+})();
+</script>
+<script>
+/* ============================================================
+   07 · DECISION WIZARD — where does the state live?
+   ============================================================ */
+(function(){
+  const tree=document.getElementById('dtree'); if(!tree) return;
+  const qs=[...tree.querySelectorAll('.dt-q')], verdict=document.getElementById('dtVerdict');
+  const answers=[null,null,null];
+  const VERDICTS={
+    memory:{v:'var(--next)',t:'keep it in memory',p:'It doesn\u2019t change what the user is looking at — it\u2019s interaction texture. <code>useState</code>/<code>useReducer</code>, gone on unmount, and that\u2019s correct. Putting it in the URL would spam the history stack with meaningless stops.'},
+    ephemeral:{v:'var(--next)',t:'memory (or sessionStorage)',p:'It changes the view, but it shouldn\u2019t survive a reload or ride in a shared link — think a live preview toggle or transient wizard scratch state. Memory first; <code>sessionStorage</code> if it must survive an accidental refresh.'},
+    url:{v:'var(--tq)',t:'put it in the URL',p:'Changes the view · should survive reload · shareable · Back/Forward should restore it · not sensitive or noisy. Path if it\u2019s <em>identity</em> (<code>/products/42</code>), query if it\u2019s a <em>modifier</em> (<code>?sort=price-asc&page=2</code>), hash if it\u2019s a <em>client-side section</em> (<code>#reviews</code>). The server sees it, caches key on it, SSR renders from it.'},
+    notUrl:{v:'var(--danger)',t:'view state — but NOT in the URL',p:'It qualifies as navigation state, but it\u2019s sensitive, huge, or changes every frame. URLs leak into history, logs, analytics and Referer headers; huge blobs break sharing; per-frame updates trash the stack. Sensitive → cookie/session + server. Huge → database + a short id in the URL. Noisy → memory, serialize on settle.'}
+  };
+  function verdictKey(){
+    if(answers[0]==='no') return 'memory';
+    if(answers[1]==='no') return 'ephemeral';
+    if(answers[2]==='yes') return 'notUrl';
+    return 'url';
+  }
+  function paint(){
+    let active=answers.findIndex(a=>a===null);
+    const done=answers[0]==='no'||answers[1]==='no'||active===-1;
+    if(answers[0]==='no'){ active=-2; }
+    else if(answers[1]==='no'){ active=-2; }
+    qs.forEach((q,i)=>{
+      const ans=answers[i];
+      q.classList.toggle('answered',ans!==null);
+      q.classList.toggle('active',i===active&&!done);
+      const skipped=(answers[0]==='no'&&i>0)||(answers[1]==='no'&&i>1);
+      q.style.display=skipped?'none':'';
+      q.querySelectorAll('.dt-yn').forEach(b=>b.classList.toggle('picked',ans===b.dataset.a));
+    });
+    if(done){
+      const V=VERDICTS[verdictKey()];
+      verdict.style.setProperty('--v',V.v);
+      verdict.style.setProperty('--vs','color-mix(in srgb, '+V.v+' 12%, transparent)');
+      verdict.innerHTML='<div class="vh"><b>'+V.t+'</b></div><p>'+V.p+'</p>';
+      hlCodeIn(verdict);
+    } else {
+      verdict.innerHTML='<span class="ph" style="color:var(--faint);font-style:italic">— answer Q'+(active+1)+' —</span>';
+    }
+  }
+  qs.forEach((q,i)=>q.querySelectorAll('.dt-yn').forEach(b=>b.onclick=()=>{
+    answers[i]=b.dataset.a;
+    if(i===0&&b.dataset.a==='no'){answers[1]=answers[2]=null;}
+    if(i===1&&b.dataset.a==='no'){answers[2]=null;}
+    paint();
+  }));
+  document.getElementById('dtReset').onclick=()=>{answers.fill(null);
+    document.querySelectorAll('#dtPresets .cf-chip').forEach(x=>x.classList.remove('on'));paint();};
+  const PRESETS={
+    search:['yes','yes','no'], page:['yes','yes','no'], tab:['yes','yes','no'], daterange:['yes','yes','no'],
+    hover:['no',null,null], mouse:['no',null,null],
+    draft:['yes','no',null], theme:['no',null,null],
+    token:['yes','yes','yes']
+  };
+  document.querySelectorAll('#dtPresets .cf-chip').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#dtPresets .cf-chip').forEach(x=>x.classList.toggle('on',x===b));
+    const seq=PRESETS[b.dataset.p]; answers.fill(null);
+    let i=0;
+    const tick=()=>{ if(i>=seq.length||seq[i]===null){paint();return;} answers[i]=seq[i]; i++; paint(); setTimeout(tick,reducedMotion?0:260); };
+    tick();
+  });
+  paint();
+})();
+
+/* ============================================================
+   08 · BUG DETECTOR
+   ============================================================ */
+(function(){
+  const chips=document.getElementById('smChips'); if(!chips) return;
+  const verdict=document.getElementById('smVerdict'), why=document.getElementById('smWhy'),
+        dials=document.getElementById('smDials'), bad=document.getElementById('smBad'), fix=document.getElementById('smFix');
+  const BUGS=[
+    {chip:'“applying a filter wiped my other filters”',flag:'clobbered query',v:'pushState with a hand-built string',
+     why:'Someone built the next URL from scratch instead of from the current one. The category, sort and search the user set are gone — because the code never read them.',
+     bad:"// current: /products?category=shoes&sort=price-asc&page=1\nhistory.pushState(null, '', '/products?page=2')\n// → /products?page=2   category & sort: gone",
+     fix:"const url = new URL(location.href)\nurl.searchParams.set('page', '2')   // merge, don't rebuild\nhistory.pushState(null, '', url.pathname + url.search)\n// → /products?category=shoes&sort=price-asc&page=2"},
+    {chip:'“I filtered and got an empty page 8”',flag:'stale pagination',v:'filter changed, position didn\u2019t',
+     why:'Pagination is a position <em>inside</em> a result set. Change the filter and the old result set no longer exists — page 8 of “all shoes” isn\u2019t page 8 of “Nike shoes”. Reset dependent state when its parent changes.',
+     bad:"// on /products?category=shoes&page=8\nurl.searchParams.set('brand', 'nike')\n// → ?category=shoes&page=8&brand=nike  // 3 pages exist",
+     fix:"url.searchParams.set('brand', 'nike')\nurl.searchParams.set('page', '1')   // new result set → page 1\nhistory.pushState(null, '', url.pathname + url.search)"},
+    {chip:'“?page=lol crashed the page”',flag:'trusted input',v:'query params are user-controlled',
+     why:'Anyone can type <code>?page=-999</code>, <code>?sort=drop-table</code> or <code>?brand=&lt;script&gt;</code> straight into the bar. Params are external input: parse, validate, fall back.',
+     bad:"const page = Number(params.get('page'))\n// 'lol' → NaN → items.slice(NaN * 20) → 💥\nconst sort = params.get('sort')  // passed straight to the DB",
+     fix:"function parsePositiveInt(v, fallback) {\n  const n = Number(v)\n  return Number.isInteger(n) && n > 0 ? n : fallback\n}\nconst page = parsePositiveInt(params.get('page'), 1)\nconst ALLOWED = ['relevance','price-asc','price-desc','newest']\nconst sort = ALLOWED.includes(params.get('sort')) ? params.get('sort') : 'relevance'"},
+    {chip:'“Back walks through every letter I typed”',flag:'history spam',v:'pushState on keystrokes',
+     why:'Each keystroke planted a history entry, so escaping the page means marching back through <code>nike → nik → ni → n</code>. Section 03\u2019s rule: replace while refining, push on intent.',
+     bad:"searchInput.addEventListener('input', e => {\n  const url = new URL(location.href)\n  url.searchParams.set('q', e.target.value)\n  history.pushState(null, '', url)   // a stop per letter\n})",
+     fix:"input:  history.replaceState(null, '', url)  // edit current entry\nsubmit: history.pushState(null, '', url)     // one meaningful stop"},
+    {chip:'“I sent a link; they see the default view”',flag:'memory-only state',v:'the URL never knew',
+     why:'The filters lived in <code>useState</code> only. The address bar said <code>/products</code> the whole time, so the copied link carries none of it — and Back can\u2019t restore what the browser never saw.',
+     bad:"const [brand, setBrand] = useState('nike')\nconst [page, setPage] = useState(3)\n// address bar: /products — forever",
+     fix:"// state that should travel, travels in the URL\nconst params = useSearchParams()\nconst brand = params.get('brand') ?? 'all'\nconst page  = parsePositiveInt(params.get('page'), 1)\n// updates go through router.push(nextUrl)"},
+    {chip:'“a session token showed up in our analytics”',flag:'secret in URL',v:'URLs are not private',
+     why:'URLs are copied into history, server logs, analytics, screenshots and <code>Referer</code> headers. A token in the query string is a token published to every system that ever sees the address.',
+     bad:"router.push(`/dashboard?token=${session.token}`)\n// now in: history, logs, analytics, Referer, screenshots",
+     fix:"// identity rides in an HttpOnly cookie — server-readable,\n// never in the address, never in a shared link\nSet-Cookie: session=…; HttpOnly; Secure; SameSite=Lax\n// the URL keeps only shareable view state"}
+  ];
+  chips.innerHTML=BUGS.map((b,i)=>'<button class="cf-chip" data-i="'+i+'">'+b.chip+'</button>').join('');
+  chips.querySelectorAll('.cf-chip').forEach(b=>b.onclick=()=>{
+    chips.querySelectorAll('.cf-chip').forEach(x=>x.classList.toggle('on',x===b));
+    const B=BUGS[+b.dataset.i];
+    verdict.innerHTML='<span class="smell-flag">'+B.flag+'</span> <b>'+B.v+'</b>';
+    why.innerHTML=B.why;
+    bad.innerHTML=hl(B.bad); fix.innerHTML=hl(B.fix);
+    dials.hidden=false;
+  });
+})();
+
+/* ============================================================
+   09 · CANONICAL & CACHE — the key collapse
+   ============================================================ */
+(function(){
+  const runBtn=document.getElementById('canRun'); if(!runBtn) return;
+  const fixBtn=document.getElementById('canFix'), log=document.getElementById('canLog');
+  const REQS=[
+    '/products?brand=nike&sort=price-asc',
+    '/products?sort=price-asc&brand=nike',
+    '/products?brand=nike&sort=price-asc&trackingId=abc123',
+    '/products?brand=nike&sort=price-asc&page=1&sessionRef=99'
+  ];
+  const SCHEMA=new Set(['q','brand','sort','page']), DEFAULTS={page:'1',sort:'relevance'};
+  function canonicalize(href){
+    const url=new URL(href,'https://x');
+    for(const key of [...url.searchParams.keys()]){
+      if(!SCHEMA.has(key)) url.searchParams.delete(key);
+      else if(url.searchParams.get(key)===DEFAULTS[key]) url.searchParams.delete(key);
+    }
+    url.searchParams.sort();
+    return url.pathname+(url.searchParams.toString()?'?'+url.searchParams.toString():'');
+  }
+  let busy=false;
+  function line(html){ const d=document.createElement('div'); d.innerHTML=html; log.appendChild(d); log.scrollTop=log.scrollHeight; }
+  function send(urls,label,done){
+    log.innerHTML='<span class="in">// '+label+'</span>';
+    const cache=new Set(); let i=0;
+    const tick=()=>{
+      if(i>=urls.length){ done(cache); return; }
+      const u=urls[i];
+      const hit=cache.has(u);
+      line('<span class="in">&gt; GET '+escQ(u)+'</span>');
+      line(hit?'<span class="out"><span class="s">HIT</span> — served from cache</span>'
+             :'<span class="out"><span class="n">MISS</span> — key <span class="b">"'+escQ(u)+'"</span> not seen · compute + store</span>');
+      cache.add(u); i++;
+      setTimeout(tick, reducedMotion?0:520);
+    };
+    tick();
+  }
+  runBtn.onclick=()=>{
+    if(busy) return; busy=true; runBtn.disabled=true;
+    send(REQS,'four users ask for the same shoes — raw URLs as cache keys',cache=>{
+      line('<span class="out" style="color:var(--danger)">→ '+cache.size+' distinct keys · '+cache.size+' misses · 0 reuse — identical meaning, four computations</span>');
+      busy=false; runBtn.disabled=false; fixBtn.disabled=false;
+    });
+  };
+  fixBtn.onclick=()=>{
+    if(busy) return; busy=true; fixBtn.disabled=true; runBtn.disabled=true;
+    const canon=REQS.map(canonicalize);
+    send(canon,'same four requests through canonicalize(url) — noise dropped, defaults omitted, params.sort()',cache=>{
+      line('<span class="out" style="color:var(--express)">→ '+cache.size+' key for 4 requests · 1 miss, 3 hits — one logical state, one cache entry</span>');
+      busy=false; runBtn.disabled=false; fixBtn.disabled=false;
+    });
+  };
+})();
+</script>
+<script>
+/* ============================================================
+   MODAL · NODE DEEP DIVES
+   ============================================================ */
+const scrim=document.getElementById('scrim'), mtag=document.getElementById('mtag'),
+      mh4=document.getElementById('mh4'), mbody=document.getElementById('mbody');
+function makeEl(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; }
+const WIDGETS={
+  flow(args){
+    const steps=args.steps;
+    const wrap=makeEl('<div class="wdemo"><div class="wbar"><span class="wt">'+(args.title||'step through it')+'</span><button class="wbtn" data-a="prev">◀</button><span class="wstep" id="flstep"></span><button class="wbtn on" data-a="next">step ▶</button><button class="wbtn" data-a="reset">↻</button></div><div class="wbody" id="flbody"></div></div>');
+    const body=wrap.querySelector('#flbody');
+    body.innerHTML=steps.map((s,i)=>'<div class="flowline" data-i="'+i+'"><span class="fn">'+String(i).padStart(2,'0')+'</span><span>'+s+'</span></div>').join('');
+    const rows=[...body.querySelectorAll('.flowline')], stepEl=wrap.querySelector('#flstep');
+    const prev=wrap.querySelector('[data-a="prev"]'), next=wrap.querySelector('[data-a="next"]');
+    let k=0;
+    function render(){
+      rows.forEach((r,i)=>{r.classList.toggle('on',i<=k);r.classList.toggle('cur',i===k);});
+      stepEl.textContent=(k+1)+' / '+rows.length;
+      prev.disabled=k<=0; next.disabled=k>=rows.length-1;
+    }
+    next.onclick=()=>{if(k<rows.length-1){k++;render();}};
+    prev.onclick=()=>{if(k>0){k--;render();}};
+    wrap.querySelector('[data-a="reset"]').onclick=()=>{k=0;render();};
+    render();
+    document.getElementById('wmount').appendChild(wrap);
+    return ()=>{};
+  },
+  code(args){
+    const wrap=makeEl('<div class="wdemo"><div class="wbar"><span class="wt">'+(args.title||'the shape')+'</span></div><pre class="wire" style="border:0;border-radius:0">'+hl(args.src)+'</pre></div>');
+    document.getElementById('wmount').appendChild(wrap);
+    return ()=>{};
+  }
+};
+const NODE_DATA={
+  'tab':{tag:['browser','runtime'],cls:'neutral',title:'The tab — a tiny operating system',
+    lead:'A tab manages a document, a JavaScript world, network, storage, an event loop — and, for routing, the two that matter: a <b>session history</b> and a <b>current URL</b>. It isn\u2019t “URL → HTML document”; in a modern app it\u2019s <code>history entry → URL state → route → data → UI</code>.',
+    widget:['flow',{title:'the routing spine of a tab',steps:[
+      'history stack — past / current / future entries',
+      'current entry exposes the current URL',
+      'the URL is interpreted by the app\u2019s router',
+      'the router renders the matching UI',
+      'user acts → a new entry or a moved cursor → repeat']}],
+    why:'Every navigation feature — Back, reload, bookmarks, deep links, shared URLs — is this one spine being replayed from a different starting point.',
+    deep:[['per tab','Each tab owns its own session history; duplicating a tab clones the timeline.'],['not just SPAs','Full document loads and client-side navigations write to the same stack — the router just changes who does the writing.']]},
+  'user':{tag:['input','driver'],cls:'neutral',title:'User intent — the event source',
+    lead:'Every transition starts here: click a link, type an address, submit a form, press Back. The machine\u2019s job is to translate each intent into the <em>right</em> timeline operation — a new entry, an edited entry, or a moved cursor.',
+    widget:['code',{title:'intent → timeline operation',src:"click <Link>        → pushState(nextUrl)      // new entry\ntype in search box  → replaceState(refined)    // edit current\npress Enter/submit  → pushState(committed)     // new entry\npress Back          → cursor moves + popstate   // nothing created\ntype an address ⏎   → full navigation + push    // new document"}],
+    why:'Map an intent to the wrong operation and you get the classic bugs: history spam from keystrokes, or filters that vanish because a “refinement” was pushed as a destination.',
+    deep:[['the smell test','Would a user expect Back to undo this? Then push. Would they be annoyed? Then replace.'],['forms too','A GET form is intent → URL serialization built into HTML: <code>name=</code> inputs become query pairs.']]},
+  'stack':{tag:['browser','source of truth'],cls:'sa',title:'The history stack — entries plus a cursor',
+    lead:'The stack is the tab\u2019s timeline: an ordered list of <b>history entries</b> with a cursor on the current one. Each entry holds a URL, an optional state object, and a scroll position. Back/Forward move the cursor; navigating mid-timeline <b>discards the future</b>.',
+    widget:['flow',{title:'the three stack operations',steps:[
+      'push — slice off any future, append, cursor to the end',
+      'replace — overwrite the entry under the cursor',
+      'go(n) — move the cursor to an existing entry; popstate fires',
+      'branch — push while mid-timeline: forward entries are gone for good']}],
+    why:'It is the source of truth for where the tab <em>can go</em>. Apps don\u2019t need their own timeline — representing state in URLs enrolls it in this one.',
+    deep:[['what\u2019s inside','<code>{ url, state, scroll, restore info }</code> — the state object is pushState\u2019s first argument, delivered back on popstate.'],['scroll restoration','Browsers restore per-entry scroll on Back; <code>history.scrollRestoration = "manual"</code> hands it to your router.']]},
+  'bar':{tag:['browser','view + input'],cls:'sc',title:'The URL bar — a view and a command line',
+    lead:'The bar is two things at once: a <b>view</b> reflecting the current entry\u2019s URL, and an <b>input</b> that creates a brand-new navigation. It belongs to the browser, not your app — which is exactly why it\u2019s an honest debugger: visible, editable, copyable state.',
+    widget:['code',{title:'the bar as state inspector',src:"/orders?status=failed&range=7d&page=3\n// a bug report you can click.\n// Compare: 'click around until you see it'\n\n// edit it manually → a state transition\n/orders?status=pending&range=30d&page=1"}],
+    why:'If meaningful state shows in the bar, every user can capture, share and reproduce app state with ⌘L ⌘C. That\u2019s free QA infrastructure.',
+    deep:[['view mode','Updates on push, replace, and cursor moves — always the current entry.'],['input mode','Typing + Enter is a full document navigation: request to the server, new entry, old document torn down.']]},
+  'router':{tag:['app','interpreter'],cls:'rh',title:'History API + Router — levers and meaning',
+    lead:'The browser exposes five levers — <code>pushState</code>, <code>replaceState</code>, <code>back</code>, <code>forward</code>, <code>go</code> — and one event, <code>popstate</code>. A router wraps them and adds the meaning the browser lacks: matching, params, layouts, data, transitions.',
+    widget:['code',{title:'a router is essentially this',src:"function render(url) {\n  const route  = matchRoute(url.pathname)   // route table\n  const params = extractParams(route, url.pathname)\n  const search = url.searchParams\n  return route.component({ params, search })\n}\n\naddEventListener('popstate', () => render(new URL(location.href)))"}],
+    why:'popstate is the whole trick: it fires only when an <em>existing</em> entry activates — never for your own push/replace. The router pairs “I changed the URL” with “the user time-traveled” into one render path.',
+    deep:[['history library vs router','A history library wraps movement (push/replace/listen); the router owns meaning (match/load/render). React Router sits on the former; Next.js hides both.'],['what routers add','Prefetching, code-splitting, scroll management, pending UI, error boundaries, navigation blocking.']]},
+  'rtable':{tag:['app','mapping'],cls:'tqd',title:'The route table — the bridge',
+    lead:'The mapping from URL patterns to UI: <code>/products/:id → ProductDetailPage</code>. File-based frameworks generate it by scanning folders at build time; code-based routers declare it as data. <b>At runtime both feed the identical matcher</b> — the browser never knows which you chose.',
+    widget:['flow',{title:'two roads, one machine',steps:[
+      'file road: app/products/[id]/page.tsx — scanned at build',
+      'code road: { path: "products/:id", element: … } — declared',
+      'both compile to: /products/:id → ProductDetailPage',
+      'request /products/123 → matcher → params.id = "123"',
+      'nested layouts wrap the leaf: Root → Shop → ProductDetail']}],
+    why:'Understanding that files and config are two syntaxes for one table demystifies every framework migration — the matcher underneath barely changes.',
+    deep:[['the filesystem DSL','<code>[id]</code> dynamic segment · <code>page.tsx</code> leaf · <code>layout.tsx</code> persistent wrapper · <code>loading/error.tsx</code> boundaries.'],['matching rules','Most-specific wins; static beats dynamic; the query string never participates — it arrives as searchParams.']]},
+  'ui':{tag:['app','projection'],cls:'neutral',title:'The UI — a pure function of the URL',
+    lead:'The strongest mental model in this guide: <code>UI = f(URL)</code>, expanded to <code>render(data(load(parse(match(URL)))))</code>. When the URL changes — for <em>any</em> reason — the same function runs. No sync code, no restoration logic.',
+    widget:['code',{title:'the reducer framing',src:"// current URL state\n/products?brand=nike&page=1\n\n// action\nNEXT_PAGE\n\n// transition: read page, compute page+1, preserve the rest\nurl.searchParams.set('page', '2')\n\n// next URL state — recorded by the browser\n/products?brand=nike&page=2"}],
+    why:'Back/Forward work naturally because the browser saw every state. Memory-only state can\u2019t be restored by a machine that never knew it existed.',
+    deep:[['derive, don\u2019t duplicate','Parse the URL on every render; never mirror it into useState “for convenience” — that\u2019s two sources of truth.'],['the private-window test','Paste your URL into a fresh window. Different screen? State lived in the wrong place.']]},
+  'server':{tag:['http','first render'],cls:'dald',title:'The server — reads path + query before any JS',
+    lead:'On a full navigation the request line carries <code>GET /products?brand=nike&page=2</code> — path and query, never the hash. A server-rendered app can read that state and return HTML that is <b>already correct</b>: filtered, sorted, paginated, cacheable.',
+    widget:['code',{title:'URL state meets SSR',src:"export default async function Page({ searchParams }) {\n  const params = await searchParams\n  const brand = params.brand ?? 'all'\n  const page  = parsePositiveInt(params.page, 1)\n  const products = await getProducts({ brand, page })\n  return <ProductGrid products={products} />\n}"}],
+    why:'This is why URL state pairs with SSR, RSC and CDN caching — and why memory-only filters mean a flash of unfiltered content while the client catches up.',
+    deep:[['cache keys','Proxies and CDNs key on the URL string — section 09\u2019s canonicalization decides your hit rate.'],['the hash stays home','<code>#reviews</code> is client-side; the server never receives it.']]}
+};
+let widgetCleanup=null;
+function openModal(d){
+  if(widgetCleanup){try{widgetCleanup();}catch(_){ }widgetCleanup=null;}
+  mtag.className='mtag '+d.cls;
+  mtag.innerHTML='<span class="nm">'+d.tag[0]+'</span><span>·</span><span>'+d.tag[1]+'</span>';
+  mh4.textContent=d.title;
+  mbody.innerHTML='<p>'+d.lead+'</p><div id="wmount"></div>'
+    +'<div class="why"><span class="wl">why it matters</span>'+d.why+'</div>'
+    +'<div class="deep-h">under the hood</div><div class="deep">'
+    +d.deep.map(c=>'<div class="dcol"><span class="dl">'+c[0]+'</span><p>'+c[1]+'</p></div>').join('')+'</div>';
+  const w=d.widget;
+  widgetCleanup = w && WIDGETS[w[0]] ? WIDGETS[w[0]](w[1]) : null;
+  hlCodeIn(mbody);
+  scrim.classList.add('open'); document.body.classList.add('fs-lock'); mbody.scrollTop=0;
+}
+function closeModal(){ scrim.classList.remove('open'); document.body.classList.remove('fs-lock'); if(widgetCleanup){try{widgetCleanup();}catch(_){ }widgetCleanup=null;} }
+document.getElementById('mclose').onclick=closeModal;
+scrim.addEventListener('click',e=>{if(e.target===scrim)closeModal();});
+(function(){
+  const s=document.getElementById('machSvg'); if(!s) return;
+  s.addEventListener('click',e=>{
+    const n=e.target.closest('.node'); if(!n)return;
+    const d=NODE_DATA[n.dataset.node]; if(d) openModal(d);
+  });
+})();
+
+/* ============================================================
+   INSPECT MODE — fullscreen pan/zoom
+   ============================================================ */
+let fsFig=null, fsApi=null;
+function enterFs(fig,api){ if(fsFig) exitFs(); fsFig=fig; fsApi=api; fig.classList.add('fs'); document.body.classList.add('fs-lock');
+  const b=fig.querySelector('[data-inspect]'); if(b) b.lastChild.textContent=' Exit'; }
+function exitFs(){ if(!fsFig) return; if(fsApi) fsApi.reset();
+  const b=fsFig.querySelector('[data-inspect]'); if(b) b.lastChild.textContent=' Inspect';
+  fsFig.classList.remove('fs'); document.body.classList.remove('fs-lock'); fsFig=null; fsApi=null; }
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){ if(scrim.classList.contains('open')) closeModal(); else exitFs(); }});
+function makeInspectable(svgId){
+  const svg=document.getElementById(svgId); if(!svg) return;
+  const vp=svg.querySelector('.viewport');
+  const canvas=svg.closest('.canvas');
+  const fig=svg.closest('.figure');
+  const hintTag=document.createElement('div'); hintTag.className='inspect-hint'; hintTag.textContent='⤢ tap to inspect'; canvas.appendChild(hintTag);
+  const ctl=document.createElement('div'); ctl.className='zoomctl';
+  ctl.innerHTML='<button data-z="in" title="zoom in">+</button><button data-z="out" title="zoom out">−</button><button data-z="reset" title="reset view">⟲</button>';
+  canvas.appendChild(ctl);
+  const lvl=document.createElement('div'); lvl.className='zlevel'; lvl.textContent='100%'; canvas.appendChild(lvl);
+  const zh=document.createElement('div'); zh.className='zhint'; zh.textContent='scroll / pinch to zoom · drag to pan · Esc to exit'; canvas.appendChild(zh);
+  let s=1,tx=0,ty=0,drag=false,sx=0,sy=0; const pts=new Map(); let pinchD=0,pinchS=1;
+  const isFs=()=>fig.classList.contains('fs');
+  const clamp=v=>Math.max(0.5,Math.min(6,v));
+  const apply=()=>{vp.setAttribute('transform','translate('+tx+','+ty+') scale('+s+')');lvl.textContent=Math.round(s*100)+'%';};
+  const reset=()=>{s=1;tx=0;ty=0;vp.removeAttribute('transform');lvl.textContent='100%';};
+  function toVB(cx,cy){const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;return[(cx-r.left)/r.width*vb.width,(cy-r.top)/r.height*vb.height];}
+  function zoomAt(cx,cy,f){const ns=clamp(s*f);const p=toVB(cx,cy);tx=p[0]-(p[0]-tx)*(ns/s);ty=p[1]-(p[1]-ty)*(ns/s);s=ns;apply();}
+  canvas.addEventListener('click',e=>{ if(isFs())return; if(e.target.closest('.node'))return; enterFs(fig,{reset}); });
+  canvas.addEventListener('wheel',e=>{ if(!isFs())return; e.preventDefault(); zoomAt(e.clientX,e.clientY,e.deltaY<0?1.12:0.89); },{passive:false});
+  canvas.addEventListener('dblclick',e=>{ if(!isFs())return; zoomAt(e.clientX,e.clientY,1.5); });
+  canvas.addEventListener('pointerdown',e=>{ if(!isFs())return; pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){const a=[...pts.values()];pinchD=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);pinchS=s;drag=false;return;}
+    if(e.target.closest('.node'))return;
+    drag=true;sx=e.clientX;sy=e.clientY;canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove',e=>{ if(!isFs())return;
+    if(pts.has(e.pointerId))pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){const a=[...pts.values()];const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);if(pinchD>0){const ns=clamp(pinchS*(d/pinchD));const cx=(a[0].x+a[1].x)/2,cy=(a[0].y+a[1].y)/2;const p=toVB(cx,cy);tx=p[0]-(p[0]-tx)*(ns/s);ty=p[1]-(p[1]-ty)*(ns/s);s=ns;apply();}return;}
+    if(!drag)return;const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;
+    tx+=(e.clientX-sx)/r.width*vb.width;ty+=(e.clientY-sy)/r.height*vb.height;sx=e.clientX;sy=e.clientY;apply(); });
+  function up(e){pts.delete(e.pointerId);if(pts.size<2)pinchD=0;drag=false;}
+  canvas.addEventListener('pointerup',up); canvas.addEventListener('pointercancel',up);
+  ctl.querySelectorAll('button').forEach(b=>{ b.onclick=ev=>{ ev.stopPropagation(); const r=svg.getBoundingClientRect();
+    if(b.dataset.z==='in')zoomAt(r.left+r.width/2,r.top+r.height/2,1.25);
+    else if(b.dataset.z==='out')zoomAt(r.left+r.width/2,r.top+r.height/2,0.8); else reset(); };});
+  const tog=fig.querySelector('[data-inspect="'+svgId+'"]');
+  if(tog) tog.addEventListener('click',()=>{ isFs()?exitFs():enterFs(fig,{reset}); });
+}
+makeInspectable('machSvg');
+
+/* ============================================================
+   THEME · SCROLLSPY · TOC
+   ============================================================ */
+const root=document.documentElement,themeBtn=document.getElementById('themeBtn');
+const sunIcon='<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/>';
+const moonIcon='<path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/>';
+function setTheme(t,persist){root.setAttribute('data-theme',t);document.getElementById('themeTxt').textContent=t.toUpperCase();document.getElementById('themeIcon').innerHTML=t==='dark'?sunIcon:moonIcon;
+  if(persist){try{localStorage.setItem('itbt-theme',t);}catch(_){/* storage unavailable — session-only */}}}
+let storedTheme=null; try{storedTheme=localStorage.getItem('itbt-theme');}catch(_){ }
+if(storedTheme==='light'||storedTheme==='dark') setTheme(storedTheme);
+else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches) setTheme('light');
+themeBtn.onclick=()=>setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark',true);
+
+const links=[...document.querySelectorAll('nav.toc a')];
+const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)links.forEach(l=>l.classList.toggle('active',l.getAttribute('href')==='#'+e.target.id));});},{rootMargin:'-30% 0px -60% 0px'});
+document.querySelectorAll('section.block').forEach(s=>io.observe(s));
+
+const shell=document.getElementById('shell'), tocToggle=document.getElementById('tocToggle'), navBtn=document.getElementById('navBtn'), navTxt=document.getElementById('navTxt');
+function setTocState(s){ shell.setAttribute('data-toc',s); navTxt.textContent = s==='hidden'?'NAV':'HIDE'; }
+tocToggle.addEventListener('click',()=>setTocState(shell.getAttribute('data-toc')==='expanded'?'collapsed':'expanded'));
+let lastVisible='expanded';
+navBtn.addEventListener('click',()=>{ const cur=shell.getAttribute('data-toc'); if(cur==='hidden'){setTocState(lastVisible||'expanded');} else {lastVisible=cur;setTocState('hidden');} });
+(function initToc(){ if(window.innerWidth<1100&&window.innerWidth>=920) setTocState('collapsed'); else setTocState('expanded'); })();
+
+tagTerms(document.querySelector('main'));
+hlCodeIn(document.body);
+</script>
+</body>
+</html>

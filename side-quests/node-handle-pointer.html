@@ -1,0 +1,1881 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>handle ⟶ pointer · the indirection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --js:#e6a93c; --js-soft:rgba(230,169,60,.16);     /* script world / the handle (key)  */
+  --engine:#36d6c3; --engine-soft:rgba(54,214,195,.14); /* native: table · pointer · resource */
+  --danger:#f0735f; --danger-soft:rgba(240,115,95,.16); /* the raw pointer / undefined behaviour */
+  --r:14px; --maxw:1180px;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --serif:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+html[data-theme="dark"]{
+  --bg:#0a0e13; --bg2:#0d1219; --panel:#10161f; --panel2:#141c27;
+  --ink:#e9e7df; --ink2:#aab2bf; --ink3:#6b7482;
+  --line:rgba(150,170,195,.14); --line2:rgba(150,170,195,.26);
+  --grid:rgba(120,150,185,.05); --grid2:rgba(120,150,185,.09);
+  --shadow:0 24px 60px -20px rgba(0,0,0,.7);
+}
+html[data-theme="light"]{
+  --bg:#ece7da; --bg2:#f0ece1; --panel:#f6f2e8; --panel2:#fbf8f0;
+  --ink:#171c22; --ink2:#4c5560; --ink3:#8a8e84;
+  --line:rgba(30,42,58,.16); --line2:rgba(30,42,58,.32);
+  --grid:rgba(40,60,85,.05); --grid2:rgba(40,60,85,.1);
+  --js:#b3711a; --engine:#0a8c7d; --danger:#c1422e;
+  --js-soft:rgba(179,113,26,.14); --engine-soft:rgba(10,140,125,.12); --danger-soft:rgba(193,66,46,.12);
+  --shadow:0 24px 50px -22px rgba(40,50,70,.4);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);font-family:var(--serif);
+  font-size:18px;line-height:1.65;-webkit-font-smoothing:antialiased;
+  background-image:
+    linear-gradient(var(--grid) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid) 1px,transparent 1px),
+    linear-gradient(var(--grid2) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid2) 1px,transparent 1px);
+  background-size:28px 28px,28px 28px,140px 140px,140px 140px;
+  transition:background-color .4s,color .4s;
+}
+::selection{background:var(--js-soft);color:var(--ink)}
+/* themed scrollbars */
+html{scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+*{scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line2);border-radius:999px;border:3px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:var(--js);background-clip:padding-box}
+::-webkit-scrollbar-corner{background:transparent}
+/* compact, surface-matched bars inside contained scroll areas */
+.modal,.repl-out,.snip pre,pre.wire,nav.toc,.memstrip{scrollbar-color:var(--line2) transparent}
+.modal::-webkit-scrollbar,.repl-out::-webkit-scrollbar,.snip pre::-webkit-scrollbar,pre.wire::-webkit-scrollbar,nav.toc::-webkit-scrollbar,.memstrip::-webkit-scrollbar{width:8px;height:8px}
+.modal::-webkit-scrollbar-thumb,.repl-out::-webkit-scrollbar-thumb,.snip pre::-webkit-scrollbar-thumb,pre.wire::-webkit-scrollbar-thumb,nav.toc::-webkit-scrollbar-thumb,.memstrip::-webkit-scrollbar-thumb{background:var(--line2);border:2px solid transparent;border-radius:999px;background-clip:padding-box}
+.modal::-webkit-scrollbar-thumb:hover,.repl-out::-webkit-scrollbar-thumb:hover,.snip pre::-webkit-scrollbar-thumb:hover,pre.wire::-webkit-scrollbar-thumb:hover,nav.toc::-webkit-scrollbar-thumb:hover,.memstrip::-webkit-scrollbar-thumb:hover{background:var(--engine);background-clip:padding-box}
+.mono{font-family:var(--mono)}
+code,pre{font-family:var(--mono)}
+
+header.top{position:sticky;top:0;z-index:60;backdrop-filter:blur(14px);background:color-mix(in srgb,var(--bg) 78%,transparent);border-bottom:1px solid var(--line);transition:transform .35s cubic-bezier(.4,0,.2,1)}
+body.top-hidden header.top{transform:translateY(-101%)}
+.top-inner{max-width:var(--maxw);margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:14px}
+.nav-toggle{flex:none;width:34px;height:34px;border-radius:9px;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);cursor:pointer;display:grid;place-items:center;transition:.18s}
+.nav-toggle:hover{color:var(--js);border-color:var(--js)}
+.nav-toggle svg{width:17px;height:17px}
+@media(max-width:920px){.nav-toggle{display:none}}
+.brand{font-family:var(--mono);font-weight:800;letter-spacing:.04em;font-size:14px;display:flex;align-items:center;gap:10px}
+.brand .dot{width:10px;height:10px;border-radius:50%;background:var(--js);box-shadow:0 0 0 4px var(--js-soft);animation:pulse 3s infinite}
+.brand .arr{color:var(--ink3)} .brand .eng{color:var(--engine)}
+@keyframes pulse{50%{box-shadow:0 0 0 9px transparent}}
+.top-spacer{flex:1}
+.theme-btn{font-family:var(--mono);font-size:12px;letter-spacing:.05em;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);padding:8px 14px;border-radius:999px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:.2s}
+.theme-btn:hover{color:var(--ink);border-color:var(--js)}
+.theme-btn svg{width:15px;height:15px}
+
+.shell{max-width:var(--maxw);margin:0 auto;padding:0 24px;display:grid;grid-template-columns:212px 1fr;gap:48px;transition:grid-template-columns .4s cubic-bezier(.4,0,.2,1),max-width .4s cubic-bezier(.4,0,.2,1)}
+nav.toc{position:sticky;top:74px;align-self:start;height:calc(100vh - 90px);padding-top:40px;font-family:var(--mono);font-size:12.5px;overflow:auto;transition:opacity .25s}
+.toc-collapse{display:flex;align-items:center;gap:8px;background:none;border:none;color:var(--ink3);font-family:var(--mono);font-size:11px;letter-spacing:.06em;cursor:pointer;padding:0 0 14px 14px;margin-left:-2px;transition:.18s}
+.toc-collapse:hover{color:var(--js)}
+.toc-collapse svg{width:13px;height:13px}
+/* collapsed: hide rail, recenter content in a comfortable reading column */
+body.nav-collapsed .shell{grid-template-columns:1fr;max-width:920px}
+body.nav-collapsed nav.toc{display:none}
+#navReopen{position:fixed;left:14px;top:78px;z-index:55;display:none;align-items:center;justify-content:center;width:30px;height:30px;color:var(--ink3);background:color-mix(in srgb,var(--panel) 70%,transparent);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:8px;padding:0;cursor:pointer;opacity:.5;transition:.18s}
+#navReopen:hover{opacity:1;color:var(--js);border-color:var(--js)}
+#navReopen svg{width:15px;height:15px}
+body.nav-collapsed #navReopen{display:flex}
+@media(max-width:920px){body.nav-collapsed .shell{max-width:var(--maxw)}#navReopen{display:none!important}}
+nav.toc a{display:flex;gap:10px;align-items:baseline;color:var(--ink3);text-decoration:none;padding:7px 0;border-left:2px solid transparent;padding-left:14px;margin-left:-2px;transition:.2s;letter-spacing:.02em}
+nav.toc a .num{color:var(--ink3);font-weight:700;font-size:11px}
+nav.toc a:hover{color:var(--ink)}
+nav.toc a.active{color:var(--ink);border-left-color:var(--js)}
+nav.toc a.active .num{color:var(--js)}
+main{padding:40px 0 140px;min-width:0}
+
+.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--engine);display:flex;align-items:center;gap:12px;margin:0 0 14px}
+.kicker .ix{color:var(--js);font-weight:800}
+.kicker::after{content:"";flex:1;height:1px;background:var(--line)}
+h1.hero-h{font-weight:600;font-size:clamp(40px,6vw,72px);line-height:1.02;letter-spacing:-.02em;margin:0 0 18px}
+h1.hero-h .a{color:var(--js)} h1.hero-h .b{color:var(--engine)}
+h2{font-weight:600;font-size:clamp(26px,3.4vw,38px);letter-spacing:-.015em;margin:0 0 16px;line-height:1.1}
+h3{font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2);margin:30px 0 10px}
+.lead{font-size:21px;color:var(--ink2);max-width:64ch}
+.prose{max-width:66ch}
+.prose p{margin:0 0 16px} .prose strong{color:var(--ink);font-weight:600} .prose em{color:var(--ink)}
+section.block{padding:70px 0;border-bottom:1px solid var(--line);scroll-margin-top:80px}
+section.block:first-of-type{padding-top:30px}
+
+.term{cursor:help;border-bottom:1.5px dotted var(--engine);position:relative;color:inherit;transition:background .15s}
+.term:hover{background:var(--engine-soft)}
+#tip{position:fixed;z-index:500;max-width:330px;background:var(--panel2);border:1px solid var(--line2);border-radius:12px;padding:13px 15px;box-shadow:var(--shadow);font-size:14.5px;line-height:1.5;color:var(--ink2);pointer-events:none;opacity:0;transform:translateY(4px);transition:opacity .14s,transform .14s;font-family:var(--serif)}
+#tip.show{opacity:1;transform:translateY(0)}
+#tip .t-name{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--engine);text-transform:uppercase;display:block;margin-bottom:5px}
+#tip .t-kind{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--js);text-transform:uppercase;float:right}
+#tip::after{content:"";position:absolute;left:var(--ax,20px);bottom:-7px;width:12px;height:12px;background:var(--panel2);border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);transform:rotate(45deg)}
+#tip.flip::after{bottom:auto;top:-7px;transform:rotate(225deg)}
+
+.callout{border:1px solid var(--line);border-left:3px solid var(--js);background:var(--panel);border-radius:0 var(--r) var(--r) 0;padding:20px 24px;margin:26px 0;font-size:17px}
+.callout.eng{border-left-color:var(--engine)}
+.callout.dgr{border-left-color:var(--danger)}
+.callout .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--js);display:block;margin-bottom:8px}
+.callout.eng .lbl{color:var(--engine)} .callout.dgr .lbl{color:var(--danger)}
+.callout strong{color:var(--ink)}
+
+pre.wire{font-family:var(--mono);font-size:13.5px;line-height:1.7;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow:auto;color:var(--ink2)}
+pre.wire .k{color:var(--js)} pre.wire .v{color:var(--engine)} pre.wire .c{color:var(--ink3)} pre.wire .d{color:var(--danger)}
+table.spec{width:100%;border-collapse:collapse;font-size:15px;margin:8px 0 4px;font-family:var(--mono)}
+table.spec th{text-align:left;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line2)}
+table.spec td{padding:11px 14px;border-bottom:1px solid var(--line);color:var(--ink2);vertical-align:top}
+table.spec td:first-child{color:var(--ink);font-weight:500}
+.pill{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;padding:2px 8px;border-radius:999px;border:1px solid currentColor}
+.pill.js{color:var(--js);background:var(--js-soft)} .pill.eng{color:var(--engine);background:var(--engine-soft)} .pill.dgr{color:var(--danger);background:var(--danger-soft)}
+
+/* ---- figure shell (player) ---- */
+.figure{margin:30px 0;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);overflow:hidden;box-shadow:var(--shadow)}
+.figure.fs{position:fixed;inset:12px;z-index:400;margin:0;max-width:none;display:flex;flex-direction:column}
+body.fs-lock{overflow:hidden}
+.fig-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.fig-bar .title{font-family:var(--mono);font-size:12px;letter-spacing:.05em;color:var(--ink2);text-transform:uppercase}
+.fig-bar .grow{flex:1}
+.canvas{position:relative;background:radial-gradient(circle at 1px 1px,var(--grid2) 1px,transparent 0) 0 0/22px 22px}
+.figure.fs .canvas{flex:1;min-height:0}
+.figure.fs .player{padding:9px 14px}
+.figure.fs .caption{padding:9px 18px;min-height:0}
+.figure.fs .caption .cn{margin-bottom:2px;font-size:10px}
+.figure.fs .caption .ch{font-size:15px;margin:0}
+.figure.fs .caption .cb{font-size:12.5px;margin:3px 0 0}
+.figure.fs .caption .more{display:none}
+.figure:not(.fs) .canvas{cursor:zoom-in}
+.figure:not(.fs) .canvas .node{cursor:pointer}
+.figure.fs .canvas{cursor:grab}
+.figure.fs .canvas:active{cursor:grabbing}
+.figure.fs .canvas .node{cursor:pointer}
+svg.diagram{display:block;width:100%;height:auto;touch-action:auto}
+.figure.fs svg.diagram{height:100%;touch-action:none}
+/* zoom affordances exist ONLY in fullscreen inspect mode */
+.zoomctl{position:absolute;right:12px;bottom:12px;display:none;flex-direction:column;gap:6px;z-index:5}
+.figure.fs .zoomctl{display:flex}
+.zoomctl button{width:34px;height:34px;border-radius:8px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);font-family:var(--mono);font-size:16px;cursor:pointer;line-height:1;transition:.15s;display:grid;place-items:center}
+.zoomctl button:hover{color:var(--ink);border-color:var(--engine)}
+.zlevel{position:absolute;left:12px;bottom:12px;display:none;font-family:var(--mono);font-size:11px;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:5;user-select:none}
+.figure.fs .zlevel{display:block}
+.zhint{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;top:auto;display:none;font-family:var(--mono);font-size:10px;color:var(--ink3);background:color-mix(in srgb,var(--panel2) 88%,transparent);backdrop-filter:blur(4px);border:1px solid var(--line);padding:4px 11px;border-radius:999px;z-index:5;opacity:.85;pointer-events:none;white-space:nowrap}
+.figure.fs .zhint{display:block;animation:zhintOut .5s ease 4.5s forwards}
+@keyframes zhintOut{to{opacity:0;visibility:hidden}}
+.inspect-hint{position:absolute;right:12px;top:12px;font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:4;pointer-events:none;opacity:0;transition:opacity .2s}
+.figure:not(.fs) .canvas:hover .inspect-hint{opacity:.9}
+.figure.fs .inspect-hint{display:none}
+.node{cursor:pointer}
+.node .nbox{transition:filter .25s}
+.node:hover .nbox{filter:brightness(1.14)}
+.node.active .nbox{filter:drop-shadow(0 0 12px var(--engine))}
+
+.player{display:flex;align-items:center;gap:10px;padding:14px 16px;border-top:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.pbtn{width:40px;height:40px;border-radius:50%;border:1px solid var(--line2);background:var(--panel);color:var(--ink);cursor:pointer;display:grid;place-items:center;transition:.18s}
+.pbtn:hover{border-color:var(--js);color:var(--js)}
+.pbtn.play{background:var(--js);border-color:var(--js);color:var(--bg);width:46px;height:46px}
+.pbtn.play:hover{filter:brightness(1.08);color:var(--bg)}
+.pbtn svg{width:18px;height:18px}
+.scrub{flex:1;min-width:160px;height:6px;border-radius:999px;background:var(--line);position:relative;cursor:pointer}
+.scrub .fill{position:absolute;left:0;top:0;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--js),var(--engine));width:0%}
+.stepno{font-family:var(--mono);font-size:12px;color:var(--ink3);min-width:62px;text-align:right}
+.caption{padding:18px 22px;border-top:1px solid var(--line);min-height:96px}
+.caption .cn{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--js);display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.caption .cn .lane{color:var(--engine)}
+.caption .ch{font-size:21px;font-weight:600;margin:0 0 4px;letter-spacing:-.01em}
+.caption .cb{color:var(--ink2);font-size:16px;margin:0;max-width:78ch}
+.caption .more{font-family:var(--mono);font-size:11px;color:var(--engine);background:none;border:none;cursor:pointer;padding:0;margin-top:8px;border-bottom:1px dotted var(--engine)}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;color:var(--ink2);margin:18px 0 0}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+/* ---- modal ---- */
+.scrim{position:fixed;inset:0;z-index:600;background:rgba(5,8,12,.62);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;pointer-events:none;transition:opacity .25s}
+.scrim.open{opacity:1;pointer-events:auto}
+.modal{background:var(--panel2);border:1px solid var(--line2);border-radius:18px;max-width:640px;width:100%;max-height:88vh;overflow:auto;box-shadow:var(--shadow);transform:translateY(16px) scale(.98);transition:transform .3s cubic-bezier(.3,1.2,.4,1);position:relative}
+.scrim.open .modal{transform:none}
+.modal .mhead{padding:24px 26px 0}
+.modal .mtag{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--js);display:flex;gap:10px;align-items:center}
+.modal .mtag .lane{color:var(--engine)}
+.modal h4{font-size:25px;font-weight:600;margin:8px 0 0;letter-spacing:-.01em}
+.modal .mbody{padding:16px 26px 26px;color:var(--ink2);font-size:16.5px}
+.modal .mbody p{margin:0 0 14px}
+.modal .mbody code{font-size:13px;color:var(--ink);background:var(--panel);padding:1px 5px;border-radius:4px}
+.mclose{position:absolute;right:18px;top:18px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);cursor:pointer;font-size:18px;line-height:1;z-index:2}
+.mtheme{position:absolute;right:60px;top:18px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);cursor:pointer;line-height:1;z-index:2;display:grid;place-items:center;transition:.18s}
+.mtheme:hover{color:var(--js);border-color:var(--js)}
+.mtheme svg{width:16px;height:16px}
+.mclose:hover{color:var(--ink);border-color:var(--danger)}
+.why{border-left:3px solid var(--engine);background:var(--engine-soft);padding:12px 16px;border-radius:0 10px 10px 0;font-size:15px;margin-top:8px}
+.why .wl{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--engine);display:block;margin-bottom:5px}
+.deeptog{margin-top:18px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--ink);background:var(--panel);border:1px solid var(--line2);border-radius:9px;padding:10px 13px;cursor:pointer;width:100%;text-align:left;transition:.18s;display:flex;justify-content:space-between;align-items:center}
+.deeptog:hover{border-color:var(--engine)}
+.deeptog.open{border-color:var(--engine);color:var(--engine)}
+.deeptog .chev{transition:transform .2s}
+.deeptog.open .chev{transform:rotate(180deg)}
+.deep{display:none;margin-top:12px;gap:12px;grid-template-columns:1fr 1fr}
+.deep.open{display:grid}
+.deep .dcol{border:1px solid var(--line);border-radius:10px;padding:13px 15px;background:var(--bg2)}
+.deep .dcol p{font-size:14px;margin:0;line-height:1.55}
+.deep .dl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:8px}
+.deep .dl.c{color:var(--js)} .deep .dl.concept{color:var(--engine)}
+.deep code{font-size:12.5px;color:var(--ink);background:var(--panel);padding:1px 4px;border-radius:4px}
+@media(max-width:560px){.deep.open{grid-template-columns:1fr}}
+
+/* ── modal interactive scene player + code snippet ── */
+.viz{margin:6px 0 4px;border:1px solid var(--line);border-radius:12px;background:var(--bg2);padding:12px 14px}
+.viz-lbl{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--js);display:block;margin-bottom:10px}
+.pv-bar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.pvbtn{font-family:var(--mono);font-size:11px;letter-spacing:.03em;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);padding:6px 11px;border-radius:8px;cursor:pointer;transition:.16s;display:inline-flex;align-items:center;gap:6px}
+.pvbtn:hover{color:var(--ink);border-color:var(--js)}
+.pvbtn.on{color:var(--bg);background:var(--js);border-color:var(--js)}
+.pvbtn svg{width:13px;height:13px}
+.pv-count{font-family:var(--mono);font-size:11px;color:var(--ink3);margin-left:auto}
+.pv-svg{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:radial-gradient(circle at 1px 1px,var(--grid2) 1px,transparent 0) 0 0/20px 20px}
+.pv-anim{transition:opacity .4s,stroke .3s,stroke-width .3s,fill .3s}
+.pv-cap{font-size:14px;color:var(--ink2);line-height:1.55;margin-top:11px;min-height:40px}
+.pv-cap b{color:var(--ink);font-weight:600}
+.pv-cap code{font-size:12px;color:var(--ink);background:var(--panel);padding:1px 5px;border-radius:4px}
+.snip{margin:14px 0 4px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg2)}
+.snip-h{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);padding:7px 13px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.snip-h .tag{color:var(--engine)}
+.snip pre{margin:0;padding:12px 14px;font-family:var(--mono);font-size:12.5px;line-height:1.7;color:var(--ink2);overflow-x:auto}
+.snip .k{color:var(--js)} .snip .v{color:var(--engine)} .snip .c{color:var(--ink3)} .snip .d{color:var(--danger)}
+
+/* ============================================================
+   SIMULATOR — the indirection, live
+   ============================================================ */
+.sim{margin:30px 0;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);overflow:hidden;box-shadow:var(--shadow)}
+.sim-toolbar{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.sim-toolbar .grow{flex:1}
+.modeswitch{display:inline-flex;border:1px solid var(--line2);border-radius:999px;overflow:hidden;font-family:var(--mono);font-size:11px}
+.modeswitch button{background:transparent;border:none;color:var(--ink3);padding:7px 14px;cursor:pointer;letter-spacing:.04em;transition:.18s}
+.modeswitch button.on[data-m="handle"]{background:var(--js);color:var(--bg)}
+.modeswitch button.on[data-m="wrapper"]{background:var(--engine);color:var(--bg)}
+.modeswitch button.on[data-m="pointer"]{background:var(--danger);color:#fff}
+/* wrapper object card: handle wearing methods */
+.hcard.obj{border-left-color:var(--engine)}
+.hcard.obj .hc-var b{color:var(--engine)}
+.hcard.obj.lit{border-color:var(--engine);box-shadow:0 0 0 2px var(--engine-soft),0 0 22px -4px var(--engine)}
+.hcard .methods{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.mchip{font-family:var(--mono);font-size:10px;letter-spacing:.02em;border:1px solid var(--engine);color:var(--engine);background:var(--engine-soft);border-radius:6px;padding:2px 7px}
+.mchip.dead{border-color:var(--danger);color:var(--danger);background:var(--danger-soft);text-decoration:line-through}
+.hcard .hc-slot{font-family:var(--mono);font-size:9.5px;color:var(--ink3);margin-top:7px}
+.hcard .hc-slot b{color:var(--engine)}
+.simbtn{font-family:var(--mono);font-size:11.5px;letter-spacing:.03em;border:1px solid var(--line2);background:var(--panel);color:var(--ink);padding:8px 13px;border-radius:9px;cursor:pointer;transition:.16s;display:inline-flex;align-items:center;gap:7px}
+.simbtn:hover{border-color:var(--js);color:var(--js)}
+.simbtn.danger:hover{border-color:var(--danger);color:var(--danger)}
+.simbtn:disabled{opacity:.35;cursor:not-allowed}
+.simbtn .ic{font-size:14px;line-height:1}
+
+.sim-stage{position:relative;padding:24px 20px 14px}
+#simWires,#wrapWires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
+.hcard .hc-var.mono{font-family:var(--mono);font-size:12px;word-break:break-word}
+.sim-cols{position:relative;z-index:2;display:grid;grid-template-columns:1fr 1.05fr 1.15fr;gap:18px}
+@media(max-width:780px){.sim-cols{grid-template-columns:1fr}}
+.sim-col{min-width:0}
+.sim-col h5{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+.sim-col .colsub{font-family:var(--mono);font-size:10px;color:var(--ink3);margin:0 0 14px;letter-spacing:.02em}
+.sim-col.js h5{color:var(--js)} .sim-col.tbl h5{color:var(--engine)} .sim-col.mem h5{color:var(--engine)}
+.sim-col .owner{margin-left:auto;font-size:9px;border:1px solid currentColor;border-radius:999px;padding:1px 7px;letter-spacing:.06em}
+.colstack{display:flex;flex-direction:column;gap:11px;min-height:90px}
+.empty-note{font-family:var(--mono);font-size:11px;color:var(--ink3);border:1px dashed var(--line2);border-radius:10px;padding:16px;text-align:center}
+
+.hcard{border:1px solid var(--line2);border-left:3px solid var(--js);border-radius:10px;background:var(--bg2);padding:11px 13px;cursor:pointer;transition:transform .18s,box-shadow .18s,border-color .18s;position:relative}
+.hcard:hover{transform:translateX(3px);box-shadow:var(--shadow)}
+.hcard .hc-top{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--mono);font-size:12px}
+.hcard .hc-var{color:var(--ink)} .hcard .hc-var b{color:var(--js);font-weight:800}
+.hcard .hc-kind{font-size:9px;color:var(--ink3);letter-spacing:.06em}
+.hcard .hc-val{font-family:var(--mono);font-size:22px;font-weight:800;color:var(--js);margin-top:5px;letter-spacing:.02em}
+.hcard .hc-name{font-family:var(--serif);font-size:13px;color:var(--ink2);margin-top:2px}
+.hcard .hc-hint{font-family:var(--mono);font-size:9.5px;color:var(--ink3);margin-top:7px}
+/* pointer-mode handle card */
+.hcard.ptr{border-left-color:var(--danger)}
+.hcard.ptr .hc-var b,.hcard.ptr .hc-val{color:var(--danger)}
+.hcard.dangling{border-style:dashed;opacity:.85}
+.hcard.dangling .hc-name{color:var(--danger)}
+.hcard.lit{border-color:var(--js);box-shadow:0 0 0 2px var(--js-soft),0 0 22px -4px var(--js)}
+.hcard.ptr.lit{border-color:var(--danger);box-shadow:0 0 0 2px var(--danger-soft),0 0 22px -4px var(--danger)}
+
+.trow{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:10px;border:1px solid var(--line);border-radius:9px;background:var(--bg2);padding:9px 12px;font-family:var(--mono);font-size:12.5px;transition:.18s}
+.trow .tk{font-weight:800;color:var(--engine);background:var(--engine-soft);border-radius:6px;padding:2px 9px;min-width:30px;text-align:center}
+.trow .tp{color:var(--ink2);text-align:right;letter-spacing:.02em}
+.trow .tp b{color:var(--engine)}
+.trow.lit{border-color:var(--engine);box-shadow:0 0 0 2px var(--engine-soft),0 0 22px -4px var(--engine)}
+.tbl-head{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--ink3);display:grid;grid-template-columns:auto 1fr;gap:10px;padding:0 12px 6px}
+.tbl-head .r{text-align:right}
+
+.membox{border:1px solid var(--line2);border-radius:11px;background:var(--bg2);padding:0;overflow:hidden;transition:.2s}
+.membox .mb-addr{font-family:var(--mono);font-size:11px;color:var(--engine);background:var(--engine-soft);padding:6px 12px;display:flex;justify-content:space-between;letter-spacing:.02em}
+.membox .mb-addr b{color:var(--engine);font-weight:800}
+.membox .mb-body{padding:11px 13px;font-family:var(--mono);font-size:12px;color:var(--ink2)}
+.membox .mb-body .struct{color:var(--ink);font-weight:700}
+.membox .mb-body .field{display:flex;justify-content:space-between;padding:2px 0;color:var(--ink3)}
+.membox .mb-body .field b{color:var(--ink2);font-weight:500}
+.membox.lit{border-color:var(--engine);box-shadow:0 0 0 2px var(--engine-soft),0 0 26px -6px var(--engine)}
+.membox.freed{border-color:var(--danger);border-style:dashed;opacity:.7}
+.membox.freed .mb-addr{background:var(--danger-soft);color:var(--danger)}
+.membox.freed .mb-addr b{color:var(--danger)}
+.membox.freed .mb-body{color:var(--danger)}
+.membox.boom{animation:boom .6s}
+@keyframes boom{0%{box-shadow:0 0 0 0 var(--danger)}40%{box-shadow:0 0 0 6px var(--danger-soft),0 0 40px -2px var(--danger);transform:translateX(-3px)}55%{transform:translateX(3px)}70%{transform:translateX(-2px)}100%{transform:none}}
+
+.beam{position:absolute;width:14px;height:14px;border-radius:50%;background:var(--js);box-shadow:0 0 16px 3px var(--js);z-index:5;opacity:0;pointer-events:none;transform:translate(-50%,-50%)}
+.beam.eng{background:var(--engine);box-shadow:0 0 16px 3px var(--engine)}
+.beam.dgr{background:var(--danger);box-shadow:0 0 16px 3px var(--danger)}
+
+.sim-status{margin-top:18px;border-top:1px solid var(--line);padding:14px 20px 4px;font-family:var(--mono);font-size:13px;color:var(--ink2);min-height:46px;display:flex;align-items:flex-start;gap:10px}
+.sim-status .sti{color:var(--js);font-weight:800;flex:none}
+.sim-status.warn .sti{color:var(--danger)}
+.sim-status.warn{color:var(--danger)}
+.sim-status.ok .sti{color:var(--engine)}
+
+/* ============================================================
+   POINTER DANGER STRIP
+   ============================================================ */
+.strip-wrap{margin:28px 0;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);overflow:hidden;box-shadow:var(--shadow)}
+.strip-tools{display:flex;gap:9px;flex-wrap:wrap;padding:13px 16px;border-bottom:1px solid var(--line);background:var(--panel2)}
+.memstrip{display:flex;gap:4px;padding:30px 20px 14px;overflow-x:auto;position:relative}
+.cell{flex:none;width:62px;height:62px;border:1px solid var(--line2);border-radius:8px;background:var(--bg2);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--mono);position:relative;transition:.18s}
+.cell .ca{font-size:8.5px;color:var(--ink3);margin-bottom:3px}
+.cell .cv{font-size:13px;color:var(--ink);font-weight:700}
+.cell.owned{border-color:var(--engine);background:var(--engine-soft)}
+.cell.owned .cv{color:var(--engine)}
+.cell.freed{border-color:var(--danger);border-style:dashed;background:var(--danger-soft)}
+.cell.freed .cv{color:var(--danger)}
+.cell.oob{border-color:var(--ink3);opacity:.5}
+.cell.hit{box-shadow:0 0 0 2px var(--engine-soft),0 0 24px -4px var(--engine);transform:translateY(-3px)}
+.cell.hit.bad{box-shadow:0 0 0 2px var(--danger-soft),0 0 28px -2px var(--danger)}
+.ptr-arrow{position:absolute;top:6px;font-family:var(--mono);font-size:11px;color:var(--danger);font-weight:800;transition:left .4s cubic-bezier(.5,0,.3,1);transform:translateX(-50%);white-space:nowrap}
+.ptr-arrow .tri{display:block;text-align:center;font-size:13px;margin-top:1px}
+.strip-status{padding:12px 18px;border-top:1px solid var(--line);font-family:var(--mono);font-size:13px;color:var(--ink2);min-height:44px;display:flex;align-items:center;gap:10px}
+.strip-status .si{flex:none}
+.strip-status.bad{color:var(--danger)} .strip-status.bad .si{color:var(--danger)}
+.strip-status.good{color:var(--engine)} .strip-status.good .si{color:var(--engine)}
+
+/* ============================================================
+   MEMBRANE MORPH
+   ============================================================ */
+.morph{margin:28px 0;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);box-shadow:var(--shadow);overflow:hidden}
+.morph-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.morph-bar .title{font-family:var(--mono);font-size:12px;color:var(--ink2);text-transform:uppercase;letter-spacing:.05em}
+.morph-hint{font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--ink3);border:1px solid var(--line);border-radius:999px;padding:3px 10px}
+#morphSvg .mbox{cursor:pointer}
+#morphSvg .mbox rect{transition:filter .18s}
+#morphSvg .mbox:hover rect{filter:brightness(1.16)}
+@media(max-width:560px){.morph-hint{display:none}}
+.morph-bar .grow{flex:1}
+.morph svg{display:block;width:100%;height:auto;background:radial-gradient(circle at 1px 1px,var(--grid2) 1px,transparent 0) 0 0/22px 22px}
+
+/* ============================================================
+   NATIVE-CODE CONSOLE
+   ============================================================ */
+.repl{margin:28px 0;border:1px solid var(--line);border-radius:var(--r);background:var(--bg2);box-shadow:var(--shadow);overflow:hidden;font-family:var(--mono)}
+.repl-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel2)}
+.repl-bar .dot3{display:flex;gap:6px}
+.repl-bar .dot3 i{width:11px;height:11px;border-radius:50%;display:inline-block}
+.repl-bar .dot3 i:nth-child(1){background:var(--danger)}
+.repl-bar .dot3 i:nth-child(2){background:var(--js)}
+.repl-bar .dot3 i:nth-child(3){background:var(--engine)}
+.repl-bar .rtitle{font-size:11px;color:var(--ink3);letter-spacing:.06em}
+.repl-out{padding:16px 18px;font-size:13.5px;line-height:1.85;min-height:150px;max-height:330px;overflow:auto}
+.repl-out .ln{white-space:pre-wrap;word-break:break-word}
+.repl-out .pmpt{color:var(--engine)}
+.repl-out .inp{color:var(--ink)}
+.repl-out .res{color:var(--ink2)}
+.repl-out .res .str{color:var(--js)}
+.repl-out .res .nat{color:var(--danger);font-weight:700}
+.repl-out .res .num{color:var(--engine);font-weight:700}
+.repl-out .note{color:var(--ink3);font-style:normal}
+.repl-chips{display:flex;flex-wrap:wrap;gap:8px;padding:12px 16px;border-top:1px solid var(--line);background:var(--panel2)}
+.rchip{font-family:var(--mono);font-size:12px;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);padding:7px 12px;border-radius:8px;cursor:pointer;transition:.16s}
+.rchip:hover{border-color:var(--engine);color:var(--ink)}
+.cursor{display:inline-block;width:8px;height:15px;background:var(--engine);vertical-align:-2px;animation:blink 1s steps(1) infinite;margin-left:2px}
+@keyframes blink{50%{opacity:0}}
+
+footer{max-width:var(--maxw);margin:0 auto;padding:40px 24px 80px;font-family:var(--mono);font-size:12px;color:var(--ink3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;border-top:1px solid var(--line)}
+
+@media(max-width:920px){
+  .shell{grid-template-columns:1fr;gap:0}
+  nav.toc{display:none}
+  body{font-size:17px}
+  main{padding:24px 0 100px}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <button class="nav-toggle" id="navToggle" aria-label="toggle contents" title="toggle contents">
+      <svg id="navToggleIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+    </button>
+    <div class="brand"><span class="dot"></span>handle<span class="arr">———▶</span><span class="eng">pointer</span></div>
+    <div class="top-spacer"></div>
+    <button class="theme-btn" id="themeBtn" aria-label="toggle theme">
+      <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>
+      <span id="themeTxt">DARK</span>
+    </button>
+  </div>
+</header>
+
+<button id="navReopen" aria-label="show contents" title="show contents">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+</button>
+
+<div class="shell">
+  <nav class="toc" id="toc">
+    <button class="toc-collapse" id="tocCollapse" title="hide contents">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg> hide</button>
+    <a href="#roundtrip"><span class="num">00</span> The round trip</a>
+    <a href="#model"><span class="num">01</span> Mental model</a>
+    <a href="#live"><span class="num">02</span> The indirection, live</a>
+    <a href="#pointer"><span class="num">03</span> Pointer · direct &amp; dangerous</a>
+    <a href="#membrane"><span class="num">04</span> The safety membrane</a>
+    <a href="#wrapper"><span class="num">05</span> The JS wrapper</a>
+    <a href="#tell"><span class="num">06</span> The [native code] tell</a>
+    <a href="#js"><span class="num">07</span> Same shape in JS</a>
+    <a href="#why"><span class="num">08</span> Why &amp; close</a>
+  </nav>
+
+  <main>
+
+    <!-- ===== HERO ===== -->
+    <section class="block" id="roundtrip" style="border-bottom:none;padding-top:36px">
+      <p class="kicker"><span class="ix">00</span> Explorable explanation · indirection &amp; safety</p>
+      <h1 class="hero-h">A <span class="a">handle</span> is a<br><span class="b">pointer</span> you can't hold.</h1>
+      <p class="lead">You hold a small reference in one world. The real thing — a raw memory address of a struct — lives in another, and the runtime won't let you touch it. So it keeps the pointer in a private table and hands you a stand-in: a bare <span class="a">key</span>, or that key dressed up as a <span class="b">wrapper object</span> with methods. Either way, every call rides the same path down through the table, to the pointer, to the resource — and brings a plain value back. Only the <span style="color:var(--danger)">raw pointer</span> skips the membrane. Press play, click any node, and open <em>under the hood</em> for the C concretes.</p>
+
+      <div class="figure" id="heroFig">
+        <div class="fig-bar">
+          <span class="title">▶ The resolution round-trip · key → table → pointer → resource → back</span>
+          <span class="grow"></span>
+          <button class="simbtn" id="boundaryBtn"><span class="ic">⛒</span> What script can hold</button>
+          <button class="simbtn" id="inspectBtn" data-inspect="heroSvg"><span class="ic">⤢</span> Inspect</button>
+        </div>
+        <div class="canvas">
+          <svg class="diagram" id="heroSvg" viewBox="0 0 1320 760" preserveAspectRatio="xMidYMid meet"><g id="heroVP"></g></svg>
+        </div>
+        <div class="player">
+          <button class="pbtn" id="hPrev" title="step back"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17V7l-7 5zM8 7h-2v10h2z"/></svg></button>
+          <button class="pbtn play" id="hPlay" title="play/pause"><svg id="hPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg></button>
+          <button class="pbtn" id="hNext" title="step forward"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 7v10l7-5zM16 7h2v10h-2z"/></svg></button>
+          <div class="scrub" id="hScrub"><div class="fill" id="hFill"></div></div>
+          <span class="stepno" id="hStepNo">00 / 08</span>
+        </div>
+        <div class="caption">
+          <div class="cn"><span id="capN">FRAME 00</span> · <span class="lane" id="capLane">—</span></div>
+          <p class="ch" id="capH">Press play to trace one call across the boundary</p>
+          <p class="cb" id="capB">The amber lane is the only place your script lives. Everything teal is owned by the runtime and native code — reached only through the key you were handed.</p>
+          <button class="more" id="capMore" style="display:none">Open full detail ↗</button>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--js)"></i> Script-owned · the handle (a key)</span>
+        <span><i style="background:var(--engine)"></i> Runtime / native · table · pointer · resource</span>
+        <span><i style="background:var(--danger)"></i> The raw pointer · undefined behaviour</span>
+      </div>
+    </section>
+
+    <!-- ===== 01 MODEL ===== -->
+    <section class="block" id="model">
+      <p class="kicker"><span class="ix">01</span> The mental model</p>
+      <h2>A lightweight value standing in for a real resource in another world.</h2>
+      <div class="prose">
+        <p>The <span class="term" data-term="handle">handle</span> is not the thing itself; it's a controlled doorway to it. You hold it and pass it around in script, and the methods on it cross the boundary into native code to do the actual work. Underneath, the resource really is a <span class="term" data-term="pointer">pointer</span> — a raw memory address of a C/C++ struct. Handing that address to your code would be unsafe: you could corrupt memory, or it could move or be freed underneath you.</p>
+        <p>So the runtime keeps the real pointer in a private table and hands you an <span class="term" data-term="opaque">opaque</span> stand-in instead. That stand-in comes in two shapes: a bare key — often a small integer — or a <span class="term" data-term="JS wrapper">wrapper object</span> that carries the same key but wears methods and properties. Every call passes it back; the runtime resolves it to the pointer and <span class="term" data-term="dereference">dereferences</span> it for you. That extra hop — <strong>handle → table → pointer → resource</strong> — is what buys safety, whichever shape you hold.</p>
+      </div>
+      <div class="callout">
+        <span class="lbl">the recurring pattern</span>
+        a small <strong>reference</strong> lives in your world &nbsp;→&nbsp; the runtime resolves it to a <strong>real pointer</strong> &nbsp;→&nbsp; native code does the work on the <strong>resource</strong> &nbsp;→&nbsp; a plain <strong>value</strong> comes back.
+      </div>
+      <p class="prose">The pattern shows up everywhere a resource is owned by a lower layer. You always get a small reference, never the underlying memory:</p>
+      <table class="spec">
+        <thead><tr><th>What you hold</th><th>The opaque key</th><th>The real thing underneath</th><th>Owner</th></tr></thead>
+        <tbody>
+          <tr><td><span class="term" data-term="file descriptor">File descriptor</span></td><td>a small <code>int</code> (e.g. <code>3</code>)</td><td>kernel <code>struct file*</code> in the open-file table</td><td><span class="pill eng">OS kernel</span></td></tr>
+          <tr><td>GPU texture handle</td><td>an opaque ID / object</td><td>VRAM allocation + driver state</td><td><span class="pill eng">GPU driver</span></td></tr>
+          <tr><td>DB connection</td><td>a connection object</td><td>socket + session struct in the pool</td><td><span class="pill eng">driver / pool</span></td></tr>
+          <tr><td><code>fetch()</code> / DOM node</td><td>a JS wrapper object</td><td>C++ Blink object on the native heap</td><td><span class="pill eng">browser engine</span></td></tr>
+          <tr><td>OS timer (<code>setTimeout</code>)</td><td>a numeric timer id</td><td>kernel/loop timer entry</td><td><span class="pill eng">event loop</span></td></tr>
+        </tbody>
+      </table>
+      <div class="callout eng" style="font-family:var(--serif);font-size:20px">
+        <span class="lbl">the one-line version</span>
+        A handle is an <strong>indirection</strong> with a safety membrane: <code>handle → (runtime's table) → real pointer → resource</code>.
+      </div>
+    </section>
+
+    <!-- ===== 02 LIVE SIMULATOR ===== -->
+    <section class="block" id="live">
+      <p class="kicker"><span class="ix">02</span> The indirection, live</p>
+      <h2>One resource. Three ways to hold it.</h2>
+      <div class="prose"><p>This is the whole idea made tangible. <strong>Open a file</strong> to mint a resource: a struct appears in native memory at some address, a row is inserted in the runtime's private table, and you get back a reference. Then switch how you <em>hold</em> that reference. As a bare <span class="pill js">key</span> the runtime resolves it for you. As a <span class="pill eng">wrapper object</span> the same key wears methods — a curated, enforceable surface. As a <span class="pill dgr">raw pointer</span> the address lands in your hand with nothing between you and the memory. Open, read, and free in each mode and watch what changes — and what doesn't.</p></div>
+
+      <div class="sim" id="sim">
+        <div class="sim-toolbar">
+          <span class="modeswitch" id="modeSwitch">
+            <button data-m="handle" class="on">◈ handle · key</button>
+            <button data-m="wrapper">▢ wrapper · object</button>
+            <button data-m="pointer">⚠ raw pointer</button>
+          </span>
+          <span class="grow"></span>
+          <button class="simbtn" id="simOpen"><span class="ic">＋</span> open a file</button>
+          <button class="simbtn" id="simRead" disabled><span class="ic">↺</span> <span id="readLbl">read via key</span></button>
+          <button class="simbtn danger" id="simFree" disabled><span class="ic">🗑</span> close / free</button>
+          <button class="simbtn" id="simReset"><span class="ic">⟲</span> reset</button>
+        </div>
+        <div class="sim-stage">
+          <svg id="simWires"><defs><marker id="wm" markerWidth="8" markerHeight="8" refX="5" refY="3" orient="auto"><path d="M0 0L5 3L0 6Z" fill="var(--engine)"/></marker></defs></svg>
+          <div class="sim-cols">
+            <div class="sim-col js">
+              <h5 id="jsHead">① your script <span class="owner" id="ownJs">JS</span></h5>
+              <p class="colsub" id="jsSub">you hold opaque keys — just values</p>
+              <div class="colstack" id="jsStack"></div>
+            </div>
+            <div class="sim-col tbl" id="tblCol">
+              <h5>② runtime handle table <span class="owner">PRIVATE</span></h5>
+              <p class="colsub" id="tblSub">key → real pointer · you can't see this</p>
+              <div class="tbl-head"><span>key</span><span class="r">→ pointer (address)</span></div>
+              <div class="colstack" id="tblStack"></div>
+            </div>
+            <div class="sim-col mem">
+              <h5>③ native memory <span class="owner">C / C++</span></h5>
+              <p class="colsub">the real <code>struct File*</code> at an address</p>
+              <div class="colstack" id="memStack"></div>
+            </div>
+          </div>
+        </div>
+        <div class="sim-status" id="simStatus"><span class="sti">▸</span><span id="simMsg">Open a file to mint your first resource. Nothing exists yet — no struct, no pointer, no key.</span></div>
+      </div>
+      <div class="callout eng">
+        <span class="lbl">read it off the screen</span>
+        <strong>Key</strong> and <strong>wrapper</strong> share the middle column — both resolve through the runtime's table, so neither ever holds an address. The only difference is the surface: a bare number versus an object with methods that can <em>refuse</em> you (closed, read-once). <strong>Raw pointer</strong> deletes that whole column — the address is in your hand, and <span class="term" data-term="use-after-free">freeing</span> turns it into a live grenade.
+      </div>
+    </section>
+
+    <!-- ===== 03 POINTER ===== -->
+    <section class="block" id="pointer">
+      <p class="kicker"><span class="ix">03</span> Pointer · direct &amp; dangerous</p>
+      <h2>A value that holds the address of something else.</h2>
+      <div class="prose"><p>Dereferencing a pointer (<code>*p</code> in C) follows the address to read or write the real data. It's direct and powerful — and dangerous: nothing stops you reading freed memory, walking off the end of an array, or aiming it at garbage. These are the bugs managed languages exist to prevent. Drive the raw pointer below and trigger each one.</p></div>
+
+      <div class="strip-wrap">
+        <div class="strip-tools">
+          <button class="simbtn" id="dDeref"><span class="ic">→</span> *p &nbsp;valid read</button>
+          <button class="simbtn" id="dStep"><span class="ic">↦</span> p++ &nbsp;walk forward</button>
+          <button class="simbtn danger" id="dUAF"><span class="ic">💀</span> free(p), then *p</button>
+          <button class="simbtn danger" id="dOOB"><span class="ic">↗</span> *(p + 99) &nbsp;out of bounds</button>
+          <button class="simbtn danger" id="dWild"><span class="ic">🎲</span> p = 0xBADF00D &nbsp;wild</button>
+          <button class="simbtn" id="dReset"><span class="ic">⟲</span> reset</button>
+        </div>
+        <div class="memstrip" id="memStrip"></div>
+        <div class="strip-status" id="stripStatus"><span class="si">▸</span><span id="stripMsg">This is your array. The arrow is a raw pointer <code>p</code> aimed at <code>arr[0]</code>. The teal cells are memory you legitimately own.</span></div>
+      </div>
+      <div class="callout dgr">
+        <span class="lbl">why this is the whole problem</span>
+        Every red outcome above is <strong>undefined behaviour</strong>. The CPU happily follows the address; there is no bounds check, no liveness check, no owner. A handle exists precisely so your code can never <em>be</em> that arrow.
+      </div>
+    </section>
+
+    <!-- ===== 04 MEMBRANE ===== -->
+    <section class="block" id="membrane">
+      <p class="kicker"><span class="ix">04</span> The safety membrane</p>
+      <h2>A handle is a pointer with a membrane around it.</h2>
+      <div class="prose"><p>Both paths end at the same struct. The difference is the hop. The raw pointer is a single arrow from your hand into memory — fast, and fatal when the target moves or dies. The handle inserts the runtime's table between you and the address: an indirection that can validate the key, relocate the resource, or reference-count it, all <em>without your reference ever breaking</em>. Toggle to compare.</p></div>
+
+      <div class="morph">
+        <div class="morph-bar">
+          <span class="title" id="morphTitle">⚠ Raw pointer · direct dereference</span>
+          <span class="morph-hint">tap any box for an interactive detail ↗</span>
+          <span class="grow"></span>
+          <button class="simbtn" id="morphBtn"><span class="ic">⇄</span> show the handle path</button>
+        </div>
+        <svg viewBox="0 0 920 300" id="morphSvg" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+
+      <table class="spec">
+        <thead><tr><th>Property</th><th><span class="pill dgr">Raw pointer</span></th><th><span class="pill js">Handle (key)</span></th><th><span class="pill eng">Wrapper (object)</span></th></tr></thead>
+        <tbody>
+          <tr><td>What you hold</td><td>the actual address</td><td>an opaque key</td><td>an object wrapping the key</td></tr>
+          <tr><td>Indirection</td><td>none — one hop</td><td>one hop through a table</td><td>same hop — object resolves the key</td></tr>
+          <tr><td>Surface</td><td>raw memory, no API</td><td>a value; methods take the key</td><td>methods &amp; properties on the object</td></tr>
+          <tr><td>Use after free</td><td>silent corruption / crash</td><td>key no longer resolves → clean error</td><td>object refuses → throws (closed / read-once)</td></tr>
+          <tr><td>Resource relocates</td><td>your pointer dangles</td><td>runtime updates the table; key unchanged</td><td>same — object holds the key, not the address</td></tr>
+          <tr><td><span class="term" data-term="reference counting">Refcounting</span> / GC</td><td>your job, manually</td><td>runtime can track it behind the key</td><td>object lifetime can drive it (GC-managed)</td></tr>
+          <tr><td>Can enforce rules</td><td>no</td><td>only what the API checks</td><td>yes — the object curates what you may call</td></tr>
+          <tr><td>Cost</td><td>one memory access</td><td>a lookup, then the access</td><td>a method call, lookup, then the access</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <span class="lbl">the trade</span>
+        You pay one indirection. In return the resource is free to <strong>move, be reference-counted, or be revoked</strong> — and your reference keeps working, or fails loudly instead of silently.
+      </div>
+    </section>
+
+    <!-- ===== 05 WRAPPER ===== -->
+    <section class="block" id="wrapper">
+      <p class="kicker"><span class="ix">05</span> The JS wrapper · a handle wearing an object</p>
+      <h2>A thin object around a native resource, exposing only a safe subset.</h2>
+      <div class="prose">
+        <p>A bare <span class="term" data-term="handle">handle</span> can be a single integer. A <span class="term" data-term="JS wrapper">JS wrapper</span> is the same indirection dressed up as an object — so you can use normal syntax: properties, methods, <code>await</code>. The wrapper is the <strong>visible surface</strong>; the engine object behind it is the <strong>substance</strong>. <code>Response</code>, <code>Request</code>, and <code>Headers</code> are all wrappers — which is exactly why their bodies are read-once and some fields are immutable. The wrapper only exposes what the native object can <em>safely</em> let you do.</p>
+        <p>Below is a live <code>Response</code>. The amber surface is everything your JS can name; the teal substance behind the glass is the <code>blink::Response</code> and its one-time body stream. Poke the surface and watch which moves are allowed — and which the wrapper refuses on the native object's behalf.</p>
+      </div>
+
+      <div class="sim" id="wrap">
+        <div class="sim-toolbar">
+          <span class="modeswitch" style="cursor:default">
+            <button class="on" data-m="handle" style="cursor:default">◈ Response wrapper</button>
+          </span>
+          <span class="grow"></span>
+          <button class="simbtn" id="wReset"><span class="ic">⟲</span> new response</button>
+        </div>
+        <div class="sim-stage">
+          <svg id="wrapWires"><defs><marker id="wwm" markerWidth="8" markerHeight="8" refX="5" refY="3" orient="auto"><path d="M0 0L5 3L0 6Z" fill="var(--engine)"/></marker></defs></svg>
+          <div class="sim-cols" style="grid-template-columns:1fr 1.05fr">
+            <div class="sim-col js">
+              <h5>the wrapper · visible surface <span class="owner" id="wOwn">JS</span></h5>
+              <p class="colsub">normal syntax — but a safe subset only</p>
+              <div class="colstack" id="wrapSurface"></div>
+            </div>
+            <div class="sim-col mem">
+              <h5>native substance · behind glass <span class="owner">C++ · blink::Response</span></h5>
+              <p class="colsub">the real object &amp; its one-time body stream</p>
+              <div class="colstack" id="wrapNative"></div>
+            </div>
+          </div>
+        </div>
+        <div class="sim-status" id="wrapStatus"><span class="sti">▸</span><span id="wrapMsg">A fresh <code>Response</code> just arrived. Try reading a field, mutating a header, then draining the body — twice.</span></div>
+      </div>
+      <div class="callout">
+        <span class="lbl">read it off the screen</span>
+        Every getter is a thin pass-through to a frozen native value. <code>headers.set()</code> is <strong>refused</strong> because a fetched response's headers are guarded. And the body drains <strong>once</strong>: the wrapper is the only handle to a stream that physically can't be rewound — so the second <code>.json()</code> throws.
+      </div>
+      <div class="callout eng" style="font-family:var(--serif);font-size:20px">
+        <span class="lbl">wrapper vs handle</span>
+        A handle hides the pointer behind a <strong>key</strong>. A wrapper hides it behind an <strong>object</strong> — same membrane, friendlier surface, and a curated set of methods that decide what you're allowed to ask.
+      </div>
+    </section>
+
+    <!-- ===== 06 TELL ===== -->
+    <section class="block" id="tell">
+      <p class="kicker"><span class="ix">06</span> The [native code] tell</p>
+      <h2>The handle looks like a value. Its behaviour is somewhere you can't read.</h2>
+      <div class="prose"><p>From your side a handle looks like an ordinary value or function. But ask the engine to show you the implementation and it can't — because there is no JavaScript to show. The body lives in C++, behind the boundary, reached through the same indirection. Run the expressions below.</p></div>
+
+      <div class="repl">
+        <div class="repl-bar"><span class="dot3"><i></i><i></i><i></i></span><span class="rtitle">node · the [native code] tell</span></div>
+        <div class="repl-out" id="replOut"></div>
+        <div class="repl-chips" id="replChips"></div>
+      </div>
+      <div class="callout eng">
+        <span class="lbl">the tell, in one line</span>
+        <code>fetch.toString()</code> reports <strong>[native code]</strong> because there is no JS body to print — the handle's behaviour lives in C++, reached through the boundary. <code>typeof fd === "number"</code> for the same reason: the kernel's file object isn't a thing JS can address, so you were handed a stand-in.
+      </div>
+    </section>
+
+    <!-- ===== 07 JS ===== -->
+    <section class="block" id="js">
+      <p class="kicker"><span class="ix">07</span> Same shape in JavaScript</p>
+      <h2>The C indirection and the JS handle are the same picture.</h2>
+      <div class="prose"><p>On the native side the real thing is a pointer; it's stored in a private table and you get back an index — the handle, never the address. Later, your handle is resolved back to the pointer for you:</p></div>
+      <pre class="wire"><span class="c">// Native side (C): the real thing is a pointer.</span>
+struct File* real = fopen(<span class="v">"data.txt"</span>, <span class="v">"r"</span>);
+
+<span class="c">// Stored in a private table; you get back an index</span>
+<span class="c">// into that table — the "handle". NOT the address.</span>
+int fd = table_insert(real);   <span class="c">// → 3</span>
+
+<span class="c">// Later, your handle is resolved back to the pointer:</span>
+struct File* p = table[fd];    <span class="c">// runtime does this, not you</span>
+fread(buf, 1, n, p);</pre>
+      <div class="prose"><p>The JavaScript is the same idea. <code>fd</code> is just a number standing in for a kernel file object you can't address directly — and <code>fetch</code> is a JS handle whose behaviour lives in C++, behind the boundary:</p></div>
+      <pre class="wire"><span class="c">// fd is a number standing in for a kernel file object.</span>
+<span class="k">const</span> fd = fs.openSync(<span class="v">"data.txt"</span>);  <span class="c">// → 3</span>
+fs.readSync(fd, buf);                  <span class="c">// number crosses into the kernel</span>
+
+<span class="c">// fetch is the same idea: a JS handle whose</span>
+<span class="c">// behaviour lives in C++, behind the boundary.</span>
+<span class="k">typeof</span> fetch         <span class="c">// "function" — but no JS body to read</span>
+fetch.toString()     <span class="d">// "function fetch() { [native code] }"</span></pre>
+      <div class="callout">
+        <span class="lbl">the symmetry</span>
+        <code>table[fd]</code> in C and the runtime resolving <code>fd</code> inside <code>fs.readSync</code> are the <strong>same lookup</strong>. You hold the index; the runtime holds the pointer.
+      </div>
+    </section>
+
+    <!-- ===== 08 WHY ===== -->
+    <section class="block" id="why" style="border-bottom:none">
+      <p class="kicker"><span class="ix">08</span> Why this indirection exists</p>
+      <h2>The extra hop, on purpose.</h2>
+      <table class="spec">
+        <thead><tr><th>Property</th><th>What the indirection buys you</th></tr></thead>
+        <tbody>
+          <tr><td>Safety</td><td>your code can't read freed memory or corrupt the heap — it never holds a real address</td></tr>
+          <tr><td>Relocation</td><td>the runtime can move or compact the resource and just update the table; your key is unchanged</td></tr>
+          <tr><td>Lifetime</td><td>reference-counting or GC can run behind the key without your reference breaking</td></tr>
+          <tr><td>Revocation</td><td>a stale key fails loudly (a clean error), where a dangling pointer fails silently (corruption)</td></tr>
+          <tr><td>Curated surface</td><td>wrapping the key in an object lets the runtime expose only a safe subset — and refuse the rest (read-once, immutable, closed)</td></tr>
+          <tr><td>Portability</td><td>the same handle or wrapper API survives the real implementation changing underneath</td></tr>
+        </tbody>
+      </table>
+      <div class="callout eng" style="margin-top:30px;font-size:21px;font-family:var(--serif)">
+        <span class="lbl">conclusion · three ways to hold one resource</span>
+        The resource really is a pointer, and you are simply <strong>not allowed to hold it</strong>. Hold it as a bare <strong>key</strong> and the runtime resolves it. Dress that key in an object and you have a <strong>wrapper</strong> — the same membrane, plus methods that decide what you may ask. Strip the membrane away and you have the <strong>raw pointer</strong>: one fast hop, and every bug this page exists to prevent.
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <span>handle ⟶ pointer · the indirection · a companion to fetch() internals</span>
+  <span id="footTheme">indirection &amp; safety mode</span>
+</footer>
+
+<div id="tip" role="tooltip"></div>
+
+<div class="scrim" id="scrim">
+  <div class="modal" role="dialog" aria-modal="true">
+    <button class="mtheme" id="mTheme" aria-label="toggle theme" title="toggle theme">
+      <svg id="mThemeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>
+    </button>
+    <button class="mclose" id="mClose" aria-label="close">✕</button>
+    <div class="mhead">
+      <div class="mtag"><span id="mTag">FRAME</span><span class="lane" id="mLane"></span></div>
+      <h4 id="mTitle"></h4>
+    </div>
+    <div class="mbody" id="mBody"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const SVGNS='http://www.w3.org/2000/svg';
+function el(tag,attrs,html){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(html!=null)e.innerHTML=html;return e;}
+
+/* ============================================================
+   GLOSSARY
+   ============================================================ */
+const GLOSSARY={
+ "handle":["concept","A lightweight value in one world standing in for a real resource in another. You hold and pass it; methods on it cross into native code. It is a controlled doorway to the resource, not the resource itself."],
+ "JS wrapper":["concept","A thin JavaScript object placed around a native resource so script can use normal syntax — properties, methods, await — while the real implementation and state live in C++. The wrapper is the visible surface; the engine object is the substance. Response, Request and Headers are wrappers, which is why bodies are read-once and some fields immutable: the wrapper exposes only a safe subset. Closely related to a handle."],
+ "pointer":["concept","A value that holds the memory address of something else. Dereferencing follows the address to the real data. Direct and powerful, but unchecked — the source of segfaults and use-after-free."],
+ "dereference":["c","Following a pointer to the value it addresses — *p in C. The runtime does this for you when it resolves a handle; with a raw pointer, you do it yourself, with no safety net."],
+ "opaque":["concept","A value you can use but cannot inspect or act on directly. A handle is opaque: it's typically a small integer or wrapper that means nothing on its own — only the runtime can resolve it."],
+ "file descriptor":["os","A small non-negative integer the kernel hands you for an open file, socket, or pipe. It indexes into the process's open-file table; the real struct file* lives in the kernel, never in your process."],
+ "use-after-free":["c","Reading or writing memory through a pointer after the underlying allocation was freed. The address still looks valid but the bytes may be reused — classic undefined behaviour and a major exploit class."],
+ "reference counting":["concept","Tracking how many references point at a resource so it can be freed when the count hits zero. A handle lets the runtime do this behind the key, instead of you doing it by hand with raw pointers."]
+};
+const KINDLABEL={c:"C / memory",os:"OS",concept:"concept"};
+const tip=$('tip');let tipHideT=null;
+function tagTerms(root){
+  root.querySelectorAll('.term[data-term]').forEach(t=>{ if(t.dataset.bound)return; t.dataset.bound='1'; });
+}
+function showTip(t){clearTimeout(tipHideT);const k=t.dataset.term;const g=GLOSSARY[k];if(!g)return;
+  tip.innerHTML='<span class="t-kind">'+(KINDLABEL[g[0]]||g[0])+'</span><span class="t-name">'+k+'</span>'+g[1];
+  tip.classList.add('show');
+  const r=t.getBoundingClientRect();tip.style.left='0px';tip.style.top='0px';
+  const tw=tip.offsetWidth,th=tip.offsetHeight;
+  let left=r.left+r.width/2-tw/2;left=Math.max(12,Math.min(left,window.innerWidth-tw-12));
+  let top=r.top-th-12,flip=false;if(top<10){top=r.bottom+12;flip=true;}
+  tip.style.left=left+'px';tip.style.top=top+'px';
+  tip.style.setProperty('--ax',(r.left+r.width/2-left-6)+'px');
+  tip.classList.toggle('flip',flip);
+}
+function hideTip(){tipHideT=setTimeout(()=>tip.classList.remove('show'),60);}
+document.addEventListener('mouseover',e=>{const t=e.target.closest('.term');if(t)showTip(t);});
+document.addEventListener('mouseout',e=>{if(e.target.closest('.term'))hideTip();});
+document.addEventListener('click',e=>{const t=e.target.closest('.term');if(t){showTip(t);setTimeout(hideTip,3000);}});
+
+/* ============================================================
+   MODAL
+   ============================================================ */
+const scrim=$('scrim');
+function modalBody(f){
+  let h='<p>'+f.body+'</p>';
+  if(f.viz)h+='<div class="viz" id="vizHost"><span class="viz-lbl">interactive · step through it</span></div>';
+  if(f.code)h+='<div class="snip"><div class="snip-h"><span>'+(f.code.lang||'javascript')+'</span><span class="tag">'+(f.code.tag||'')+'</span></div><pre>'+f.code.html+'</pre></div>';
+  if(f.why)h+='<div class="why"><span class="wl">why this hop exists</span>'+f.why+'</div>';
+  if(f.deep)h+='<button class="deeptog">under the hood · C concrete + concept <span class="chev">▾</span></button>'+
+    '<div class="deep"><div class="dcol"><span class="dl c">C concrete</span>'+f.deep.c+'</div>'+
+    '<div class="dcol"><span class="dl concept">the concept</span>'+f.deep.concept+'</div></div>';
+  return h;
+}
+let modalCleanup=null;
+function openModal(f){
+  if(modalCleanup){modalCleanup();modalCleanup=null;}
+  $('mTag').textContent=(f.n!=null?('FRAME '+String(f.n).padStart(2,'0')):(f.tag||'DETAIL'));
+  $('mLane').textContent=f.laneName?('· '+f.laneName):'';
+  $('mTitle').textContent=f.title;
+  const mb=$('mBody');mb.innerHTML=modalBody(f);
+  const tog=mb.querySelector('.deeptog'),deep=mb.querySelector('.deep');
+  if(tog)tog.onclick=()=>{tog.classList.toggle('open');deep.classList.toggle('open');};
+  const host=mb.querySelector('#vizHost');
+  if(host&&typeof f.viz==='function')modalCleanup=f.viz(host)||null;
+  tagTerms(mb);scrim.classList.add('open');
+}
+function closeModal(){if(modalCleanup){modalCleanup();modalCleanup=null;}scrim.classList.remove('open');}
+$('mClose').onclick=closeModal;
+scrim.onclick=e=>{if(e.target===scrim)closeModal();};
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape')return;
+  if(scrim.classList.contains('open')){closeModal();return;}
+  if(typeof fsFig!=='undefined'&&fsFig){exitFs();}
+});
+
+/* ============================================================
+   HERO PLAYER — the resolution round-trip
+   lanes: 0 Script · 1 Handle table · 2 Native memory · 3 Resource
+   ============================================================ */
+const LANES=["Script world","Handle table","Native memory","The resource"];
+const LANE_OWNER=["js","eng","eng","eng"];
+/* ============================================================
+   MODAL SCENE PLAYER — a mini step-through mounted in each modal
+   ============================================================ */
+function scenePlayer(host,cfg){
+  if(!host)return null;
+  const wrap=document.createElement('div');
+  wrap.innerHTML='<div class="pv-bar">'
+    +'<button class="pvbtn pv-play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg> Play</button>'
+    +'<button class="pvbtn pv-step">Step ›</button>'
+    +'<button class="pvbtn pv-reset" title="reset">⟲</button>'
+    +'<span class="pv-count"></span></div>'+cfg.svg+'<div class="pv-cap"></div>';
+  host.appendChild(wrap);
+  const s=wrap.querySelector('svg.pv-svg');
+  const {caps,render}=cfg.build(s,wrap);
+  const dwell=cfg.dwell||1500;
+  const capEl=wrap.querySelector('.pv-cap'),countEl=wrap.querySelector('.pv-count'),playBtn=wrap.querySelector('.pv-play');
+  let i=0,timer=null,playing=false;
+  function show(n){i=n;render(i);capEl.innerHTML=caps[i];countEl.textContent=(i+1)+' / '+caps.length;}
+  function setPlay(on){playing=on;playBtn.classList.toggle('on',on);playBtn.innerHTML=on?'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg> Pause':'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg> Play';}
+  function stop(){setPlay(false);if(timer){clearInterval(timer);timer=null;}}
+  function play(){if(playing)return;if(i>=caps.length-1)show(0);setPlay(true);timer=setInterval(()=>{if(i>=caps.length-1)stop();else show(i+1);},dwell);}
+  playBtn.onclick=()=>{playing?stop():play();};
+  wrap.querySelector('.pv-step').onclick=()=>{stop();show(i>=caps.length-1?0:i+1);};
+  wrap.querySelector('.pv-reset').onclick=()=>{stop();show(0);};
+  try{let m=0;caps.forEach(c=>{capEl.innerHTML=c;if(capEl.offsetHeight>m)m=capEl.offsetHeight;});if(m>0)capEl.style.minHeight=m+'px';}catch(e){}
+  show(0);
+  return ()=>{if(timer){clearInterval(timer);timer=null;}};
+}
+const ARR=id=>'<defs><marker id="'+id+'" markerWidth="8" markerHeight="8" refX="5.5" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--engine)"/></marker></defs>';
+
+/* 1 · the handle is just a number */
+function vizF1(host){return scenePlayer(host,{dwell:1500,svg:
+ `<svg class="pv-svg" viewBox="0 0 520 188">
+   <rect class="f1-fd pv-anim" x="24" y="62" width="150" height="64" rx="11" fill="var(--js-soft)" stroke="var(--js)" stroke-width="2"/>
+   <text x="40" y="88" font-size="12" fill="var(--ink2)" font-family="var(--mono)">const fd =</text>
+   <text x="99" y="116" text-anchor="middle" font-size="30" font-weight="800" fill="var(--js)" font-family="var(--mono)">3</text>
+   <g class="f1-typ pv-anim" opacity="0.22"><rect x="24" y="28" width="150" height="22" rx="11" fill="var(--bg2)" stroke="var(--line2)"/><text x="99" y="43" text-anchor="middle" font-size="10" fill="var(--ink2)" font-family="var(--mono)">typeof fd → "number"</text></g>
+   <line x1="300" y1="18" x2="300" y2="170" stroke="var(--danger)" stroke-width="1.3" stroke-dasharray="2 7" opacity="0.6"/>
+   <text x="300" y="13" text-anchor="middle" font-size="8.5" fill="var(--danger)" font-family="var(--mono)">membrane</text>
+   <g class="f1-tbl pv-anim" opacity="0.28"><rect x="332" y="54" width="164" height="80" rx="10" fill="var(--bg2)" stroke="var(--engine)" stroke-width="1.4"/><text x="346" y="72" font-size="9" fill="var(--ink3)" font-family="var(--mono)">runtime table · private</text><rect x="344" y="82" width="140" height="24" rx="6" fill="var(--engine-soft)" stroke="var(--engine)"/><text x="356" y="98" font-size="11" font-weight="700" fill="var(--engine)" font-family="var(--mono)">3</text><text x="386" y="98" font-size="10" fill="var(--ink3)" font-family="var(--mono)">→ 0x•••• hidden</text></g>
+   <path class="f1-arr pv-anim" d="M174 94 L330 94" opacity="0" stroke="var(--ink3)" stroke-width="1.4" stroke-dasharray="4 4"/>
+ </svg>`,
+ build(s){const $=c=>s.querySelector(c),typ=$('.f1-typ'),tbl=$('.f1-tbl'),arr=$('.f1-arr'),fd=$('.f1-fd');
+  const caps=["Your script holds <code>const fd = 3</code> — a single <b>number</b>. Press Play.",
+   "<code>typeof fd</code> → <b>\"number\"</b>. There's no address inside it, nothing to dereference.",
+   "It's really an <b>index</b> into a table the runtime keeps — you hold the key, never the row.",
+   "So you can copy, log and pass <code>fd</code> anywhere with <b>zero risk</b>. It's inert on its own."];
+  function render(i){typ.setAttribute('opacity',i>=1?'1':'0.22');tbl.setAttribute('opacity',i>=2?'1':'0.28');arr.setAttribute('opacity',i>=2?'0.9':'0');fd.setAttribute('stroke-width',i>=3?'2.8':'2');}
+  return{caps,render};}});}
+
+/* 2 · the key crosses, a pointer cannot */
+function vizF2(host){return scenePlayer(host,{dwell:1500,svg:
+ `<svg class="pv-svg" viewBox="0 0 520 188">
+   <text x="120" y="22" text-anchor="middle" font-size="9" fill="var(--js)" font-family="var(--mono)" letter-spacing="1">SCRIPT</text>
+   <text x="400" y="22" text-anchor="middle" font-size="9" fill="var(--engine)" font-family="var(--mono)" letter-spacing="1">NATIVE CODE</text>
+   <line x1="260" y1="14" x2="260" y2="170" stroke="var(--danger)" stroke-width="1.3" stroke-dasharray="2 7" opacity="0.7"/>
+   <text x="260" y="184" text-anchor="middle" font-size="8.5" fill="var(--danger)" font-family="var(--mono)">the boundary</text>
+   <g class="f2-keyL pv-anim"><circle cx="120" cy="70" r="18" fill="var(--js-soft)" stroke="var(--js)" stroke-width="2"/><text x="120" y="75" text-anchor="middle" font-size="15" font-weight="800" fill="var(--js)" font-family="var(--mono)">3</text></g>
+   <g class="f2-keyR pv-anim" opacity="0"><circle cx="400" cy="70" r="18" fill="var(--js-soft)" stroke="var(--js)" stroke-width="2"/><text x="400" y="75" text-anchor="middle" font-size="15" font-weight="800" fill="var(--js)" font-family="var(--mono)">3</text></g>
+   <text class="f2-ok pv-anim" x="252" y="64" text-anchor="end" font-size="15" fill="var(--engine)" opacity="0">✓</text>
+   <g class="f2-ptr pv-anim" opacity="0"><rect x="64" y="116" width="140" height="32" rx="8" fill="var(--danger-soft)" stroke="var(--danger)" stroke-width="1.6"/><text x="134" y="137" text-anchor="middle" font-size="12" font-weight="700" fill="var(--danger)" font-family="var(--mono)">0x7ffe4c10</text></g>
+   <text class="f2-x pv-anim" x="250" y="140" text-anchor="middle" font-size="20" font-weight="800" fill="var(--danger)" opacity="0">✕</text>
+ </svg>`,
+ build(s){const $=c=>s.querySelector(c),kL=$('.f2-keyL'),kR=$('.f2-keyR'),ok=$('.f2-ok'),ptr=$('.f2-ptr'),xx=$('.f2-x');
+  const caps=["You call <code>fs.readSync(fd, buf)</code>. The argument is the <b>key 3</b> — it heads for the boundary.",
+   "The key is a plain value, so the membrane <b>lets it cross</b> into native code.",
+   "A raw <b>pointer</b> tries the same trip — and is <b>refused</b>. Addresses never cross.",
+   "The membrane's one rule: <b>keys and values in, identity stays below</b>."];
+  function render(i){kL.setAttribute('opacity',i>=1?'0.2':'1');kR.setAttribute('opacity',i>=1?'1':'0');ok.setAttribute('opacity',i>=1?'1':'0');ptr.setAttribute('opacity',i>=2?'1':'0');xx.setAttribute('opacity',i>=2?'1':'0');}
+  return{caps,render};}});}
+
+/* 3 · the table lookup */
+function vizF3(host){return scenePlayer(host,{dwell:1400,svg:
+ `<svg class="pv-svg" viewBox="0 0 520 188">
+   <text x="60" y="22" font-size="9" fill="var(--ink3)" font-family="var(--mono)">runtime handle table — resolving table[fd]</text>
+   <g class="f3-rows"></g>
+   <text class="f3-idx pv-anim" x="42" y="40" font-size="13" fill="var(--js)" font-family="var(--mono)" opacity="0">▶</text>
+ </svg>`,
+ build(s){const rows=[[1,'0x7ffe4b00'],[2,'0x7ffe4b80'],[3,'0x7ffe4c10'],[4,'0x7ffe4c90']];const g=s.querySelector('.f3-rows');let h='';
+  rows.forEach((r,k)=>{const y=34+k*30;h+='<g class="f3-r" data-k="'+k+'"><rect x="60" y="'+y+'" width="400" height="24" rx="6" fill="var(--bg2)" stroke="var(--line2)"/><text x="76" y="'+(y+16)+'" font-size="11" font-weight="700" fill="var(--engine)" font-family="var(--mono)">'+r[0]+'</text><text x="110" y="'+(y+16)+'" font-size="10.5" fill="var(--ink3)" font-family="var(--mono)">→ '+r[1]+'</text></g>';});
+  g.innerHTML=h;const rEls=[...g.querySelectorAll('.f3-r')];const idx=s.querySelector('.f3-idx');const targetY=34+2*30;
+  const caps=["Native code holds the key <b>3</b>. It indexes its private table: <code>table[3]</code>.",
+   "Straight to row <b>3</b> — an array index, O(1). No search, no scan.",
+   "That row stores the real <b>pointer</b> for this resource: <code>0x7ffe4c10</code>."];
+  function render(i){rEls.forEach((r,k)=>{const on=(i>=1&&k===2);r.querySelector('rect').setAttribute('stroke',on?'var(--engine)':'var(--line2)');r.querySelector('rect').setAttribute('stroke-width',on?'2':'1');r.querySelectorAll('text')[1].setAttribute('fill',(i>=2&&k===2)?'var(--engine)':'var(--ink3)');r.style.opacity=(i>=1&&k!==2)?'0.45':'1';});
+   idx.setAttribute('opacity',i>=1?'1':'0');idx.setAttribute('y',(targetY+16));}
+  return{caps,render};}});}
+
+/* 4 · the row yields the pointer */
+function vizF4(host){return scenePlayer(host,{dwell:1500,svg:
+ `<svg class="pv-svg" viewBox="0 0 520 188">
+   <line x1="20" y1="40" x2="500" y2="40" stroke="var(--danger)" stroke-width="1.2" stroke-dasharray="2 7" opacity="0.6"/>
+   <text x="500" y="32" text-anchor="end" font-size="8.5" fill="var(--danger)" font-family="var(--mono)">▲ membrane · script above · native below</text>
+   <rect class="f4-row pv-anim" x="40" y="74" width="160" height="48" rx="9" fill="var(--engine-soft)" stroke="var(--engine)" stroke-width="1.8"/>
+   <text x="56" y="93" font-size="10" fill="var(--ink3)" font-family="var(--mono)">table[3] →</text>
+   <text class="f4-addr pv-anim" x="56" y="112" font-size="14" font-weight="800" fill="var(--engine)" font-family="var(--mono)" opacity="0.25">0x7ffe4c10</text>
+   <path class="f4-arr pv-anim" d="M200 98 L322 98" opacity="0" stroke="var(--engine)" stroke-width="1.8" marker-end="url(#pvm4)"/>
+   <rect class="f4-mem pv-anim" x="326" y="74" width="160" height="48" rx="9" fill="var(--bg2)" stroke="var(--engine)" stroke-width="1.4" opacity="0.3"/>
+   <text x="406" y="102" text-anchor="middle" font-size="10" fill="var(--ink3)" font-family="var(--mono)">struct File @ addr</text>
+   ${ARR('pvm4')}
+ </svg>`,
+ build(s){const $=c=>s.querySelector(c),addr=$('.f4-addr'),arr=$('.f4-arr'),mem=$('.f4-mem');
+  const caps=["Row 3 resolves to a real <code>struct File*</code>.",
+   "Its value is <b>0x7ffe4c10</b> — the address that existed all along, kept private.",
+   "That pointer aims at the live struct. It stays <b>below the membrane</b>: the runtime may hold it, your script may not."];
+  function render(i){addr.setAttribute('opacity',i>=1?'1':'0.25');arr.setAttribute('opacity',i>=2?'0.9':'0');mem.setAttribute('opacity',i>=2?'1':'0.3');}
+  return{caps,render};}});}
+
+/* 5 · dereference *p → the struct */
+function vizF5(host){return scenePlayer(host,{dwell:1500,svg:
+ `<svg class="pv-svg" viewBox="0 0 520 188">
+   <rect class="f5-p pv-anim" x="20" y="78" width="116" height="36" rx="9" fill="var(--engine-soft)" stroke="var(--engine)" stroke-width="1.8"/>
+   <text x="78" y="101" text-anchor="middle" font-size="12" font-weight="700" fill="var(--engine)" font-family="var(--mono)">p = 0x7ffe</text>
+   <path class="f5-arr pv-anim" d="M136 96 L204 96" opacity="0.3" stroke="var(--engine)" stroke-width="1.8" marker-end="url(#pvm5)"/>
+   <text class="f5-star pv-anim" x="170" y="86" text-anchor="middle" font-size="13" fill="var(--engine)" font-family="var(--mono)" opacity="0">*p</text>
+   <g class="f5-mem pv-anim" opacity="0.4"><rect x="208" y="60" width="296" height="80" rx="10" fill="var(--bg2)" stroke="var(--engine)" stroke-width="1.6"/><text x="224" y="80" font-size="9.5" fill="var(--ink3)" font-family="var(--mono)">struct File {</text><text class="f5-f0 pv-anim" x="238" y="99" font-size="10.5" fill="var(--ink3)" font-family="var(--mono)" opacity="0.4">fd:  3</text><text class="f5-f1 pv-anim" x="238" y="117" font-size="10.5" fill="var(--ink3)" font-family="var(--mono)" opacity="0.4">pos: 0</text><text x="330" y="99" font-size="10.5" fill="var(--ink3)" font-family="var(--mono)">buf: 0x55f0…</text><text x="224" y="134" font-size="9.5" fill="var(--ink3)" font-family="var(--mono)">}</text></g>
+   ${ARR('pvm5')}
+ </svg>`,
+ build(s){const $=c=>s.querySelector(c),star=$('.f5-star'),arr=$('.f5-arr'),mem=$('.f5-mem'),f0=$('.f5-f0'),f1=$('.f5-f1');
+  const caps=["The runtime holds the pointer <code>p = 0x7ffe4c10</code>.",
+   "<b>Dereference</b> it: <code>*p</code> follows the address into memory.",
+   "It reaches the real <b>struct File</b> — its fd, position and buffer become readable.",
+   "<code>p->pos</code> compiles to a load at <code>base + offset</code> — no CPU check; safe only because the runtime knows it's alive."];
+  function render(i){star.setAttribute('opacity',i>=1?'1':'0');arr.setAttribute('opacity',i>=1?'0.95':'0.3');mem.setAttribute('opacity',i>=2?'1':'0.4');f0.setAttribute('opacity',i>=2?'1':'0.4');f1.setAttribute('opacity',i>=2?'1':'0.4');f1.setAttribute('fill',i>=3?'var(--engine)':'var(--ink3)');}
+  return{caps,render};}});}
+
+/* 6 · native does the work — read(2) fills the buffer */
+function vizF6(host){return scenePlayer(host,{dwell:1400,svg:
+ `<svg class="pv-svg" viewBox="0 0 520 188">
+   <rect class="f6-fread pv-anim" x="24" y="38" width="130" height="34" rx="9" fill="var(--engine-soft)" stroke="var(--engine)" stroke-width="1.6"/>
+   <text x="89" y="60" text-anchor="middle" font-size="11" font-weight="700" fill="var(--engine)" font-family="var(--mono)">fread(…, p)</text>
+   <path class="f6-a1 pv-anim" d="M89 72 L89 100" opacity="0" stroke="var(--ink3)" stroke-width="1.4" marker-end="url(#pvm6)"/>
+   <rect class="f6-kern pv-anim" x="24" y="102" width="130" height="34" rx="9" fill="var(--bg2)" stroke="var(--engine)" stroke-width="1.4" opacity="0.35"/>
+   <text x="89" y="124" text-anchor="middle" font-size="10.5" fill="var(--ink3)" font-family="var(--mono)">read(2) ⟶ kernel</text>
+   <text x="208" y="50" font-size="9" fill="var(--ink3)" font-family="var(--mono)">your buffer (buf)</text>
+   <g class="f6-buf"></g>
+   ${ARR('pvm6')}
+ </svg>`,
+ build(s){const g=s.querySelector('.f6-buf');const vals=['48','65','6c','6c','6f','2c','20','77'];let h='';
+  vals.forEach((v,k)=>{const x=208+k*36;h+='<g class="f6-cell" data-k="'+k+'"><rect x="'+x+'" y="64" width="30" height="30" rx="6" fill="var(--bg2)" stroke="var(--line2)"/><text class="f6-cv" x="'+(x+15)+'" y="84" text-anchor="middle" font-size="10" fill="var(--ink3)" font-family="var(--mono)" opacity="0">'+v+'</text></g>';});
+  g.innerHTML=h;const cells=[...g.querySelectorAll('.f6-cell')];const a1=s.querySelector('.f6-a1'),kern=s.querySelector('.f6-kern');
+  const caps=["<code>fread(buf, 1, n, p)</code> runs on the real resource.",
+   "It issues the <b>read(2)</b> syscall against the kernel file object.",
+   "Bytes stream from the file into <b>your buffer</b>, one chunk at a time.",
+   "It returns a <b>count</b> — the data is yours; the address never left native code."];
+  function render(i){a1.setAttribute('opacity',i>=1?'0.9':'0');kern.setAttribute('opacity',i>=1?'1':'0.35');cells.forEach(c=>{const on=i>=2;c.querySelector('rect').setAttribute('stroke',on?'var(--engine)':'var(--line2)');c.querySelector('rect').setAttribute('fill',on?'var(--engine-soft)':'var(--bg2)');c.querySelector('.f6-cv').setAttribute('opacity',on?'1':'0');});}
+  return{caps,render};}});}
+
+/* 7 · the value goes up, the pointer stays */
+function vizF7(host){return scenePlayer(host,{dwell:1500,svg:
+ `<svg class="pv-svg" viewBox="0 0 520 188">
+   <line x1="20" y1="58" x2="500" y2="58" stroke="var(--danger)" stroke-width="1.2" stroke-dasharray="2 7" opacity="0.65"/>
+   <text x="24" y="50" font-size="8.5" fill="var(--js)" font-family="var(--mono)">SCRIPT (above)</text>
+   <text x="24" y="76" font-size="8.5" fill="var(--engine)" font-family="var(--mono)">NATIVE (below)</text>
+   <g class="f7-val pv-anim"><rect x="120" y="98" width="120" height="32" rx="9" fill="var(--js-soft)" stroke="var(--js)" stroke-width="1.8"/><text x="180" y="119" text-anchor="middle" font-size="12" font-weight="700" fill="var(--js)" font-family="var(--mono)">n = 512</text></g>
+   <g class="f7-valUp pv-anim" opacity="0"><rect x="120" y="20" width="120" height="28" rx="9" fill="var(--js-soft)" stroke="var(--js)" stroke-width="1.8"/><text x="180" y="39" text-anchor="middle" font-size="12" font-weight="700" fill="var(--js)" font-family="var(--mono)">n = 512 ✓</text></g>
+   <g class="f7-ptr pv-anim"><rect x="300" y="98" width="160" height="32" rx="9" fill="var(--engine-soft)" stroke="var(--engine)" stroke-width="1.6"/><text x="380" y="119" text-anchor="middle" font-size="12" font-weight="700" fill="var(--engine)" font-family="var(--mono)">p = 0x7ffe4c10</text></g>
+   <text class="f7-block pv-anim" x="380" y="78" text-anchor="middle" font-size="17" font-weight="800" fill="var(--danger)" opacity="0">✕</text>
+ </svg>`,
+ build(s){const $=c=>s.querySelector(c),val=$('.f7-val'),valUp=$('.f7-valUp'),block=$('.f7-block');
+  const caps=["The work produced a result: <code>n = 512</code> bytes, and <code>buf</code> is filled.",
+   "The <b>value</b> crosses the boundary upward, back toward your script.",
+   "The <b>pointer</b> does not — returning it would re-leak the address. <b>Identity never escapes.</b>"];
+  function render(i){val.setAttribute('opacity',i>=1?'0.2':'1');valUp.setAttribute('opacity',i>=1?'1':'0');block.setAttribute('opacity',i>=2?'1':'0');}
+  return{caps,render};}});}
+
+/* 8 · script receives a plain value; the loop closes */
+function vizF8(host){return scenePlayer(host,{dwell:1500,svg:
+ `<svg class="pv-svg" viewBox="0 0 520 188">
+   <rect class="f8-ret pv-anim" x="24" y="42" width="190" height="56" rx="11" fill="var(--js-soft)" stroke="var(--js)" stroke-width="2"/>
+   <text x="40" y="64" font-size="11" fill="var(--ink2)" font-family="var(--mono)">const n =</text>
+   <text x="40" y="88" font-size="18" font-weight="800" fill="var(--js)" font-family="var(--mono)">512</text>
+   <text x="120" y="76" font-size="10" fill="var(--ink3)" font-family="var(--mono)">buf filled ✓</text>
+   <rect class="f8-fd pv-anim" x="24" y="116" width="190" height="34" rx="9" fill="var(--bg2)" stroke="var(--line2)" opacity="0.3"/>
+   <text x="119" y="138" text-anchor="middle" font-size="12" fill="var(--ink2)" font-family="var(--mono)">fd is still <tspan fill="var(--js)" font-weight="800">3</tspan></text>
+   <g class="f8-loop pv-anim" opacity="0.22"><text x="370" y="62" text-anchor="middle" font-size="10" fill="var(--js)" font-family="var(--mono)">handle</text><text x="370" y="82" text-anchor="middle" font-size="10" fill="var(--engine)" font-family="var(--mono)">→ table → pointer</text><text x="370" y="102" text-anchor="middle" font-size="10" fill="var(--engine)" font-family="var(--mono)">→ resource</text><text x="370" y="124" text-anchor="middle" font-size="10" fill="var(--js)" font-family="var(--mono)">→ value  ↺</text></g>
+ </svg>`,
+ build(s){const $=c=>s.querySelector(c),fd=$('.f8-fd'),loop=$('.f8-loop');
+  const caps=["Back in your code, <code>readSync</code> returns <b>512</b> and <code>buf</code> now holds the bytes.",
+   "You operated on the resource — yet <code>fd</code> is <b>still just 3</b>. You never held the pointer.",
+   "The loop closes: <b>handle → table → pointer → resource → value</b>. Data moved; memory identity never did."];
+  function render(i){fd.setAttribute('opacity',i>=1?'1':'0.3');loop.setAttribute('opacity',i>=2?'1':'0.22');}
+  return{caps,render};}});}
+
+const FRAMES=[
+ {n:1,lane:0,title:"Script holds the handle",short:"fd is just 3 — an opaque key",viz:vizF1,
+  code:{lang:'javascript',tag:'your code',html:`<span class="k">const</span> fd = fs.openSync(<span class="v">"data.txt"</span>); <span class="c">// 3</span>
+<span class="k">typeof</span> fd;   <span class="c">// "number" — no address inside it</span>`},
+  body:"Your code holds <code>const fd = 3</code>. That's the whole handle: a small integer. No address, no struct, no memory you can touch. It means nothing on its own — only the runtime can turn it into something real.",
+  why:"The key can be copied, logged, and passed freely with zero risk, because dereferencing it requires the table you don't have.",
+  deep:{c:"<p>On the native side the real object already exists as <code>struct File*</code>. Your <code>fd</code> is the index that <code>table_insert(real)</code> returned.</p>",
+        concept:"<p>An <em>opaque</em> reference: usable, not inspectable. The classic example is a POSIX file descriptor.</p>"}},
+ {n:2,lane:0,title:"You call a method — the key crosses",short:"fs.readSync(fd, buf) passes the key in",viz:vizF2,
+  code:{lang:'javascript',tag:'crossing the boundary',html:`fs.readSync(fd, buf, <span class="v">0</span>, <span class="v">512</span>, <span class="v">null</span>);
+<span class="c">// the number 3 crosses into C — a raw pointer never could</span>`},
+  body:"You call <code>fs.readSync(fd, buf)</code>. The <strong>key</strong> crosses the boundary into native code — not a pointer. This is the membrane's one rule: keys and plain values may cross; raw addresses never do.",
+  why:"If a pointer could cross, your script could forge or corrupt one. Only the harmless key is allowed through.",
+  deep:{c:"<p>The N-API / binding layer marshals the JS number into a C <code>int</code> and calls into the addon.</p>",
+        concept:"<p>The boundary is a one-way copy for values. Identity (the real address) stays below it.</p>"}},
+ {n:3,lane:1,title:"Runtime looks up the key",short:"table[3] — find the row",viz:vizF3,
+  code:{lang:'c',tag:'native side',html:`<span class="c">// inside the binding, the runtime indexes its table</span>
+<span class="k">struct</span> File* p = table[fd];   <span class="c">// table[3]</span>`},
+  body:"Inside native code the runtime indexes its <strong>private table</strong> with your key: <code>table[3]</code>. This table is the thing you were never given a reference to. It maps each key to a real pointer.",
+  why:"Centralising every key→pointer mapping in one table is what lets the runtime validate, relocate, or revoke without telling your code.",
+  deep:{c:"<p>For fds this is the kernel's per-process open-file table; for engine objects it's a handle scope / object table.</p>",
+        concept:"<p>The indirection layer. Resolve happens here, every single call.</p>"}},
+ {n:4,lane:1,title:"The table yields the real pointer",short:"→ 0x7ffe… the address of the struct",viz:vizF4,
+  code:{lang:'c',tag:'native side',html:`<span class="c">// table[3] == (struct File*) 0x7ffe4c10</span>
+<span class="c">//            ^ the real address, kept private</span>`},
+  body:"The row resolves to the real <code>struct File*</code> at, say, <code>0x7ffe4c10</code>. This address has existed the entire time — it was simply kept on the far side of the membrane.",
+  why:"This is the value that would be catastrophic in your hand, and perfectly safe in the runtime's.",
+  deep:{c:"<p><code>struct File* p = table[fd];</code> — the runtime does this line, never you.</p>",
+        concept:"<p>The handle's whole job was to defer this lookup to a trusted party.</p>"}},
+ {n:5,lane:2,title:"The pointer is dereferenced",short:"*p — follow the address to the struct",viz:vizF5,
+  code:{lang:'c',tag:'native side',html:`<span class="k">size_t</span> pos = p-><span class="v">pos</span>;     <span class="c">// load at base + offset</span>
+<span class="k">char</span>*  buffer = p-><span class="v">buf</span>;  <span class="c">// follow the pointer</span>`},
+  body:"The runtime <strong>dereferences</strong> the pointer, reaching the actual bytes of the struct: its buffer, position, flags. This is the dangerous primitive — performed here under the runtime's control, with the resource known to be alive.",
+  why:"Because the runtime owns the lifetime, it can guarantee the struct is still valid before touching it.",
+  deep:{c:"<p>Field access like <code>p->pos</code> compiles to a load at <code>base + offset</code> — no checks at the CPU level.</p>",
+        concept:"<p>Dereference: the act managed languages hide. Here it's wrapped in a liveness guarantee.</p>"}},
+ {n:6,lane:3,title:"Native code does the real work",short:"fread(buf, 1, n, p) on the resource",viz:vizF6,
+  code:{lang:'c',tag:'native side',html:`fread(buf, <span class="v">1</span>, n, p);     <span class="c">// → read(2) syscall</span>
+<span class="c">// the kernel copies bytes from the file into buf</span>`},
+  body:"Now the actual work runs on the real resource: <code>fread(buf, 1, n, p)</code> reads bytes from the kernel file object into your buffer. This is the only place the resource is genuinely operated on.",
+  why:"All the indirection existed to get safely to exactly this call.",
+  deep:{c:"<p>The C runtime issues the <code>read(2)</code> syscall against the kernel's <code>struct file</code>.</p>",
+        concept:"<p>The resource is acted on; the result is data, not an address.</p>"}},
+ {n:7,lane:2,title:"The result is gathered, not the pointer",short:"bytes read, count computed",viz:vizF7,
+  code:{lang:'c',tag:'native side',html:`<span class="k">size_t</span> n = fread(buf, <span class="v">1</span>, <span class="v">512</span>, p);
+<span class="k">return</span> n;                <span class="c">// a count — not p</span>`},
+  body:"The work produces a <strong>value</strong> — a byte count, the filled buffer's contents — never the address. The pointer stays below the membrane; only data prepares to travel back up.",
+  why:"Returning the pointer would re-leak the unsafe address. Only the harmless result returns.",
+  deep:{c:"<p><code>fread</code> returns a <code>size_t</code> count; the buffer holds copied bytes.</p>",
+        concept:"<p>Outbound: keys in, values out. Identity never escapes.</p>"}},
+ {n:8,lane:0,title:"Script receives a plain value",short:"a number / buffer — never an address",viz:vizF8,
+  code:{lang:'javascript',tag:'back in your code',html:`<span class="k">const</span> n = fs.readSync(fd, buf); <span class="c">// 512</span>
+fd;                              <span class="c">// still 3</span>`},
+  body:"Back in your world, <code>fs.readSync</code> returns a plain value: the number of bytes read, and your buffer is now filled. You touched the resource — without ever holding the pointer to it. The key is still just <code>3</code>.",
+  why:"The full round trip moved data, not memory identity. That's the entire safety property in one sentence.",
+  deep:{c:"<p>The binding marshals the C result back into a JS value across the boundary.</p>",
+        concept:"<p>handle → table → pointer → resource → value. The loop closes back in script.</p>"}}
+];
+
+/* hero swimlane build */
+const heroVP=$('heroVP');
+const laneX0=160, laneW=1320-laneX0-40, laneY=[150,330,510,690], laneH=64, R=20;
+const nodeCX=i=>laneX0+40+(laneW-80)*(i/(FRAMES.length-1));
+LANES.forEach((name,li)=>{
+  const owner=LANE_OWNER[li];
+  const g=el('g',{class:owner==='eng'?'engine':''});
+  g.appendChild(el('rect',{x:laneX0,y:laneY[li]-laneH/2,width:laneW,height:laneH,rx:11,fill:'var(--panel2)',stroke:'var(--line)'}));
+  g.appendChild(el('text',{x:laneX0-16,y:laneY[li]-2,'text-anchor':'end','font-size':13,'font-weight':700,fill:'var(--'+(owner==='eng'?'engine':'js')+')','letter-spacing':1,'font-family':'var(--mono)'},name.split(' ')[0].toUpperCase()));
+  g.appendChild(el('text',{x:laneX0-16,y:laneY[li]+15,'text-anchor':'end','font-size':10.5,fill:'var(--ink3)','letter-spacing':1,'font-family':'var(--mono)'},name.split(' ').slice(1).join(' ').toUpperCase()));
+  heroVP.appendChild(g);
+});
+// THE MEMBRANE between lane 0 (script) and lane 1 (native)
+const memY=(laneY[0]+laneH/2+laneY[1]-laneH/2)/2;
+heroVP.appendChild(el('line',{x1:laneX0-30,y1:memY,x2:laneX0+laneW,y2:memY,stroke:'var(--danger)','stroke-width':1.4,'stroke-dasharray':'2 7',opacity:.75}));
+heroVP.appendChild(el('text',{x:laneX0+laneW,y:memY-8,'text-anchor':'end','font-size':11,'font-family':'var(--mono)',fill:'var(--danger)','letter-spacing':1.5},'◂ THE BOUNDARY · keys cross · pointers never do ▸'));
+
+// connector thread
+const pts=FRAMES.map((f,i)=>[nodeCX(i),laneY[f.lane]]);
+let dd='M '+pts[0][0]+' '+pts[0][1];
+for(let i=1;i<pts.length;i++){const[x0,y0]=pts[i-1],[x1,y1]=pts[i],mx=(x0+x1)/2;dd+=` C ${mx} ${y0}, ${mx} ${y1}, ${x1} ${y1}`;}
+heroVP.appendChild(el('path',{d:dd,fill:'none',stroke:'var(--line2)','stroke-width':2,'stroke-dasharray':'4 5'}));
+
+const heroNodes=[],heroLabels=[];
+FRAMES.forEach((f,i)=>{
+  const cx=nodeCX(i),cy=laneY[f.lane],owner=LANE_OWNER[f.lane],c='var(--'+(owner==='eng'?'engine':'js')+')';
+  const above=(f.lane>=2)?false:(i%2===0?false:true);
+  // place labels to avoid the membrane; for top lane push up, others vary
+  const ly=(i%2===0)?cy-R-28:cy+R+28;
+  heroVP.appendChild(el('line',{x1:cx,y1:(ly<cy?cy-R:cy+R),x2:cx,y2:(ly<cy?ly+10:ly-10),stroke:'var(--line2)','stroke-width':1.1}));
+  const lg=el('g',{});
+  const t=f.title,fs=11,w=t.length*(fs*0.6)+20,h=fs+14;
+  const lxc=Math.max(w/2+10,Math.min(cx,1320-w/2-10));
+  lg.innerHTML=`<rect x="${lxc-w/2}" y="${ly-h/2}" width="${w}" height="${h}" rx="7" fill="var(--panel2)" stroke="var(--line)"/>`+
+    `<text x="${lxc}" y="${ly+fs*0.35}" text-anchor="middle" font-size="${fs}" font-weight="700" fill="var(--ink)" font-family="var(--mono)">${t}</text>`;
+  heroVP.appendChild(lg);heroLabels.push({g:lg,c});
+  const g=el('g',{class:'node'+(owner==='eng'?' engine':''),transform:`translate(${cx},${cy})`});
+  g.innerHTML=`<g class="nbox"><circle r="${R}" fill="var(--panel)" stroke="${c}" stroke-width="2.2"/>`+
+    `<text x="0" y="5" text-anchor="middle" font-size="14.5" font-weight="800" fill="${c}" font-family="var(--mono)">${String(f.n).padStart(2,'0')}</text></g>`;
+  g.addEventListener('click',()=>{setStep(i);openModal(f);});
+  heroVP.appendChild(g);heroNodes.push(g);
+});
+const token=el('g',{});
+token.innerHTML='<circle r="15" fill="var(--js)" opacity="0.25"/><circle r="8" fill="var(--js)"/>';
+token.style.transition='transform .6s cubic-bezier(.5,0,.3,1)';
+heroVP.appendChild(token);
+
+let step=-1,playing=false,playT=null;
+function setStep(i){
+  step=Math.max(0,Math.min(FRAMES.length-1,i));
+  const f=FRAMES[step];
+  heroNodes.forEach((n,k)=>n.classList.toggle('active',k===step));
+  heroLabels.forEach((L,k)=>{const on=k===step;L.g.style.opacity=on?'1':'0.5';
+    const rect=L.g.querySelector('rect'),txt=L.g.querySelector('text');
+    if(rect)rect.setAttribute('stroke',on?L.c:'var(--line)');
+    if(txt)txt.setAttribute('fill',on?L.c:'var(--ink2)');});
+  const tx=nodeCX(step),ty=laneY[f.lane],col=LANE_OWNER[f.lane]==='eng'?'var(--engine)':'var(--js)';
+  token.setAttribute('transform',`translate(${tx},${ty})`);
+  token.querySelectorAll('circle').forEach(c=>c.setAttribute('fill',col));
+  $('capN').textContent='FRAME '+String(f.n).padStart(2,'0');
+  $('capLane').textContent=LANES[f.lane];
+  $('capH').textContent=f.title;
+  $('capB').textContent=f.short.charAt(0).toUpperCase()+f.short.slice(1)+'.';
+  const more=$('capMore');more.style.display='inline-block';more.onclick=()=>openModal(f);
+  $('hStepNo').textContent=String(f.n).padStart(2,'0')+' / 08';
+  $('hFill').style.width=(step/(FRAMES.length-1)*100)+'%';
+}
+function play(){playing=true;updatePI();if(step>=FRAMES.length-1)setStep(0);playT=setInterval(()=>{if(step>=FRAMES.length-1){pause();return;}setStep(step+1);},1900);}
+function pause(){playing=false;clearInterval(playT);updatePI();}
+function updatePI(){$('hPlayIcon').innerHTML=playing?'<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>':'<path d="M7 5v14l12-7z"/>';}
+$('hPlay').onclick=()=>{playing?pause():play();};
+$('hNext').onclick=()=>{pause();setStep(step+1);};
+$('hPrev').onclick=()=>{pause();setStep(step-1);};
+$('hScrub').onclick=e=>{pause();const r=e.currentTarget.getBoundingClientRect();setStep(Math.round((e.clientX-r.left)/r.width*(FRAMES.length-1)));};
+setStep(0);$('hStepNo').textContent='00 / 08';$('hFill').style.width='0%';$('capMore').style.display='none';
+$('capH').textContent='Press play to trace one call across the boundary';
+$('capB').textContent='The amber lane is the only place your script lives. Everything teal is owned by the runtime and native code — reached only through the key you were handed.';
+$('capN').textContent='FRAME 00';$('capLane').textContent='—';
+heroNodes.forEach(n=>n.classList.remove('active'));token.setAttribute('transform','translate(-50,-50)');
+
+// boundary highlight toggle
+let boundaryOn=false;
+$('boundaryBtn').onclick=()=>{
+  boundaryOn=!boundaryOn;
+  heroVP.querySelectorAll('.engine').forEach(g=>{g.style.transition='opacity .4s,filter .4s';g.style.opacity=boundaryOn?'.13':'1';g.style.filter=boundaryOn?'grayscale(.8)':'none';});
+  $('boundaryBtn').lastChild.textContent=boundaryOn?' Showing script only':' What script can hold';
+};
+
+/* ============================================================
+   INSPECT MODE — read-only inline; pan/zoom live in a dedicated
+   fullscreen inspector so the page never traps the scroll wheel.
+   ============================================================ */
+let fsFig=null, fsApi=null;
+function enterFs(fig,api){ if(fsFig) exitFs(); fsFig=fig; fsApi=api; fig.classList.add('fs'); document.body.classList.add('fs-lock');
+  const zh=fig.querySelector('.zhint'); if(zh){zh.style.animation='none';zh.style.opacity='';zh.style.visibility='';void zh.offsetWidth;zh.style.animation='';}
+  const b=fig.querySelector('[data-inspect]'); if(b) b.lastChild.textContent=' Exit'; }
+function exitFs(){ if(!fsFig) return; if(fsApi) fsApi.reset();
+  const b=fsFig.querySelector('[data-inspect]'); if(b) b.lastChild.textContent=' Inspect';
+  fsFig.classList.remove('fs'); document.body.classList.remove('fs-lock'); fsFig=null; fsApi=null; }
+
+function makeInspectable(svgId){
+  const svg=document.getElementById(svgId);
+  const vp=svg.querySelector('g');            // the viewport group (#heroVP) we pan/zoom
+  const canvas=svg.closest('.canvas');
+  const fig=svg.closest('.figure');
+
+  const hintTag=document.createElement('div'); hintTag.className='inspect-hint'; hintTag.textContent='⤢ click to inspect'; canvas.appendChild(hintTag);
+  const ctl=document.createElement('div'); ctl.className='zoomctl';
+  ctl.innerHTML='<button data-z="in" title="zoom in">+</button>'+
+                '<button data-z="out" title="zoom out">−</button>'+
+                '<button data-z="reset" title="reset view">⟲</button>';
+  canvas.appendChild(ctl);
+  const lvl=document.createElement('div'); lvl.className='zlevel'; lvl.textContent='100%'; canvas.appendChild(lvl);
+  const zh=document.createElement('div'); zh.className='zhint'; zh.textContent='scroll / pinch to zoom · drag to pan · Esc to exit'; canvas.appendChild(zh);
+
+  let s=1,tx=0,ty=0,drag=false,sx=0,sy=0;
+  const pts=new Map(); let pinchD=0,pinchS=1;
+  const isFs=()=>fig.classList.contains('fs');
+  const clamp=v=>Math.max(0.5,Math.min(6,v));
+  const apply=()=>{vp.setAttribute('transform',`translate(${tx},${ty}) scale(${s})`);lvl.textContent=Math.round(s*100)+'%';};
+  const reset=()=>{s=1;tx=0;ty=0;vp.removeAttribute('transform');lvl.textContent='100%';};
+  function toVB(cx,cy){const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;return[(cx-r.left)/r.width*vb.width,(cy-r.top)/r.height*vb.height];}
+  function zoomAt(cx,cy,f){const ns=clamp(s*f);const[px,py]=toVB(cx,cy);tx=px-(px-tx)*(ns/s);ty=py-(py-ty)*(ns/s);s=ns;apply();}
+
+  // inline: click empty canvas → enter inspector; nodes still open modals
+  canvas.addEventListener('click',e=>{ if(isFs())return; if(e.target.closest('.node'))return; enterFs(fig,{reset}); });
+
+  // the rest are inert unless we're in fullscreen inspect mode
+  canvas.addEventListener('wheel',e=>{ if(!isFs())return; e.preventDefault(); zoomAt(e.clientX,e.clientY,e.deltaY<0?1.12:0.89); },{passive:false});
+  canvas.addEventListener('dblclick',e=>{ if(!isFs()||e.target.closest('.node'))return; zoomAt(e.clientX,e.clientY,1.5); });
+  canvas.addEventListener('pointerdown',e=>{
+    if(!isFs())return;
+    pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){const a=[...pts.values()];pinchD=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);pinchS=s;drag=false;return;}
+    if(e.target.closest('.node'))return;
+    drag=true;sx=e.clientX;sy=e.clientY;if(canvas.setPointerCapture)canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove',e=>{
+    if(!isFs())return;
+    if(pts.has(e.pointerId))pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){const a=[...pts.values()];const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);if(pinchD>0){const ns=clamp(pinchS*(d/pinchD));const cx=(a[0].x+a[1].x)/2,cy=(a[0].y+a[1].y)/2;const[px,py]=toVB(cx,cy);tx=px-(px-tx)*(ns/s);ty=py-(py-ty)*(ns/s);s=ns;apply();}return;}
+    if(!drag)return;const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;
+    tx+=(e.clientX-sx)/r.width*vb.width;ty+=(e.clientY-sy)/r.height*vb.height;sx=e.clientX;sy=e.clientY;apply();
+  });
+  function up(e){pts.delete(e.pointerId);if(pts.size<2)pinchD=0;drag=false;}
+  canvas.addEventListener('pointerup',up); canvas.addEventListener('pointercancel',up);
+  ctl.querySelectorAll('button').forEach(b=>{ b.onclick=ev=>{ ev.stopPropagation(); const r=svg.getBoundingClientRect();
+    if(b.dataset.z==='in')zoomAt(r.left+r.width/2,r.top+r.height/2,1.25);
+    else if(b.dataset.z==='out')zoomAt(r.left+r.width/2,r.top+r.height/2,0.8);
+    else reset();
+  };});
+
+  const tog=fig.querySelector('[data-inspect="'+svgId+'"]');
+  if(tog) tog.addEventListener('click',()=>{ isFs()?exitFs():enterFs(fig,{reset}); });
+}
+makeInspectable('heroSvg');
+
+/* ============================================================
+   SIMULATOR — the indirection, live
+   ============================================================ */
+const sim={mode:'handle',nextKey:3,nextAddr:0x7ffe4c10,sel:null,res:[]};
+const jsStack=$('jsStack'),tblStack=$('tblStack'),memStack=$('memStack');
+const wires=$('simWires');
+const fileNames=['data.txt','config.json','image.png','log.txt','cache.db','notes.md'];
+let fnIdx=0;
+
+function addr(a){return '0x'+a.toString(16);}
+function simEmpty(node,txt){node.innerHTML='<div class="empty-note">'+txt+'</div>';}
+function vname(r){return (sim.mode==='wrapper'?'file':sim.mode==='pointer'?'p':'fd')+r.idx;}
+
+function renderSim(){
+  const ptr=sim.mode==='pointer', wrap=sim.mode==='wrapper';
+  $('ownJs').textContent=ptr?'RAW':wrap?'OBJ':'JS';
+  $('jsSub').textContent=ptr?'you hold the raw address itself':wrap?'you hold objects — methods over a hidden key':'you hold opaque keys — just values';
+  $('tblSub').textContent=wrap?"the object's internal key → pointer":'key → real pointer · you can\u2019t see this';
+  $('readLbl').textContent=ptr?'deref *p':wrap?'call file.read()':'read via key';
+  $('tblCol').style.display=ptr?'none':'';
+  document.querySelector('.sim-cols').style.gridTemplateColumns=ptr?'1fr 1.3fr':'1fr 1.05fr 1.15fr';
+
+  // JS column
+  jsStack.innerHTML='';
+  if(!sim.res.length){simEmpty(jsStack,ptr?'no pointers yet · open a file':wrap?'no objects yet · open a file':'no keys yet · open a file');}
+  sim.res.forEach(r=>{
+    const c=document.createElement('div');
+    c.className='hcard'+(ptr?' ptr':wrap?' obj':'')+(r.freed?' dangling':'')+(sim.sel===r.id?' lit':'');
+    c.dataset.id=r.id;
+    const nm=vname(r);
+    if(ptr){
+      c.innerHTML='<div class="hc-top"><span class="hc-var"><b>'+nm+'</b></span><span class="hc-kind">struct File*</span></div>'+
+        '<div class="hc-val" style="font-size:15px">'+addr(r.addr)+'</div>'+
+        '<div class="hc-name">'+(r.freed?'⚠ dangling — points at freed memory':r.name)+'</div>'+
+        '<div class="hc-hint">'+(r.freed?'using *'+nm+' = undefined behaviour':'*'+nm+' reaches the struct directly')+'</div>';
+    }else if(wrap){
+      c.innerHTML='<div class="hc-top"><span class="hc-var">const <b>'+nm+'</b></span><span class="hc-kind">FileHandle '+(r.freed?'(closed)':'{object}')+'</span></div>'+
+        '<div class="hc-name" style="margin-top:4px">'+(r.freed?'closed — the object now refuses':'"'+r.name+'"')+'</div>'+
+        '<div class="methods"><span class="mchip'+(r.freed?' dead':'')+'">.read()</span><span class="mchip'+(r.freed?' dead':'')+'">.close()</span></div>'+
+        '<div class="hc-slot">'+(r.freed?'.read() now throws <b>"file is closed"</b>':'wraps key <b>'+r.key+'</b> · click <b>.read()</b> to resolve')+'</div>';
+    }else{
+      c.innerHTML='<div class="hc-top"><span class="hc-var">const <b>'+nm+'</b></span><span class="hc-kind">number (key)</span></div>'+
+        '<div class="hc-val">'+r.key+'</div>'+
+        '<div class="hc-name">'+(r.freed?'stale key — no longer resolves':r.name)+'</div>'+
+        '<div class="hc-hint">'+(r.freed?'reading → EBADF: bad descriptor':'click to resolve key '+r.key)+'</div>';
+    }
+    c.onclick=()=>{ if(ptr){selectRes(r.id);usePointer(r);} else {selectRes(r.id);resolveHandle(r);} };
+    jsStack.appendChild(c);
+  });
+
+  // table column (handle AND wrapper both resolve through it)
+  if(!ptr){
+    tblStack.innerHTML='';
+    const live=sim.res.filter(r=>!r.freed);
+    if(!live.length){simEmpty(tblStack,'table empty · no keys map anywhere');}
+    live.forEach(r=>{
+      const row=document.createElement('div');
+      row.className='trow'+(sim.sel===r.id?' lit':'');row.dataset.id=r.id;
+      row.innerHTML='<span class="tk">'+r.key+'</span><span class="tp">→ <b>'+addr(r.addr)+'</b></span>';
+      tblStack.appendChild(row);
+    });
+  }
+
+  // memory column
+  memStack.innerHTML='';
+  if(!sim.res.length){simEmpty(memStack,'native heap empty');}
+  sim.res.forEach(r=>{
+    const m=document.createElement('div');
+    m.className='membox'+(r.freed?' freed':'')+(sim.sel===r.id?' lit':'');m.dataset.id=r.id;
+    m.innerHTML='<div class="mb-addr"><span>'+(r.freed?'freed':'struct File*')+'</span><b>'+addr(r.addr)+'</b></div>'+
+      '<div class="mb-body"><div class="struct">'+(r.freed?'░░░ reclaimed ░░░':'struct File {')+'</div>'+
+      (r.freed?'<div class="field">memory may be reused</div>':
+        '<div class="field"><span>name</span><b>"'+r.name+'"</b></div>'+
+        '<div class="field"><span>fd</span><b>'+r.key+'</b></div>'+
+        '<div class="field"><span>pos</span><b>'+r.pos+'</b></div>'+
+        '<div class="struct">}</div>')+'</div>';
+    memStack.appendChild(m);
+  });
+  updateButtons();
+}
+function selectRes(id){sim.sel=id;[...jsStack.children,...tblStack.children,...memStack.children].forEach(n=>n.classList?.toggle?.('lit',n.dataset&&n.dataset.id==id));}
+function updateButtons(){
+  const has=sim.res.length>0;const live=sim.res.some(r=>!r.freed);
+  $('simRead').disabled=!live;$('simFree').disabled=!live;
+}
+function status(msg,kind){const s=$('simStatus');s.className='sim-status'+(kind?' '+kind:'');$('simMsg').innerHTML=msg;}
+
+function findEl(col,id){return [...col.children].find(n=>n.dataset.id==id);}
+function centerOf(node){
+  const stage=document.querySelector('.sim-stage').getBoundingClientRect();
+  const r=node.getBoundingClientRect();
+  return {x:r.left-stage.left+r.width/2, y:r.top-stage.top+r.height/2,
+          left:r.left-stage.left, right:r.right-stage.left, top:r.top-stage.top, bottom:r.bottom-stage.top, h:r.height};
+}
+function sizeWires(){const stage=document.querySelector('.sim-stage');wires.setAttribute('viewBox',`0 0 ${stage.clientWidth} ${stage.clientHeight}`);wires.style.width=stage.clientWidth+'px';wires.style.height=stage.clientHeight+'px';}
+function clearWires(){[...wires.querySelectorAll('.wire,.beam-dot')].forEach(n=>n.remove());}
+function drawWire(a,b,color){
+  sizeWires();
+  const mx=(a.x+b.x)/2;
+  const p=el('path',{class:'wire',d:`M ${a.x} ${a.y} C ${mx} ${a.y}, ${mx} ${b.y}, ${b.x} ${b.y}`,fill:'none',stroke:color,'stroke-width':2,'stroke-dasharray':'5 5','marker-end':'url(#wm)',opacity:0});
+  wires.appendChild(p);
+  requestAnimationFrame(()=>{p.style.transition='opacity .3s';p.setAttribute('opacity','.9');});
+  return p;
+}
+function beamAlong(a,b,color,cls){
+  return new Promise(res=>{
+    const beam=document.createElement('div');beam.className='beam '+(cls||'');beam.style.background='';
+    document.querySelector('.sim-stage').appendChild(beam);
+    beam.style.left=a.x+'px';beam.style.top=a.y+'px';beam.style.opacity='1';
+    requestAnimationFrame(()=>{
+      beam.style.transition='left .55s cubic-bezier(.5,0,.3,1), top .55s cubic-bezier(.5,0,.3,1)';
+      beam.style.left=b.x+'px';beam.style.top=b.y+'px';
+    });
+    setTimeout(()=>{beam.style.opacity='0';setTimeout(()=>beam.remove(),200);res();},620);
+  });
+}
+
+let busy=false;
+async function resolveHandle(r){
+  const wrap=sim.mode==='wrapper';
+  if(busy)return;
+  if(r.freed){
+    if(wrap)status('<b>'+vname(r)+'</b> is <b>closed</b>. You call <b>'+vname(r)+'.read()</b> and the <em>object refuses</em> — it throws <b>"file is closed"</b> before touching anything. The membrane is the object\u2019s own state check.','warn');
+    else status('Key <b>'+r.key+'</b> is stale — the resource was freed. The runtime checks the table, finds nothing, and throws <b>EBADF: bad file descriptor</b>. No memory is touched. <span style="color:var(--engine)">This is the membrane doing its job.</span>','warn');
+    shake(findEl(memStack,r.id));return;
+  }
+  busy=true;clearWires();selectRes(r.id);
+  const jc=centerOf(findEl(jsStack,r.id));
+  const tr=findEl(tblStack,r.id),mc=findEl(memStack,r.id);
+  if(wrap)status('① You call <b>'+vname(r)+'.read()</b>. The object resolves its <em>internal key '+r.key+'</em> across the boundary — you never see it…','');
+  else status('① Script passes key <b>'+r.key+'</b> across the boundary…','');
+  await beamAlong({x:jc.right,y:jc.y},{x:centerOf(tr).left,y:centerOf(tr).y},null,'');
+  tr.classList.add('lit');
+  drawWire({x:jc.right,y:jc.y},{x:centerOf(tr).left,y:centerOf(tr).y},'var(--engine)');
+  status('② Same table, same lookup: <b>table['+r.key+']</b> → <b>'+addr(r.addr)+'</b>','ok');
+  await new Promise(r2=>setTimeout(r2,500));
+  await beamAlong({x:centerOf(tr).right,y:centerOf(tr).y},{x:centerOf(mc).left,y:centerOf(mc).y},null,'eng');
+  mc.classList.add('lit');
+  drawWire({x:centerOf(tr).right,y:centerOf(tr).y},{x:centerOf(mc).left,y:centerOf(mc).y},'var(--engine)');
+  if(wrap)status('③ Dereference <b>'+addr(r.addr)+'</b> → <b>struct File "'+r.name+'"</b>. Same trip as the bare key — <span style="color:var(--engine)">the object just wrapped it in a method you could call, and could have refused.</span>','ok');
+  else status('③ Dereference <b>'+addr(r.addr)+'</b> → reach <b>struct File "'+r.name+'"</b>. Work runs here; a plain value returns. <span style="color:var(--js)">You never held the address.</span>','ok');
+  r.pos+=16;findEl(memStack,r.id).querySelectorAll('.field b')[2]&&(findEl(memStack,r.id).querySelectorAll('.field b')[2].textContent=r.pos);
+  busy=false;
+}
+async function usePointer(r){
+  if(busy)return;clearWires();selectRes(r.id);
+  const nm=vname(r);
+  const jc=centerOf(findEl(jsStack,r.id)),mc=findEl(memStack,r.id);
+  if(r.freed){
+    status('💥 <b>use-after-free</b>: *'+nm+' follows <b>'+addr(r.addr)+'</b> into freed memory. The address still looks fine — but the bytes were reclaimed. Silent corruption or crash. <b>Undefined behaviour.</b>','warn');
+    boom(mc);
+    await beamAlong({x:jc.right,y:jc.y},{x:centerOf(mc).left,y:centerOf(mc).y},null,'dgr');
+    drawWire({x:jc.right,y:jc.y},{x:centerOf(mc).left,y:centerOf(mc).y},'var(--danger)');
+    return;
+  }
+  busy=true;
+  status('Raw deref: *'+nm+' follows <b>'+addr(r.addr)+'</b> straight to the struct — one hop, no table, no checks.','');
+  await beamAlong({x:jc.right,y:jc.y},{x:centerOf(mc).left,y:centerOf(mc).y},null,'dgr');
+  mc.classList.add('lit');
+  drawWire({x:jc.right,y:jc.y},{x:centerOf(mc).left,y:centerOf(mc).y},'var(--danger)');
+  status('Reached <b>struct File "'+r.name+'"</b> directly. Fast — and your hand is now holding a live address. Free it and this same arrow becomes a grenade.','');
+  busy=false;
+}
+function shake(node){if(!node)return;node.classList.add('boom');setTimeout(()=>node.classList.remove('boom'),650);}
+function boom(node){if(!node)return;node.classList.add('boom');setTimeout(()=>node.classList.remove('boom'),650);}
+
+$('simOpen').onclick=()=>{
+  if(sim.res.length>=4){status('Cap reached for the demo — free or reset first.','');return;}
+  clearWires();
+  const name=fileNames[fnIdx++%fileNames.length];
+  const idx=sim.res.length+1;
+  const r={id:Math.random().toString(36).slice(2),key:sim.nextKey++,addr:sim.nextAddr,idx:idx,varname:'fd'+idx,name:name,pos:0,freed:false};
+  sim.nextAddr+=0x40+Math.floor(Math.random()*6)*0x10;
+  sim.res.push(r);sim.sel=r.id;renderSim();
+  if(sim.mode==='handle'){
+    status('Opened <b>"'+name+'"</b>. Native allocated <b>struct File*</b> at <b>'+addr(r.addr)+'</b>, inserted <b>'+r.key+' → '+addr(r.addr)+'</b> into the table, and handed you the key <b>'+r.key+'</b>. <span style="color:var(--js)">Notice your column holds a number, not an address.</span>','ok');
+  }else if(sim.mode==='wrapper'){
+    status('Opened <b>"'+name+'"</b>. Same struct, same table row <b>'+r.key+' → '+addr(r.addr)+'</b> — but you were handed a <b>FileHandle object</b> that <em>wraps</em> key '+r.key+'. <span style="color:var(--engine)">Your column holds an object with methods, still no address.</span>','ok');
+  }else{
+    status('Opened <b>"'+name+'"</b>. In raw-pointer mode the address <b>'+addr(r.addr)+'</b> is handed straight to you. No table, no membrane — <b>'+vname(r)+'</b> <em>is</em> the pointer.','warn');
+  }
+};
+$('simRead').onclick=()=>{const r=sim.res.find(x=>!x.freed);if(!r)return;sim.sel=r.id;renderSim();sim.mode==='pointer'?usePointer(r):resolveHandle(r);};
+$('simFree').onclick=()=>{
+  const r=[...sim.res].reverse().find(x=>!x.freed);if(!r)return;
+  clearWires();r.freed=true;sim.sel=r.id;renderSim();shake(findEl(memStack,r.id));
+  if(sim.mode==='handle'){
+    status('Freed <b>"'+r.name+'"</b>. Native reclaimed the struct and the runtime <b>removed row '+r.key+'</b> from the table. Your key <b>'+r.key+'</b> is now inert — using it throws a clean <b>EBADF</b>, touching nothing.','ok');
+  }else if(sim.mode==='wrapper'){
+    status('Closed <b>"'+r.name+'"</b> via <b>'+vname(r)+'.close()</b>. The object flips to a <b>closed</b> state and the runtime removes row '+r.key+'. Now <b>'+vname(r)+'.read()</b> throws <b>"file is closed"</b> — the object refuses, touching nothing.','ok');
+  }else{
+    status('Freed <b>"'+r.name+'"</b>. The struct is reclaimed — but <b>'+vname(r)+'</b> in your hand still holds <b>'+addr(r.addr)+'</b>. It now <b>dangles</b>. Click it to see use-after-free.','warn');
+  }
+};
+$('simReset').onclick=()=>{Object.assign(sim,{nextKey:3,nextAddr:0x7ffe4c10,sel:null,res:[]});fnIdx=0;clearWires();renderSim();status('Reset. Open a file to mint your first resource. Nothing exists yet — no struct, no pointer, no key.','');};
+$('modeSwitch').querySelectorAll('button').forEach(b=>{
+  b.onclick=()=>{
+    sim.mode=b.dataset.m;clearWires();
+    $('modeSwitch').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+    renderSim();
+    if(sim.mode==='pointer')status('Switched to <b>raw pointer</b> mode. Your script now holds real addresses — the middle column is gone. Power, and danger, are yours.','warn');
+    else if(sim.mode==='wrapper')status('Switched to <b>wrapper</b> mode. Same resources, same table — but now you hold <b>objects with methods</b> instead of bare numbers. A handle wearing an object.','ok');
+    else status('Switched to <b>handle</b> mode. Your script holds bare opaque <b>keys</b>; the runtime holds the pointers behind the table.','ok');
+  };
+});
+renderSim();
+window.addEventListener('resize',()=>{sizeWires();});
+
+/* ============================================================
+   POINTER DANGER STRIP
+   ============================================================ */
+const memStrip=$('memStrip');
+let stripState={};
+function buildStrip(){
+  stripState={ptr:0,base:0x1000,freed:false,vals:['72','101','108','108','111'],owned:5,total:8};
+  memStrip.innerHTML='';
+  const arrow=document.createElement('div');arrow.className='ptr-arrow';arrow.id='stripArrow';
+  arrow.innerHTML='p<span class="tri">▼</span>';
+  memStrip.appendChild(arrow);
+  for(let i=0;i<stripState.total;i++){
+    const c=document.createElement('div');c.className='cell'+(i<stripState.owned?' owned':' oob');c.dataset.i=i;
+    c.innerHTML='<span class="ca">'+ '0x'+(stripState.base+i*4).toString(16) +'</span><span class="cv">'+(i<stripState.owned?stripState.vals[i]:'??')+'</span>';
+    memStrip.appendChild(c);
+  }
+  positionArrow();
+  sStatus('This is your array. The arrow is a raw pointer <code>p</code> aimed at <code>arr[0]</code>. The teal cells are memory you legitimately own.','');
+}
+function positionArrow(){
+  const cell=memStrip.querySelector('.cell[data-i="'+Math.max(0,Math.min(stripState.total-1,stripState.ptr))+'"]');
+  if(!cell)return;const a=$('stripArrow');
+  a.style.left=(cell.offsetLeft+cell.offsetWidth/2)+'px';
+}
+function sStatus(msg,kind){const s=$('stripStatus');s.className='strip-status'+(kind?' '+kind:'');$('stripMsg').innerHTML=msg;}
+function hit(i,bad){const c=memStrip.querySelector('.cell[data-i="'+i+'"]');if(!c)return;c.classList.add('hit');if(bad)c.classList.add('bad');setTimeout(()=>c.classList.remove('hit','bad'),900);}
+$('dDeref').onclick=()=>{
+  if(stripState.ptr<stripState.owned && !(stripState.freed&&stripState.ptr<stripState.owned)){
+    hit(stripState.ptr,false);sStatus('<code>*p</code> → reads <b>'+stripState.vals[stripState.ptr]+'</b> from <code>'+('0x'+(stripState.base+stripState.ptr*4).toString(16))+'</code>. Valid: inside owned, live memory.','good');
+  }else if(stripState.freed){hit(stripState.ptr,true);sStatus('💥 <code>*p</code> on <b>freed</b> memory — <b>use-after-free</b>. The read may return stale bytes, attacker-controlled data, or crash.','bad');}
+  else{hit(stripState.ptr,true);sStatus('💥 <code>*p</code> reads <b>out of bounds</b> — past what you own. Undefined behaviour.','bad');}
+};
+$('dStep').onclick=()=>{stripState.ptr++;positionArrow();
+  if(stripState.ptr<stripState.owned)sStatus('<code>p++</code> → now at <code>arr['+stripState.ptr+']</code>. Still inside the array. Dereference to read.','');
+  else sStatus('<code>p++</code> → now <b>past the end</b> of your array (<code>arr['+stripState.ptr+']</code>). Reading here is out of bounds.','bad');
+};
+$('dUAF').onclick=()=>{stripState.freed=true;
+  memStrip.querySelectorAll('.cell.owned').forEach(c=>{c.classList.remove('owned');c.classList.add('freed');c.querySelector('.cv').textContent='▓▓';});
+  stripState.ptr=Math.min(stripState.ptr,stripState.owned-1);positionArrow();hit(stripState.ptr,true);
+  sStatus('💀 <code>free(p)</code> — the allocation is reclaimed, but <code>p</code> still holds the address. It now <b>dangles</b>. <code>*p</code> is use-after-free.','bad');
+};
+$('dOOB').onclick=()=>{sStatus('💥 <code>*(p + 99)</code> aims far past your array into unrelated memory. No bounds check exists — the CPU just loads from <code>'+('0x'+(stripState.base+ (stripState.ptr+99)*4).toString(16))+'</code>. Out-of-bounds read.','bad');
+  const a=$('stripArrow');a.style.left=(memStrip.scrollWidth+20)+'px';setTimeout(positionArrow,1100);};
+$('dWild').onclick=()=>{sStatus('🎲 <code>p = 0xBADF00D</code> — a wild pointer at an address you never owned. <code>*p</code> reads garbage or segfaults. The pointer is just a number; nothing validates it.','bad');
+  const a=$('stripArrow');a.innerHTML='p → 0xBADF00D<span class="tri">▼</span>';a.style.left='90%';
+  setTimeout(()=>{a.innerHTML='p<span class="tri">▼</span>';positionArrow();},1400);};
+$('dReset').onclick=buildStrip;
+buildStrip();
+window.addEventListener('resize',positionArrow);
+
+/* ============================================================
+   MEMBRANE MORPH
+   ============================================================ */
+const morphSvg=$('morphSvg');
+let morphMode='ptr';
+function box(x,y,w,h,stroke,title,sub,fill,mod){
+  const inner=`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="12" fill="${fill||'var(--panel)'}" stroke="${stroke}" stroke-width="2"/>`+
+    `<text x="${x+18}" y="${y+30}" font-size="15" font-weight="700" fill="var(--ink)" font-family="var(--mono)">${title}</text>`+
+    (sub?`<text x="${x+18}" y="${y+52}" font-size="12" fill="var(--ink2)" font-family="var(--mono)">${sub}</text>`:'')+
+    (mod?`<text x="${x+w-9}" y="${y+h-9}" text-anchor="end" font-size="11" fill="${stroke}" font-family="var(--mono)" opacity="0.7">↗</text>`:'');
+  return mod?`<g class="mbox" data-mod="${mod}">${inner}</g>`:inner;
+}
+function renderMorph(){
+  let h='<defs><marker id="ma" markerWidth="10" markerHeight="10" refX="7" refY="3.5" orient="auto"><path d="M0 0L7 3.5L0 7Z" fill="var(--danger)"/></marker>'+
+        '<marker id="mb" markerWidth="10" markerHeight="10" refX="7" refY="3.5" orient="auto"><path d="M0 0L7 3.5L0 7Z" fill="var(--engine)"/></marker></defs>';
+  // resource always on the right
+  h+=box(700,110,180,80,'var(--engine)','struct File*','the resource','var(--engine-soft)','resource');
+  if(morphMode==='ptr'){
+    h+=box(40,110,180,80,'var(--danger)','your code','holds the address','var(--danger-soft)','ptr');
+    h+=`<path d="M 220 150 L 700 150" stroke="var(--danger)" stroke-width="3" marker-end="url(#ma)"/>`;
+    h+=`<text x="460" y="138" text-anchor="middle" font-size="13" font-weight="700" fill="var(--danger)" font-family="var(--mono)">one hop · *p</text>`;
+    h+=`<text x="460" y="174" text-anchor="middle" font-size="11.5" fill="var(--ink3)" font-family="var(--mono)">no checks · moves &amp; frees break it silently</text>`;
+    h+=`<text x="460" y="250" text-anchor="middle" font-size="13" fill="var(--danger)" font-family="var(--serif)" font-style="italic">A raw pointer is a direct line from your hand into memory.</text>`;
+  }else if(morphMode==='handle'){
+    h+=box(40,110,150,80,'var(--js)','your code','holds key 3','var(--js-soft)','key');
+    h+=box(370,90,180,120,'var(--engine)','handle table','3 → 0x7ffe…','var(--panel)','table');
+    h+=`<line x1="280" y1="30" x2="280" y2="270" stroke="var(--danger)" stroke-width="1.4" stroke-dasharray="2 7" opacity=".7"/>`;
+    h+=`<text x="280" y="24" text-anchor="middle" font-size="10" fill="var(--danger)" font-family="var(--mono)">▲ the membrane</text>`;
+    h+=`<path d="M 190 150 L 370 150" stroke="var(--engine)" stroke-width="2.5" marker-end="url(#mb)"/>`;
+    h+=`<text x="280" y="140" text-anchor="middle" font-size="11" font-weight="700" fill="var(--js)" font-family="var(--mono)">key 3</text>`;
+    h+=`<path d="M 550 150 L 700 150" stroke="var(--engine)" stroke-width="2.5" marker-end="url(#mb)"/>`;
+    h+=`<text x="625" y="140" text-anchor="middle" font-size="11" font-weight="700" fill="var(--engine)" font-family="var(--mono)">pointer</text>`;
+    h+=`<text x="460" y="250" text-anchor="middle" font-size="13" fill="var(--engine)" font-family="var(--serif)" font-style="italic">The table can validate, relocate, or refcount — your key never changes.</text>`;
+  }else{
+    h+=box(28,118,128,64,'var(--js)','your code','holds object','var(--js-soft)','wrapper');
+    h+=box(186,108,150,84,'var(--engine)','FileHandle','{ key 3 } + methods','var(--panel)','wrapper');
+    h+=box(410,118,150,64,'var(--engine)','handle table','3 → 0x7ffe…','var(--panel)','table');
+    h+=`<line x1="172" y1="34" x2="172" y2="266" stroke="var(--danger)" stroke-width="1.4" stroke-dasharray="2 7" opacity=".7"/>`;
+    h+=`<text x="172" y="28" text-anchor="middle" font-size="10" fill="var(--danger)" font-family="var(--mono)">▲ the membrane</text>`;
+    h+=`<path d="M 156 150 L 186 150" stroke="var(--engine)" stroke-width="2.5" marker-end="url(#mb)"/>`;
+    h+=`<path d="M 336 150 L 410 150" stroke="var(--engine)" stroke-width="2.5" marker-end="url(#mb)"/>`;
+    h+=`<text x="373" y="140" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--engine)" font-family="var(--mono)">its key</text>`;
+    h+=`<path d="M 560 150 L 700 150" stroke="var(--engine)" stroke-width="2.5" marker-end="url(#mb)"/>`;
+    h+=`<text x="630" y="140" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--engine)" font-family="var(--mono)">pointer</text>`;
+    h+=`<text x="455" y="250" text-anchor="middle" font-size="13" fill="var(--engine)" font-family="var(--serif)" font-style="italic">A handle wearing an object: same key, same table — plus methods that can refuse you.</text>`;
+  }
+  morphSvg.innerHTML=h;
+}
+morphSvg.addEventListener('click',e=>{const g=e.target.closest('[data-mod]');if(g&&MORPH_MODALS[g.dataset.mod])openModal(MORPH_MODALS[g.dataset.mod]);});
+
+/* ── morph-box scenes (new angles: UAF · relocation · refusal · revocation · refcount) ── */
+function vizP(host){return scenePlayer(host,{dwell:1500,svg:
+ `<svg class="pv-svg" viewBox="0 0 520 188">
+   <rect x="24" y="80" width="120" height="40" rx="9" fill="var(--danger-soft)" stroke="var(--danger)" stroke-width="1.8"/>
+   <text x="84" y="105" text-anchor="middle" font-size="12" font-weight="700" fill="var(--danger)" font-family="var(--mono)">p = 0x7ffe</text>
+   <path class="vp-arr pv-anim" d="M144 100 L250 100" stroke="var(--danger)" stroke-width="2" marker-end="url(#vpm)"/>
+   <rect class="vp-s pv-anim" x="254" y="66" width="240" height="68" rx="10" fill="var(--engine-soft)" stroke="var(--engine)" stroke-width="1.8"/>
+   <text class="vp-st pv-anim" x="270" y="92" font-size="10.5" fill="var(--engine)" font-family="var(--mono)">struct File { fd:3, pos:0 }</text>
+   <text class="vp-stb pv-anim" x="270" y="112" font-size="10" fill="var(--ink3)" font-family="var(--mono)">live · the bytes are here</text>
+   <text class="vp-boom pv-anim" x="374" y="156" text-anchor="middle" font-size="14" font-weight="800" fill="var(--danger)" opacity="0">💥 use-after-free</text>
+   ${ARR('vpm')}
+ </svg>`,
+ build(s){const $=c=>s.querySelector(c),sBox=$('.vp-s'),st=$('.vp-st'),stb=$('.vp-stb'),arr=$('.vp-arr'),boom=$('.vp-boom');
+  const caps=["<code>*p</code> follows the address straight to the struct — <b>one hop, no checks</b>.",
+   "It works: the bytes are right there. Fast, direct, and entirely trusting.",
+   "Now something calls <code>free(p)</code> — the struct is <b>reclaimed</b>.",
+   "<code>p</code> still holds <b>0x7ffe4c10</b>, but the memory is gone. <code>*p</code> is <b>use-after-free</b> — undefined behaviour."];
+  function render(i){const freed=i>=2;sBox.setAttribute('stroke',freed?'var(--danger)':'var(--engine)');sBox.setAttribute('fill',freed?'var(--danger-soft)':'var(--engine-soft)');sBox.setAttribute('stroke-dasharray',freed?'4 4':'0');st.textContent=freed?'░░░ reclaimed ░░░':'struct File { fd:3, pos:0 }';st.setAttribute('fill',freed?'var(--danger)':'var(--engine)');stb.textContent=freed?'memory may be reused':'live · the bytes are here';stb.setAttribute('fill',freed?'var(--danger)':'var(--ink3)');boom.setAttribute('opacity',i>=3?'1':'0');arr.setAttribute('opacity',i>=3?'1':'0.85');}
+  return{caps,render};}});}
+function vizK(host){return scenePlayer(host,{dwell:1600,svg:
+ `<svg class="pv-svg" viewBox="0 0 520 188">
+   <rect x="20" y="74" width="96" height="44" rx="9" fill="var(--js-soft)" stroke="var(--js)" stroke-width="1.8"/>
+   <text x="68" y="101" text-anchor="middle" font-size="14" font-weight="800" fill="var(--js)" font-family="var(--mono)">fd = 3</text>
+   <text x="68" y="138" text-anchor="middle" font-size="9" fill="var(--ink3)" font-family="var(--mono)">never changes ✓</text>
+   <rect x="150" y="72" width="158" height="48" rx="9" fill="var(--panel)" stroke="var(--engine)" stroke-width="1.6"/>
+   <text x="164" y="91" font-size="10" fill="var(--ink3)" font-family="var(--mono)">table[3] →</text>
+   <text class="vk-addr pv-anim" x="164" y="110" font-size="12" font-weight="800" fill="var(--engine)" font-family="var(--mono)">0x7ffe4c10</text>
+   <rect class="vk-s pv-anim" x="356" y="44" width="148" height="44" rx="9" fill="var(--engine-soft)" stroke="var(--engine)" stroke-width="1.8"/>
+   <text class="vk-sl pv-anim" x="430" y="70" text-anchor="middle" font-size="10.5" fill="var(--engine)" font-family="var(--mono)">struct @ 0x7ffe</text>
+ </svg>`,
+ build(s){const $=c=>s.querySelector(c),addr=$('.vk-addr'),sb=$('.vk-s'),sl=$('.vk-sl');
+  const caps=["You hold the key <code>fd = 3</code>. It resolves through the table to the struct.",
+   "The runtime <b>relocates</b> the struct — GC compaction, a realloc — to <b>0x9a02e0</b>.",
+   "The table row is rewritten: <code>3 → 0x9a02e0</code>. <b>Your key never changed.</b>",
+   "A raw pointer would now dangle. The key still resolves — exactly what the indirection buys."];
+  function render(i){const moved=i>=1;addr.textContent=moved?'0x9a02e0':'0x7ffe4c10';sl.textContent=moved?'struct @ 0x9a02':'struct @ 0x7ffe';const y=moved?108:44;sb.setAttribute('y',y);sl.setAttribute('y',y+26);addr.setAttribute('fill',i>=2?'var(--engine)':'var(--js)');}
+  return{caps,render};}});}
+function vizW(host){return scenePlayer(host,{dwell:1500,svg:
+ `<svg class="pv-svg" viewBox="0 0 520 188">
+   <rect class="vw-o pv-anim" x="148" y="38" width="224" height="112" rx="12" fill="var(--engine-soft)" stroke="var(--engine)" stroke-width="1.8"/>
+   <text x="168" y="62" font-size="12" font-weight="700" fill="var(--engine)" font-family="var(--mono)">FileHandle</text>
+   <text class="vw-state pv-anim" x="352" y="62" text-anchor="end" font-size="10" fill="var(--ink3)" font-family="var(--mono)">{ open }</text>
+   <g class="vw-read"><rect x="168" y="78" width="80" height="28" rx="7" fill="var(--engine-soft)" stroke="var(--engine)"/><text x="208" y="96" text-anchor="middle" font-size="10.5" fill="var(--engine)" font-family="var(--mono)">.read()</text></g>
+   <g class="vw-close"><rect x="260" y="78" width="86" height="28" rx="7" fill="var(--engine-soft)" stroke="var(--engine)"/><text x="303" y="96" text-anchor="middle" font-size="10.5" fill="var(--engine)" font-family="var(--mono)">.close()</text></g>
+   <text class="vw-msg pv-anim" x="260" y="134" text-anchor="middle" font-size="11" font-weight="700" fill="var(--engine)" font-family="var(--mono)" opacity="0"></text>
+ </svg>`,
+ build(s){const $=c=>s.querySelector(c),st=$('.vw-state'),read=$('.vw-read'),close=$('.vw-close'),msg=$('.vw-msg');
+  const caps=["You hold a <b>FileHandle</b> — methods over a hidden key. A handle wearing an object.",
+   "<code>await file.read(buf)</code> resolves through the table and reads — <b>allowed</b>.",
+   "<code>file.close()</code> flips the object to a <b>closed</b> state.",
+   "<code>file.read()</code> again → the object <b>refuses</b>: <code>\"file is closed\"</code>. The wrapper is its own guard."];
+  function render(i){const closed=i>=2;st.textContent=closed?'{ closed }':'{ open }';st.setAttribute('fill',closed?'var(--danger)':'var(--ink3)');
+   [read,close].forEach(gg=>{const r=gg.querySelector('rect'),t=gg.querySelector('text');r.setAttribute('stroke',closed?'var(--danger)':'var(--engine)');r.setAttribute('fill',closed?'var(--danger-soft)':'var(--engine-soft)');t.setAttribute('fill',closed?'var(--danger)':'var(--engine)');});
+   if(i===1){msg.setAttribute('opacity','1');msg.textContent='→ resolves key, reads bytes  ✓';msg.setAttribute('fill','var(--engine)');}
+   else if(i>=3){msg.setAttribute('opacity','1');msg.textContent='✕ TypeError: file is closed';msg.setAttribute('fill','var(--danger)');}
+   else msg.setAttribute('opacity','0');}
+  return{caps,render};}});}
+function vizT(host){return scenePlayer(host,{dwell:1500,svg:
+ `<svg class="pv-svg" viewBox="0 0 520 188">
+   <text x="60" y="22" font-size="9" fill="var(--ink3)" font-family="var(--mono)">runtime handle table — one checkpoint for every key</text>
+   <g class="vt-rows"></g>
+   <g class="vt-q pv-anim" opacity="0"><circle cx="38" cy="0" r="13" fill="var(--js-soft)" stroke="var(--js)" stroke-width="1.6"/><text class="vt-qk" x="38" y="4" text-anchor="middle" font-size="11" font-weight="800" fill="var(--js)" font-family="var(--mono)">3</text></g>
+   <text class="vt-res pv-anim" x="470" y="0" text-anchor="end" font-size="11" font-weight="800" font-family="var(--mono)" opacity="0"></text>
+ </svg>`,
+ build(s){const rows=[[3,'0x7ffe4c10',true],[5,'0x7ffe4d20',true],[9,'— (freed)',false]];const g=s.querySelector('.vt-rows');let html='';
+  rows.forEach((r,k)=>{const y=42+k*34;html+='<g class="vt-r"><rect x="60" y="'+y+'" width="380" height="26" rx="6" fill="var(--bg2)" stroke="var(--line2)"/><text x="76" y="'+(y+17)+'" font-size="11" font-weight="700" fill="'+(r[2]?'var(--engine)':'var(--danger)')+'" font-family="var(--mono)">'+r[0]+'</text><text x="112" y="'+(y+17)+'" font-size="10.5" fill="var(--ink3)" font-family="var(--mono)">→ '+r[1]+'</text></g>';});
+  g.innerHTML=html;const rEls=[...g.querySelectorAll('.vt-r')];const q=s.querySelector('.vt-q'),qk=s.querySelector('.vt-qk'),res=s.querySelector('.vt-res');
+  const caps=["Every call indexes the table: <code>table[key]</code>. It is the single checkpoint.",
+   "Live key <b>3</b> → resolves to <b>0x7ffe4c10</b>. <b>Allowed.</b>",
+   "Freed key <b>9</b> → no live row. The table <b>refuses</b>: <code>EBADF</code>. Nothing is touched.",
+   "One table to <b>validate, relocate, or revoke</b> — without your code ever knowing."];
+  function render(i){rEls.forEach(r=>{r.style.opacity=(i>=1)?'1':'0.55';r.querySelector('rect').setAttribute('stroke','var(--line2)');});
+   if(i>=1&&i<3){q.setAttribute('opacity','1');qk.textContent='3';q.setAttribute('transform','translate(0,'+(42+13)+')');rEls[0].querySelector('rect').setAttribute('stroke','var(--engine)');res.setAttribute('opacity','1');res.textContent='→ 0x7ffe4c10  ✓';res.setAttribute('fill','var(--engine)');res.setAttribute('y',(42+17));}
+   else if(i>=3){q.setAttribute('opacity','1');qk.textContent='9';q.setAttribute('transform','translate(0,'+(42+2*34+13)+')');rEls[2].querySelector('rect').setAttribute('stroke','var(--danger)');res.setAttribute('opacity','1');res.textContent='✕ EBADF';res.setAttribute('fill','var(--danger)');res.setAttribute('y',(42+2*34+17));}
+   else{q.setAttribute('opacity','0');res.setAttribute('opacity','0');}}
+  return{caps,render};}});}
+function vizR(host){return scenePlayer(host,{dwell:1500,svg:
+ `<svg class="pv-svg" viewBox="0 0 520 188">
+   <rect class="vr-s pv-anim" x="180" y="46" width="180" height="96" rx="12" fill="var(--engine-soft)" stroke="var(--engine)" stroke-width="1.8"/>
+   <text x="196" y="70" font-size="11" font-weight="700" fill="var(--engine)" font-family="var(--mono)">struct File</text>
+   <text x="196" y="90" font-size="10" fill="var(--ink3)" font-family="var(--mono)">fd:3 · pos:0</text>
+   <text x="196" y="108" font-size="10" fill="var(--ink3)" font-family="var(--mono)">buf: 0x55f0…</text>
+   <text class="vr-rc pv-anim" x="344" y="70" text-anchor="end" font-size="12" font-weight="800" fill="var(--engine)" font-family="var(--mono)">rc:0</text>
+   <g class="vr-h1 pv-anim" opacity="0"><circle cx="58" cy="70" r="13" fill="var(--js-soft)" stroke="var(--js)" stroke-width="1.6"/><text x="58" y="74" text-anchor="middle" font-size="10" font-weight="800" fill="var(--js)" font-family="var(--mono)">A</text><path d="M72 72 L178 90" stroke="var(--engine)" stroke-width="1.4" stroke-dasharray="3 3"/></g>
+   <g class="vr-h2 pv-anim" opacity="0"><circle cx="58" cy="122" r="13" fill="var(--js-soft)" stroke="var(--js)" stroke-width="1.6"/><text x="58" y="126" text-anchor="middle" font-size="10" font-weight="800" fill="var(--js)" font-family="var(--mono)">B</text><path d="M72 120 L178 108" stroke="var(--engine)" stroke-width="1.4" stroke-dasharray="3 3"/></g>
+ </svg>`,
+ build(s){const $=c=>s.querySelector(c),rc=$('.vr-rc'),h1=$('.vr-h1'),h2=$('.vr-h2'),sBox=$('.vr-s');
+  const caps=["The resource is a real <b>struct File</b> at an address — what every reference ultimately points to.",
+   "Two handles refer to it. The runtime tracks <b>refcount = 2</b>.",
+   "One closes. <b>rc = 1</b> — still alive; the other key keeps working.",
+   "The last closes. <b>rc = 0</b> → the runtime <b>frees</b> it. Lifetime managed behind the references."];
+  function render(i){h1.setAttribute('opacity',(i>=1&&i<3)?'1':'0');h2.setAttribute('opacity',(i>=1&&i<2)?'1':'0');const n=i===1?2:i===2?1:0;rc.textContent='rc:'+n;rc.setAttribute('fill',i>=3?'var(--danger)':'var(--engine)');const freed=i>=3;sBox.setAttribute('stroke',freed?'var(--danger)':'var(--engine)');sBox.setAttribute('fill',freed?'var(--danger-soft)':'var(--engine-soft)');sBox.setAttribute('stroke-dasharray',freed?'4 4':'0');}
+  return{caps,render};}});}
+
+const MORPH_MODALS={
+ ptr:{tag:'RAW POINTER',laneName:'no membrane',title:'The raw pointer — the address itself',viz:vizP,
+  code:{lang:'c',tag:'unchecked',html:`<span class="k">struct</span> File* p = (<span class="k">struct</span> File*)<span class="v">0x7ffe4c10</span>;
+free(p);
+*p;   <span class="d">// 💥 use-after-free — undefined behaviour</span>`},
+  body:"In raw-pointer mode your code holds the <strong>actual address</strong>. <code>*p</code> is one hop into memory — fast, and unguarded. There is no liveness check: if the resource is freed or moved, the pointer silently goes wrong while still looking valid.",
+  why:"This is the exact failure mode the handle exists to prevent — the address survives the memory it names.",
+  deep:{c:"<p>The CPU loads from <code>base + offset</code> with no validation that the allocation is still live.</p>",
+        concept:"<p>Direct access trades every safety property for one fewer indirection.</p>"}},
+ key:{tag:'HANDLE · KEY',laneName:'the indirection payoff',title:'The opaque key survives relocation',viz:vizK,
+  code:{lang:'javascript',tag:'why the hop pays off',html:`<span class="k">const</span> fd = <span class="v">3</span>;        <span class="c">// you hold a number</span>
+<span class="c">// runtime relocates the struct → table[3] now points at 0x9a02e0</span>
+fs.readSync(fd, buf);  <span class="c">// still works — fd never changed</span>`},
+  body:"Because you hold a <strong>key</strong> and the runtime holds the pointer, the resource is free to <strong>move</strong>. When it relocates, the runtime just rewrites the table row — your key is untouched and keeps resolving.",
+  why:"A raw pointer would dangle the instant the resource moved; the key's indirection absorbs the change.",
+  deep:{c:"<p>Compacting GCs and reallocating pools move objects; only the table entry needs updating.</p>",
+        concept:"<p>Stable identity (the key) decoupled from volatile location (the address).</p>"}},
+ wrapper:{tag:'WRAPPER · OBJECT',laneName:'a curated surface',title:'A handle wearing an object — and refusing',viz:vizW,
+  code:{lang:'javascript',tag:'read-once / closed',html:`<span class="k">const</span> file = <span class="k">await</span> fs.open(<span class="v">"data.txt"</span>);
+<span class="k">await</span> file.read(buf);   <span class="c">// ✓ resolves the hidden key</span>
+<span class="k">await</span> file.close();
+<span class="k">await</span> file.read(buf);   <span class="d">// ✕ throws: file is closed</span>`},
+  body:"A <strong>wrapper</strong> is the same key dressed as an object — properties, methods, <code>await</code>. Because the runtime owns the surface, it can expose only a <strong>safe subset</strong> and <strong>refuse</strong> the rest: a closed handle, a read-once body, an immutable field.",
+  why:"The object is its own guard: state checks live on the wrapper, so misuse throws cleanly instead of corrupting anything.",
+  deep:{c:"<p>The wrapper holds the key plus a state flag; methods check it before resolving.</p>",
+        concept:"<p>Same membrane as a bare handle, friendlier surface, plus enforcement.</p>"}},
+ table:{tag:'THE TABLE',laneName:'the runtime\u2019s private map',title:'The handle table — validate &amp; revoke',viz:vizT,
+  code:{lang:'c',tag:'one checkpoint',html:`<span class="k">struct</span> File* p = table[<span class="v">3</span>];   <span class="c">// live → 0x7ffe4c10</span>
+<span class="k">struct</span> File* q = table[<span class="v">9</span>];   <span class="d">// freed → EBADF, nothing touched</span>`},
+  body:"The <strong>private table</strong> is the indirection layer: every call resolves <code>table[key]</code> here. Because it's the one place every reference passes through, it can <strong>validate</strong> a key, <strong>relocate</strong> a resource, or <strong>revoke</strong> a stale key — without your code knowing.",
+  why:"A dangling raw pointer fails silently; a stale key hits a missing row and fails loudly with a clean error.",
+  deep:{c:"<p>For fds this is the kernel's per-process open-file table; for engine objects, a handle scope.</p>",
+        concept:"<p>Centralised resolution is what makes every safety property enforceable.</p>"}},
+ resource:{tag:'THE RESOURCE',laneName:'native memory',title:'The real struct &amp; its lifetime',viz:vizR,
+  code:{lang:'c',tag:'refcounted lifetime',html:`<span class="k">struct</span> File { <span class="k">int</span> fd; off_t pos; <span class="k">char</span>* buf; };
+retain(p);   <span class="c">// rc = 2</span>
+release(p);  <span class="c">// rc = 1 — still alive</span>
+release(p);  <span class="c">// rc = 0 → free(p)</span>`},
+  body:"At the bottom of every reference is a real <strong>struct</strong> at a real address — the thing all the keys and pointers ultimately name. Its <strong>lifetime</strong> can be managed behind the references: the runtime reference-counts it and frees it when the last handle lets go.",
+  why:"You never call <code>free</code> by hand — dropping the handle is enough, which removes the whole class of double-free and leak bugs.",
+  deep:{c:"<p>Each handle retain/release adjusts a count; zero triggers the destructor / <code>free</code>.</p>",
+        concept:"<p>Ownership expressed through references, not manual memory calls.</p>"}}
+};
+
+const MORPH_NEXT={ptr:'handle',handle:'wrapper',wrapper:'ptr'};
+const MORPH_TITLE={ptr:'⚠ Raw pointer · direct dereference',handle:'◈ Handle · resolved through the table',wrapper:'▢ Wrapper · an object over the key'};
+const MORPH_BTN={ptr:' show the handle path',handle:' show the wrapper path',wrapper:' show the raw pointer'};
+renderMorph();
+$('morphBtn').onclick=()=>{
+  morphMode=MORPH_NEXT[morphMode];
+  $('morphTitle').textContent=MORPH_TITLE[morphMode];
+  $('morphBtn').lastChild.textContent=MORPH_BTN[morphMode];
+  renderMorph();
+};
+
+/* ============================================================
+   NATIVE-CODE REPL
+   ============================================================ */
+const replOut=$('replOut'),replChips=$('replChips');
+const REPL=[
+ {in:'typeof fetch',res:'<span class="str">"function"</span>',note:'it looks like an ordinary function value…'},
+ {in:'fetch.toString()',res:'<span class="nat">"function fetch() { [native code] }"</span>',note:'…but there is no JS body to show. The behaviour lives in C++, behind the boundary.'},
+ {in:'const fd = fs.openSync("data.txt")',res:'<span class="note">undefined</span>',note:'fd is now bound to the returned key.'},
+ {in:'typeof fd',res:'<span class="str">"number"</span>',note:'the kernel file object isn\'t addressable from JS — you got a stand-in.'},
+ {in:'fd',res:'<span class="num">3</span>',note:'the whole handle: a small integer.'},
+ {in:'fd.constructor === Number',res:'<span class="num">true</span>',note:'genuinely just a number — no hidden pointer inside it.'}
+];
+function typeLine(text,cls,done){
+  const ln=document.createElement('div');ln.className='ln';replOut.appendChild(ln);
+  let i=0;const cur=document.createElement('span');cur.className='cursor';
+  ln.innerHTML='<span class="pmpt">› </span><span class="inp"></span>';
+  ln.appendChild(cur);
+  const span=ln.querySelector('.inp');
+  const t=setInterval(()=>{
+    span.textContent=text.slice(0,++i);replOut.scrollTop=replOut.scrollHeight;
+    if(i>=text.length){clearInterval(t);cur.remove();done&&done(ln);}
+  },24);
+}
+let replBusy=false;
+function runRepl(item){
+  if(replBusy)return;replBusy=true;
+  typeLine(item.in,'inp',()=>{
+    setTimeout(()=>{
+      const r=document.createElement('div');r.className='ln res';r.innerHTML=item.res;replOut.appendChild(r);
+      if(item.note){const n=document.createElement('div');n.className='ln note';n.textContent='// '+item.note;replOut.appendChild(n);}
+      const sp=document.createElement('div');sp.className='ln';sp.innerHTML='&nbsp;';replOut.appendChild(sp);
+      replOut.scrollTop=replOut.scrollHeight;replBusy=false;
+    },260);
+  });
+}
+REPL.forEach(item=>{const c=document.createElement('button');c.className='rchip';c.textContent='› '+item.in;c.onclick=()=>runRepl(item);replChips.appendChild(c);});
+(function seed(){const intro=document.createElement('div');intro.className='ln note';intro.textContent='// click an expression below to run it';replOut.appendChild(intro);
+ const sp=document.createElement('div');sp.className='ln';sp.innerHTML='&nbsp;';replOut.appendChild(sp);})();
+
+/* ============================================================
+   RESPONSE WRAPPER — visible surface vs native substance
+   ============================================================ */
+const wrapSurface=$('wrapSurface'),wrapNative=$('wrapNative'),wrapWires=$('wrapWires');
+let wrap={bodyUsed:false,parsed:false};
+function wStatus(msg,kind){const s=$('wrapStatus');s.className='sim-status'+(kind?' '+kind:'');$('wrapMsg').innerHTML=msg;}
+function wWires(){const stage=$('wrap').querySelector('.sim-stage');wrapWires.setAttribute('viewBox',`0 0 ${stage.clientWidth} ${stage.clientHeight}`);wrapWires.style.width=stage.clientWidth+'px';wrapWires.style.height=stage.clientHeight+'px';}
+function wClearWires(){const st=$('wrap').querySelector('.sim-stage');[...st.querySelectorAll('.beam')].forEach(n=>n.remove());[...wrapWires.querySelectorAll('.wire')].forEach(n=>n.remove());}
+function wCenter(node){const stage=$('wrap').querySelector('.sim-stage').getBoundingClientRect();const r=node.getBoundingClientRect();return{left:r.left-stage.left,right:r.right-stage.left,y:r.top-stage.top+r.height/2};}
+function litNode(node){if(!node)return;node.classList.add('lit');setTimeout(()=>node.classList.remove('lit'),900);}
+// visible feedback: glow the clicked card + send a beam across the boundary to the
+// native field (z-index above the columns, so it is never hidden behind the cards).
+function wDraw(aNode,bNode,color,bad){
+  litNode(aNode);
+  const a=wCenter(aNode),b=wCenter(bNode);
+  const stage=$('wrap').querySelector('.sim-stage');
+  const beam=document.createElement('div');
+  beam.className='beam '+(bad?'dgr':'eng');
+  stage.appendChild(beam);
+  beam.style.left=a.right+'px';beam.style.top=a.y+'px';beam.style.opacity='1';
+  requestAnimationFrame(()=>{
+    beam.style.transition='left .55s cubic-bezier(.5,0,.3,1), top .55s cubic-bezier(.5,0,.3,1)';
+    beam.style.left=b.left+'px';beam.style.top=b.y+'px';
+  });
+  setTimeout(()=>{beam.style.opacity='0';setTimeout(()=>beam.remove(),250);},600);
+}
+function flashNative(id,bad){const n=wrapNative.querySelector('[data-nat="'+id+'"]');if(!n)return;n.classList.add(bad?'boom':'lit');setTimeout(()=>n.classList.remove('lit','boom'),bad?650:1100);return n;}
+
+// surface rows: each is a JS expression you can poke
+const SURFACE=[
+ {id:'status',code:'res.status',kind:'getter · number',nat:'status',
+  run(row){const n=flashNative('status');if(n)wDraw(row,n,'var(--engine)');wStatus('<code>res.status</code> → <b>200</b>. A thin getter reading a frozen field on the native object. Safe: it can\'t change anything.','ok');}},
+ {id:'ok',code:'res.ok',kind:'getter · boolean',nat:'status',
+  run(row){const n=flashNative('status');if(n)wDraw(row,n,'var(--engine)');wStatus('<code>res.ok</code> → <b>true</b>. Derived from the native status (200–299). Still just a read.','ok');}},
+ {id:'type',code:'res.type',kind:'getter · string',nat:'type',
+  run(row){const n=flashNative('type');if(n)wDraw(row,n,'var(--engine)');wStatus('<code>res.type</code> → <b>"cors"</b>. The native object already decided this during security filtering; the wrapper only reports it.','ok');}},
+ {id:'hget',code:"res.headers.get('content-type')",kind:'method · read',nat:'headers',
+  run(row){const n=flashNative('headers');if(n)wDraw(row,n,'var(--engine)');wStatus('<code>headers.get(\'content-type\')</code> → <b>"application/json"</b>. Reading the guarded header map is fine.','ok');}},
+ {id:'hset',code:"res.headers.set('x-foo','1')",kind:'method · MUTATE',nat:'headers',guarded:true,
+  run(row){const n=flashNative('headers',true);if(n)wDraw(row,n,'var(--danger)',true);wStatus('⛔ <b>TypeError: Headers are immutable</b>. A fetched response\'s headers are <em>guarded</em> — the wrapper exposes <code>get()</code> but refuses <code>set()</code>. The native object simply has no method here for you.','warn');}},
+ {id:'json',code:'await res.json()',kind:'method · drains body',nat:'body',
+  run(row){
+    const n=wrapNative.querySelector('[data-nat="body"]');
+    if(wrap.bodyUsed){
+      flashNative('body',true);if(n)wDraw(row,n,'var(--danger)',true);
+      wStatus('⛔ <b>TypeError: Body has already been read</b>. The body is a <em>one-time stream</em> — it was drained on the first call and physically can\'t rewind. The wrapper is the only handle to it, so it enforces read-once.','warn');
+      return;
+    }
+    wrap.bodyUsed=true;wrap.parsed=true;flashNative('body');if(n)wDraw(row,n,'var(--engine)');
+    renderWrap();
+    wStatus('<code>await res.json()</code> → <b>{ id: 1, name: "Alex" }</b>. The wrapper pulled every chunk from the native stream, decoded and parsed it. <b>bodyUsed</b> is now <b>true</b>.','ok');
+  }},
+ {id:'text',code:'await res.text()',kind:'method · drains body',nat:'body',
+  run(row){
+    const n=wrapNative.querySelector('[data-nat="body"]');
+    if(wrap.bodyUsed){flashNative('body',true);if(n)wDraw(row,n,'var(--danger)',true);
+      wStatus('⛔ <b>TypeError: Body has already been read</b>. Same one-time stream as <code>.json()</code> — once it\'s drained by either method, it\'s gone.','warn');return;}
+    wrap.bodyUsed=true;flashNative('body');if(n)wDraw(row,n,'var(--engine)');renderWrap();
+    wStatus('<code>await res.text()</code> drained the stream as a string. <b>bodyUsed</b> is now <b>true</b> — <code>.json()</code> will throw from here on.','ok');
+  }}
+];
+function renderWrap(){
+  wrapSurface.innerHTML='';
+  SURFACE.forEach(s=>{
+    const c=document.createElement('div');
+    const disabled=(s.nat==='body'&&wrap.bodyUsed);
+    c.className='hcard'+(s.guarded?' ptr':'')+(disabled?' dangling':'');
+    c.dataset.id=s.id;
+    c.innerHTML='<div class="hc-top"><span class="hc-var mono">'+s.code+'</span><span class="hc-kind">'+s.kind+'</span></div>'+
+      (s.guarded?'<div class="hc-hint" style="color:var(--danger)">wrapper refuses this — guarded</div>':
+       disabled?'<div class="hc-hint" style="color:var(--danger)">body already read — throws</div>':
+       '<div class="hc-hint">click to call across the boundary</div>');
+    c.onclick=()=>s.run(c);
+    wrapSurface.appendChild(c);
+  });
+  // native substance
+  wrapNative.innerHTML='';
+  const fields=[
+   {id:'status',title:'int status_ = 200',sub:'frozen after headers arrived'},
+   {id:'type',title:'ResponseType type_ = kCors',sub:'set during CORS filtering'},
+   {id:'headers',title:'FetchHeaderList* headers_',sub:'guard = kResponse (read-only to JS)'},
+   {id:'body',title:'BytesConsumer* body_',sub: wrap.bodyUsed?'⛓ consumed — stream drained':'one-time stream over a mojo pipe'}
+  ];
+  fields.forEach(f=>{
+    const m=document.createElement('div');
+    m.className='membox'+(f.id==='body'&&wrap.bodyUsed?' freed':'');m.dataset.nat=f.id;
+    m.innerHTML='<div class="mb-addr"><span>blink::Response</span><b>'+(f.id==='body'&&wrap.bodyUsed?'consumed':'live')+'</b></div>'+
+      '<div class="mb-body"><div class="struct">'+f.title+'</div><div class="field"><span>'+f.sub+'</span></div></div>';
+    wrapNative.appendChild(m);
+  });
+}
+$('wReset').onclick=()=>{wrap={bodyUsed:false,parsed:false};wClearWires();renderWrap();wStatus('A fresh <code>Response</code> just arrived. Try reading a field, mutating a header, then draining the body — twice.','');};
+renderWrap();
+window.addEventListener('resize',wWires);
+
+/* ============================================================
+   THEME / TOC
+   ============================================================ */
+const root=document.documentElement,themeBtn=$('themeBtn');
+const sunIcon='<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/>';
+const moonIcon='<path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/>';
+function setTheme(t){root.setAttribute('data-theme',t);$('themeTxt').textContent=t.toUpperCase();const ic=t==='dark'?sunIcon:moonIcon;$('themeIcon').innerHTML=ic;const mi=$('mThemeIcon');if(mi)mi.innerHTML=ic;renderMorph();}
+if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)setTheme('light');
+themeBtn.onclick=()=>setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+$('mTheme').onclick=()=>setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+
+const links=[...document.querySelectorAll('nav.toc a')];
+const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)links.forEach(l=>l.classList.toggle('active',l.getAttribute('href')==='#'+e.target.id));});},{rootMargin:'-30% 0px -60% 0px'});
+document.querySelectorAll('section.block').forEach(s=>io.observe(s));
+
+tagTerms(document.querySelector('main'));
+
+/* ============================================================
+   NAV: retract header on scroll · collapsible side rail
+   ============================================================ */
+const body=document.body;
+
+// retract the top bar when scrolling down, reveal on scroll up / near top
+let lastY=window.pageYOffset||0, ticking=false;
+function onScroll(){
+  const y=window.pageYOffset||document.documentElement.scrollTop||0;
+  if(y<80){ body.classList.remove('top-hidden'); }
+  else if(y>lastY+6){ body.classList.add('top-hidden'); }      // scrolling down
+  else if(y<lastY-6){ body.classList.remove('top-hidden'); }   // scrolling up
+  lastY=y; ticking=false;
+}
+window.addEventListener('scroll',()=>{ if(!ticking){requestAnimationFrame(onScroll);ticking=true;} },{passive:true});
+
+// collapsible side navigation (content recenters when hidden)
+function setNav(collapsed){
+  body.classList.toggle('nav-collapsed',collapsed);
+  const ic=$('navToggleIcon');
+  if(ic) ic.innerHTML = collapsed
+    ? '<path d="M3 6h18M3 12h18M3 18h18"/>'                 // hamburger → "open contents"
+    : '<path d="M15 6l-6 6 6 6"/>';                          // chevron-left → "hide contents"
+  $('navToggle')&&$('navToggle').setAttribute('title',collapsed?'show contents':'hide contents');
+}
+$('navToggle')&&($('navToggle').onclick=()=>setNav(!body.classList.contains('nav-collapsed')));
+$('tocCollapse')&&($('tocCollapse').onclick=()=>setNav(true));
+$('navReopen')&&($('navReopen').onclick=()=>setNav(false));
+// start expanded on wide screens, collapsed feel handled by CSS on mobile
+setNav(false);
+
+</script>
+</body>
+</html>

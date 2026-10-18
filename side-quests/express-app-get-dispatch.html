@@ -1,0 +1,1952 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What happens under app.get — Express dispatch internals</title>
+<meta name="description" content="Router, Route, Layer and middleware dispatch in Express 5, with interactive figures driven by a real routing engine.">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+
+:root{
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --wrap:872px; --wide:1064px; --col:824px;
+  --r:10px; --r-lg:16px;
+  --dur:.22s; --ease:cubic-bezier(.4,0,.2,1);
+}
+
+:root[data-theme="dark"]{
+  --bg:#07090E; --bg-2:#0A0D14; --pane:#0E121B; --raise:#141A26; --sunk:#05070B;
+  --bd:rgba(122,158,214,.16); --bd-2:rgba(122,158,214,.28); --bd-3:rgba(122,158,214,.42);
+  --tx:#E6ECF6; --tx-2:#98A7C0; --tx-3:#77859F;
+  --acc:#5AA9FF; --acc-bg:rgba(90,169,255,.13); --acc-bd:rgba(90,169,255,.36);
+  --router:#A88BFA; --router-bg:rgba(168,139,250,.14); --router-bd:rgba(168,139,250,.34);
+  --route:#3ED6A8; --route-bg:rgba(62,214,168,.13); --route-bd:rgba(62,214,168,.32);
+  --layer:#F2B65C; --layer-bg:rgba(242,182,92,.13); --layer-bd:rgba(242,182,92,.32);
+  --fn:#FF9270; --fn-bg:rgba(255,146,112,.13); --fn-bd:rgba(255,146,112,.32);
+  --err:#FF7273; --err-bg:rgba(255,114,115,.13); --err-bd:rgba(255,114,115,.32);
+  --num:#7FE0D0;
+  --tok-kw:#A88BFA; --tok-fn:#5AA9FF; --tok-str:#3ED6A8; --tok-num:#7FE0D0;
+  --tok-cm:#80808f; --tok-pun:#7C8BA6; --tok-id:#E6ECF6;
+  --code-bg:#05070B;
+  --sb:rgba(122,158,214,.14); --sb-h:rgba(122,158,214,.42);
+  --shadow:0 18px 48px rgba(0,0,0,.62);
+  --scrim:rgba(3,5,9,.76);
+}
+
+:root[data-theme="light"]{
+  --bg:#F5F1E6; --bg-2:#F1ECDF; --pane:#FBF8F0; --raise:#FFFDF7; --sunk:#EDE7D8;
+  --bd:rgba(38,48,70,.14); --bd-2:rgba(38,48,70,.24); --bd-3:rgba(38,48,70,.38);
+  --tx:#161C2A; --tx-2:#4C596F; --tx-3:#5C677C;
+  --acc:#1C65BE; --acc-bg:rgba(31,111,208,.10); --acc-bd:rgba(31,111,208,.34);
+  --router:#5B3FC0; --router-bg:rgba(91,63,192,.10); --router-bd:rgba(91,63,192,.32);
+  --route:#0B7357; --route-bg:rgba(11,115,87,.10); --route-bd:rgba(11,115,87,.30);
+  --layer:#8C5C0B; --layer-bg:rgba(147,97,12,.11); --layer-bd:rgba(147,97,12,.30);
+  --fn:#A94526; --fn-bg:rgba(169,69,38,.10); --fn-bd:rgba(169,69,38,.30);
+  --err:#A82D2C; --err-bg:rgba(168,45,44,.10); --err-bd:rgba(168,45,44,.30);
+  --num:#0A6E70;
+  --tok-kw:#5B3FC0; --tok-fn:#1C65BE; --tok-str:#0B7357; --tok-num:#0A6E70;
+  --tok-cm:#666677; --tok-pun:#5C687E; --tok-id:#161C2A;
+  --code-bg:#EFE9DA;
+  --sb:rgba(38,48,70,.16); --sb-h:rgba(38,48,70,.40);
+  --shadow:0 18px 44px rgba(60,52,32,.20);
+  --scrim:rgba(60,54,38,.44);
+}
+
+html{scroll-behavior:smooth;scroll-padding-top:88px}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+body{
+  margin:0;background:var(--bg);color:var(--tx);
+  font-family:var(--sans);font-size:16px;line-height:1.72;
+  -webkit-font-smoothing:antialiased;
+  font-variant-ligatures:none;
+}
+
+*{scrollbar-width:thin;scrollbar-color:var(--sb) transparent}
+@supports not (scrollbar-color:auto){
+  *::-webkit-scrollbar{width:9px;height:9px}
+  *::-webkit-scrollbar-track{background:transparent}
+  *::-webkit-scrollbar-thumb{background:var(--sb);border-radius:6px}
+  *::-webkit-scrollbar-thumb:hover{background:var(--sb-h)}
+}
+
+/* ---------- nav ---------- */
+.nav{
+  position:fixed;top:0;left:0;right:0;z-index:60;
+  background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:saturate(1.4) blur(14px);
+  border-bottom:1px solid var(--bd);
+  transform:translateY(0);transition:transform var(--dur) var(--ease);
+}
+.nav.hide{transform:translateY(-102%)}
+.nav-in{max-width:var(--wide);margin:0 auto;padding:0 24px;height:58px;display:flex;align-items:center;gap:20px}
+.brand{font-size:14px;font-weight:600;letter-spacing:-.01em;white-space:nowrap}
+.brand span{color:var(--tx-3);font-weight:400}
+.nav-links{display:flex;gap:2px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:none}
+.nav-links::-webkit-scrollbar{display:none}
+.nav-links a{
+  font-size:13px;color:var(--tx-2);text-decoration:none;white-space:nowrap;
+  padding:6px 10px;border-radius:7px;transition:background var(--dur),color var(--dur)
+}
+.nav-links a:hover{color:var(--tx);background:var(--pane)}
+.nav-links a.on{color:var(--acc);background:var(--acc-bg)}
+
+.iconbtn{
+  width:34px;height:34px;flex:none;display:grid;place-items:center;
+  border:1px solid var(--bd-2);border-radius:9px;background:var(--pane);
+  color:var(--tx-2);cursor:pointer;transition:all var(--dur)
+}
+.iconbtn:hover{color:var(--tx);border-color:var(--bd-3)}
+.iconbtn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+:root[data-theme="dark"] .i-sun{display:block}
+:root[data-theme="dark"] .i-moon{display:none}
+:root[data-theme="light"] .i-sun{display:none}
+:root[data-theme="light"] .i-moon{display:block}
+
+/* ---------- layout ---------- */
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 24px}
+.wide{max-width:var(--wide);margin:0 auto;padding:0 24px}
+
+.hero{padding:132px 0 40px}
+.hero h1{
+  font-size:clamp(30px,5.2vw,46px);line-height:1.1;letter-spacing:-.028em;
+  font-weight:600;margin:0 0 18px;max-width:16ch
+}
+.hero p{font-size:18px;line-height:1.62;color:var(--tx-2);margin:0;max-width:60ch}
+.hero .meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:26px;font-size:13px;color:var(--tx-3)}
+.hero .meta b{color:var(--num);font-weight:500;font-family:var(--mono)}
+
+.wide > h2,
+.wide > .col,
+.wide > figure > figcaption{max-width:var(--col);margin-left:auto;margin-right:auto}
+.wide > figure{margin-left:0;margin-right:0}
+section{padding:52px 0 8px;scroll-margin-top:88px}
+h2{font-size:26px;line-height:1.22;letter-spacing:-.02em;font-weight:600;margin:0 0 14px}
+h3{font-size:17px;line-height:1.4;font-weight:600;margin:34px 0 10px;letter-spacing:-.01em}
+p{margin:0 0 16px;max-width:68ch}
+.lede{font-size:17px;color:var(--tx-2);max-width:64ch}
+ul,ol{max-width:66ch;padding-left:20px;margin:0 0 16px}
+li{margin:0 0 7px}
+li::marker{color:var(--tx-3)}
+hr.rule{border:0;border-top:1px solid var(--bd);margin:44px 0 0}
+
+/* ---------- inline code + popovers ---------- */
+code{font-family:var(--mono);font-size:.875em;font-variant-ligatures:none}
+p code,li code,td code,.cap code{
+  background:var(--code-bg);padding:1.5px 6px;border-radius:5px;color:var(--tok-id)
+}
+.an{
+  cursor:pointer;border:1px solid var(--bd-2);border-bottom:1px solid var(--bd-2);
+  background:var(--code-bg);padding:1px 6px;border-radius:5px;
+  font-family:var(--mono);font-size:.875em;
+  transition:border-color var(--dur),background var(--dur)
+}
+.an:hover{border-color:var(--bd-3)}
+.an.k-router{color:var(--router)} .an.k-route{color:var(--route)}
+.an.k-layer{color:var(--layer)} .an.k-fn{color:var(--fn)}
+.an.k-err{color:var(--err)} .an.k-acc{color:var(--acc)} .an.k-num{color:var(--num)}
+.an[aria-expanded="true"]{border-color:var(--acc-bd);background:var(--acc-bg)}
+
+.pop{
+  position:absolute;z-index:80;width:min(360px,calc(100vw - 32px));
+  background:var(--raise);border:1px solid var(--bd-2);border-radius:12px;
+  box-shadow:var(--shadow);padding:14px 16px;font-size:13.5px;line-height:1.62;
+  color:var(--tx-2)
+}
+.pop h4{margin:0 0 3px;font-size:13px;font-weight:600;letter-spacing:-.005em}
+.pop .kind{font-size:11px;color:var(--tx-3);margin:0 0 8px;font-family:var(--mono)}
+.pop p{margin:0;max-width:none}
+.pop p+p{margin-top:8px}
+.pop .t-router{color:var(--router)} .pop .t-route{color:var(--route)}
+.pop .t-layer{color:var(--layer)} .pop .t-fn{color:var(--fn)}
+.pop .t-err{color:var(--err)} .pop .t-acc{color:var(--acc)} .pop .t-num{color:var(--num)}
+.pop code{background:var(--code-bg);padding:1px 5px;border-radius:4px;font-size:12.5px}
+
+/* ---------- code panes ---------- */
+.code{
+  background:var(--code-bg);border:1px solid var(--bd);border-radius:var(--r);
+  padding:14px 16px;overflow-x:auto;margin:0 0 18px;
+  font-family:var(--mono);font-size:13px;line-height:1.75;white-space:pre
+}
+.code .kw{color:var(--tok-kw)} .code .fn{color:var(--tok-fn)}
+.code .str{color:var(--tok-str)} .code .num{color:var(--tok-num)}
+.code .cm{color:var(--tok-cm)} .code .pun{color:var(--tok-pun)}
+.code .id{color:var(--tok-id)} .code .hd{color:var(--fn)}
+
+/* ---------- figures ---------- */
+figure{margin:0 0 26px}
+.fig{
+  background:var(--pane);border:1px solid var(--bd);border-radius:var(--r-lg);
+  padding:18px;overflow:hidden
+}
+.fig-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px;min-height:34px}
+.fig-head .sp{flex:1}
+.cap{font-size:13.5px;color:var(--tx-3);line-height:1.6;margin:10px 2px 0;max-width:70ch}
+.cap .btn{margin-left:6px;vertical-align:baseline}
+
+.btn{
+  font-family:inherit;font-size:12.5px;padding:6px 11px;border-radius:8px;
+  border:1px solid var(--bd-2);background:var(--raise);color:var(--tx-2);cursor:pointer;
+  transition:all var(--dur);white-space:nowrap
+}
+.btn:hover{color:var(--tx);border-color:var(--bd-3)}
+.btn.on{background:var(--acc-bg);border-color:var(--acc-bd);color:var(--acc)}
+.btn.mono{font-family:var(--mono);font-size:12px}
+.btn:focus-visible,.iconbtn:focus-visible,.an:focus-visible,a:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+.dots{display:flex;gap:5px}
+.dot{
+  width:25px;height:25px;padding:0;border-radius:50%;border:1px solid var(--bd-2);
+  background:var(--raise);color:var(--tx-3);font-size:11px;font-family:var(--mono);cursor:pointer;
+  transition:all var(--dur)
+}
+.dot.on{background:var(--acc);border-color:var(--acc);color:var(--bg)}
+
+.stage{position:relative}
+.stage svg{display:block;width:100%;height:auto}
+.hotspot{cursor:pointer}
+.hotspot rect{transition:stroke var(--dur)}
+.hotspot:hover rect{stroke:var(--acc)}
+.hotspot:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.mi{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 14px}
+.mi .btn{font-size:12px}
+.mout{background:var(--sunk);border:1px solid var(--bd);border-radius:10px;padding:13px 15px;font-family:var(--mono);font-size:12.5px;line-height:1.85;min-height:132px}
+.mout .k{color:var(--tx-3);display:inline-block;min-width:118px}
+.mout .frames{display:block;margin-top:3px}
+.mrow{display:flex;gap:10px;align-items:baseline;padding:2px 0}
+.svgtext{font-family:var(--sans);font-size:12px}
+
+.hint{font-size:12px;color:var(--tx-3);margin-top:12px;min-height:44px;line-height:1.6}
+.hint code{background:var(--code-bg);padding:1px 5px;border-radius:4px;font-family:var(--mono);font-size:11.5px}
+
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--tx-3);margin-bottom:12px}
+.legend i{width:9px;height:9px;border-radius:3px;display:inline-block;margin-right:6px;vertical-align:0}
+
+/* ---------- tables ---------- */
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px;margin:0 0 20px;table-layout:fixed}
+.tbl th{
+  text-align:left;font-weight:500;font-size:11.5px;color:var(--tx-3);
+  padding:0 12px 8px;border-bottom:1px solid var(--bd)
+}
+.tbl td{padding:10px 12px;border-bottom:1px solid var(--bd);vertical-align:top;overflow-wrap:anywhere}
+.tbl tr:last-child td{border-bottom:0}
+.tbl .m{font-family:var(--mono);font-size:12.5px}
+.c-router{color:var(--router)} .c-route{color:var(--route)} .c-layer{color:var(--layer)}
+.c-fn{color:var(--fn)} .c-err{color:var(--err)} .c-acc{color:var(--acc)} .c-num{color:var(--num)}
+.c-mut{color:var(--tx-3)}
+
+.pill{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:20px;font-family:var(--mono)}
+.p-yes{background:var(--route-bg);color:var(--route)}
+.p-no{background:var(--sunk);color:var(--tx-3)}
+.p-err{background:var(--err-bg);color:var(--err)}
+
+/* ---------- modal ---------- */
+.scrim{
+  position:fixed;inset:0;z-index:90;background:var(--scrim);
+  display:none;padding:24px;overflow-y:auto;
+  backdrop-filter:blur(3px)
+}
+.scrim.open{display:block}
+.modal{
+  max-width:760px;margin:40px auto;background:var(--pane);
+  border:1px solid var(--bd-2);border-radius:var(--r-lg);box-shadow:var(--shadow);
+  overflow:hidden
+}
+.modal-top{
+  display:flex;align-items:flex-start;gap:12px;padding:20px 22px 14px;
+  border-bottom:1px solid var(--bd)
+}
+.modal-top h3{margin:0;font-size:19px;letter-spacing:-.015em}
+.modal-top .kind{font-size:11.5px;font-family:var(--mono);color:var(--tx-3);margin-top:3px}
+.modal-body{padding:20px 22px 24px;max-height:calc(100vh - 220px);overflow-y:auto}
+.modal-body p{font-size:14.5px;color:var(--tx-2);max-width:none}
+.modal-body .fig{background:var(--raise)}
+.modal-body .tbl{font-size:13px}
+
+/* ---------- misc ---------- */
+.callout{
+  border:1px solid var(--bd);border-left:3px solid var(--acc);border-radius:0 var(--r) var(--r) 0;
+  background:var(--pane);padding:14px 18px;margin:0 0 20px
+}
+.callout.warn{border-left-color:var(--layer)}
+.callout.bad{border-left-color:var(--err)}
+.callout p{margin:0;font-size:14.5px}
+.callout p+p{margin-top:9px}
+.callout .lab{
+  font-size:11px;font-family:var(--mono);color:var(--tx-3);
+  display:block;margin-bottom:5px
+}
+
+footer{padding:56px 0 80px;color:var(--tx-3);font-size:13px}
+footer p{max-width:66ch}
+
+@media (max-width:720px){
+  .hero{padding:104px 0 28px}
+  h2{font-size:22px}
+  .fig{padding:14px}
+  .nav-in{gap:12px;padding:0 16px}
+  .wrap,.wide{padding:0 18px}
+  .tbl{font-size:12.5px}
+  .tbl td,.tbl th{padding:8px 7px}
+}
+
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-in">
+    <div class="brand">Express dispatch <span>internals</span></div>
+    <div class="nav-links">
+      <a href="#objects">Three objects</a>
+      <a href="#layer">Layer</a>
+      <a href="#router">Router</a>
+      <a href="#route">Route</a>
+      <a href="#middleware">Middleware</a>
+      <a href="#cost">Cost</a>
+    </div>
+    <button class="iconbtn" data-theme-toggle aria-label="Toggle colour theme">
+      <svg class="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <svg class="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>
+    </button>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <h1>What happens under app.get</h1>
+  <p>Express routing is three objects and one loop that is not a loop. Everything else &mdash; mounting, error handling, <code>req.params</code>, the 404 you did not write &mdash; falls out of how those three fit together.</p>
+  <div style="margin:30px 0 0"><div id="f-hero"></div></div>
+  <div class="meta">
+    <span>Express <b>5</b> semantics</span>
+    <span>every figure runs a real routing engine</span>
+    <span>click any <span class="an k-acc" data-t="next">next</span> to expand it</span>
+  </div>
+</header>
+
+<main>
+
+<section id="objects" class="wrap">
+  <h2>Three objects, one invariant</h2>
+  <p class="lede">A <span class="an k-router" data-t="router">Router</span> owns an array of <span class="an k-layer" data-t="layer">Layers</span>. A <span class="an k-route" data-t="route">Route</span> owns an array of Layers too. The Layer is the only record that appears in both, and it carries one field that decides everything downstream.</p>
+
+  <p><span class="an k-layer" data-t="handle">layer.handle</span> holds <em>either</em> a plain function <em>or</em> a Route. Never both, never something else. When it holds a function, the Layer is middleware. When it holds a Route, the Layer is a route entry and a second dispatch level opens beneath it.</p>
+
+  <div class="code"><span class="cm">// the whole object model, as a type</span>
+<span class="kw">type</span> <span class="hd">Layer</span> <span class="pun">=</span> <span class="pun">{</span>
+  <span class="id">regexp</span><span class="pun">:</span> <span class="hd">RegExp</span><span class="pun">,</span>
+  <span class="id">keys</span><span class="pun">:</span> <span class="hd">string</span><span class="pun">[],</span>
+  <span class="id">handle</span><span class="pun">:</span> <span class="hd">Function</span> <span class="pun">|</span> <span class="hd">Route</span>
+<span class="pun">}</span></div>
+
+  <p>The array itself &mdash; <span class="an k-router" data-t="stack">router.stack</span> &mdash; is plain and ordered, which means registration order <em>is</em> the routing algorithm. That single union is why the same walking code serves middleware and routes. The Router does not branch on &ldquo;is this a route&rdquo; when deciding whether to <em>enter</em> a Layer &mdash; it matches a path and calls <code>handle</code>. The branch happens one level down.</p>
+
+  <h3>Two calls, two Routes</h3>
+  <p>Registering the same path twice does not merge anything. Each <code>app.get</code> or <code>app.post</code> call runs <code>router.route(path)</code>, which constructs a <em>new</em> Route and pushes a <em>new</em> Layer. Only explicit chaining shares one.</p>
+
+  <div class="code"><span class="cm">// two Layers in router.stack, two separate Route objects</span>
+<span class="id">app</span><span class="pun">.</span><span class="fn">get</span><span class="pun">(</span><span class="str">'/users/:id'</span><span class="pun">,</span> <span class="id">getUser</span><span class="pun">)</span>
+<span class="id">app</span><span class="pun">.</span><span class="fn">post</span><span class="pun">(</span><span class="str">'/users/:id'</span><span class="pun">,</span> <span class="id">updateUser</span><span class="pun">)</span>
+
+<span class="cm">// one Layer, one Route holding two method entries</span>
+<span class="id">app</span><span class="pun">.</span><span class="fn">route</span><span class="pun">(</span><span class="str">'/users/:id'</span><span class="pun">)</span>
+  <span class="pun">.</span><span class="fn">get</span><span class="pun">(</span><span class="id">getUser</span><span class="pun">)</span>
+  <span class="pun">.</span><span class="fn">post</span><span class="pun">(</span><span class="id">updateUser</span><span class="pun">)</span></div>
+
+  <p>The difference is not cosmetic. In the first form a <code>POST</code> tests the path regexp twice &mdash; once for the GET Layer, which matches on path but is skipped on method, and once for the POST Layer. In the second form the path is tested once and the verb is selected from a map. That is the mechanism behind the numbers in the last section.</p>
+  <hr class="rule">
+</section>
+
+<section id="layer" class="wide">
+  <h2 class="col">Layer &mdash; a compiled matcher</h2>
+  <div class="col">
+    <p>By the time a Layer exists the path string has already been consumed. <span class="an k-layer" data-t="p2r">path-to-regexp</span> ran once, at registration, and produced a <code>RegExp</code> plus an ordered <span class="an k-acc" data-t="keys">keys</span> array. <span class="an k-layer" data-t="match">layer.match</span> is then a single <code>exec</code> call, and <span class="an k-router" data-t="params">req.params</span> is those capture groups zipped onto the keys.</p>
+  </div>
+
+  <figure>
+    <div class="fig"><div id="f-compile"></div></div>
+    <figcaption class="cap col">The compiler is live. Pick any pattern and any request path &mdash; the tokens, the regexp source, the keys and the params are all produced by the same lexer the rest of this page uses. <button class="btn" data-modal="p2r">Token reference</button> <button class="btn" data-modal="layer">Layer fields</button></figcaption>
+  </figure>
+
+  <div class="col">
+    <div class="callout warn">
+      <span class="lab">consequence</span>
+      <p>Because <code>:param</code> compiles to <code>([^/]+?)</code> and decoding happens <em>after</em> matching, a request for <code>/users/a%2Fb</code> matches a pattern that explicitly excludes slashes, and <code>req.params.id</code> arrives holding <code>'a/b'</code>. The pattern constrains the raw URL, not the decoded value.</p>
+    </div>
+    <p>The <code>path</code> string does survive on the Layer, but only as debugging residue. Nothing reads it during dispatch, which is why a pattern that compiles to something unintended fails quietly rather than throwing.</p>
+  </div>
+  <div class="col"><hr class="rule"></div>
+</section>
+
+<section id="router" class="wide">
+  <h2 class="col">Router &mdash; next is the loop</h2>
+  <div class="col">
+    <p><code>Router.prototype.handle</code> declares a local <span class="an k-acc" data-t="idx">idx</span> and defines <span class="an k-acc" data-t="next">next</span> as a closure over it. Calling <code>next()</code> advances the cursor, finds the next Layer whose regexp matches, and invokes it &mdash; passing <em>itself</em> as the third argument.</p>
+    <p>So there is no iteration construct. The handler you write is holding the loop&rsquo;s continuation, and the walk advances only because your code chose to advance it.</p>
+  </div>
+
+  <figure>
+    <div class="fig"><div id="f-walk"></div></div>
+    <figcaption class="cap col">Frames on the right are recorded by a real router run, not staged. The final step runs a second router whose <code>logger</code> omits <code>next()</code> &mdash; the frame count is what that engine actually produced. <button class="btn" data-modal="next">The closure</button> <button class="btn" data-modal="router">Router object</button></figcaption>
+  </figure>
+
+  <div class="col">
+    <p>Watch the depth column. Each <code>next()</code> is called from <em>inside</em> the previous handler, so frames accumulate rather than unwind. Express does not trampoline the walk. A request passing through twenty synchronous middlewares is genuinely twenty-odd frames deep when the last one runs, and everything written after <code>next()</code> in an earlier handler executes on the way back out &mdash; after the response has already been sent.</p>
+
+    <div class="code"><span class="id">app</span><span class="pun">.</span><span class="fn">use</span><span class="pun">((</span><span class="id">req</span><span class="pun">,</span> <span class="id">res</span><span class="pun">,</span> <span class="id">next</span><span class="pun">)</span> <span class="pun">=&gt;</span> <span class="pun">{</span>
+  <span class="kw">const</span> <span class="id">started</span> <span class="pun">=</span> <span class="id">Date</span><span class="pun">.</span><span class="fn">now</span><span class="pun">()</span>
+  <span class="fn">next</span><span class="pun">()</span>
+  <span class="cm">// runs after the response was sent, still inside this frame</span>
+  <span class="id">log</span><span class="pun">.</span><span class="fn">info</span><span class="pun">(</span><span class="id">Date</span><span class="pun">.</span><span class="fn">now</span><span class="pun">()</span> <span class="pun">-</span> <span class="id">started</span><span class="pun">)</span>
+<span class="pun">})</span></div>
+
+    <p>That timing works for a fully synchronous stack and breaks the moment anything downstream awaits, because <code>next()</code> returns as soon as the first suspension point is hit. The reliable version listens for the response&rsquo;s <code>finish</code> event instead.</p>
+  </div>
+  <div class="col"><hr class="rule"></div>
+</section>
+
+<section id="route" class="wide">
+  <h2 class="col">Route &mdash; the second cursor</h2>
+  <div class="col">
+    <p><span class="an k-route" data-t="dispatch">route.dispatch</span> repeats the closure pattern over <span class="an k-route" data-t="routestack">route.stack</span>, comparing each Layer&rsquo;s <code>method</code> against <code>req.method</code>. Two nested cursors now exist, which makes &ldquo;move on&rdquo; ambiguous &mdash; hence the sentinels.</p>
+  </div>
+
+  <figure>
+    <div class="fig"><div id="f-sentinel"></div></div>
+    <figcaption class="cap col">A request is mid-flight inside the Route, in <code>auth</code>. Each sentinel abandons a different amount of the remaining walk. <button class="btn" data-modal="route">Route object</button> <button class="btn" data-modal="errmode">Error mode</button> <button class="btn" data-modal="mount">Mounting</button></figcaption>
+  </figure>
+
+  <div class="col">
+    <p><span class="an k-acc" data-t="sentinel">next('route')</span> and <span class="an k-acc" data-t="routersentinel">next('router')</span> are checked by identity before the argument is treated as an error. That check is why passing a caught error string through <code>next</code> can silently behave as a sentinel rather than an error &mdash; and why <code>next('router')</code> forwarded as if it were an error turns a deliberate decline into a 500.</p>
+
+    <p>Anything else truthy puts the walk into <span class="an k-err" data-t="errmode">error mode</span>, and a request entering a mounted sub-router additionally has its <span class="an k-route" data-t="baseurl">req.baseUrl</span> rewritten for the duration of that router&rsquo;s walk.</p>
+
+    <p>The method check also happens earlier than most people expect. A Route with no entry for the request verb is skipped by the <em>outer</em> walk, as though its path never matched at all. The walk therefore never learns that the path was recognised, which is exactly why an unmatched verb produces a default 404 rather than a 405 with an <code>Allow</code> header.</p>
+  </div>
+  <div class="col"><hr class="rule"></div>
+</section>
+
+<section id="middleware" class="wide">
+  <h2 class="col">Middleware &mdash; the arity gate</h2>
+  <div class="col">
+    <p>There is no <code>app.useError()</code>. Express decides whether a function is an error handler by reading <span class="an k-err" data-t="arity">fn.length</span>. <span class="an k-layer" data-t="handlerequest">handle_request</span> runs a Layer only when the arity is below four; <span class="an k-err" data-t="handleerror">handle_error</span> runs it only when the arity is exactly four.</p>
+  </div>
+
+  <figure>
+    <div class="fig"><div id="f-arity"></div></div>
+    <figcaption class="cap col">Every length in the table is read from a real function object when the page loads. <button class="btn" data-modal="arity">How length is computed</button></figcaption>
+  </figure>
+
+  <div class="col">
+    <div class="callout bad">
+      <span class="lab">the quiet failure</span>
+      <p>An error handler written as <code>(err, req, res, next = noop)</code> reports a length of three. It registers as ordinary middleware, never runs in error mode, and never catches anything &mdash; while looking correct at every call site.</p>
+    </div>
+
+    <h3>What still escapes</h3>
+    <p><code>handle_request</code> wraps your handler in <code>try/catch</code>, so synchronous throws have always been routed to <code>next(err)</code>. Express 5 additionally inspects the <span class="an k-acc" data-t="thenable">returned thenable</span> and routes a rejection the same way; Express 4 discarded it, which is why <code>async</code> handlers hung there without a manual <code>.catch(next)</code>.</p>
+    <p>What escapes in both versions is a throw from inside a scheduled callback. By the time a <code>setTimeout</code> fires, the <code>try</code> block has already returned and there is no frame left to catch into &mdash; so it reaches <code>uncaughtException</code>, not your error handler.</p>
+
+    <div class="code"><span class="id">app</span><span class="pun">.</span><span class="fn">get</span><span class="pun">(</span><span class="str">'/x'</span><span class="pun">,</span> <span class="kw">async</span> <span class="pun">(</span><span class="id">req</span><span class="pun">,</span> <span class="id">res</span><span class="pun">)</span> <span class="pun">=&gt;</span> <span class="pun">{</span>
+  <span class="kw">throw</span> <span class="kw">new</span> <span class="hd">Error</span><span class="pun">(</span><span class="str">'caught in v5, dropped in v4'</span><span class="pun">)</span>
+<span class="pun">})</span>
+
+<span class="id">app</span><span class="pun">.</span><span class="fn">get</span><span class="pun">(</span><span class="str">'/y'</span><span class="pun">,</span> <span class="pun">(</span><span class="id">req</span><span class="pun">,</span> <span class="id">res</span><span class="pun">)</span> <span class="pun">=&gt;</span> <span class="pun">{</span>
+  <span class="fn">setTimeout</span><span class="pun">(()</span> <span class="pun">=&gt;</span> <span class="pun">{</span>
+    <span class="kw">throw</span> <span class="kw">new</span> <span class="hd">Error</span><span class="pun">(</span><span class="str">'escapes both'</span><span class="pun">)</span>
+  <span class="pun">},</span> <span class="num">0</span><span class="pun">)</span>
+<span class="pun">})</span></div>
+  </div>
+  <div class="col"><hr class="rule"></div>
+</section>
+
+<section id="cost" class="wide">
+  <h2 class="col">Cost is position, not lookup</h2>
+  <div class="col">
+    <p>Every Layer holds its own compiled regexp and they are tested in registration order. There is no index, no trie, nothing to consult &mdash; so the cost of routing a request is its <em>position</em> in the stack, and a request that matches nothing pays for the whole thing.</p>
+  </div>
+
+  <figure>
+    <div class="fig"><div id="f-cost"></div></div>
+    <figcaption class="cap col">Counted, not timed: each bar is the number of <span class="an k-num" data-t="exec">regexp.exec</span> calls the engine made for that request. <button class="btn" data-modal="exec">Measurement method</button></figcaption>
+  </figure>
+
+  <div class="col">
+    <p>This is the mechanical argument for mounting sub-routers rather than registering flat. A miss under <code>/api</code> costs one failed prefix test at the mount Layer instead of one test per route behind it. The deep hit improves too, but not to one &mdash; the sub-router still walks its own stack.</p>
+    <p>It is also the argument for putting <code>app.use(express.static(...))</code> and other broad middleware where you actually want them. A middleware registered first runs its match on every single request, including the ones it will never handle.</p>
+  </div>
+</section>
+
+</main>
+
+<footer class="wrap">
+  <hr class="rule" style="margin-bottom:32px">
+  <p>Figures on this page run a small routing engine written for the document: a real path compiler, real Layer matching, a real <code>next</code> closure, real error-mode arity gating, mount rewriting and an exact <code>exec</code> counter. It deliberately models no socket, no view engine and a reduced pattern syntax, so anything depending on those is out of scope rather than approximated.</p>
+</footer>
+
+<script>
+/* exlite - a real, small Express-5-shaped routing core.
+   Figures project frames recorded here. A figure may not claim
+   behaviour this engine does not have. */
+var EX = (function () {
+
+  var EXEC = { n: 0 };
+  var COMPILES = { n: 0 };
+
+  function esc(s) { return s.replace(/[.+?^${}()|[\]\\]/g, '\\$&'); }
+
+  function lex(path) {
+    var toks = [], i = 0;
+    while (i < path.length) {
+      var c = path[i];
+      if (c === ':') {
+        var j = i + 1, n = '';
+        while (j < path.length && /[A-Za-z0-9_]/.test(path[j])) { n += path[j]; j++; }
+        toks.push({ t: 'param', v: ':' + n, name: n }); i = j;
+      } else if (c === '*') {
+        var j2 = i + 1, n2 = '';
+        while (j2 < path.length && /[A-Za-z0-9_]/.test(path[j2])) { n2 += path[j2]; j2++; }
+        toks.push({ t: 'splat', v: '*' + n2, name: n2 || '0' }); i = j2;
+      } else if (c === '/') {
+        toks.push({ t: 'sep', v: '/' }); i++;
+      } else {
+        var j3 = i, l = '';
+        while (j3 < path.length && !/[:*/]/.test(path[j3])) { l += path[j3]; j3++; }
+        toks.push({ t: 'lit', v: l }); i = j3;
+      }
+    }
+    return toks;
+  }
+
+  function compile(path, end) {
+    COMPILES.n++;
+    var toks = lex(path), keys = [], src = '';
+    for (var i = 0; i < toks.length; i++) {
+      var t = toks[i];
+      if (t.t === 'param') { keys.push(t.name); src += '([^/]+?)'; }
+      else if (t.t === 'splat') { keys.push(t.name); src += '(.*)'; }
+      else if (t.t === 'sep') { src += '/'; }
+      else { src += esc(t.v); }
+    }
+    var source;
+    if (end) source = '^' + src + '/?$';
+    else if (path === '/') source = '^/';
+    else source = '^' + src + '(?=/|$)';
+    return { tokens: toks, keys: keys, source: source, re: new RegExp(source, 'i') };
+  }
+
+  function Layer(path, fn, opts) {
+    opts = opts || {};
+    var c = compile(path, opts.end !== false);
+    this.path = path;
+    this.handle = fn;
+    this.name = opts.name || fn.name || '<anonymous>';
+    this.method = opts.method || null;
+    this.route = null;
+    this.keys = c.keys;
+    this.tokens = c.tokens;
+    this.source = c.source;
+    this.regexp = c.re;
+    this.params = null;
+    this.matched = null;
+  }
+
+  Layer.prototype.match = function (p) {
+    EXEC.n++;
+    var m = this.regexp.exec(p);
+    if (!m) { this.params = null; this.matched = null; return false; }
+    this.params = {};
+    for (var i = 0; i < this.keys.length; i++) {
+      var raw = m[i + 1];
+      if (raw === undefined) continue;
+      try { this.params[this.keys[i]] = decodeURIComponent(raw); }
+      catch (e) { this.params[this.keys[i]] = raw; }
+    }
+    this.matched = m[0];
+    return true;
+  };
+
+  Layer.prototype.handleRequest = function (req, res, next) {
+    if (this.handle.length > 3) return next();
+    try {
+      var r = this.handle(req, res, next);
+      if (r && typeof r.then === 'function') r.then(null, next);
+    } catch (e) { next(e); }
+  };
+
+  Layer.prototype.handleError = function (err, req, res, next) {
+    if (this.handle.length !== 4) return next(err);
+    try { this.handle(err, req, res, next); }
+    catch (e) { next(e); }
+  };
+
+  function Route(path) {
+    this.path = path;
+    this.stack = [];
+    this.methods = {};
+  }
+
+  Route.prototype.add = function (method, fn) {
+    var l = new Layer('/', fn, { end: false, method: method });
+    this.methods[method] = true;
+    this.stack.push(l);
+    return this;
+  };
+
+  Route.prototype.handlesMethod = function (m) {
+    m = m.toLowerCase();
+    if (this.methods[m]) return true;
+    if (m === 'head' && this.methods.get) return true;
+    return !!this.methods._all;
+  };
+
+  Route.prototype.dispatch = function (req, res, done) {
+    var i = 0, self = this;
+    var m = req.method.toLowerCase();
+    if (m === 'head' && !this.methods.head) m = 'get';
+    req.__verb = m;
+    req.__verbFellBack = m !== req.method.toLowerCase();
+    function next(err) {
+      if (err === 'route') return done();
+      if (err === 'router') return done('router');
+      var l = self.stack[i++];
+      if (!l) return done(err);
+      if (l.method !== '_all' && l.method !== m) return next(err);
+      req.__frames.push({ k: err ? 'route-error' : 'route-handler', v: l.name, depth: req.__depth, li: req.__curLayer, ri: i - 1 });
+      req.__depth++;
+      if (err) l.handleError(err, req, res, next);
+      else l.handleRequest(req, res, next);
+    }
+    next();
+  };
+
+  function Router(name) {
+    this.stack = [];
+    this.name = name || 'router';
+  }
+
+  Router.prototype.use = function (path, fn) {
+    if (typeof path === 'function') { fn = path; path = '/'; }
+    var opts = { end: false };
+    if (fn instanceof Router) {
+      var sub = fn;
+      var mounted = function mounted(req, res, next) { sub.handle(req, res, next); };
+      Object.defineProperty(mounted, 'length', { value: 3 });
+      var l = new Layer(path, mounted, opts);
+      l.name = sub.name;
+      l.mounted = sub;
+      this.stack.push(l);
+      return this;
+    }
+    this.stack.push(new Layer(path, fn, opts));
+    return this;
+  };
+
+  Router.prototype.route = function (path) {
+    var r = new Route(path);
+    var dispatcher = function bound_dispatch(req, res, next) { r.dispatch(req, res, next); };
+    var l = new Layer(path, dispatcher, { end: true, name: 'route ' + path });
+    l.route = r;
+    this.stack.push(l);
+    return r;
+  };
+
+  Router.prototype.method = function (m, path, fn) {
+    var r = this.route(path);
+    var fns = Array.prototype.slice.call(arguments, 2);
+    for (var i = 0; i < fns.length; i++) r.add(m, fns[i]);
+    return this;
+  };
+
+  Router.prototype.get = function () {
+    var a = Array.prototype.slice.call(arguments);
+    return this.method.apply(this, ['get'].concat(a));
+  };
+  Router.prototype.post = function () {
+    var a = Array.prototype.slice.call(arguments);
+    return this.method.apply(this, ['post'].concat(a));
+  };
+
+  function pathnameOf(u) {
+    var i = u.indexOf('?');
+    return i === -1 ? u : u.slice(0, i);
+  }
+
+  function trim(req, layer) {
+    if (!layer.matched || layer.matched === '/') return '';
+    return layer.matched;
+  }
+
+  Router.prototype.handle = function (req, res, out) {
+    var self = this, idx = 0, removed = '';
+    var parentUrl = req.baseUrl || '';
+
+    function next(err) {
+      if (err === 'route') err = null;
+      if (err === 'router') return out(null);
+
+      if (removed.length) {
+        req.baseUrl = parentUrl;
+        req.url = removed + (req.url === '/' ? '' : req.url);
+        if (req.url === '') req.url = '/';
+        removed = '';
+      }
+
+      var layer = null;
+      var pathname = pathnameOf(req.url);
+      while (idx < self.stack.length) {
+        var cand = self.stack[idx++];
+        if (!cand.match(pathname)) continue;
+        if (cand.route && err) continue;
+        if (cand.route && !cand.route.handlesMethod(req.method)) continue;
+        if (err && cand.handle.length !== 4) continue;
+        if (!err && cand.handle.length === 4) continue;
+        layer = cand;
+        break;
+      }
+
+      if (!layer) return out(err);
+
+      var li = idx - 1;
+      req.__curLayer = li;
+      req.params = Object.assign({}, req.params, layer.params);
+
+      if (layer.mounted) {
+        removed = trim(req, layer);
+        if (removed) {
+          req.baseUrl = parentUrl + removed;
+          req.url = req.url.slice(removed.length) || '/';
+        }
+        req.__frames.push({ k: 'mount', v: layer.name, depth: req.__depth, li: li, url: req.url, baseUrl: req.baseUrl });
+      } else {
+        req.__frames.push({
+          k: err ? 'error-handler' : (layer.route ? 'route-enter' : 'middleware'),
+          v: layer.name, depth: req.__depth, li: li
+        });
+      }
+
+      req.__depth++;
+      if (err) layer.handleError(err, req, res, next);
+      else layer.handleRequest(req, res, next);
+    }
+
+    next();
+  };
+
+  function mkRes(req) {
+    return {
+      statusCode: 200,
+      body: null,
+      ended: false,
+      send: function (b) {
+        if (this.ended) { req.__frames.push({ k: 'late-send', v: 'ignored', depth: req.__depth }); return this; }
+        this.body = b; this.ended = true;
+        req.__frames.push({ k: 'respond', v: this.statusCode + ' ' + String(b).slice(0, 40), depth: req.__depth, li: req.__curLayer });
+        return this;
+      },
+      status: function (c) {
+        if (this.ended) { req.__frames.push({ k: 'late-status', v: c, depth: req.__depth }); return this; }
+        this.statusCode = c; return this;
+      }
+    };
+  }
+
+  function run(router, method, url) {
+    var req = {
+      method: method, url: url, originalUrl: url, baseUrl: '',
+      params: {}, __frames: [], __depth: 0
+    };
+    var res = mkRes(req);
+    var settled = false;
+    router.handle(req, res, function (err) {
+      settled = true;
+      if (err) { req.__frames.push({ k: 'unhandled', v: String(err.message || err), depth: 0 }); res.statusCode = 500; }
+      else if (!res.ended) { req.__frames.push({ k: 'fallthrough', v: '404', depth: 0 }); res.statusCode = 404; }
+    });
+    return { req: req, res: res, frames: req.__frames, settled: settled };
+  }
+
+  function countExecs(fn) {
+    var before = EXEC.n;
+    fn();
+    return EXEC.n - before;
+  }
+
+  var DIVERGENCES = [
+    ['No socket or HTTP parser', 'requests are plain objects; nothing is written to a wire.'],
+    ['No view engine', 'res.render does not exist here.'],
+    ['Simplified pattern syntax', 'literals, :params and *splat only - no optional groups or custom matchers.'],
+    ['Query parsing', 'the pathname is split off for matching, but req.query is never populated.']
+  ];
+
+  return {
+    Router: Router, Route: Route, Layer: Layer, pathnameOf: pathnameOf,
+    compile: compile, lex: lex, run: run,
+    EXEC: EXEC, COMPILES: COMPILES, countExecs: countExecs,
+    DIVERGENCES: DIVERGENCES
+  };
+})();
+
+
+
+</script>
+<script>
+var FIG = (function () {
+
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function svg(w, h, inner) {
+    return '<svg viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-hidden="true">' + inner + '</svg>';
+  }
+  var ARROW = '<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>';
+
+  function box(x, y, w, h, kind, title, sub, r) {
+    var f = 'var(--' + kind + '-bg)', s = 'var(--' + kind + '-bd)', c = 'var(--' + kind + ')';
+    var o = '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="' + (r || 9) + '" fill="' + f + '" stroke="' + s + '" stroke-width="1"/>';
+    if (sub) {
+      o += '<text class="svgtext" x="' + (x + 14) + '" y="' + (y + h / 2 - 8) + '" fill="' + c + '" font-weight="500" dominant-baseline="central">' + esc(title) + '</text>';
+      o += '<text class="svgtext" x="' + (x + 14) + '" y="' + (y + h / 2 + 11) + '" fill="var(--tx-3)" font-size="11.5" dominant-baseline="central">' + esc(sub) + '</text>';
+    } else {
+      o += '<text class="svgtext" x="' + (x + 14) + '" y="' + (y + h / 2) + '" fill="' + c + '" dominant-baseline="central">' + esc(title) + '</text>';
+    }
+    return o;
+  }
+  function ghost(x, y, w, h, title, sub, dim) {
+    var op = dim ? ' opacity="' + dim + '"' : '';
+    var o = '<g' + op + '><rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="9" fill="var(--sunk)" stroke="var(--bd)" stroke-width="1"/>';
+    o += '<text class="svgtext" x="' + (x + 14) + '" y="' + (y + h / 2 - (sub ? 8 : 0)) + '" fill="var(--tx-3)" dominant-baseline="central">' + esc(title) + '</text>';
+    if (sub) o += '<text class="svgtext" x="' + (x + 14) + '" y="' + (y + h / 2 + 11) + '" fill="var(--tx-3)" font-size="11.5" opacity=".8" dominant-baseline="central">' + esc(sub) + '</text>';
+    return o + '</g>';
+  }
+  function lab(x, y, t, c, sz, w) {
+    return '<text class="svgtext" x="' + x + '" y="' + y + '" fill="var(--' + (c || 'tx-3') + ')" font-size="' + (sz || 12) + '"' + (w ? ' font-weight="' + w + '"' : '') + '>' + esc(t) + '</text>';
+  }
+
+  /* ============ 1. hero: two tiers, because dispatch has two ============ */
+  function hit(key, inner) {
+    return '<g data-modal="' + key + '" class="hotspot" role="button" tabindex="0">' + inner + '</g>';
+  }
+
+  function hero(id) {
+    var host = el(id); if (!host) return;
+    var OUTER = [
+      { x: 168, w: 132, t: 'logger', s: 'middleware', k: 'fn', m: 'step-middleware' },
+      { x: 312, w: 180, t: "'/users/:id'", s: 'route layer', k: 'layer', m: 'step-routelayer' },
+      { x: 504, w: 132, t: 'notFound', s: 'never reached', k: null, m: 'step-notfound' }
+    ];
+    var INNER = [
+      { x: 312, w: 124, t: 'auth', s: 'method get', k: 'route', m: 'step-inner' },
+      { x: 448, w: 136, t: 'getUser', s: 'method get', k: 'fn', m: 'step-handler' }
+    ];
+    var ORDER = [['o', 0], ['o', 1], ['i', 0], ['i', 1], ['r', 0]];
+
+    function draw(step) {
+      var o = ARROW;
+      o += lab(18, 26, 'router.stack', 'tx-3', 11.5);
+      o += hit('step-request', box(18, 44, 132, 46, 'acc', 'GET', '/users/42'));
+      OUTER.forEach(function (b, i) {
+        var on = ORDER.slice(0, step + 1).some(function (p) { return p[0] === 'o' && p[1] === i; });
+        o += hit(b.m, (on && b.k) ? box(b.x, 44, b.w, 46, b.k, b.t, b.s) : ghost(b.x, 44, b.w, 46, b.t, b.s, '.5'));
+      });
+      o += lab(312, 112, 'route.stack', 'tx-3', 11.5);
+      o += '<path d="M402 90 L402 100 L402 118" fill="none" stroke="' + (step >= 2 ? 'var(--route)' : 'var(--bd-2)') + '" stroke-width="1.5" marker-end="url(#ah)"/>';
+      INNER.forEach(function (b, i) {
+        var on = ORDER.slice(0, step + 1).some(function (p) { return p[0] === 'i' && p[1] === i; });
+        o += hit(b.m, on ? box(b.x, 126, b.w, 46, b.k, b.t, b.s) : ghost(b.x, 126, b.w, 46, b.t, b.s, '.5'));
+      });
+      var rOn = step >= 4;
+      o += hit('step-response', rOn ? box(604, 126, 120, 46, 'acc', '200', 'response sent')
+               : ghost(604, 126, 120, 46, '200', 'response sent', '.5'));
+      [[150, 67, 162], [300, 67, 306], [492, 67, 498]].forEach(function (l, i) {
+        o += '<line x1="' + l[0] + '" y1="' + l[1] + '" x2="' + l[2] + '" y2="' + l[1] + '" stroke="' + (step > i - 1 && i < 2 ? 'var(--acc)' : 'var(--bd-2)') + '" stroke-width="1.5" marker-end="url(#ah)"/>';
+      });
+      o += '<line x1="436" y1="149" x2="442" y2="149" stroke="' + (step >= 3 ? 'var(--acc)' : 'var(--bd-2)') + '" stroke-width="1.5" marker-end="url(#ah)"/>';
+      o += '<line x1="584" y1="149" x2="598" y2="149" stroke="' + (step >= 4 ? 'var(--acc)' : 'var(--bd-2)') + '" stroke-width="1.5" marker-end="url(#ah)"/>';
+      host.innerHTML = svg(818, 190, o);
+    }
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) return draw(4);
+    draw(-1);
+    var i = 0;
+    var t = setInterval(function () { draw(i); i++; if (i > 4) clearInterval(t); }, 470);
+  }
+
+  /* ============ 2. path compiler: align the pattern over the request ============ */
+  var PATS = ['/users/:id', '/users/:id/posts/:postId', '/files/*rest', '/'];
+  var PATHS = ['/users/42', '/users/42/posts/7', '/files/a/b/c.txt', '/users/42/'];
+
+  function segsOf(p) {
+    if (p === '/') return [];
+    return p.replace(/^\//, '').replace(/\/$/, '').split('/');
+  }
+  function kindOf(seg) {
+    return seg[0] === ':' ? 'param' : seg[0] === '*' ? 'splat' : 'lit';
+  }
+  function alignSegs(pat, path) {
+    var map = [], splat = -1;
+    pat.forEach(function (s, i) { if (kindOf(s) === 'splat') splat = i; });
+    for (var i = 0; i < pat.length; i++) {
+      if (splat === -1 || i < splat) map.push([i, i]);
+      else if (i === splat) map.push([i, path.length - 1 - (pat.length - 1 - i)]);
+      else map.push([path.length - (pat.length - i), path.length - (pat.length - i)]);
+    }
+    return map;
+  }
+
+  function compileFig(id) {
+    var host = el(id); if (!host) return;
+    var pi = 0, hi = 0;
+    host.innerHTML =
+      '<div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;margin-bottom:16px">' +
+      '<span style="font-size:11.5px;color:var(--tx-3);font-family:var(--mono)">pattern</span><span id="' + id + '-p"></span>' +
+      '<span style="font-size:11.5px;color:var(--tx-3);font-family:var(--mono)">request</span><span id="' + id + '-q"></span>' +
+      '</div><div class="stage" id="' + id + '-out"></div>';
+
+    function cellRow(segs, y, colorFn, leading) {
+      var x = 122, out = '', pos = [];
+      if (!segs.length) {
+        var w0 = 54;
+        out += '<rect x="' + x + '" y="' + y + '" width="' + w0 + '" height="42" rx="8" fill="var(--sunk)" stroke="var(--bd)" stroke-width="1"/>';
+        out += '<text x="' + (x + w0 / 2) + '" y="' + (y + 21) + '" text-anchor="middle" fill="var(--tx-3)" font-family="var(--mono)" font-size="12.5" dominant-baseline="central">/</text>';
+        return { svg: out, pos: [] };
+      }
+      if (leading) out += '<text x="110" y="' + (y + 21) + '" text-anchor="middle" fill="var(--tx-3)" font-family="var(--mono)" font-size="12.5" dominant-baseline="central">/</text>';
+      segs.forEach(function (s, i) {
+        var w = Math.max(54, s.length * 8 + 26);
+        var c = colorFn(s, i);
+        out += '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="42" rx="8" fill="var(--' + c + '-bg)" stroke="var(--' + c + '-bd)" stroke-width="1"/>';
+        out += '<text x="' + (x + w / 2) + '" y="' + (y + 21) + '" text-anchor="middle" fill="var(--' + c + ')" font-family="var(--mono)" font-size="12.5" dominant-baseline="central">' + esc(s) + '</text>';
+        pos.push({ x: x, w: w, c: c });
+        x += w;
+        if (i < segs.length - 1) {
+          out += '<text x="' + (x + 6) + '" y="' + (y + 21) + '" text-anchor="middle" fill="var(--tx-3)" font-family="var(--mono)" font-size="12.5" dominant-baseline="central">/</text>';
+          x += 12;
+        }
+      });
+      return { svg: out, pos: pos };
+    }
+
+    function render() {
+      var p = PATS[pi], q = PATHS[hi];
+      var c = EX.compile(p, true), m = c.re.exec(q);
+      var pat = segsOf(p), path = segsOf(q), map = alignSegs(pat, path);
+
+      el(id + '-p').innerHTML = PATS.map(function (v, i) {
+        return '<button class="btn mono' + (i === pi ? ' on' : '') + '" data-pi="' + i + '">' + esc(v) + '</button>';
+      }).join(' ');
+      el(id + '-q').innerHTML = PATHS.map(function (v, i) {
+        return '<button class="btn mono' + (i === hi ? ' on' : '') + '" data-qi="' + i + '">' + esc(v) + '</button>';
+      }).join(' ');
+
+      /* the regexp decides the verdict; the cells only explain it */
+      var badPath = {}, reason = '';
+      if (!m) {
+        if (!pat.length && path.length) reason = 'the pattern has no segments, so only "/" can match';
+        else if (path.length > pat.length && !pat.some(function (s) { return kindOf(s) === 'splat'; })) {
+          for (var k = pat.length; k < path.length; k++) badPath[k] = 1;
+          reason = (path.length - pat.length) + ' segment(s) beyond what the pattern accepts';
+        } else if (path.length < pat.length) reason = 'the request is ' + (pat.length - path.length) + ' segment(s) short';
+        else {
+          for (var k2 = 0; k2 < pat.length; k2++) {
+            if (kindOf(pat[k2]) === 'lit' && (path[k2] || '').toLowerCase() !== pat[k2].toLowerCase()) {
+              badPath[k2] = 1; reason = 'literal "' + pat[k2] + '" does not equal "' + (path[k2] || '') + '"'; break;
+            }
+          }
+        }
+        if (!pat.length) for (var k3 = 0; k3 < path.length; k3++) badPath[k3] = 1;
+      }
+
+      var o = ARROW;
+      o += '<text x="96" y="59" text-anchor="end" fill="var(--tx-3)" font-size="11.5" dominant-baseline="central">pattern</text>';
+      var rowA = cellRow(pat, 38, function (s) {
+        var k = kindOf(s);
+        return k === 'param' ? 'router' : k === 'splat' ? 'layer' : 'route';
+      }, true);
+      o += rowA.svg;
+
+      o += '<text x="96" y="155" text-anchor="end" fill="var(--tx-3)" font-size="11.5" dominant-baseline="central">request</text>';
+      var rowB = cellRow(path, 134, function (s, i) {
+        if (badPath[i]) return 'err';
+        if (!m) return 'route';
+        var owner = -1;
+        map.forEach(function (r, pIdx) { if (i >= r[0] && i <= r[1]) owner = pIdx; });
+        if (owner < 0) return 'route';
+        var k = kindOf(pat[owner]);
+        return k === 'param' ? 'router' : k === 'splat' ? 'layer' : 'route';
+      }, true);
+      o += rowB.svg;
+
+      if (m) {
+        map.forEach(function (r, pIdx) {
+          if (!rowA.pos[pIdx] || !rowB.pos[r[0]] || !rowB.pos[r[1]]) return;
+          var a = rowA.pos[pIdx], from = rowB.pos[r[0]], to = rowB.pos[r[1]];
+          var ax = a.x + a.w / 2, bx = (from.x + to.x + to.w) / 2;
+          var col = a.c === 'route' ? 'var(--bd-2)' : 'var(--' + a.c + ')';
+          o += '<path d="M' + ax + ' 80 C' + ax + ' 108, ' + bx + ' 106, ' + bx + ' 130" fill="none" stroke="' + col + '" stroke-width="1.25"' + (a.c === 'route' ? ' stroke-dasharray="3 3"' : '') + '/>';
+          if (r[1] > r[0]) {
+            o += '<line x1="' + from.x + '" y1="126" x2="' + (to.x + to.w) + '" y2="126" stroke="var(--' + a.c + ')" stroke-width="1.25"/>';
+          }
+        });
+      }
+
+      var vfill = m ? 'route' : 'err';
+      var vtext = m ? 'exec matched' : 'no match';
+      o += '<rect x="122" y="196" width="700" height="32" rx="8" fill="var(--' + vfill + '-bg)" stroke="var(--' + vfill + '-bd)" stroke-width="1"/>';
+      o += '<text x="136" y="212" fill="var(--' + vfill + ')" font-size="12.5" dominant-baseline="central">' + vtext + (reason ? ' \u2014 ' + esc(reason) : '') + '</text>';
+
+      o += '<text x="96" y="256" text-anchor="end" fill="var(--tx-3)" font-size="11.5" dominant-baseline="central">compiled</text>';
+      var src = esc(c.source).replace(/\(\[\^\/\]\+\?\)/g, '\u0001').replace(/\(\.\*\)/g, '\u0002');
+      var tsp = '', parts = src.split(/([\u0001\u0002])/);
+      parts.forEach(function (s) {
+        if (s === '\u0001') tsp += '<tspan fill="var(--router)">([^/]+?)</tspan>';
+        else if (s === '\u0002') tsp += '<tspan fill="var(--layer)">(.*)</tspan>';
+        else if (s) tsp += '<tspan fill="var(--tx-3)">' + s + '</tspan>';
+      });
+      o += '<text x="122" y="256" font-family="var(--mono)" font-size="12.5" dominant-baseline="central">/' + tsp + '/i</text>';
+
+      o += '<text x="96" y="288" text-anchor="end" fill="var(--tx-3)" font-size="11.5" dominant-baseline="central">params</text>';
+      var pout = '';
+      if (m && c.keys.length) {
+        pout = c.keys.map(function (k, i) {
+          var v = m[i + 1];
+          try { v = decodeURIComponent(v); } catch (e) { }
+          return '<tspan fill="var(--router)">' + esc(k) + '</tspan><tspan fill="var(--tx-3)"> = </tspan><tspan fill="var(--acc)">\'' + esc(v) + '\'</tspan>';
+        }).join('<tspan fill="var(--tx-3)">   </tspan>');
+      } else if (m) {
+        pout = '<tspan fill="var(--tx-3)">{}  no capture groups in this pattern</tspan>';
+      } else {
+        pout = '<tspan fill="var(--tx-3)">not built \u2014 the Router moves to the next Layer</tspan>';
+      }
+      o += '<text x="122" y="288" font-family="var(--mono)" font-size="12.5" dominant-baseline="central">' + pout + '</text>';
+
+      el(id + '-out').innerHTML = svg(840, 314, o);
+    }
+    host.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.pi !== undefined) pi = +b.dataset.pi;
+      if (b.dataset.qi !== undefined) hi = +b.dataset.qi;
+      render();
+    });
+    render();
+  }
+
+  /* ============ 3. the walk ============ */
+  function walkFig(id) {
+    var host = el(id); if (!host) return;
+
+    function mk(omitNext) {
+      var r = new EX.Router('app');
+      r.use(omitNext ? function logger(q, s, n) { } : function logger(q, s, n) { n(); });
+      r.get('/users/:id',
+        function auth(q, s, n) { n(); },
+        function getUser(q, s) { s.send('user ' + q.params.id); });
+      r.use(function notFound(q, s, n) { n(); });
+      return r;
+    }
+    var good = EX.run(mk(false), 'GET', '/users/42');
+    var stalled = EX.run(mk(true), 'GET', '/users/42');
+
+    var STACK = [
+      ['Layer 0', "path '/' \u2192 logger", 'router'],
+      ['Layer 1', "path '/users/:id' \u2192 Route", 'router'],
+      ['Layer 2', "path '/' \u2192 notFound", 'router']
+    ];
+
+    var steps = [];
+    steps.push({ li: -1, frames: [['router.handle(req, res, out)', 'router']], idx: 'idx = 0', cap: 'handle declares <code>let idx = 0</code> and defines <code>next</code> as a closure over it. Nothing has run yet.' });
+    var acc = [['router.handle(req, res, out)', 'router']];
+    good.frames.forEach(function (f) {
+      if (f.k === 'respond') return;
+      acc = acc.slice();
+      acc.push(['next() \u2192 idx ' + (f.li === undefined ? '?' : f.li) + ' \u2192 ' + ((f.li || 0) + 1), 'route']);
+      var kind = f.k === 'middleware' ? 'fn' : f.k === 'route-enter' ? 'route' : 'fn';
+      var nm = f.k === 'route-enter' ? 'route.dispatch(req, res, next)' : f.v + '(req, res, next)';
+      acc.push([nm, kind]);
+      steps.push({
+        li: f.li, ri: f.ri, frames: acc, idx: 'idx = ' + ((f.li || 0) + 1),
+        cap: f.k === 'middleware'
+          ? 'Layer ' + f.li + ' matched, so <code>next</code> invokes <code>' + f.v + '</code> and passes <em>itself</em> as the third argument.'
+          : f.k === 'route-enter'
+            ? 'Layer 1 matched. <code>req.params.id</code> is set from the capture group, and control enters the Route &mdash; which begins a second walk over its own stack.'
+            : 'Inside <code>route.dispatch</code>. A separate cursor is walking <code>route.stack</code>; the Router\u2019s <code>idx</code> has not moved.'
+      });
+    });
+    var last = steps[steps.length - 1].frames.slice();
+    steps.push({
+      li: 1, frames: last, idx: 'idx = 2', unwind: true,
+      cap: '<code>getUser</code> calls <code>res.send()</code> and returns. Only now does the stack unwind. Anything written after <code>next()</code> in <code>logger</code> runs <em>here</em> &mdash; after the response was already sent.'
+    });
+    steps.push({
+      li: 0, stalled: true, idx: 'idx = 1, parked',
+      frames: [['router.handle(req, res, out)', 'router'], ['next() \u2192 idx 0 \u2192 1', 'route'], ['logger(req, res, next) \u2014 returned without calling next', 'err']],
+      cap: 'The failure mode, run for real: this <code>logger</code> omits <code>next()</code>. Recorded frames: <b>' + stalled.frames.length + '</b>. No error, no timeout, no Layer 1. <code>idx</code> simply stops.'
+    });
+
+    var MAXF = steps.reduce(function (m, s) { return Math.max(m, s.frames.length); }, 0);
+    var FROW = 36, FBOX = 30, FTOP = 56;
+    var VH = FTOP + MAXF * FROW + 30;
+
+    var i = 0, timer = null;
+    host.innerHTML =
+      '<div class="fig-head">' +
+      '<button class="btn" data-a="reset">Reset</button>' +
+      '<button class="btn" data-a="prev">Back</button>' +
+      '<button class="btn" data-a="play" id="' + id + '-play">Play</button>' +
+      '<button class="btn" data-a="next">Next</button>' +
+      '<span class="sp"></span><span class="dots" id="' + id + '-dots"></span></div>' +
+      '<div class="stage" id="' + id + '-stage"></div>' +
+      '<div class="hint" id="' + id + '-hint"></div>';
+
+    function render() {
+      var s = steps[i];
+      var o = ARROW;
+      o += lab(18, 22, 'router.stack', 'tx-2', 12.5, '500');
+      o += lab(18, 40, s.idx, 'acc', 11.5);
+      o += lab(430, 22, 'JS call stack', 'tx-2', 12.5, '500');
+      o += lab(430, 40, 'depth ' + s.frames.length, 'num', 11.5);
+
+      for (var k = 0; k < STACK.length; k++) {
+        var y = 56 + k * 62;
+        if (s.li === k) o += box(18, y, 380, 52, STACK[k][2], STACK[k][0], STACK[k][1]);
+        else o += ghost(18, y, 380, 52, STACK[k][0], STACK[k][1], '.6');
+      }
+      for (var j = 0; j < MAXF; j++) {
+        if (!s.frames[j]) continue;
+        var fr = s.frames[j];
+        o += box(430, FTOP + j * FROW, 392, FBOX, fr[1], fr[0], null, 7);
+      }
+      if (s.unwind) {
+        o += '<text class="svgtext" x="430" y="' + (FTOP + s.frames.length * FROW + 12) + '" fill="var(--num)" font-size="11.5">\u2191 unwinds only now, innermost first</text>';
+      }
+      el(id + '-stage').innerHTML = svg(840, VH, o);
+      el(id + '-hint').innerHTML = s.cap;
+      var d = el(id + '-dots');
+      d.innerHTML = steps.map(function (_, k) {
+        return '<button class="dot' + (k === i ? ' on' : '') + '" data-go="' + k + '">' + (k + 1) + '</button>';
+      }).join('');
+    }
+    function stop() { if (timer) { clearInterval(timer); timer = null; el(id + '-play').textContent = 'Play'; } }
+    host.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.go !== undefined) { stop(); i = +b.dataset.go; return render(); }
+      var a = b.dataset.a;
+      if (a === 'reset') { stop(); i = 0; render(); }
+      if (a === 'next') { stop(); i = (i + 1) % steps.length; render(); }
+      if (a === 'prev') { stop(); if (i > 0) { i--; render(); } }
+      if (a === 'play') {
+        if (timer) return stop();
+        b.textContent = 'Pause';
+        timer = setInterval(function () {
+          if (i >= steps.length - 1) return stop();
+          i++; render();
+        }, 2400);
+      }
+    });
+    render();
+  }
+
+  /* ============ 4. sentinels ============ */
+  function sentinelFig(id) {
+    var host = el(id); if (!host) return;
+    var OPTS = [
+      ['next()', { L0: 'r', L1: 'r', R0: 'r', R1: 'n', R2: 'i', L2: 'i', L3: 'i', OUT: 'i' },
+        'The ordinary case. The inner cursor advances by one and <code>validate</code> runs. The Router\u2019s own <code>idx</code> has not moved &mdash; control is still inside Layer 1.'],
+      ["next('route')", { L0: 'r', L1: 'r', R0: 'r', R1: 's', R2: 's', L2: 'n', L3: 'i', OUT: 'i' },
+        'Abandons the rest of <em>this Route</em> and returns to the outer walk. Everything left in <code>route.stack</code> is skipped and the Router resumes at Layer 2. Outside a Route it behaves like plain <code>next()</code>.'],
+      ["next('router')", { L0: 'r', L1: 'r', R0: 'r', R1: 's', R2: 's', L2: 's', L3: 's', OUT: 'n' },
+        'Abandons this <em>entire router</em>, error handlers included, and hands control to whatever mounted it. It is not an error &mdash; forwarding it as one turns a deliberate decline into a 500.'],
+      ['next(err)', { L0: 'r', L1: 'r', R0: 'r', R1: 's', R2: 's', L2: 's', L3: 'n', OUT: 'i' },
+        'Flips the walk into error mode, which is one-way. Every remaining Layer is tested for four-argument arity and skipped if it does not qualify, so <code>notFound</code> is passed over.']
+    ];
+    var LEFT = [
+      ['L0', 'Layer 0', 'logger', 40],
+      ['L1', 'Layer 1', "path '/users/:id' \u2192 Route", 100],
+      ['L2', 'Layer 2', 'notFound', 232],
+      ['L3', 'Layer 3', 'errorHandler, four arguments', 292]
+    ];
+    var RIGHT = [['R0', 'auth', 62], ['R1', 'validate', 114], ['R2', 'getUser', 166]];
+    var cur = 0;
+
+    host.innerHTML =
+      '<div class="fig-head" id="' + id + '-ctl"></div>' +
+      '<div class="legend">' +
+      '<span><i style="background:var(--route)"></i>already ran</span>' +
+      '<span><i style="background:var(--router)"></i>runs next</span>' +
+      '<span><i style="background:var(--tx-3)"></i>skipped</span></div>' +
+      '<div class="stage" id="' + id + '-stage"></div>' +
+      '<div class="hint" id="' + id + '-hint"></div>';
+
+    function render() {
+      var st = OPTS[cur][1], o = ARROW;
+      el(id + '-ctl').innerHTML = OPTS.map(function (x, k) {
+        return '<button class="btn mono' + (k === cur ? ' on' : '') + '" data-s="' + k + '">' + esc(x[0]) + '</button>';
+      }).join('');
+      o += lab(18, 24, 'router.stack', 'tx-2', 12.5, '500');
+      o += lab(452, 24, 'route.stack', 'tx-2', 12.5, '500');
+      o += lab(452, 42, 'inside Layer 1', 'tx-3', 11.5);
+
+      LEFT.forEach(function (L) {
+        var v = st[L[0]], y = L[3];
+        if (v === 'r') o += box(18, y, 386, 50, 'route', L[1], L[2]);
+        else if (v === 'n') o += box(18, y, 386, 50, 'router', L[1], L[2]);
+        else o += ghost(18, y, 386, 50, L[1], L[2], v === 's' ? '.32' : '.6');
+      });
+      var vo = st.OUT;
+      if (vo === 'n') o += box(18, 352, 386, 34, 'router', 'out() \u2192 parent router', null, 7);
+      else o += ghost(18, 352, 386, 34, 'out() \u2192 parent router', null, vo === 's' ? '.32' : '.55');
+
+      o += '<line x1="404" y1="125" x2="440" y2="125" stroke="var(--bd-3)" stroke-width="1.5" marker-end="url(#ah)"/>';
+      o += '<rect x="446" y="52" width="376" height="168" rx="12" fill="none" stroke="var(--bd)" stroke-width="1" stroke-dasharray="4 4"/>';
+      RIGHT.forEach(function (R) {
+        var v = st[R[0]];
+        if (v === 'r') o += box(462, R[2], 344, 42, 'route', R[1], null, 7);
+        else if (v === 'n') o += box(462, R[2], 344, 42, 'router', R[1], null, 7);
+        else o += ghost(462, R[2], 344, 42, R[1], null, v === 's' ? '.32' : '.6');
+        o += '<text class="svgtext" x="792" y="' + (R[2] + 21) + '" text-anchor="end" font-family="var(--mono)" font-size="11" fill="var(--tx-3)" dominant-baseline="central"' +
+             (v === 's' ? ' opacity=".4"' : '') + '>method get</text>';
+      });
+      el(id + '-stage').innerHTML = svg(840, 404, o);
+      el(id + '-hint').innerHTML = OPTS[cur][2];
+    }
+    host.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-s]'); if (!b) return;
+      cur = +b.dataset.s; render();
+    });
+    render();
+  }
+
+  /* ============ 5. arity gate ============ */
+  function arityFig(id) {
+    var host = el(id); if (!host) return;
+    var base = function (err, req, res, next) { };
+    var SHAPES = [
+      ['function (req, res, next) {}', function (req, res, next) { }, false, 'the ordinary middleware shape'],
+      ['function (err, req, res, next) {}', function (err, req, res, next) { }, false, 'the only shape that catches errors'],
+      ['function (req, res) {}', function (req, res) { }, false, 'a terminal handler'],
+      ['function (err, req, res, next = noop) {}', function (err, req, res) { }, true, 'length counts params before the first default'],
+      ['function (...args) {}', function () { }, true, 'a rest parameter contributes nothing'],
+      ['handler.bind(null)', base.bind(null), false, 'bind with no extra args preserves length'],
+      ['handler.bind(null, ctx)', base.bind(null, {}), true, 'each bound argument subtracts one']
+    ];
+    var traps = SHAPES.filter(function (s) { return s[2]; }).length;
+
+    var mx = '<div style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(0,1fr);gap:7px;margin-bottom:22px">' +
+      '<div></div>' +
+      '<div style="font-size:11px;color:var(--tx-3);padding:0 10px 3px;align-self:end">walk in normal mode</div>' +
+      '<div style="font-size:11px;color:var(--tx-3);padding:0 10px 3px;align-self:end">walk in error mode</div>' +
+      '<div style="font-family:var(--mono);font-size:12.5px;color:var(--tx-2);background:var(--sunk);border-radius:9px;padding:13px 12px">fn.length &lt; 4</div>' +
+      '<div style="background:var(--route-bg);color:var(--route);border-radius:9px;padding:13px 12px;font-size:13px;text-align:center">handle_request runs it</div>' +
+      '<div style="background:var(--sunk);color:var(--tx-3);border-radius:9px;padding:13px 12px;font-size:13px;text-align:center">skipped</div>' +
+      '<div style="font-family:var(--mono);font-size:12.5px;color:var(--tx-2);background:var(--sunk);border-radius:9px;padding:13px 12px">fn.length === 4</div>' +
+      '<div style="background:var(--sunk);color:var(--tx-3);border-radius:9px;padding:13px 12px;font-size:13px;text-align:center">skipped</div>' +
+      '<div style="background:var(--err-bg);color:var(--err);border-radius:9px;padding:13px 12px;font-size:13px;text-align:center">handle_error runs it</div>' +
+      '</div>';
+
+    var rows = SHAPES.map(function (s) {
+      var n = s[1].length, isErr = n === 4;
+      return '<tr>' +
+        '<td class="m" style="color:var(--tx-2)">' + esc(s[0]) + '</td>' +
+        '<td class="m" style="text-align:center;color:var(--' + (s[2] ? 'layer' : 'num') + ')">' + n + '</td>' +
+        '<td style="text-align:center"><span class="pill ' + (isErr ? 'p-no' : 'p-yes') + '">' + (isErr ? 'skipped' : 'runs') + '</span></td>' +
+        '<td style="text-align:center"><span class="pill ' + (isErr ? 'p-err' : 'p-no') + '">' + (isErr ? 'runs' : 'skipped') + '</span></td>' +
+        '<td class="c-mut" style="font-size:12.5px">' + esc(s[3]) + '</td></tr>';
+    }).join('');
+
+    host.innerHTML = mx +
+      '<table class="tbl" style="margin-bottom:0"><colgroup><col style="width:31%"><col style="width:10%"><col style="width:14%"><col style="width:14%"><col style="width:31%"></colgroup>' +
+      '<thead><tr><th>declared shape</th><th style="text-align:center">length</th><th style="text-align:center">normal</th><th style="text-align:center">error</th><th>why</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table>' +
+      '<div class="hint" style="min-height:0;margin-top:12px"><b style="color:var(--layer)">' + traps + ' of these ' + SHAPES.length + ' report a length that contradicts the author\u2019s intent.</b> ' +
+      'A four-argument error handler that reports 3 is registered as ordinary middleware and never catches anything. Every number above is read from a real function object at page load.</div>';
+  }
+
+  /* ============ 6. cost ============ */
+  function costFig(id) {
+    var host = el(id); if (!host) return;
+    function flat(n) {
+      var r = new EX.Router('flat');
+      for (var i = 0; i < n; i++) r.get('/r' + i + '/:id', function (q, s) { s.send('ok'); });
+      return r;
+    }
+    function mounted(groups, per) {
+      var top = new EX.Router('app');
+      for (var g = 0; g < groups; g++) {
+        var sub = new EX.Router('g' + g);
+        for (var i = 0; i < per; i++) sub.get('/r' + i + '/:id', function (q, s) { s.send('ok'); });
+        top.use('/g' + g, sub);
+      }
+      return top;
+    }
+    var F = flat(300), M = mounted(3, 100);
+    var DATA = {
+      flat: [
+        ['miss, no route matches', EX.countExecs(function () { EX.run(F, 'GET', '/nope'); })],
+        ['hit on the first route', EX.countExecs(function () { EX.run(F, 'GET', '/r0/1'); })],
+        ['hit on the last route', EX.countExecs(function () { EX.run(F, 'GET', '/r299/1'); })]
+      ],
+      mounted: [
+        ['miss, no route matches', EX.countExecs(function () { EX.run(M, 'GET', '/nope'); })],
+        ['hit in the first group', EX.countExecs(function () { EX.run(M, 'GET', '/g0/r0/1'); })],
+        ['hit at the end of the last group', EX.countExecs(function () { EX.run(M, 'GET', '/g2/r99/1'); })]
+      ]
+    };
+    var mode = 'flat';
+    host.innerHTML =
+      '<div class="fig-head">' +
+      '<button class="btn" data-m="flat">300 routes, flat</button>' +
+      '<button class="btn" data-m="mounted">3 routers of 100, mounted</button></div>' +
+      '<div class="stage" id="' + id + '-stage"></div>' +
+      '<div class="hint" id="' + id + '-hint"></div>';
+
+    function render() {
+      var rows = DATA[mode], max = 300, o = '';
+      o += lab(18, 22, 'regexp.exec calls per request', 'tx-2', 12.5, '500');
+      rows.forEach(function (r, k) {
+        var y = 48 + k * 62;
+        var w = Math.max(3, Math.round(r[1] / max * 690));
+        o += lab(18, y + 13, r[0], 'tx-2', 12.5);
+        o += '<rect x="18" y="' + (y + 22) + '" width="690" height="22" rx="6" fill="var(--sunk)"/>';
+        o += '<rect x="18" y="' + (y + 22) + '" width="' + w + '" height="22" rx="6" fill="var(--' + (mode === 'flat' ? 'layer' : 'route') + '-bg)" stroke="var(--' + (mode === 'flat' ? 'layer' : 'route') + '-bd)" stroke-width="1"/>';
+        o += '<text class="svgtext" x="822" y="' + (y + 33) + '" text-anchor="end" fill="var(--num)" font-family="var(--mono)" font-size="13" dominant-baseline="central">' + r[1] + '</text>';
+      });
+      el(id + '-stage').innerHTML = svg(840, 240, o);
+      Array.prototype.forEach.call(host.querySelectorAll('[data-m]'), function (b) {
+        b.classList.toggle('on', b.dataset.m === mode);
+      });
+      el(id + '-hint').innerHTML = mode === 'flat'
+        ? 'Every Layer holds its own compiled regexp and they are tested in registration order, so cost is <em>position</em>, not lookup. A miss pays for the entire stack &mdash; there is no index to consult.'
+        : 'Mounting collapses the miss to one <code>exec</code> per group, because a failed prefix match skips all 100 routes behind it. The deep hit still walks its own sub-stack, so it drops but not to 1.';
+    }
+    host.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-m]'); if (!b) return;
+      mode = b.dataset.m; render();
+    });
+    render();
+  }
+
+  return {
+    init: function () {
+      hero('f-hero');
+      compileFig('f-compile');
+      walkFig('f-walk');
+      sentinelFig('f-sentinel');
+      arityFig('f-arity');
+      costFig('f-cost');
+    }
+  };
+})();
+
+</script>
+<script>
+(function () {
+  var M = window.__MODALS = (window.__MODALS || {});
+
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function ctl(items, active) {
+    return '<div class="mi">' + items.map(function (t, i) {
+      return '<button class="btn mono' + (i === active ? ' on' : '') + '" data-k="' + i + '">' + esc(t) + '</button>';
+    }).join('') + '</div>';
+  }
+  function wire(root, render) {
+    var i = 0;
+    function paint() {
+      root.querySelector('[data-inst]').innerHTML = render(i);
+      [].forEach.call(root.querySelectorAll('.mi .btn'), function (b, k) {
+        b.classList.toggle('on', k === i);
+      });
+    }
+    root.addEventListener('click', function (e) {
+      var b = e.target.closest('.mi .btn'); if (!b) return;
+      i = +b.dataset.k; paint();
+    });
+    paint();
+  }
+  function kv(k, v, c) {
+    return '<div><span class="k">' + k + '</span><span style="color:var(--' + (c || 'tx-2') + ')">' + v + '</span></div>';
+  }
+  function frameList(frames) {
+    return frames.map(function (f) {
+      var col = f.k === 'respond' ? 'route' : f.k === 'late-send' || f.k === 'late-status' ? 'err'
+        : f.k === 'fallthrough' ? 'layer' : 'tx-2';
+      return '<div style="color:var(--' + col + ')">' + '  '.repeat(Math.min(f.depth, 6)) + esc(f.k) + ' &rarr; ' + esc(String(f.v)) + '</div>';
+    }).join('') || '<div style="color:var(--tx-3)">no frames recorded</div>';
+  }
+  function shell(body) { return body + '<div class="mout" data-inst></div>'; }
+
+  /* ---------- 1. what the router actually reads ---------- */
+  M['step-request'] = function () {
+    var LINES = ['GET /users/42', 'GET /users/42?tab=posts', 'GET /USERS/42', 'HEAD /users/42', 'PUT /users/42'];
+    return {
+      title: 'The incoming request', kind: 'stage 1 \u2014 what routing is given',
+      body: '<p>Before any Layer is tested, Express reduces the request to two values: the method, and the <em>pathname</em>. Not <code>req.url</code> \u2014 the pathname, with the query string split off.</p>' +
+        shell(ctl(LINES, 0)) +
+        '<p>Two behaviours fall out. A query string cannot influence which route is chosen, so <code>/users/42?tab=posts</code> and <code>/users/42</code> reach the same handler. And because patterns compile with the <code>i</code> flag by default, an uppercase path still matches \u2014 until you enable the <code>case sensitive routing</code> setting, which recompiles every pattern without it.</p>',
+      mount: function (root) {
+        var r = new EX.Router('probe');
+        r.get('/users/:id', function getUser(q, s) { s.send('getUser ran'); });
+        wire(root, function (i) {
+          var parts = LINES[i].split(' ');
+          var out = EX.run(r, parts[0], parts[1]);
+          return kv('req.method', esc(parts[0]), 'acc') +
+            kv('req.url', esc(parts[1]), 'tx-2') +
+            kv('pathname matched', esc(EX.pathnameOf(parts[1])), 'router') +
+            kv('status', out.res.statusCode, out.res.statusCode === 200 ? 'route' : 'err') +
+            kv('req.params', esc(JSON.stringify(out.req.params)), 'acc') +
+            kv('outcome', out.res.body ? esc(out.res.body) : 'no handler accepted it', out.res.body ? 'route' : 'err');
+        });
+      }
+    };
+  };
+
+  /* ---------- 2. middleware matches by prefix ---------- */
+  M['step-middleware'] = function () {
+    var MOUNTS = ["use(logger)", "use('/users', logger)", "use('/users/42', logger)", "use('/admin', logger)"];
+    var PATHS = ['/users/42', '/users', '/users/4200', '/admin/x', '/'];
+    return {
+      title: 'A middleware Layer', kind: 'stage 2 \u2014 prefix matching',
+      body: '<p>A middleware Layer compiles without an end anchor, so it matches any pathname that <em>begins</em> with its mount path at a segment boundary. That boundary condition is the part people trip over.</p>' +
+        shell(ctl(MOUNTS, 0)) +
+        '<p>Look at <code>/users/4200</code> under the <code>/users/42</code> mount. A naive prefix test on strings would accept it; Express does not, because the compiled pattern requires the next character to be a slash or the end of the string. The mount path always ends on a segment.</p>',
+      mount: function (root) {
+        var MK = [
+          function (r, fn) { r.use(fn); },
+          function (r, fn) { r.use('/users', fn); },
+          function (r, fn) { r.use('/users/42', fn); },
+          function (r, fn) { r.use('/admin', fn); }
+        ];
+        wire(root, function (i) {
+          return PATHS.map(function (p) {
+            var ran = false;
+            var r = new EX.Router('m');
+            MK[i](r, function logger(q, s, n) { ran = true; n(); });
+            r.use(function done(q, s) { s.send('end'); });
+            EX.run(r, 'GET', p);
+            return '<div class="mrow"><span class="k">' + esc(p) + '</span>' +
+              '<span style="color:var(--' + (ran ? 'route' : 'tx-3') + ')">' +
+              (ran ? 'logger runs' : 'skipped') + '</span></div>';
+          }).join('');
+        });
+      }
+    };
+  };
+
+  /* ---------- 3. routes anchor, mounts do not ---------- */
+  M['step-routelayer'] = function () {
+    var FORMS = ["get('/users/:id', h)", "use('/users/:id', h)"];
+    var URLS = ['/users/42', '/users/42/', '/users/42/avatar', '/users'];
+    return {
+      title: 'The route Layer', kind: 'stage 3 \u2014 the end anchor',
+      body: '<p>The same path string compiles to two different regexps depending on how it was registered. A route anchors at the end; a mount deliberately does not, because it has to leave a remainder for the router beneath it.</p>' +
+        shell(ctl(FORMS, 0)) +
+        '<p>This single flag explains why <code>/users/42/avatar</code> falls through to a 404 on a route but is happily accepted by a mount at the same path \u2014 and why the optional trailing slash in the route form means <code>/users/42/</code> is not a separate URL as far as routing is concerned.</p>',
+      mount: function (root) {
+        wire(root, function (i) {
+          var c = EX.compile('/users/:id', i === 0);
+          var head = kv('compiled', '/' + esc(c.source) + '/i', 'layer') +
+            kv('end anchored', i === 0 ? 'yes' : 'no', i === 0 ? 'route' : 'layer') + '<div style="height:8px"></div>';
+          return head + URLS.map(function (u) {
+            var hit = c.re.test(u);
+            var rest = '';
+            if (hit && i === 1) {
+              var m = c.re.exec(u);
+              rest = '   remainder ' + esc(u.slice(m[0].length) || '/');
+            }
+            return '<div class="mrow"><span class="k">' + esc(u) + '</span>' +
+              '<span style="color:var(--' + (hit ? 'route' : 'tx-3') + ')">' +
+              (hit ? 'matches' : 'no match') + esc(rest) + '</span></div>';
+          }).join('');
+        });
+      }
+    };
+  };
+
+  /* ---------- 4. position is the only thing that makes a 404 handler a 404 handler ---------- */
+  M['step-notfound'] = function () {
+    var POS = ['registered first', 'after logger', 'last (as shown)'];
+    return {
+      title: 'The unreached Layer', kind: 'stage 4 \u2014 why position is meaning',
+      body: '<p>Nothing marks <code>notFound</code> as a fallback. It is an ordinary terminal handler mounted at <code>/</code>, and the only thing that makes it behave like a catch-all is that every more specific Layer sits above it.</p>' +
+        shell(ctl(POS, 2)) +
+        '<p>Move it up and it stops being a fallback and becomes a wall: it matches <code>/</code> as a prefix, which is every request, so it answers before the route it was meant to protect ever gets tested. The frames below come from a real run against <code>GET /users/42</code>.</p>',
+      mount: function (root) {
+        wire(root, function (i) {
+          var r = new EX.Router('n');
+          var add = [
+            function () { r.use(function notFound(q, s) { s.status(404).send('not found'); }); },
+            function () { r.use(function logger(q, s, n) { n(); }); },
+            function () { r.get('/users/:id', function getUser(q, s) { s.send('user 42'); }); }
+          ];
+          if (i === 0) { add[0](); add[1](); add[2](); }
+          else if (i === 1) { add[1](); add[0](); add[2](); }
+          else { add[1](); add[2](); add[0](); }
+          var out = EX.run(r, 'GET', '/users/42');
+          return kv('status', out.res.statusCode, out.res.statusCode === 200 ? 'route' : 'err') +
+            kv('body', esc(String(out.res.body)), 'acc') +
+            kv('route reached', out.frames.some(function (f) { return f.v === 'getUser'; }) ? 'yes' : 'no',
+              out.frames.some(function (f) { return f.v === 'getUser'; }) ? 'route' : 'err') +
+            '<div class="frames">' + frameList(out.frames) + '</div>';
+        });
+      }
+    };
+  };
+
+  /* ---------- 5. the inner cursor ---------- */
+  M['step-inner'] = function () {
+    var VERBS = ['GET', 'POST', 'HEAD', 'PUT'];
+    return {
+      title: 'Inside route.stack', kind: 'stage 5 \u2014 the inner cursor',
+      body: '<p>One Route here carries four handler Layers across two verbs. The inner walk tests each one\u2019s <code>method</code> against the request and runs only the matches, in registration order.</p>' +
+        shell(ctl(VERBS, 0)) +
+        '<p><code>HEAD</code> is the interesting row: with no HEAD entry registered, the dispatcher resolves it to the GET chain, so <code>auth</code> and <code>getUser</code> both run. <code>PUT</code> never reaches the inner walk at all \u2014 the outer Layer rejects it on the methods map, which is why nothing is recorded rather than a 405.</p>',
+      mount: function (root) {
+        wire(root, function (i) {
+          var r = new EX.Router('i');
+          var rt = r.route('/users/:id');
+          rt.add('get', function auth(q, s, n) { n(); });
+          rt.add('get', function getUser(q, s) { s.send('read'); });
+          rt.add('post', function auth(q, s, n) { n(); });
+          rt.add('post', function updateUser(q, s) { s.send('written'); });
+          var out = EX.run(r, VERBS[i], '/users/42');
+          var inner = out.frames.filter(function (f) { return f.k === 'route-handler'; });
+          var resolved = out.req.__verb
+            ? out.req.__verb + (out.req.__verbFellBack ? '  (no ' + VERBS[i].toLowerCase() + ' entry, fell back)' : '')
+            : 'never entered \u2014 rejected by the methods map';
+          return kv('methods map', "{ get, post }", 'route') +
+            kv('dispatched as', esc(resolved), out.req.__verbFellBack ? 'layer' : 'acc') +
+            kv('entered the Route', inner.length ? 'yes' : 'no', inner.length ? 'route' : 'err') +
+            kv('inner Layers run', inner.length, 'num') +
+            kv('status', out.res.statusCode, out.res.statusCode === 200 ? 'route' : 'err') +
+            '<div class="frames">' + frameList(out.frames) + '</div>';
+        });
+      }
+    };
+  };
+
+  /* ---------- 6. how a handler ends ---------- */
+  M['step-handler'] = function () {
+    var ENDS = ['res.send()', 'res.send() then next()', 'next() only', 'neither'];
+    return {
+      title: 'The terminal handler', kind: 'stage 6 \u2014 four ways to finish',
+      body: '<p>A handler ends the request by writing a response, not by returning. The walk has no idea the response went out unless someone tells it, which is why the last two rows below are indistinguishable to the router and very distinguishable to the client.</p>' +
+        shell(ctl(ENDS, 0)) +
+        '<p>The second row is the one worth studying: sending and <em>then</em> continuing hands control to a Layer that assumes it may still write. In real Express that second write throws <code>ERR_HTTP_HEADERS_SENT</code>; this engine records it as a refused late write instead, which is the same event without a socket to fail against.</p>',
+      mount: function (root) {
+        wire(root, function (i) {
+          var r = new EX.Router('h');
+          r.get('/users/:id', function getUser(q, s, n) {
+            if (i === 0) return s.send('user 42');
+            if (i === 1) { s.send('user 42'); return n(); }
+            if (i === 2) return n();
+          });
+          r.use(function audit(q, s, n) { s.status(200).send('second write'); });
+          var out = EX.run(r, 'GET', '/users/42');
+          var late = out.frames.filter(function (f) { return f.k === 'late-send' || f.k === 'late-status'; }).length;
+          return kv('handler returned', i === 3 ? 'without doing anything' : esc(ENDS[i]), 'tx-2') +
+            kv('walk continued', (i === 1 || i === 2 || i === 3) ? 'yes' : 'no', (i === 1 || i === 2 || i === 3) ? 'layer' : 'route') +
+            kv('refused late writes', late, late ? 'err' : 'num') +
+            kv('client receives', out.res.ended ? esc(String(out.res.body)) : 'nothing \u2014 socket left open', out.res.ended ? 'route' : 'err') +
+            '<div class="frames">' + frameList(out.frames) + '</div>';
+        });
+      }
+    };
+  };
+
+  /* ---------- response chip reuses the handler breakdown's sibling angle ---------- */
+  M['step-response'] = function () {
+    var CODES = ['res.send(body)', 'res.status(404).send()', 'res.status(500).send()'];
+    return {
+      title: 'The response', kind: 'stage 7 \u2014 what the walk does afterwards',
+      body: '<p>Writing a response does not unwind anything. Every frame between <code>handle</code> and the handler is still on the stack, suspended inside its own <code>next()</code> call, and each one resumes in reverse order once the handler returns.</p>' +
+        shell(ctl(CODES, 0)) +
+        '<p>That is why post-response work placed after <code>next()</code> still executes, and why an exception thrown during that unwinding reaches an error handler even though the client already has the full response. The status shown below is whatever the handler set before returning; nothing later can change it once bytes are on the wire.</p>',
+      mount: function (root) {
+        wire(root, function (i) {
+          var order = [];
+          var r = new EX.Router('r');
+          r.use(function outer(q, s, n) { order.push('outer before next'); n(); order.push('outer after next'); });
+          r.use(function inner(q, s, n) { order.push('inner before next'); n(); order.push('inner after next'); });
+          r.get('/users/:id', function getUser(q, s) {
+            order.push('handler writes');
+            if (i === 0) s.send('user 42');
+            if (i === 1) s.status(404).send('not found');
+            if (i === 2) s.status(500).send('boom');
+          });
+          var out = EX.run(r, 'GET', '/users/42');
+          return kv('status', out.res.statusCode, out.res.statusCode < 400 ? 'route' : 'err') +
+            kv('response ended', String(out.res.ended), 'acc') +
+            '<div class="frames">' + order.map(function (o, k) {
+              var after = o.indexOf('after') > -1;
+              return '<div style="color:var(--' + (after ? 'layer' : 'tx-2') + ')">' + (k + 1) + '. ' + esc(o) + '</div>';
+            }).join('') + '</div>';
+        });
+      }
+    };
+  };
+})();
+
+</script>
+<script>
+(function () {
+  var root = document.documentElement;
+
+  /* ---------- theme ---------- */
+  function setTheme(t) {
+    root.setAttribute('data-theme', t);
+    try { localStorage.setItem('ex-theme', t); } catch (e) { }
+  }
+  var saved = null;
+  try { saved = localStorage.getItem('ex-theme'); } catch (e) { }
+  setTheme(saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('[data-theme-toggle]')) return;
+    setTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+
+  /* ---------- retractable nav ---------- */
+  var nav = document.querySelector('.nav'), lastY = 0, ticking = false;
+  function onScroll() {
+    var y = window.scrollY || 0;
+    if (y > 120 && y > lastY + 4) nav.classList.add('hide');
+    else if (y < lastY - 4 || y < 120) nav.classList.remove('hide');
+    lastY = y;
+    var best = null;
+    document.querySelectorAll('section[id]').forEach(function (s) {
+      if (s.getBoundingClientRect().top - 120 <= 0) best = s.id;
+    });
+    document.querySelectorAll('.nav-links a').forEach(function (a) {
+      a.classList.toggle('on', a.getAttribute('href') === '#' + best);
+    });
+    ticking = false;
+  }
+  window.addEventListener('scroll', function () {
+    if (!ticking) { ticking = true; requestAnimationFrame(onScroll); }
+  }, { passive: true });
+
+  /* ---------- popover annotations ---------- */
+  var TERMS = {
+    router: ['Router', 'object', 'router', 'The object that owns an ordered array of <span class="t-layer">Layers</span> and walks it once per request. It holds no per-request state of its own &mdash; the cursor lives in a closure created fresh inside <code>handle</code>, which is what lets one Router serve concurrent requests.'],
+    route: ['Route', 'object', 'route', 'Owns the handler stack for <em>one path</em> and dispatches by HTTP method. It is never walked directly by the <span class="t-router">Router</span>; it is reached through a <span class="t-layer">Layer</span> whose <code>handle</code> points at it.'],
+    layer: ['Layer', 'object', 'layer', 'One entry in either stack, and the only universal record in the system. It holds a compiled regexp, a keys array, and a <code>handle</code> that is <em>either</em> a function <em>or</em> a <span class="t-route">Route</span> &mdash; never both.'],
+    handle: ['layer.handle', 'property', 'layer', 'The dispatch target. When it is a plain function the Layer is middleware; when it is a Route the Layer is a route entry. Everything else about dispatch follows from which of the two it holds.'],
+    stack: ['router.stack', 'property', 'router', 'A plain array, in registration order. There is no tree, no trie and no index &mdash; order of registration <em>is</em> the routing algorithm.'],
+    routestack: ['route.stack', 'property', 'route', 'The inner array, one <span class="t-layer">Layer</span> per registered handler, each carrying a <code>method</code>. Chaining <code>.get().post()</code> on one Route appends to this same array.'],
+    next: ['next', 'closure', 'acc', 'Not a callback you are given for politeness &mdash; it <em>is</em> the loop. It closes over <code>idx</code> and re-enters the walk each time you call it. Never calling it parks the walk permanently.'],
+    idx: ['idx', 'closure variable', 'acc', 'The cursor. Declared inside <code>handle</code>, captured by <code>next</code>, invisible to everything else. Each request gets its own.'],
+    match: ['layer.match', 'method', 'layer', 'One <code>regexp.exec()</code> against the current <code>req.url</code>. On a hit it stores the decoded capture groups on <code>layer.params</code> and returns true; on a miss the Router moves to the next Layer.'],
+    params: ['req.params', 'property', 'router', 'Built by zipping capture groups onto the <code>keys</code> array in order. It is reassigned per matched Layer, so an inner capture of the same name silently shadows an outer one.'],
+    keys: ['keys', 'array', 'router', 'The parameter names, in capture-group order. It is what turns a positional regexp result into a named object &mdash; position <code>i</code> in <code>keys</code> pairs with capture group <code>i + 1</code>.'],
+    p2r: ['path-to-regexp', 'library', 'layer', 'The compiler behind every path argument. It runs <em>once, at registration</em>. By the time a request arrives the string is gone and only the regexp and keys remain.'],
+    dispatch: ['route.dispatch', 'method', 'route', 'The inner walk. Same closure pattern as the outer one, but it compares <code>layer.method</code> to <code>req.method</code> instead of matching a path.'],
+    arity: ['fn.length', 'property', 'err', 'The count of declared parameters before the first one with a default value or a rest parameter. Express reads it to decide whether a function is an error handler. There is no other signal.'],
+    errmode: ['error mode', 'state', 'err', 'Entered by passing anything truthy to <code>next</code>. One-way: only an error handler calling plain <code>next()</code> returns the walk to normal mode.'],
+    sentinel: ["next('route')", 'sentinel', 'acc', 'A string Express checks for by identity before treating the argument as an error. It abandons the remaining handlers in the current Route only.'],
+    routersentinel: ["next('router')", 'sentinel', 'acc', 'Abandons the entire current router, error handlers included, and returns control to whatever mounted it. Not an error.'],
+    baseurl: ['req.baseUrl', 'property', 'route', 'Grows by the matched prefix when a request enters a mounted router, while <code>req.url</code> shrinks by the same amount. Both are restored when control returns.'],
+    exec: ['regexp.exec', 'method', 'num', 'The single operation every routing decision passes through. Counting it gives an exact cost figure that is identical on any machine &mdash; not a timing sample.'],
+    handlerequest: ['handle_request', 'method', 'layer', 'Runs a Layer in normal mode. It first checks <code>fn.length &gt; 3</code> and bails to <code>next()</code> if so, which is how error handlers are skipped when nothing has gone wrong.'],
+    handleerror: ['handle_error', 'method', 'err', 'Runs a Layer in error mode. It requires <code>fn.length === 4</code> exactly and otherwise forwards the error untouched.'],
+    thenable: ['returned thenable', 'behaviour', 'acc', 'Express 5 inspects the return value of a handler and routes a rejection to <code>next(err)</code>. Express 4 discarded it, which is why <code>async</code> handlers hung there without a manual <code>.catch(next)</code>.']
+  };
+
+  var pop = null;
+  function closePop() {
+    if (!pop) return;
+    pop.remove(); pop = null;
+    document.querySelectorAll('.an[aria-expanded="true"]').forEach(function (a) { a.setAttribute('aria-expanded', 'false'); });
+  }
+  function openPop(a) {
+    var t = TERMS[a.dataset.t]; if (!t) return;
+    closePop();
+    a.setAttribute('aria-expanded', 'true');
+    pop = document.createElement('div');
+    pop.className = 'pop';
+    pop.setAttribute('role', 'dialog');
+    pop.innerHTML = '<h4 class="t-' + t[2] + '">' + t[0] + '</h4><p class="kind">' + t[1] + '</p><p>' + t[3] + '</p>';
+    document.body.appendChild(pop);
+    var r = a.getBoundingClientRect(), pw = pop.offsetWidth, ph = pop.offsetHeight;
+    var left = Math.min(Math.max(12, r.left + window.scrollX - 12), window.innerWidth - pw - 12 + window.scrollX);
+    var above = r.bottom + ph + 16 > window.innerHeight;
+    pop.style.left = left + 'px';
+    pop.style.top = (above ? r.top + window.scrollY - ph - 9 : r.bottom + window.scrollY + 9) + 'px';
+  }
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest('.an');
+    if (a) {
+      e.preventDefault();
+      if (a.getAttribute('aria-expanded') === 'true') closePop(); else openPop(a);
+      return;
+    }
+    if (!e.target.closest('.pop')) closePop();
+  });
+  window.addEventListener('scroll', closePop, { passive: true });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closePop(); closeModal(); } });
+
+  /* ---------- modals ---------- */
+  function tbl(cols, rows) {
+    return '<table class="tbl"><thead><tr>' + cols.map(function (c) { return '<th>' + c + '</th>'; }).join('') +
+      '</tr></thead><tbody>' + rows.map(function (r) {
+        return '<tr>' + r.map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>';
+      }).join('') + '</tbody></table>';
+  }
+  function fig(inner) { return '<div class="fig" style="margin-bottom:18px">' + inner + '</div>'; }
+  function s(w, h, inner) { return '<svg viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-hidden="true">' + inner + '</svg>'; }
+  function rect(x, y, w, h, k, r) {
+    return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="' + (r || 8) + '" fill="var(--' + k + '-bg)" stroke="var(--' + k + '-bd)" stroke-width="1"/>';
+  }
+  function srect(x, y, w, h, r) {
+    return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="' + (r || 8) + '" fill="var(--sunk)" stroke="var(--bd)" stroke-width="1"/>';
+  }
+  function tx(x, y, t, c, sz, w, anchor) {
+    return '<text class="svgtext" x="' + x + '" y="' + y + '" fill="var(--' + (c || 'tx-2') + ')" font-size="' + (sz || 12) + '"' +
+      (w ? ' font-weight="' + w + '"' : '') + (anchor ? ' text-anchor="' + anchor + '"' : '') + ' dominant-baseline="central">' + t + '</text>';
+  }
+  function mono(x, y, t, c, sz, anchor) {
+    return '<text x="' + x + '" y="' + y + '" fill="var(--' + (c || 'tx-2') + ')" font-family="var(--mono)" font-size="' + (sz || 12) + '"' +
+      (anchor ? ' text-anchor="' + anchor + '"' : '') + ' dominant-baseline="central">' + t + '</text>';
+  }
+
+  var MODALS = window.__MODALS = (window.__MODALS || {});
+
+  MODALS.router = function () {
+    var o = tx(16, 20, 'one Router object, three concurrent requests', 'tx-2', 12.5, '500');
+    o += rect(16, 36, 200, 108, 'router');
+    o += tx(30, 58, 'Router', 'router', 13, '500');
+    o += mono(30, 80, 'stack: [ Layer, Layer ]', 'tx-3', 11.5);
+    o += mono(30, 100, 'name: \'app\'', 'tx-3', 11.5);
+    o += tx(30, 124, 'shared, immutable after boot', 'tx-3', 11);
+    for (var i = 0; i < 3; i++) {
+      var y = 36 + i * 40;
+      o += srect(268, y, 232, 32, 7);
+      o += mono(282, y + 16, 'handle() \u2014 idx = ' + i, 'acc', 11.5);
+      o += '<line x1="220" y1="90" x2="262" y2="' + (y + 16) + '" stroke="var(--bd-2)" stroke-width="1"/>';
+    }
+    o += tx(268, 172, 'one closure per request, each with its own cursor', 'tx-3', 11);
+    return {
+      title: 'Router', kind: 'the object that walks',
+      body: '<p>The Router is the only long-lived object in the system. It is built once at boot and then never mutated, which is why it can serve any number of requests at the same time.</p>' +
+        fig(s(516, 190, o)) +
+        '<p>Everything that varies per request &mdash; the cursor, the error flag, the saved <code>baseUrl</code> &mdash; is created inside <code>handle</code> and dies when the response ends. The Router itself has no idea a request is in progress.</p>' +
+        '<p>The practical consequence: you cannot inspect &ldquo;where routing currently is&rdquo; from the Router object. That information exists only on the JavaScript stack.</p>'
+    };
+  };
+
+  MODALS.layer = function () {
+    var L = new EX.Layer('/users/:id', function getUser(q, r) { }, { end: true });
+    L.match('/users/42');
+    var rows = [
+      ['<span class="m c-layer">path</span>', '<span class="m">' + "'" + L.path + "'" + '</span>', 'kept for debugging only; never matched against'],
+      ['<span class="m c-layer">regexp</span>', '<span class="m">' + L.source.replace(/</g, '&lt;') + '</span>', 'the actual matcher, compiled at registration'],
+      ['<span class="m c-layer">keys</span>', '<span class="m">[\'' + L.keys.join("', '") + '\']</span>', 'capture-group order, zipped onto params'],
+      ['<span class="m c-layer">handle</span>', '<span class="m c-fn">' + L.name + '</span>', 'a function here; a Route on a route Layer'],
+      ['<span class="m c-layer">params</span>', '<span class="m c-acc">' + JSON.stringify(L.params) + '</span>', 'overwritten on every match &mdash; per-request scratch'],
+      ['<span class="m c-layer">method</span>', '<span class="m c-mut">null</span>', 'only set on Layers inside a Route']
+    ];
+    return {
+      title: 'Layer', kind: 'the dispatch record',
+      body: '<p>A real Layer, constructed and matched against <code>/users/42</code> when this modal opened. Two of these fields are constants decided at registration; two are scratch space rewritten on every request.</p>' +
+        tbl(['field', 'value now', 'lifetime'], rows) +
+        '<p>Notice that <code>path</code> is inert. Once <code>regexp</code> and <code>keys</code> exist, the original string is never consulted again &mdash; which is why a pattern that compiles to something surprising fails silently rather than erroring.</p>'
+    };
+  };
+
+  MODALS.route = function () {
+    var r = new EX.Route('/users/:id');
+    r.add('get', function getUser() { });
+    r.add('post', function updateUser() { });
+    var probes = ['GET', 'POST', 'HEAD', 'PUT'].map(function (m) {
+      var ok = r.handlesMethod(m);
+      return [
+        '<span class="m">' + m + '</span>',
+        '<span class="pill ' + (ok ? 'p-yes' : 'p-no') + '">' + (ok ? 'dispatches' : 'no entry') + '</span>',
+        ok ? (m === 'HEAD' ? 'falls back to the <span class="c-route">get</span> entry' : 'exact entry in <span class="m">methods</span>') : 'the Router skips this Layer entirely'
+      ];
+    });
+    var o = tx(16, 18, 'route.methods', 'tx-2', 12, '500');
+    o += srect(16, 30, 150, 62, 7);
+    o += mono(30, 50, 'get: true', 'route', 11.5);
+    o += mono(30, 72, 'post: true', 'route', 11.5);
+    o += tx(196, 18, 'route.stack', 'tx-2', 12, '500');
+    o += rect(196, 30, 300, 28, 'route', 6);
+    o += mono(210, 44, 'Layer method=get \u2192 getUser', 'route', 11);
+    o += rect(196, 64, 300, 28, 'route', 6);
+    o += mono(210, 78, 'Layer method=post \u2192 updateUser', 'route', 11);
+    o += tx(16, 110, 'the map answers "should this Layer run at all"; the stack answers "which handler"', 'tx-3', 11);
+    return {
+      title: 'Route', kind: 'the method dispatcher',
+      body: '<p>A Route keeps the same information twice, for two different questions asked at two different moments.</p>' +
+        fig(s(516, 126, o)) +
+        '<p>The <code>methods</code> map is consulted by the <em>outer</em> walk, before the Layer is entered: a Route that has no entry for the request method is skipped as if its path never matched. The <code>stack</code> is walked only after that check passes.</p>' +
+        '<p>Probed live against a Route carrying GET and POST:</p>' +
+        tbl(['request method', 'outer check', 'why'], probes) +
+        '<p>That is also why an unmatched method yields 404 rather than 405 by default &mdash; the walk never learns that the path matched, only that no Layer accepted the request.</p>'
+    };
+  };
+
+  MODALS.next = function () {
+    var o = tx(16, 20, 'scope captured by next', 'tx-2', 12.5, '500');
+    o += '<rect x="16" y="34" width="484" height="150" rx="12" fill="none" stroke="var(--bd-2)" stroke-width="1" stroke-dasharray="4 4"/>';
+    o += tx(32, 52, 'Router.prototype.handle', 'router', 12, '500');
+    var vars = [['idx', 'the cursor'], ['removed', 'the trimmed url prefix'], ['parentUrl', 'the baseUrl to restore'], ['out', 'what to call when the stack ends']];
+    vars.forEach(function (v, i) {
+      var y = 68 + i * 26;
+      o += mono(32, y + 9, v[0], 'acc', 11.5);
+      o += tx(120, y + 9, v[1], 'tx-3', 11);
+    });
+    o += rect(300, 66, 184, 100, 'acc');
+    o += tx(316, 88, 'next', 'acc', 13, '500');
+    o += tx(316, 110, 'reads and writes', 'tx-3', 11);
+    o += tx(316, 128, 'every variable at left', 'tx-3', 11);
+    o += tx(316, 150, 'handed to your code', 'tx-3', 11);
+    return {
+      title: 'next', kind: 'the loop, as a closure',
+      body: '<p>There is no <code>for</code> loop anywhere in Express\u2019s router. The walk is a function that captures four local variables and is then handed to code Express does not control.</p>' +
+        fig(s(516, 198, o)) +
+        '<p>This is what makes the middleware contract unusual: your handler is holding the continuation of a loop. Three things follow directly.</p>' +
+        '<p>Calling <code>next()</code> twice runs the remainder of the stack twice, because nothing guards re-entry. Calling it after sending a response produces the &ldquo;headers already sent&rdquo; class of error, because the walk continues into handlers that assume they may still write. And never calling it stalls without any signal at all &mdash; no error is thrown because, from the runtime\u2019s point of view, nothing went wrong.</p>'
+    };
+  };
+
+  MODALS.p2r = function () {
+    var toks = EX.lex('/files/:id/*rest');
+    var map = { param: ['([^/]+?)', 'router', 'one segment, lazily &mdash; stops at the next slash'], splat: ['(.*)', 'layer', 'greedy across slashes, so it must come last'], sep: ['/', 'tx-3', 'a literal separator, not a boundary token'], lit: ['escaped text', 'tx-2', 'regexp metacharacters are escaped, not honoured'] };
+    var seen = {}, rows = [];
+    toks.forEach(function (t) {
+      if (seen[t.t]) return; seen[t.t] = 1;
+      var m = map[t.t];
+      rows.push(['<span class="m c-layer">' + t.v.replace(/</g, '&lt;') + '</span>', '<span class="m" style="color:var(--' + m[1] + ')">' + m[0].replace(/</g, '&lt;') + '</span>', m[2]]);
+    });
+    return {
+      title: 'path-to-regexp', kind: 'the registration-time compiler',
+      body: '<p>Each token type maps to exactly one regexp fragment. The table is generated by lexing <code>/files/:id/*rest</code> with the same lexer the figures use.</p>' +
+        tbl(['token', 'emits', 'matching behaviour'], rows) +
+        '<p>Two consequences worth holding onto. Because <code>:param</code> compiles to <code>([^/]+?)</code>, a value containing an encoded slash (<code>%2F</code>) <em>matches</em> and then decodes into a string containing the very character the pattern excluded. And because a splat is greedy across slashes, any pattern placed after one in the same path can never be reached.</p>' +
+        '<p>Express 5 upgraded this compiler. Patterns that were legal in Express 4 &mdash; bare <code>*</code>, unnamed groups, some regexp-ish syntax &mdash; now throw at registration rather than misbehaving at request time.</p>'
+    };
+  };
+
+  MODALS.errmode = function () {
+    var o = tx(16, 20, 'transitions', 'tx-2', 12.5, '500');
+    o += rect(30, 44, 170, 56, 'route');
+    o += tx(46, 64, 'normal mode', 'route', 13, '500');
+    o += tx(46, 84, 'runs fn.length < 4', 'tx-3', 11);
+    o += rect(310, 44, 170, 56, 'err');
+    o += tx(326, 64, 'error mode', 'err', 13, '500');
+    o += tx(326, 84, 'runs fn.length === 4', 'tx-3', 11);
+    o += '<path d="M200 62 L304 62" fill="none" stroke="var(--err)" stroke-width="1.5" marker-end="url(#mah)"/>';
+    o += mono(252, 50, 'next(err)', 'err', 11, 'middle');
+    o += '<path d="M304 86 L200 86" fill="none" stroke="var(--route)" stroke-width="1.5" marker-end="url(#mah)"/>';
+    o += mono(252, 100, 'next()', 'route', 11, 'middle');
+    o += '<defs><marker id="mah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>';
+    o += tx(16, 128, 'the return edge exists only inside a four-argument handler', 'tx-3', 11);
+    return {
+      title: 'Error mode', kind: 'a one-way flag on the walk',
+      body: '<p>Error mode is not a separate pipeline. It is the same walk over the same stack, with the eligibility test inverted.</p>' +
+        fig(s(516, 146, o)) +
+        '<p>The asymmetry matters. Entering error mode is available to any handler; leaving it is available only to a handler that already qualified as an error handler. So a stack with no four-argument function anywhere has no return edge at all &mdash; the walk runs to the end of the stack in error mode, matching nothing, and falls out to the default handler.</p>' +
+        '<p>The subtle bug this produces: adding a 404 handler as ordinary middleware at the end of the stack does nothing for errors. It has three arguments, so once error mode is on it is skipped, and the client gets the framework\u2019s default 500 page instead of anything you wrote.</p>'
+    };
+  };
+
+  MODALS.mount = function () {
+    var top = new EX.Router('app'), api = new EX.Router('api');
+    var seen = {};
+    api.get('/users/:id', function subUser(q, r) { seen.url = q.url; seen.baseUrl = q.baseUrl; seen.id = q.params.id; r.send('ok'); });
+    top.use('/api', api);
+    var out = EX.run(top, 'GET', '/api/users/9');
+    var o = tx(16, 18, 'originalUrl', 'tx-3', 11.5);
+    o += srect(16, 28, 484, 30, 6);
+    o += mono(30, 44, '/api/users/9', 'tx-2', 12.5);
+    o += tx(16, 76, 'inside the mounted router', 'tx-3', 11.5);
+    o += rect(16, 86, 150, 30, 'route', 6);
+    o += mono(30, 102, seen.baseUrl, 'route', 12.5);
+    o += rect(174, 86, 326, 30, 'acc', 6);
+    o += mono(188, 102, seen.url, 'acc', 12.5);
+    o += tx(16, 134, 'baseUrl grew by exactly what url lost \u2014 the two always concatenate back to originalUrl', 'tx-3', 11);
+    return {
+      title: 'Mounting', kind: 'string surgery on req.url',
+      body: '<p>A sub-router is reached through an ordinary <span class="t-layer">Layer</span> whose <code>handle</code> re-enters a second Router. For that inner Router to match its own patterns, the prefix it was mounted under has to be invisible to it.</p>' +
+        fig(s(516, 150, o)) +
+        '<p>Express does that by moving the matched prefix from <code>url</code> to <code>baseUrl</code> before entering, and moving it back the moment control returns. The values above were read from inside a real mounted handler when this modal opened: <code>req.params.id</code> came out as <span class="m c-acc">\'' + seen.id + '\'</span>.</p>' +
+        '<p>Because the restore happens on the way out, sibling Layers registered after the mount see the untouched URL. And because <code>originalUrl</code> is never rewritten, it stays the right thing to log.</p>'
+    };
+  };
+
+  MODALS.arity = function () {
+    var cases = [
+      ['function (a, b, c) {}', function (a, b, c) { }, 'three plain parameters'],
+      ['function (a, b, c = 1) {}', function (a, b) { }, 'counting stops at the first default'],
+      ['function (a, ...rest) {}', function (a) { }, 'a rest parameter is not counted'],
+      ['function ({ a }, [b]) {}', function (x, y) { }, 'destructuring patterns each count as one']
+    ];
+    var rows = cases.map(function (c) {
+      return ['<span class="m">' + c[0].replace(/</g, '&lt;') + '</span>', '<span class="m c-num" style="text-align:center">' + c[1].length + '</span>', c[2]];
+    });
+    return {
+      title: 'fn.length', kind: 'how the arity is computed',
+      body: '<p>Express\u2019s error-handler test is a read of a language-level property, so the rules are ECMAScript\u2019s, not Express\u2019s. <code>length</code> is the number of parameters <em>before</em> the first one that has a default value or is a rest parameter.</p>' +
+        tbl(['declaration', 'length', 'rule applied'], rows) +
+        '<p>The property is also non-writable but configurable, which is how Express itself fixes up wrapper functions: <code>Object.defineProperty(fn, \'length\', { value: 3 })</code> makes a generated wrapper look like ordinary middleware regardless of how it was written.</p>' +
+        '<p>The reason this design survives at all is that it needs no registration API. The cost is that the signal is invisible at the call site &mdash; nothing about <code>app.use(handler)</code> tells you which mode <code>handler</code> will run in.</p>'
+    };
+  };
+
+  MODALS.exec = function () {
+    var r = new EX.Router('probe');
+    r.use(function a(q, s, n) { n(); });
+    r.get('/x', function b(q, s) { s.send('ok'); });
+    var hit = EX.countExecs(function () { EX.run(r, 'GET', '/x'); });
+    var miss = EX.countExecs(function () { EX.run(r, 'GET', '/nope'); });
+    return {
+      title: 'Counting the walk', kind: 'how the cost figure is measured',
+      body: '<p>The cost figure is not a timing. Every routing decision in this document\u2019s engine passes through a single <code>Layer.match</code> call, which increments a counter before running <code>regexp.exec</code>. The number is therefore exact and identical on any machine.</p>' +
+        tbl(['probe on a two-Layer router', 'exec calls'], [
+          ['request that matches the route', '<span class="m c-num">' + hit + '</span>'],
+          ['request that matches nothing', '<span class="m c-num">' + miss + '</span>']
+        ]) +
+        '<p>Both numbers are two, and that is the point: a miss costs the same as the most expensive hit, because the walk cannot know it has failed until it has tried everything. Scale that to a few hundred routes and the miss path becomes the worst case in the application.</p>' +
+        '<p>Real Express adds work this engine does not model &mdash; header parsing, body handling, <code>Object.assign</code> on params per matched Layer. Those change the constant, not the shape: cost still tracks position in the stack.</p>'
+    };
+  };
+
+  var scrim = null;
+  function closeModal() { if (scrim) { scrim.classList.remove('open'); document.body.style.overflow = ''; } }
+  function openModal(key) {
+    var m = MODALS[key]; if (!m) return;
+    var d = m();
+    if (!scrim) {
+      scrim = document.createElement('div');
+      scrim.className = 'scrim';
+      document.body.appendChild(scrim);
+      scrim.addEventListener('click', function (e) {
+        if (e.target === scrim || e.target.closest('[data-close]')) closeModal();
+      });
+    }
+    scrim.innerHTML =
+      '<div class="modal" role="dialog" aria-modal="true">' +
+      '<div class="modal-top"><div style="flex:1"><h3>' + d.title + '</h3><div class="kind">' + d.kind + '</div></div>' +
+      '<button class="iconbtn" data-theme-toggle aria-label="Toggle theme">' +
+      '<svg class="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>' +
+      '<svg class="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg></button>' +
+      '<button class="iconbtn" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>' +
+      '<div class="modal-body">' + d.body + '</div></div>';
+    scrim.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    var mb = scrim.querySelector('.modal-body');
+    mb.scrollTop = 0;
+    if (typeof d.mount === 'function') d.mount(mb);
+  }
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-modal]');
+    if (t) { e.preventDefault(); openModal(t.dataset.modal); }
+  });
+
+  window.__EXDOC = { TERMS: TERMS, MODALS: MODALS, openModal: openModal };
+
+  window.__EXDOC.openModal = openModal;
+  if (window.FIG) FIG.init();
+  onScroll();
+})();
+
+</script>
+</body>
+</html>

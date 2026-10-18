@@ -1,0 +1,1762 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Two Renderers, One Request — Streaming in the App Router</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Geist:wght@300..700&family=JetBrains+Mono:wght@400..700&display=swap" rel="stylesheet">
+<style>
+/* ============ TOKENS ============ */
+:root{
+  --display:"Bricolage Grotesque",system-ui,sans-serif;
+  --sans:"Geist",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+
+  --c-flight:#22D3EE;   /* the RSC serializer */
+  --c-fizz:#F5A524;     /* the HTML renderer */
+  --c-stream:#A78BFA;   /* stream / chunk */
+  --c-boundary:#4ADE80; /* Suspense boundary */
+  --c-client:#F472B6;   /* client / hydration */
+  --c-ident:#60A5FA;    /* code identifiers */
+  --c-metric:#FB923C;   /* measured numbers */
+}
+html[data-theme="dark"]{
+  --bg:#04060C; --bg2:#070B14; --panel:#0A1020; --panel2:#0E1628; --raised:#131D33;
+  --line:#1B2740; --line2:#26364F;
+  --ink:#E8EEF9; --ink2:#A8B6CE; --ink3:#6F809C;
+  --glow:0 0 0 1px #1B2740, 0 18px 46px -22px #000C;
+  --codebg:#060A13; --gutter:#0B1120;
+}
+html[data-theme="light"]{
+  --bg:#F7F3E9; --bg2:#FCF9F2; --panel:#FFFDF7; --panel2:#F4EFE3; --raised:#FFFFFF;
+  --line:#E0D7C4; --line2:#CDC1A8;
+  --ink:#161B24; --ink2:#4A5568; --ink3:#7C8699;
+  --glow:0 0 0 1px #E0D7C4, 0 14px 34px -20px #2A231533;
+  --codebg:#FFFDF7; --gutter:#F2ECDE;
+  --c-flight:#077792; --c-fizz:#AF5109; --c-stream:#7C3AED;
+  --c-boundary:#147C3B; --c-client:#BE185D; --c-ident:#1D4ED8; --c-metric:#C2410C;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:var(--sans); font-size:16.5px; line-height:1.72;
+  -webkit-font-smoothing:antialiased;
+}
+html[data-theme="dark"] body{
+  background:
+    radial-gradient(1100px 620px at 78% -8%, #0C2036 0%, transparent 62%),
+    radial-gradient(820px 480px at 8% 4%, #0A1A2E 0%, transparent 58%),
+    var(--bg);
+  background-attachment:fixed;
+}
+/* scrollbars tuned down to the system */
+*::-webkit-scrollbar{width:10px;height:10px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px;border:3px solid transparent;background-clip:content-box}
+*::-webkit-scrollbar-thumb:hover{background:var(--line2);background-clip:content-box}
+*{scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+
+/* ============ CHROME ============ */
+.topnav{
+  position:fixed; top:0; left:0; right:0; z-index:60;
+  display:flex; align-items:center; gap:14px;
+  padding:11px 22px; background:color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter:blur(14px); border-bottom:1px solid var(--line);
+  transition:top .28s ease;
+}
+.topnav[data-hidden="1"]{top:-64px}
+.brand{font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:-.01em;white-space:nowrap}
+.brand span{color:var(--c-flight)}
+.navspace{flex:1}
+.seg{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:2px;gap:2px}
+.seg button{
+  font-family:var(--sans);font-size:12.5px;font-weight:500;color:var(--ink3);
+  background:transparent;border:0;border-radius:7px;padding:5px 11px;cursor:pointer;
+  transition:background .16s,color .16s;white-space:nowrap;
+}
+.seg button:hover{color:var(--ink2)}
+.seg.mini{padding:1px}
+.seg.mini button{padding:3px 9px;font-size:11.5px}
+.seg button[aria-pressed="true"]{background:var(--raised);color:var(--ink)}
+.iconbtn{
+  background:var(--panel);border:1px solid var(--line);border-radius:9px;
+  width:34px;height:32px;cursor:pointer;color:var(--ink2);font-size:14px;
+  display:grid;place-items:center;transition:background .16s;
+}
+.iconbtn:hover{background:var(--raised);color:var(--ink)}
+.navlbl{font-size:11px;color:var(--ink3);font-weight:500;letter-spacing:.01em}
+@media(max-width:860px){.navlbl,.brand{display:none}}
+@media(max-width:720px){.seg button{padding:5px 8px;font-size:11.5px}.topnav{padding:9px 12px;gap:8px}}
+
+.skip{position:absolute;left:-9999px;top:0;background:var(--raised);color:var(--ink);padding:10px 16px;border-radius:8px;z-index:99}
+.skip:focus{left:12px;top:56px}
+
+/* ============ LAYOUT ============ */
+main{max-width:960px;margin:0 auto;padding:104px 26px 140px;display:flex;flex-direction:column}
+@media(max-width:720px){main{padding:92px 15px 100px}}
+section{margin:0 0 72px;scroll-margin-top:86px}
+
+/* reading-mode ordering + emphasis */
+body[data-mode="ladder"]    section[data-lad]{order:var(--lad)}
+body[data-mode="renderers"] section[data-ren]{order:var(--ren)}
+body[data-mode="request"]   section[data-req]{order:var(--req)}
+body[data-mode="ladder"]    section[data-lad="off"],
+body[data-mode="renderers"] section[data-ren="off"],
+body[data-mode="request"]   section[data-req="off"]{opacity:.34}
+section[data-lad="off"]:hover,section[data-ren="off"]:hover,section[data-req="off"]:hover{opacity:1;transition:opacity .3s}
+
+h1{font-family:var(--display);font-size:clamp(33px,5.4vw,54px);line-height:1.04;letter-spacing:-.035em;font-weight:700;margin:0 0 18px}
+h2{font-family:var(--display);font-size:clamp(23px,3.4vw,31px);line-height:1.18;letter-spacing:-.025em;font-weight:600;margin:0 0 18px}
+h3{font-family:var(--display);font-size:18.5px;letter-spacing:-.015em;font-weight:600;margin:34px 0 12px}
+p{margin:0 0 17px;max-width:74ch}
+.lede{font-size:19.5px;line-height:1.62;color:var(--ink2);max-width:70ch}
+ul.pts{margin:0 0 18px;padding:0;list-style:none;max-width:74ch}
+ul.pts li{position:relative;padding-left:19px;margin-bottom:9px}
+ul.pts li::before{content:"";position:absolute;left:3px;top:.72em;width:5px;height:5px;border-radius:2px;background:var(--line2)}
+
+/* concept colour carried by the prose itself */
+.k-flight{color:var(--c-flight);font-weight:550}
+.k-fizz{color:var(--c-fizz);font-weight:550}
+.k-stream{color:var(--c-stream);font-weight:550}
+.k-bound{color:var(--c-boundary);font-weight:550}
+.k-client{color:var(--c-client);font-weight:550}
+.num{color:var(--c-metric);font-weight:600;font-variant-numeric:tabular-nums}
+
+/* annotated inline code — chip outline + colour, no underline */
+code.t{
+  font-family:var(--mono);font-size:.87em;background:var(--panel2);
+  border:1px solid var(--line);border-radius:5px;padding:.1em .38em;
+  color:var(--c-ident);cursor:pointer;white-space:nowrap;
+  transition:border-color .15s,background .15s;
+}
+code.t:hover{border-color:var(--line2);background:var(--raised)}
+code.t:focus-visible{outline:2px solid var(--c-ident);outline-offset:1px}
+code.t[data-c="flight"]{color:var(--c-flight)} code.t[data-c="fizz"]{color:var(--c-fizz)}
+code.t[data-c="stream"]{color:var(--c-stream)} code.t[data-c="bound"]{color:var(--c-boundary)}
+code.t[data-c="client"]{color:var(--c-client)} code.t[data-c="metric"]{color:var(--c-metric)}
+code.p{font-family:var(--mono);font-size:.87em;color:var(--ink2);background:var(--panel2);border-radius:5px;padding:.1em .38em}
+
+/* ============ POPOVER ============ */
+.pop{
+  position:absolute;z-index:80;width:min(370px,calc(100vw - 28px));
+  background:var(--panel);border:1px solid var(--line2);border-radius:13px;
+  box-shadow:0 22px 60px -18px #000A, var(--glow);padding:14px 16px;
+  font-size:14px;line-height:1.6;color:var(--ink2);
+  opacity:0;transform:translateY(5px);pointer-events:none;transition:opacity .15s,transform .15s;
+}
+.pop[data-open="1"]{opacity:1;transform:translateY(0);pointer-events:auto}
+.pop h4{font-family:var(--display);font-size:14px;margin:0 0 3px;font-weight:650;letter-spacing:-.01em}
+.pop .kind{font-size:10.5px;color:var(--ink3);margin:0 0 9px;font-weight:500}
+.pop p{margin:0 0 9px;max-width:none;font-size:13.7px}
+.pop p:last-child{margin:0}
+.pop code{font-family:var(--mono);font-size:.9em;color:var(--c-ident)}
+.pop .x{position:absolute;top:8px;right:9px;background:none;border:0;color:var(--ink3);cursor:pointer;font-size:15px;line-height:1;padding:3px}
+.pop .x:hover{color:var(--ink)}
+
+/* ============ PANELS / FIGURES ============ */
+.fig{
+  background:var(--panel);border:1px solid var(--line);border-radius:15px;
+  margin:26px 0;box-shadow:var(--glow);overflow:hidden;
+}
+.fig-head{
+  display:flex;align-items:center;gap:9px;padding:10px 13px;
+  border-bottom:1px solid var(--line);background:var(--panel2);flex-wrap:wrap;
+}
+.fig-title{font-family:var(--display);font-size:13.5px;font-weight:600;color:var(--ink2);letter-spacing:-.01em}
+.fig-sp{flex:1}
+.ctl{display:flex;gap:4px;align-items:center}
+.ctl button{
+  background:var(--raised);border:1px solid var(--line);color:var(--ink2);
+  border-radius:7px;min-width:30px;height:27px;padding:0 8px;cursor:pointer;
+  font-size:11.5px;font-family:var(--sans);display:grid;place-items:center;transition:background .15s,color .15s;
+}
+.ctl button:hover:not(:disabled){background:var(--panel2);color:var(--ink)}
+.ctl button:disabled{opacity:.34;cursor:default}
+.ticks{display:flex;gap:3px;align-items:center;margin:0 4px}
+.ticks i{width:14px;height:3px;border-radius:2px;background:var(--line2);transition:background .2s}
+.ticks i[data-on="1"]{background:var(--c-stream)}
+.fig-body{padding:16px 14px}
+.fig svg{display:block;margin:0 auto;max-width:100%;height:auto;overflow:visible}
+.cap{
+  font-size:13px;color:var(--ink2);padding:11px 15px;border-top:1px solid var(--line);
+  background:var(--panel2);min-height:42px;line-height:1.6;
+}
+.cap b{color:var(--ink);font-weight:600}
+
+/* svg helpers */
+.s-lbl{font-family:var(--sans);font-size:11.5px;fill:var(--ink2)}
+.s-sub{font-family:var(--sans);font-size:10.5px;fill:var(--ink3)}
+.s-mono{font-family:var(--mono);font-size:11px;fill:var(--ink2)}
+.s-ttl{font-family:var(--display);font-size:12.5px;font-weight:600;fill:var(--ink)}
+.s-num{font-family:var(--mono);font-size:11px;fill:var(--c-metric);font-weight:600}
+.s-box{fill:var(--panel2);stroke:var(--line2);stroke-width:1}
+.s-dim{opacity:.2;transition:opacity .34s}
+.s-off{opacity:0;transition:opacity .34s;pointer-events:none}
+.s-lit{opacity:1;transition:opacity .34s}
+.s-hit{cursor:pointer}
+.s-hit:focus,.s-hit:focus-visible{outline:none}
+.s-hit .s-box{
+  stroke:color-mix(in srgb,var(--c-ident) 38%,var(--line2));
+  transition:stroke .16s,stroke-width .16s,fill .16s;
+}
+.s-hit:hover .s-box{stroke:var(--c-ident);stroke-width:1.4}
+.s-hit:focus-visible .s-box{
+  stroke:var(--c-ident);stroke-width:2;
+  fill:color-mix(in srgb,var(--c-ident) 12%,var(--panel2));
+}
+.s-hit:active .s-box{fill:color-mix(in srgb,var(--c-ident) 20%,var(--panel2))}
+
+/* ============ CODE PANE ============ */
+.pane{background:var(--codebg);border:1px solid var(--line);border-radius:13px;margin:22px 0;overflow:hidden;box-shadow:var(--glow)}
+.pane-head{display:flex;align-items:center;gap:8px;padding:8px 13px;border-bottom:1px solid var(--line);background:var(--panel2)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--line2)}
+.pane-file{font-family:var(--mono);font-size:11.5px;color:var(--ink3)}
+.pane-grid{display:grid;grid-template-columns:1fr;gap:0}
+.pane-grid[data-ann="1"]{grid-template-columns:minmax(0,1.8fr) minmax(0,1fr)}
+@media(max-width:860px){.pane-grid[data-ann="1"]{grid-template-columns:1fr}}
+.codewrap{padding:12px 0;overflow-x:hidden;background:linear-gradient(to right,var(--gutter) 0 44px,transparent 44px)}
+pre.code{margin:0;font-family:var(--mono);font-size:13px;line-height:1.72;counter-reset:ln}
+pre.code .l{
+  display:block;position:relative;padding:0 14px 0 56px;
+  white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;
+}
+pre.code .l::before{
+  counter-increment:ln;content:counter(ln);
+  position:absolute;left:0;top:0;width:44px;padding-right:11px;text-align:right;
+  color:var(--ink3);opacity:.55;font-size:11.5px;user-select:none;
+}
+pre.code .l[data-hl="1"]{background:color-mix(in srgb,var(--c-stream) 13%,transparent)}
+.anns{border-left:1px solid var(--line);padding:12px 13px;display:flex;flex-direction:column;gap:9px}
+@media(max-width:860px){.anns{border-left:0;border-top:1px solid var(--line)}}
+.ann{font-size:12.6px;line-height:1.55;color:var(--ink2);padding-left:10px;border-left:2px solid var(--line2)}
+.ann b{display:block;font-family:var(--mono);font-size:11px;font-weight:600;margin-bottom:1px}
+.ann[data-c="flight"]{border-color:var(--c-flight)} .ann[data-c="flight"] b{color:var(--c-flight)}
+.ann[data-c="fizz"]{border-color:var(--c-fizz)} .ann[data-c="fizz"] b{color:var(--c-fizz)}
+.ann[data-c="stream"]{border-color:var(--c-stream)} .ann[data-c="stream"] b{color:var(--c-stream)}
+.ann[data-c="bound"]{border-color:var(--c-boundary)} .ann[data-c="bound"] b{color:var(--c-boundary)}
+.ann[data-c="client"]{border-color:var(--c-client)} .ann[data-c="client"] b{color:var(--c-client)}
+
+/* token palette */
+/* protocol roles - one meaning per colour, everywhere in the document */
+.r-mech{color:var(--c-flight)}   /* the $ family: references and markers */
+.r-id{color:var(--c-ident)}      /* row ids, boundary ids */
+.r-tag{color:var(--c-fizz)}      /* tag and type names */
+.r-key{color:var(--c-stream)}    /* keys and attributes */
+.r-pend{color:var(--c-metric)}   /* outstanding */
+.r-done{color:var(--c-boundary)} /* settled */
+.r-punc{color:var(--ink3)}       /* structure */
+.rmk{color:var(--c-flight);font-weight:650}
+.rid{color:var(--c-ident);font-weight:600}
+.rolekey{display:flex;flex-wrap:wrap;gap:7px 16px;margin:20px 0;padding:13px 15px;
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;font-size:12.6px}
+.rolekey span{display:inline-flex;align-items:center;gap:6px;color:var(--ink2)}
+.rolekey i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.rolekey b{font-family:var(--mono);font-weight:500;font-size:12px}
+.kw{color:#C084FC} .kwc{color:#F472B6} .fn{color:#60A5FA} .cls{color:#FBBF24}
+.str{color:#4ADE80} .numl{color:#FB923C} .prop{color:#7DD3FC} .meth{color:#38BDF8}
+.par{color:#E8EEF9} .cmt{color:#64748B;font-style:normal} .pun{color:#64748B} .cst{color:#F0ABFC}
+html[data-theme="light"] .kw{color:#7E22CE} html[data-theme="light"] .kwc{color:#BE185D}
+html[data-theme="light"] .fn{color:#1D4ED8} html[data-theme="light"] .cls{color:#A16207}
+html[data-theme="light"] .str{color:#15803D} html[data-theme="light"] .numl{color:#C2410C}
+html[data-theme="light"] .prop{color:#0369A1} html[data-theme="light"] .meth{color:#027AB9}
+html[data-theme="light"] .par{color:#161B24} html[data-theme="light"] .cmt{color:#8A8271}
+html[data-theme="light"] .pun{color:#8A8271} html[data-theme="light"] .cst{color:#A21CAF}
+
+/* ============ TABLES ============ */
+.tbl{width:100%;border-collapse:collapse;margin:22px 0;font-size:13.6px;display:block;overflow-x:auto}
+.tbl th{
+  text-align:left;font-family:var(--sans);font-size:11.5px;font-weight:600;color:var(--ink3);
+  padding:9px 12px;border-bottom:1px solid var(--line2);white-space:nowrap;
+}
+.tbl td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink2)}
+.tbl tr:last-child td{border-bottom:0}
+.tbl code{font-family:var(--mono);font-size:12.2px}
+.tbl .w{color:var(--c-flight)} .tbl .h{color:var(--c-fizz)} .tbl .v{color:var(--c-stream)}
+
+/* ============ CALLOUT ============ */
+.note{
+  border:1px solid var(--line);border-left:3px solid var(--c-metric);
+  background:var(--panel);border-radius:0 12px 12px 0;padding:14px 17px;margin:24px 0;
+  font-size:14.4px;color:var(--ink2);
+}
+.note h4{font-family:var(--display);font-size:13.5px;margin:0 0 6px;color:var(--ink);font-weight:650}
+.note p{margin:0 0 8px;max-width:none;font-size:14.2px}
+.note p:last-child{margin:0}
+.note[data-c="bound"]{border-left-color:var(--c-boundary)}
+.note[data-c="stream"]{border-left-color:var(--c-stream)}
+
+/* ============ MODAL ============ */
+.scrim{
+  position:fixed;inset:0;z-index:90;background:#020408CC;backdrop-filter:blur(5px);
+  display:grid;place-items:center;padding:22px;opacity:0;pointer-events:none;transition:opacity .2s;
+}
+html[data-theme="light"] .scrim{background:#2A231566}
+.scrim[data-open="1"]{opacity:1;pointer-events:auto}
+.modal{
+  background:var(--bg2);border:1px solid var(--line2);border-radius:17px;
+  width:min(720px,100%);max-height:min(84vh,780px);display:flex;flex-direction:column;
+  box-shadow:0 34px 90px -26px #000C;transform:scale(.975);transition:transform .2s;
+}
+.scrim[data-open="1"] .modal{transform:scale(1)}
+.modal-head{display:flex;align-items:center;gap:10px;padding:15px 18px;border-bottom:1px solid var(--line)}
+.modal-head h3{margin:0;font-size:16.5px;font-family:var(--display);letter-spacing:-.015em}
+.modal-kind{font-size:11px;color:var(--ink3);font-family:var(--mono)}
+.modal-body{padding:17px 19px 22px;overflow-y:auto}
+.modal-body p{font-size:14.6px;max-width:none}
+.modal-body .pane{margin:15px 0}
+.modal-body .tbl{font-size:13px;display:table;table-layout:fixed}
+.modal-body .tbl th{white-space:normal;width:34%}
+.modal-body p{margin:0 0 13px}
+.mfig{margin:18px 0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 12px 11px}
+.mfig svg{display:block;margin:0 auto;max-width:100%;height:auto;overflow:visible}
+.mfig figcaption{font-size:12.3px;color:var(--ink3);text-align:center;margin:11px auto 0;line-height:1.5;max-width:56ch}
+.pane.mout .codewrap{background:none}
+.pane.mout pre.code .l{padding-left:14px}
+.pane.mout pre.code .l::before{content:"";width:0;padding:0}
+
+/* ============ MISC ============ */
+.rail{position:fixed;left:0;top:0;height:3px;background:linear-gradient(90deg,var(--c-flight),var(--c-stream),var(--c-fizz));z-index:70;width:0;transition:width .1s}
+footer{border-top:1px solid var(--line);padding-top:30px;margin-top:20px;color:var(--ink3);font-size:13.5px}
+footer a{color:var(--c-ident);text-decoration:none}
+footer a:hover{text-decoration:underline}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+:focus-visible{outline:2px solid var(--c-ident);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition-duration:.01ms!important}}
+body[data-runtime="web"] [data-rt="node"]{display:none}
+body[data-runtime="node"] [data-rt="web"]{display:none}
+.marching{stroke-dasharray:5 4;animation:march .85s linear infinite}
+@keyframes march{to{stroke-dashoffset:-18}}
+</style>
+</head>
+<body data-mode="ladder" data-runtime="web">
+<a class="skip" href="#start">Skip to content</a>
+<div class="rail" id="rail"></div>
+
+<nav class="topnav" id="topnav">
+  <div class="brand">Part 1 &mdash; <span>Streaming in the App Router</span></div>
+  <div class="navspace"></div>
+  <span class="navlbl">Reading path</span>
+  <div class="seg" role="group" aria-label="Reading path">
+    <button data-mode-btn="ladder" aria-pressed="true">Protocol ladder</button>
+    <button data-mode-btn="renderers" aria-pressed="false">Two renderers</button>
+    <button data-mode-btn="request" aria-pressed="false">One request</button>
+  </div>
+  <button class="iconbtn" id="themebtn" aria-label="Switch theme" title="Switch theme">◐</button>
+</nav>
+
+<div class="pop" id="pop" role="dialog" aria-live="polite">
+  <button class="x" id="popx" aria-label="Close">✕</button>
+  <h4 id="poph"></h4><p class="kind" id="popk"></p><div id="popb"></div>
+</div>
+
+<div class="scrim" id="scrim" role="dialog" aria-modal="true" aria-labelledby="mh">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="mh"></h3><span class="modal-kind" id="mk"></span>
+      <div class="fig-sp"></div>
+      <button class="iconbtn" id="mtheme" aria-label="Switch theme">◐</button>
+      <button class="iconbtn" id="mx" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="mb"></div>
+  </div>
+</div>
+
+<main id="start">
+<section id="s1" data-lad data-ren data-req style="--lad:1;--ren:1;--req:1">
+<h1>Two renderers,<br>one request</h1>
+<p class="lede">An App Router page is rendered twice, by two different programs, into two different wire formats, over one HTTP response. Neither of them produces a string. Both produce a <span class="k-stream">stream</span> whose chunks arrive in the order the work finishes — not the order the markup was written.</p>
+
+<p>The name <code class="t" data-c="ident" data-k="rtrs">renderToReadableStream</code> is exported by two separate packages, and they do unrelated jobs. <code class="p">react-server-dom-webpack/server</code> exports the one that serializes a React tree into the <span class="k-flight">Flight</span> payload. <code class="p">react-dom/server</code> exports the one that renders a React tree into <span class="k-fizz">HTML</span>. Next.js produces both on a single request, but they are not one pipeline. Flight renders the <span class="k-flight">component and data model</span>; Fizz renders the <span class="k-fizz">HTML the browser paints</span>. Fizz never reads Flight rows &mdash; a <span class="k-client">decoder</span> sits between them, rebuilding an element tree from the wire.</p>
+
+<p>Everything on this page was measured, not recalled. The traces below came out of React <code class="p">19.3.0</code> running in a container, and the probe scripts are printed alongside their output so you can re-run them.</p>
+
+<div class="fig" id="fig-claim">
+  <div class="fig-head">
+    <span class="fig-title">The same tree, both renderers, same inversion</span>
+    <div class="fig-sp"></div>
+    <div class="ctl" data-stepper="claim">
+      <button data-act="reset" title="Reset">↺</button>
+      <button data-act="prev" title="Previous">‹</button>
+      <button data-act="play" title="Play">▶</button>
+      <button data-act="next" title="Next">›</button>
+      <span class="ticks" data-ticks></span>
+    </div>
+  </div>
+  <div class="fig-body"><div id="fig-claim-svg"></div></div>
+  <div class="cap" data-cap>Two <span class="k-bound">Suspense boundaries</span>. <b>B</b> is written first and resolves in <span class="num">60ms</span>; <b>A</b> is written second and resolves in <span class="num">20ms</span>. Step through to watch both renderers ship A before B.</div>
+</div>
+
+<p>That inversion is the whole argument. A <span class="k-stream">stream</span> is not a slower array — it is a structure whose ordering is determined by completion rather than by position. Every mechanism on this page exists to make that safe: forward references in the Flight rows, placeholder comments in the HTML, and a tiny inline runtime that moves DOM nodes into place after the fact.</p>
+</section>
+
+<section id="s2" data-lad data-ren="off" data-req="off" style="--lad:2;--ren:8;--req:10">
+<h2>The protocol underneath is the one you already know</h2>
+<p>Before any React machinery, the shape. A <code class="t" data-k="rs">ReadableStream</code> is consumed through a reader, and the reader's <code class="t" data-k="read">read()</code> returns a promise for exactly the object an iterator returns.</p>
+
+<div class="pane">
+  <div class="pane-head"><i class="dot"></i><span class="pane-file">probe/streams.mjs — reader vs iterator</span></div>
+  <div class="pane-grid" data-ann="1">
+    <div class="codewrap"><pre class="code"><span class="l"><span class="kw">const</span> <span class="par">rs</span> <span class="pun">=</span> <span class="kw">new</span> <span class="cls">ReadableStream</span><span class="pun">({</span></span><span class="l">  <span class="meth">start</span><span class="pun">(</span><span class="par">c</span><span class="pun">){</span> <span class="par">c</span><span class="pun">.</span><span class="meth">enqueue</span><span class="pun">(</span><span class="str">'a'</span><span class="pun">);</span> <span class="par">c</span><span class="pun">.</span><span class="meth">enqueue</span><span class="pun">(</span><span class="str">'b'</span><span class="pun">);</span> <span class="par">c</span><span class="pun">.</span><span class="meth">close</span><span class="pun">();</span> <span class="pun">}</span></span><span class="l"><span class="pun">});</span></span><span class="l"><span class="kw">const</span> <span class="par">rd</span> <span class="pun">=</span> <span class="par">rs</span><span class="pun">.</span><span class="meth">getReader</span><span class="pun">();</span></span><span class="l"><span class="kw">await</span> <span class="par">rd</span><span class="pun">.</span><span class="meth">read</span><span class="pun">();</span></span><span class="l"></span><span class="l"><span class="kw">function</span><span class="pun">*</span> <span class="fn">g</span><span class="pun">(){</span> <span class="kwc">yield</span> <span class="str">'a'</span><span class="pun">;</span> <span class="kwc">yield</span> <span class="str">'b'</span><span class="pun">;</span> <span class="pun">}</span></span><span class="l"><span class="kw">const</span> <span class="par">it</span> <span class="pun">=</span> <span class="fn">g</span><span class="pun">()[</span><span class="cst">Symbol</span><span class="pun">.</span><span class="prop">iterator</span><span class="pun">]();</span></span><span class="l"><span class="par">it</span><span class="pun">.</span><span class="meth">next</span><span class="pun">();</span></span></pre></div>
+    <div class="anns">
+      <div class="ann" data-c="stream"><b>getReader()</b>Takes an exclusive lock on the stream. While a reader is held, nothing else may read it — the same single-consumer constraint an iterator has.</div>
+      <div class="ann" data-c="stream"><b>read()</b>Returns <code>Promise&lt;{value, done}&gt;</code>. Not <code>{value, done}</code> wrapped in a promise by convenience — this <em>is</em> the async iterator result contract.</div>
+      <div class="ann" data-c="stream"><b>Symbol.iterator</b>The generator's iterator returns the same record synchronously. The two protocols differ in timing, not in shape.</div>
+    </div>
+  </div>
+</div>
+
+<p>The measured output makes the equivalence literal:</p>
+
+<div class="pane">
+  <div class="pane-head"><i class="dot"></i><span class="pane-file">stdout</span></div>
+  <div class="codewrap"><pre class="code"><span class="l"><span class="cmt">READER  </span> <span class="pun">{</span><span class="prop">"value"</span><span class="pun">:</span><span class="str">"a"</span><span class="pun">,</span><span class="prop">"done"</span><span class="pun">:</span><span class="kw">false</span><span class="pun">}</span> <span class="pun">{</span><span class="prop">"value"</span><span class="pun">:</span><span class="str">"b"</span><span class="pun">,</span><span class="prop">"done"</span><span class="pun">:</span><span class="kw">false</span><span class="pun">}</span> <span class="pun">{</span><span class="prop">"done"</span><span class="pun">:</span><span class="kw">true</span><span class="pun">}</span></span><span class="l"><span class="cmt">ITERATOR</span> <span class="pun">{</span><span class="prop">"value"</span><span class="pun">:</span><span class="str">"a"</span><span class="pun">,</span><span class="prop">"done"</span><span class="pun">:</span><span class="kw">false</span><span class="pun">}</span> <span class="pun">{</span><span class="prop">"value"</span><span class="pun">:</span><span class="str">"b"</span><span class="pun">,</span><span class="prop">"done"</span><span class="pun">:</span><span class="kw">false</span><span class="pun">}</span> <span class="pun">{</span><span class="prop">"done"</span><span class="pun">:</span><span class="kw">true</span><span class="pun">}</span></span><span class="l"><span class="cmt">async-iterable?</span> <span class="str">function</span></span></pre></div>
+</div>
+
+<p>That last line matters for the rest of the page. <code class="t" data-k="asyncit">ReadableStream.prototype[Symbol.asyncIterator]</code> is a function in Node 22, so a Flight or HTML stream can be driven by <code class="p">for await…of</code> directly. Browser support is still uneven, which is why React's own code paths use <code class="t" data-k="read">read()</code> loops rather than <code class="p">for await</code>.</p>
+
+<div class="note" data-c="stream">
+<h4>Where this sits relative to the async series</h4>
+<p>If you have read <em>From Loop to Iterator to Stream</em>, this is the same ladder one rung higher: the middle now holds bytes instead of values, and the party that moves it is the network. A <code class="p">ReadableStream</code> is an async iterator with a queue, a high-water mark, and a cancellation channel bolted on.</p>
+</div>
+</section>
+
+<section id="s3" data-lad data-ren data-req style="--lad:3;--ren:2;--req:4">
+<h2>Flight: serializing a tree into rows</h2>
+<p>The <span class="k-flight">Flight</span> renderer does not produce HTML. It produces a newline-delimited sequence of numbered <span class="k-flight">rows</span>, each one a fragment of a serialized React tree. Its output content type is <code class="p">text/x-component</code>.</p>
+
+<p>The format is deliberately flat. A React tree is a graph, and a graph cannot be streamed as a nested literal — you would have to finish the deepest child before you could close the root. Flight solves this by emitting the root immediately with <span class="k-flight">forward references</span> to rows that do not exist yet, then emitting those rows as their work completes.</p>
+
+<div class="fig" id="fig-rows">
+  <div class="fig-head">
+    <span class="fig-title">A tree becomes rows with forward references</span>
+    <div class="fig-sp"></div>
+    <div class="ctl" data-stepper="rows">
+      <button data-act="reset" title="Reset">↺</button>
+      <button data-act="prev" title="Previous">‹</button>
+      <button data-act="play" title="Play">▶</button>
+      <button data-act="next" title="Next">›</button>
+      <span class="ticks" data-ticks></span>
+    </div>
+  </div>
+  <div class="fig-body"><div id="fig-rows-svg"></div></div>
+  <div class="cap" data-cap>Click any row or node for its own breakdown.</div>
+</div>
+
+<div class="rolekey" aria-label="Colour key for wire-format roles">
+<span><i style="background:var(--c-flight)"></i><b>$</b> mechanism &mdash; references and markers</span>
+<span><i style="background:var(--c-ident)"></i><b>id</b> row and boundary ids</span>
+<span><i style="background:var(--c-fizz)"></i><b>tag</b> tag and type names</span>
+<span><i style="background:var(--c-stream)"></i><b>key</b> keys and attributes</span>
+<span><i style="background:var(--c-boundary)"></i><b>settled</b></span>
+<span><i style="background:var(--c-metric)"></i><b>outstanding</b></span>
+</div>
+<h3>The row grammar</h3>
+<p>Every row is <code class="p">id:payload\n</code>, where <code class="p">id</code> is a hexadecimal chunk number. The payload is JSON, except that strings beginning with <code class="p">$</code> are escape sequences. This is the full set as measured from a single render that deliberately contained one of every type:</p>
+
+<div class="pane">
+  <div class="pane-head"><i class="dot"></i><span class="pane-file">probe/types.mjs — output, NODE_ENV=production</span></div>
+  <div class="pane-grid" data-ann="1">
+  <div class="codewrap"><pre class="code"><span class="l"><span class="numl">1</span><span class="pun">:</span><span class="pun">[[</span><span class="str">"k"</span><span class="pun">,</span><span class="numl">1</span><span class="pun">]]</span></span><span class="l"><span class="numl">2</span><span class="pun">:</span><span class="pun">[</span><span class="numl">1</span><span class="pun">,</span><span class="numl">2</span><span class="pun">]</span></span><span class="l"><span class="rid">4</span><span class="pun">:</span><span class="cls">o</span><span class="numl">3</span><span class="pun">,</span><span class="cmt">\x01\x02\x03</span></span><span class="l"><span class="numl">0</span><span class="pun">:{</span><span class="prop">"str"</span><span class="pun">:</span><span class="str">"plain"</span><span class="pun">,</span><span class="prop">"num"</span><span class="pun">:</span><span class="numl">42</span><span class="pun">,</span><span class="prop">"bool"</span><span class="pun">:</span><span class="kw">true</span><span class="pun">,</span><span class="prop">"nul"</span><span class="pun">:</span><span class="kw">null</span><span class="pun">,</span></span><span class="l">   <span class="prop">"undef"</span><span class="pun">:</span><span class="str">"$undefined"</span><span class="pun">,</span><span class="prop">"big"</span><span class="pun">:</span><span class="str">"$n10"</span><span class="pun">,</span></span><span class="l">   <span class="prop">"date"</span><span class="pun">:</span><span class="str">"$D2026-01-02T03:04:05.000Z"</span><span class="pun">,</span></span><span class="l">   <span class="prop">"map"</span><span class="pun">:</span><span class="str">"$Q1"</span><span class="pun">,</span><span class="prop">"set"</span><span class="pun">:</span><span class="str">"$W2"</span><span class="pun">,</span><span class="prop">"arr"</span><span class="pun">:[</span><span class="numl">1</span><span class="pun">,</span><span class="str">"two"</span><span class="pun">],</span></span><span class="l">   <span class="prop">"inf"</span><span class="pun">:</span><span class="str">"$Infinity"</span><span class="pun">,</span><span class="prop">"nan"</span><span class="pun">:</span><span class="str">"$NaN"</span><span class="pun">,</span><span class="prop">"neg0"</span><span class="pun">:</span><span class="str">"$-0"</span><span class="pun">,</span></span><span class="l">   <span class="prop">"dollarEscape"</span><span class="pun">:</span><span class="str">"$$literal"</span><span class="pun">,</span><span class="prop">"promise"</span><span class="pun">:</span><span class="str">"$@3"</span><span class="pun">,</span><span class="prop">"typed"</span><span class="pun">:</span><span class="str">"$4"</span><span class="pun">}</span></span><span class="l"><span class="numl">3</span><span class="pun">:</span><span class="str">"resolved"</span></span></pre></div>
+    <div class="anns">
+      <div class="ann" data-c="flight"><b>rows 1, 2 and 4 first</b>Sub-values are written as the serializer meets them, so they land <em>before</em> the root that references them. Arrival order carries no structure.</div>
+      <div class="ann" data-c="stream"><b>the $ family</b>Every value JSON cannot express gets a tag: <code>$Q</code> Map, <code>$W</code> Set, <code>$D</code> Date, <code>$n</code> BigInt, <code>$@</code> promise. A literal leading <code>$</code> is escaped by doubling it.</div>
+      <div class="ann" data-c="metric"><b>4:o3,\x01\x02\x03</b>The binary row: tag <code>o</code>, byte length <code>3</code>, then the bytes themselves. Bytes <code>0x01 0x02 0x03</code> have no printable form, so they are shown here as escapes &mdash; on the wire they are three raw bytes, not twelve characters.</div>
+      <div class="ann" data-c="bound"><b>3:"resolved" last</b>The only row that had to wait. Everything else was synchronously available while the root was being walked.</div>
+    </div>
+  </div>
+</div>
+
+<table class="tbl">
+<thead><tr><th>JavaScript value</th><th>Wire encoding</th><th>Mechanism</th></tr></thead>
+<tbody>
+<tr><td><code>undefined</code></td><td><code><span class="r-punc">"</span><span class="r-mech">$undefined</span><span class="r-punc">"</span></code></td><td>JSON has no <code>undefined</code>; a sentinel string stands in</td></tr>
+<tr><td><code>10n</code></td><td><code><span class="r-punc">"</span><span class="r-mech">$n</span>10<span class="r-punc">"</span></code></td><td>BigInt, decimal digits after the tag</td></tr>
+<tr><td><code>new Date(&hellip;)</code></td><td><code><span class="r-punc">"</span><span class="r-mech">$D</span>2026-01-02T&hellip;<span class="r-punc">"</span></code></td><td>ISO string after the tag</td></tr>
+<tr><td><code>new Map([&hellip;])</code></td><td><code><span class="r-punc">"</span><span class="r-mech">$Q</span><span class="r-id">1</span><span class="r-punc">"</span></code></td><td>Reference to row <span class="r-id">1</span>, which holds the entry array</td></tr>
+<tr><td><code>new Set([&hellip;])</code></td><td><code><span class="r-punc">"</span><span class="r-mech">$W</span><span class="r-id">2</span><span class="r-punc">"</span></code></td><td>Reference to row <span class="r-id">2</span>, which holds the member array</td></tr>
+<tr><td><code>Infinity</code> / <code>NaN</code> / <code>-0</code></td><td><code><span class="r-punc">"</span><span class="r-mech">$Infinity</span><span class="r-punc">" "</span><span class="r-mech">$NaN</span><span class="r-punc">" "</span><span class="r-mech">$-0</span><span class="r-punc">"</span></code></td><td>Values JSON cannot round-trip</td></tr>
+<tr><td><code>Uint8Array</code></td><td><code><span class="r-punc">"</span><span class="r-mech">$</span><span class="r-id">4</span><span class="r-punc">" &rarr; </span><span class="r-id">4</span><span class="r-punc">:</span><span class="r-tag">o</span>3<span class="r-punc">,</span><span class="r-punc">\x01\x02\x03</span></code></td><td>Binary row: tag <span class="r-tag">o</span>, byte length <code>3</code>, then the raw bytes. Bytes <code>0x01 0x02 0x03</code> have no printable form, so they are shown as escapes; on the wire they are three raw bytes</td></tr>
+<tr><td>a <code>Promise</code></td><td><code><span class="r-punc">"</span><span class="r-mech">$@</span><span class="r-id">3</span><span class="r-punc">"</span></code></td><td>Row <span class="r-id">3</span> is written when the promise settles</td></tr>
+<tr><td>a pending element</td><td><code><span class="r-punc">"</span><span class="r-mech">$L</span><span class="r-id">2</span><span class="r-punc">"</span></code></td><td>Lazy reference &mdash; row <span class="r-id">2</span> arrives later</td></tr>
+<tr><td><code>Symbol.for('react.suspense')</code></td><td><code><span class="r-punc">"</span><span class="r-mech">$S</span>react.suspense<span class="r-punc">"</span></code></td><td>Registered symbol by key</td></tr>
+<tr><td>the literal string <code>"$literal"</code></td><td><code><span class="r-punc">"</span><span class="r-mech">$$</span>literal<span class="r-punc">"</span></code></td><td>A leading <code>$</code> is escaped by doubling</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+<h4>Read the row numbers, not the row order</h4>
+<p>Rows <span class="num">1</span>, <span class="num">2</span> and <span class="num">4</span> were written <em>before</em> row <span class="num">0</span>, even though row <span class="num">0</span> is the root. The serializer walks the root, and each time it meets a value that needs its own row it emits that row first, then continues. Row <span class="num">3</span> — the promise — could not be written until it settled, so it came last. Arrival order carries no structural meaning; only the ids do.</p>
+</div>
+</section>
+
+<section id="s4" data-lad data-ren data-req style="--lad:4;--ren:7;--req:3">
+<h2>An async component is a row that has not been written yet</h2>
+<p>A Server Component may be an <code class="p">async function</code>. The <span class="k-flight">Flight</span> renderer awaits it. What it does <em>not</em> do is wait for it before emitting the parent — if that component sits under a <span class="k-bound">Suspense boundary</span>, the parent ships immediately with a <code class="t" data-k="lazyref">$L</code> reference in the child slot.</p>
+
+<div class="pane">
+  <div class="pane-head"><i class="dot"></i><span class="pane-file">probe/prod.mjs</span></div>
+  <div class="pane-grid" data-ann="1">
+    <div class="codewrap"><pre class="code"><span class="l"><span class="kw">async</span> <span class="kw">function</span> <span class="fn">Slow</span><span class="pun">({</span><span class="par">label</span><span class="pun">,</span> <span class="par">ms</span><span class="pun">}){</span></span><span class="l">  <span class="kwc">return</span> <span class="pun">&lt;</span><span class="cls">p</span><span class="pun">&gt;{</span><span class="kwc">await</span> <span class="fn">sleep</span><span class="pun">(</span><span class="par">ms</span><span class="pun">,</span> <span class="par">label</span><span class="pun">)}&lt;/</span><span class="cls">p</span><span class="pun">&gt;;</span></span><span class="l"><span class="pun">}</span></span><span class="l"></span><span class="l"><span class="kw">function</span> <span class="fn">App</span><span class="pun">(){</span> <span class="kwc">return</span> <span class="pun">(</span></span><span class="l">  <span class="pun">&lt;</span><span class="cls">main</span><span class="pun">&gt;</span></span><span class="l">    <span class="pun">&lt;</span><span class="cls">h1</span><span class="pun">&gt;</span>shell<span class="pun">&lt;/</span><span class="cls">h1</span><span class="pun">&gt;</span></span><span class="l">    <span class="pun">&lt;</span><span class="cls">Suspense</span> <span class="prop">fallback</span><span class="pun">={&lt;</span><span class="cls">i</span><span class="pun">&gt;</span>fb B<span class="pun">&lt;/</span><span class="cls">i</span><span class="pun">&gt;}&gt;</span></span><span class="l">      <span class="pun">&lt;</span><span class="cls">Slow</span> <span class="prop">label</span><span class="pun">=</span><span class="str">"B"</span> <span class="prop">ms</span><span class="pun">={</span><span class="numl">60</span><span class="pun">}/&gt;</span></span><span class="l">    <span class="pun">&lt;/</span><span class="cls">Suspense</span><span class="pun">&gt;</span></span><span class="l">    <span class="pun">&lt;</span><span class="cls">Suspense</span> <span class="prop">fallback</span><span class="pun">={&lt;</span><span class="cls">i</span><span class="pun">&gt;</span>fb A<span class="pun">&lt;/</span><span class="cls">i</span><span class="pun">&gt;}&gt;</span></span><span class="l">      <span class="pun">&lt;</span><span class="cls">Slow</span> <span class="prop">label</span><span class="pun">=</span><span class="str">"A"</span> <span class="prop">ms</span><span class="pun">={</span><span class="numl">20</span><span class="pun">}/&gt;</span></span><span class="l">    <span class="pun">&lt;/</span><span class="cls">Suspense</span><span class="pun">&gt;</span></span><span class="l">  <span class="pun">&lt;/</span><span class="cls">main</span><span class="pun">&gt;</span></span><span class="l"><span class="pun">);}</span></span></pre></div>
+    <div class="anns">
+      <div class="ann" data-c="flight"><b>async function Slow</b>Returns a promise for an element. The renderer treats it as a task, not as a value it must have before continuing.</div>
+      <div class="ann" data-c="bound"><b>Suspense</b>The unit of streaming. Without a boundary here, the whole payload would wait for the slowest child — the boundary is what makes the parent shippable.</div>
+      <div class="ann" data-c="bound"><b>fallback</b>Serialized eagerly into the parent row, because it is what the client shows while the real row is outstanding.</div>
+      <div class="ann" data-c="metric"><b>ms={60} / ms={20}</b>Written slow-first deliberately, so document order and completion order disagree.</div>
+    </div>
+  </div>
+</div>
+
+<div class="pane">
+  <div class="pane-head"><i class="dot"></i><span class="pane-file">stdout — timestamps are real</span></div>
+  <div class="codewrap"><pre class="code"><span class="l"><span class="cmt">+ 78ms</span>  <span class="numl">1</span><span class="pun">:</span><span class="str">"$Sreact.suspense"</span></span><span class="l" data-hl="1"><span class="cmt">+ 82ms</span>  <span class="numl">0</span><span class="pun">:[</span><span class="str">"$"</span><span class="pun">,</span><span class="str">"main"</span><span class="pun">,</span><span class="kw">null</span><span class="pun">,{</span><span class="prop">"children"</span><span class="pun">:[</span></span><span class="l" data-hl="1">          <span class="pun">[</span><span class="str">"$"</span><span class="pun">,</span><span class="str">"h1"</span><span class="pun">,</span><span class="kw">null</span><span class="pun">,{</span><span class="prop">"children"</span><span class="pun">:</span><span class="str">"shell"</span><span class="pun">}],</span></span><span class="l" data-hl="1">          <span class="pun">[</span><span class="str">"$"</span><span class="pun">,</span><span class="str">"$1"</span><span class="pun">,</span><span class="kw">null</span><span class="pun">,{</span><span class="prop">"fallback"</span><span class="pun">:</span>…<span class="pun">,</span><span class="prop">"children"</span><span class="pun">:</span><span class="str">"$L2"</span><span class="pun">}],</span></span><span class="l" data-hl="1">          <span class="pun">[</span><span class="str">"$"</span><span class="pun">,</span><span class="str">"$1"</span><span class="pun">,</span><span class="kw">null</span><span class="pun">,{</span><span class="prop">"fallback"</span><span class="pun">:</span>…<span class="pun">,</span><span class="prop">"children"</span><span class="pun">:</span><span class="str">"$L3"</span><span class="pun">}]]}]</span></span><span class="l"><span class="cmt">+ 99ms</span>  <span class="numl">3</span><span class="pun">:[</span><span class="str">"$"</span><span class="pun">,</span><span class="str">"p"</span><span class="pun">,</span><span class="kw">null</span><span class="pun">,{</span><span class="prop">"children"</span><span class="pun">:</span><span class="str">"A-payload"</span><span class="pun">}]</span>   <span class="cmt">← second in source</span></span><span class="l"><span class="cmt">+138ms</span>  <span class="numl">2</span><span class="pun">:[</span><span class="str">"$"</span><span class="pun">,</span><span class="str">"p"</span><span class="pun">,</span><span class="kw">null</span><span class="pun">,{</span><span class="prop">"children"</span><span class="pun">:</span><span class="str">"B-payload"</span><span class="pun">}]</span>   <span class="cmt">← first in source</span></span></pre></div>
+</div>
+
+<ul class="pts">
+<li>Row <span class="num">0</span> is written at <span class="num">82ms</span>. It is not the finished root: it is the root <em>as far as it can be serialized at that moment</em>, with each pending region standing in as a reference.</li>
+<li>Row <span class="num">3</span> arrives at <span class="num">99ms</span>. Row <span class="num">2</span> arrives at <span class="num">138ms</span>. <strong>Row 3 precedes row 2 on the wire.</strong></li>
+<li>Nothing downstream has to care, because <code class="p">$L2</code> and <code class="p">$L3</code> named their targets by id when the shell was written.</li>
+</ul>
+
+<div class="note">
+<h4>Development builds emit rows production builds do not</h4>
+<p>Running the same probe without <code class="p">NODE_ENV=production</code> adds <code class="p">D</code> rows carrying component names, source file positions, owner stacks and timing — the data behind the React DevTools server timeline. They are real rows in the same grammar, but they are a debugging channel, and reading them as part of the protocol is a common way to end up describing a format that never reaches production.</p>
+</div>
+</section>
+
+<section id="s5" data-lad data-ren data-req style="--lad:5;--ren:3;--req:6">
+<h2>Fizz: the same inversion, a different wire format</h2>
+<p>The <span class="k-fizz">HTML renderer</span> faces the identical problem and solves it differently, because its consumer is an HTML parser that cannot be told to hold a slot open. So Fizz writes the fallback into the document at the correct position, then patches the DOM later using script tags.</p>
+
+<div class="pane">
+  <div class="pane-head"><i class="dot"></i><span class="pane-file">probe/fizz.mjs — output (indented for reading; the wire has no whitespace)</span></div>
+  <div class="pane-grid" data-ann="1">
+    <div class="codewrap"><pre class="code"><span class="l"><span class="numl">[+ 1ms]</span><span class="cmt">   the shell — everything not inside a boundary</span></span><span class="l"><span class="pun">&lt;</span><span class="cls">main</span><span class="pun">&gt;</span></span><span class="l">  <span class="pun">&lt;</span><span class="cls">h1</span><span class="pun">&gt;</span>shell<span class="pun">&lt;/</span><span class="cls">h1</span><span class="pun">&gt;</span></span><span class="l"></span><span class="l">  <span class="rmk">&lt;!--$?--&gt;</span><span class="pun">&lt;</span><span class="cls">template</span> <span class="prop">id</span><span class="pun">="</span><span class="rid">B:0</span><span class="pun">"&gt;</span><span class="pun">&lt;/</span><span class="cls">template</span><span class="pun">&gt;</span></span><span class="l">    <span class="pun">&lt;</span><span class="cls">i</span><span class="pun">&gt;</span>loading B<span class="pun">&lt;/</span><span class="cls">i</span><span class="pun">&gt;</span></span><span class="l">  <span class="rmk">&lt;!--/$--&gt;</span></span><span class="l"></span><span class="l">  <span class="rmk">&lt;!--$?--&gt;</span><span class="pun">&lt;</span><span class="cls">template</span> <span class="prop">id</span><span class="pun">="</span><span class="rid">B:1</span><span class="pun">"&gt;</span><span class="pun">&lt;/</span><span class="cls">template</span><span class="pun">&gt;</span></span><span class="l">    <span class="pun">&lt;</span><span class="cls">i</span><span class="pun">&gt;</span>loading A<span class="pun">&lt;/</span><span class="cls">i</span><span class="pun">&gt;</span></span><span class="l">  <span class="rmk">&lt;!--/$--&gt;</span></span><span class="l"><span class="pun">&lt;/</span><span class="cls">main</span><span class="pun">&gt;</span></span><span class="l"></span><span class="l"><span class="numl">[+ 8ms]</span><span class="cmt">   B:1 completes first — it is the 20ms child</span></span><span class="l"><span class="pun">&lt;</span><span class="cls">div</span> <span class="prop">hidden</span> <span class="prop">id</span><span class="pun">="</span><span class="rid">S:1</span><span class="pun">"&gt;</span><span class="pun">&lt;</span><span class="cls">p</span><span class="pun">&gt;</span>A-html<span class="pun">&lt;/</span><span class="cls">p</span><span class="pun">&gt;</span><span class="pun">&lt;/</span><span class="cls">div</span><span class="pun">&gt;</span></span><span class="l"><span class="pun">&lt;</span><span class="cls">script</span><span class="pun">&gt;</span><span class="cst">$RB</span><span class="pun">=[];</span><span class="cst">$RV</span><span class="pun">=</span><span class="kw">function</span><span class="pun">(</span><span class="par">a</span><span class="pun">){</span><span class="cmt"> … </span><span class="pun">}</span><span class="pun">&lt;/</span><span class="cls">script</span><span class="pun">&gt;</span></span><span class="l"></span><span class="l"><span class="numl">[+47ms]</span><span class="cmt">   B:0 completes last — it is the 60ms child</span></span><span class="l"><span class="pun">&lt;</span><span class="cls">div</span> <span class="prop">hidden</span> <span class="prop">id</span><span class="pun">="</span><span class="rid">S:0</span><span class="pun">"&gt;</span><span class="pun">&lt;</span><span class="cls">p</span><span class="pun">&gt;</span>B-html<span class="pun">&lt;/</span><span class="cls">p</span><span class="pun">&gt;</span><span class="pun">&lt;/</span><span class="cls">div</span><span class="pun">&gt;</span></span><span class="l"><span class="pun">&lt;</span><span class="cls">script</span><span class="pun">&gt;</span><span class="cst">$RC</span><span class="pun">("</span><span class="rid">B:0</span><span class="pun">","</span><span class="rid">S:0</span><span class="pun">")</span><span class="pun">&lt;/</span><span class="cls">script</span><span class="pun">&gt;</span></span></pre></div>
+    <div class="anns">
+      <div class="ann" data-c="bound"><b>&lt;!--$?--&gt;</b>Opens a pending boundary. The <code>?</code> marks it unresolved; <code>&lt;!--$--&gt;</code> would mark it already complete. The closing <code>&lt;!--/$--&gt;</code> ends it.</div>
+      <div class="ann" data-c="bound"><b>template id="B:0"</b>The anchor. It carries no content and renders nothing — it exists so the runtime can find this boundary by id later.</div>
+      <div class="ann" data-c="fizz"><b>div hidden id="S:1"</b>Completed content, parked at the end of the document out of view. The parser appends it wherever it lands; position is fixed afterwards.</div>
+      <div class="ann" data-c="client"><b>$RB / $RV</b>The inline runtime, written out in full on first use only. It is roughly 800 bytes and never repeats.</div>
+      <div class="ann" data-c="client"><b>$RC("B:0","S:0")</b>Move the children of <code>S:0</code> into the boundary anchored at <code>B:0</code>, then delete the husk. The second boundary costs <span class="num">68</span> bytes because the runtime is already present.</div>
+    </div>
+  </div>
+</div>
+
+<p>Boundary <code class="p">B:1</code> — the one written second — completes and flushes first, exactly as its Flight counterpart did. They invert for the same <em>reason</em>, not from a shared mechanism: each orders its output by completion rather than by document position. The two renderers cannot see each other at all, as the next section shows.</p>
+
+<div class="fig" id="fig-two">
+  <div class="fig-head">
+    <span class="fig-title">Same hole, two encodings</span>
+    <div class="fig-sp"></div>
+    <div class="ctl" data-stepper="two">
+      <button data-act="reset" title="Reset">↺</button>
+      <button data-act="prev" title="Previous">‹</button>
+      <button data-act="play" title="Play">▶</button>
+      <button data-act="next" title="Next">›</button>
+      <span class="ticks" data-ticks></span>
+    </div>
+  </div>
+  <div class="fig-body"><div id="fig-two-svg"></div></div>
+  <div class="cap" data-cap>Click either column's boxes to open its mechanism.</div>
+</div>
+</section>
+
+<section id="s6" data-lad data-ren data-req style="--lad:8;--ren:4;--req:5">
+<h2>How Next.js joins them: two products, one response</h2>
+<p>On a document request, Next.js needs the <span class="k-flight">Flight</span> payload for two unrelated purposes at the same time — and a stream can only be read once.</p>
+
+<ul class="pts">
+<li>The <span class="k-fizz">HTML renderer</span> needs the <em>tree</em> those rows describe &mdash; it never reads the rows itself. <code class="t" data-k="createfrom">createFromReadableStream</code>, the client half of the RSC package running on the server, rebuilds an element tree, and that tree is what Fizz renders.</li>
+<li>The same bytes must be inlined into the HTML as <code class="t" data-k="nextf">self.__next_f.push(…)</code> script tags, so the browser can rebuild the tree without a second network round trip.</li>
+</ul>
+
+<p>The resolution is <code class="t" data-c="stream" data-k="tee">tee()</code>, which turns one stream into two independent readers backed by a shared source.</p>
+
+<p>The two renderers are not merely separate functions. They resolve React through different export
+conditions, and neither will load in the other's environment. Measured in plain Node, both directions fail:</p>
+<div class="pane"><div class="pane-head"><i class="dot"></i><span class="pane-file">probe — loading each renderer in the other's environment</span></div>
+<div class="codewrap"><pre class="code"><span class="l"><span class="pun">$</span> <span class="par">node</span> <span class="pun">--conditions</span> <span class="par">react-server</span> <span class="pun">-e</span> <span class="str">"import('react-dom/server.edge')"</span></span><span class="l">  <span class="cmt">react-dom/server is not supported in React Server Components.</span></span><span class="l"></span><span class="l"><span class="pun">$</span> <span class="par">node</span> <span class="pun">-e</span> <span class="str">"import('react-server-dom-webpack/server.edge')"</span></span><span class="l">  <span class="cmt">The "react" package in this environment is not configured correctly.</span></span><span class="l">  <span class="cmt">The "react-server" condition must be enabled in any environment</span></span><span class="l">  <span class="cmt">that runs React Server Components.</span></span></pre></div></div>
+<p>Next.js gets both in one process by building <strong>two module graphs</strong> — bundler layers, each resolving its own
+copy of React. A Server Component never executes in Fizz's graph, and Fizz never executes in the Flight graph. The only thing
+that crosses between them is bytes.</p>
+<div class="fig" id="fig-tee">
+  <div class="fig-head">
+    <span class="fig-title">One render, two consumers, one response</span>
+    <div class="fig-sp"></div>
+    <div class="ctl" data-stepper="tee">
+      <button data-act="reset" title="Reset">↺</button>
+      <button data-act="prev" title="Previous">‹</button>
+      <button data-act="play" title="Play">▶</button>
+      <button data-act="next" title="Next">›</button>
+      <span class="ticks" data-ticks></span>
+    </div>
+  </div>
+  <div class="fig-body"><div id="fig-tee-svg"></div></div>
+  <div class="cap" data-cap>Every box opens a detailed breakdown of that stage.</div>
+</div>
+
+<div class="note" data-c="stream">
+<h4>tee() has no backpressure between branches</h4>
+<p>If one branch is read and the other is not, the unread branch's queue grows without bound — the source is pulled at the rate of the <em>faster</em> consumer, and everything the slow branch has not taken is held in memory. Measured directly: draining the fast branch of a five-chunk stream to completion leaves all <span class="num">5</span> chunks buffered for the slow branch, which then yields all <span class="num">5</span> from that buffer. On a real page the branches move at similar rates, but this is the mechanism behind memory growth when one side stalls.</p>
+</div>
+</section>
+<section id="s7" data-lad data-ren data-req style="--lad:6;--ren:9;--req:7">
+<h2>Backpressure: who decides how fast the render goes</h2>
+<p>A <span class="k-stream">ReadableStream</span> does not push. It is pulled, and the queue between producer and consumer has a declared capacity. When that capacity is full, the producer is not called again until space appears.</p>
+
+<div data-rt="web"><div class="pane">
+  <div class="pane-head"><i class="dot"></i><span class="pane-file">probe/streams.mjs — pull and desiredSize</span><div class="fig-sp"></div><div class="seg mini" role="group" aria-label="Runtime"><button data-rt-btn="web" aria-pressed="true">Web</button><button data-rt-btn="node" aria-pressed="false">Node</button></div></div>
+  <div class="pane-grid" data-ann="1">
+    <div class="codewrap"><pre class="code"><span class="l"><span class="kw">const</span> <span class="par">bp</span> <span class="pun">=</span> <span class="kw">new</span> <span class="cst">ReadableStream</span><span class="pun">(</span><span class="pun">{</span></span><span class="l">  <span class="fn">start</span><span class="pun">(</span><span class="par">c</span><span class="pun">)</span> <span class="pun">{</span></span><span class="l">    <span class="fn">log</span><span class="pun">(</span><span class="str">`start desiredSize=${c.desiredSize}`</span><span class="pun">)</span><span class="pun">;</span></span><span class="l">  <span class="pun">}</span><span class="pun">,</span></span><span class="l">  <span class="fn">pull</span><span class="pun">(</span><span class="par">c</span><span class="pun">)</span> <span class="pun">{</span></span><span class="l">    <span class="fn">log</span><span class="pun">(</span><span class="str">`pull desiredSize=${c.desiredSize}`</span><span class="pun">)</span><span class="pun">;</span></span><span class="l">    <span class="par">c</span><span class="pun">.</span><span class="meth">enqueue</span><span class="pun">(</span><span class="numl">1</span><span class="pun">)</span><span class="pun">;</span></span><span class="l">  <span class="pun">}</span><span class="pun">,</span></span><span class="l"><span class="pun">}</span><span class="pun">,</span> <span class="kw">new</span> <span class="cst">CountQueuingStrategy</span><span class="pun">(</span><span class="pun">{</span> <span class="par">highWaterMark</span><span class="pun">:</span> <span class="numl">3</span> <span class="pun">}</span><span class="pun">)</span><span class="pun">)</span><span class="pun">;</span></span></pre></div>
+    <div class="anns">
+      <div class="ann" data-c="stream"><b>highWaterMark: 3</b>The queue's declared capacity. Not a hard limit — <code>enqueue</code> always succeeds — but the level at which the stream stops asking for more.</div>
+      <div class="ann" data-c="stream"><b>desiredSize</b>Capacity minus queue length. Reaching <code>0</code> is the signal to stop; it can go negative if the producer ignores it.</div>
+      <div class="ann" data-c="stream"><b>pull(c)</b>Called only when there is room. This is the inversion that makes backpressure automatic — the consumer's pace sets the producer's pace.</div>
+    </div>
+  </div>
+</div>
+
+<div class="pane">
+  <div class="pane-head"><i class="dot"></i><span class="pane-file">stdout</span></div>
+  <div class="codewrap"><pre class="code"><span class="l"><span class="cmt">start desiredSize=</span><span class="numl">3</span></span><span class="l"><span class="cmt">pull  desiredSize=</span><span class="numl">3</span> <span class="pun">-&gt;</span> <span class="cmt">enqueue</span></span><span class="l"><span class="cmt">pull  desiredSize=</span><span class="numl">2</span> <span class="pun">-&gt;</span> <span class="cmt">enqueue</span></span><span class="l"><span class="cmt">pull  desiredSize=</span><span class="numl">1</span> <span class="pun">-&gt;</span> <span class="cmt">enqueue</span></span><span class="l"><span class="cmt">--- reader reads once ---</span></span><span class="l"><span class="cmt">pull  desiredSize=</span><span class="numl">1</span> <span class="pun">-&gt;</span> <span class="cmt">enqueue</span></span></pre></div>
+</div>
+
+<p>Three pulls fill the queue, then silence. One <code class="t" data-k="read">read()</code> frees one slot and produces exactly one more pull. That loop is what connects a slow client to a slow render: TCP backs up, the response's stream stops being drained, <code class="p">desiredSize</code> sits at zero, and React stops being asked for chunks.</p>
+
+</div>
+<div data-rt="node"><div class="pane">
+  <div class="pane-head"><i class="dot"></i><span class="pane-file">probe/nodebp.mjs — write() and drain</span><div class="fig-sp"></div><div class="seg mini" role="group" aria-label="Runtime"><button data-rt-btn="web" aria-pressed="true">Web</button><button data-rt-btn="node" aria-pressed="false">Node</button></div></div>
+  <div class="pane-grid" data-ann="1">
+    <div class="codewrap"><pre class="code"><span class="l"><span class="kw">const</span> <span class="par">slow</span> <span class="pun">=</span> <span class="kw">new</span> <span class="cst">Writable</span><span class="pun">(</span><span class="pun">{</span></span><span class="l">  <span class="par">highWaterMark</span><span class="pun">:</span> <span class="numl">64</span><span class="pun">,</span></span><span class="l">  <span class="fn">write</span><span class="pun">(</span><span class="par">chunk</span><span class="pun">,</span> <span class="par">enc</span><span class="pun">,</span> <span class="par">cb</span><span class="pun">)</span> <span class="pun">{</span> <span class="fn">setTimeout</span><span class="pun">(</span><span class="par">cb</span><span class="pun">,</span> <span class="numl">20</span><span class="pun">)</span><span class="pun">;</span> <span class="pun">}</span><span class="pun">,</span></span><span class="l"><span class="pun">}</span><span class="pun">)</span><span class="pun">;</span></span><span class="l"></span><span class="l"><span class="kw">const</span> <span class="par">ok</span> <span class="pun">=</span> <span class="par">slow</span><span class="pun">.</span><span class="meth">write</span><span class="pun">(</span><span class="cst">Buffer</span><span class="pun">.</span><span class="meth">alloc</span><span class="pun">(</span><span class="numl">48</span><span class="pun">)</span><span class="pun">)</span><span class="pun">;</span></span><span class="l"><span class="kwc">if</span> <span class="pun">(</span><span class="pun">!</span><span class="par">ok</span><span class="pun">)</span> <span class="pun">{</span></span><span class="l">  <span class="kw">await</span> <span class="fn">once</span><span class="pun">(</span><span class="par">slow</span><span class="pun">,</span> <span class="str">'drain'</span><span class="pun">)</span><span class="pun">;</span></span><span class="l"><span class="pun">}</span></span></pre></div>
+    <div class="anns">
+      <div class="ann" data-c="stream"><b>highWaterMark: 64</b>The same declared capacity, counted in bytes rather than chunks. Node streams have always had this; only the spelling differs.</div>
+      <div class="ann" data-c="stream"><b>write() returns false</b>The write still succeeded. The boolean is advisory in exactly the way <code>desiredSize</code> is — ignoring it is legal, and unbounded.</div>
+      <div class="ann" data-c="bound"><b>'drain'</b>Fires when the buffer empties. Web streams make you poll a number; Node pushes you an event. <code>pipe()</code> exists so you never write this loop yourself.</div>
+    </div>
+  </div>
+</div>
+<div class="pane">
+  <div class="pane-head"><i class="dot"></i><span class="pane-file">stdout</span></div>
+  <div class="codewrap"><pre class="code"><span class="l"><span class="cmt">write #1 -&gt; true</span></span><span class="l"><span class="cmt">write #2 -&gt; false</span></span><span class="l"><span class="cmt">  false: buffered 96B of 64B, awaiting drain</span></span><span class="l"><span class="cmt">  drain fired, buffered now 0B</span></span><span class="l"><span class="cmt">write #3 -&gt; true</span></span><span class="l"><span class="cmt">write #4 -&gt; false</span></span></pre></div>
+</div>
+<p>A 48-byte write into a 64-byte buffer succeeds; the second pushes the buffered length to <span class="num">96B</span> and
+<code class="p">write</code> returns <code class="p">false</code>. Nothing stopped it — the producer is trusted to wait for
+<code class="p">drain</code>, just as a Web producer is trusted to watch <code class="t" data-k="read">desiredSize</code>.</p>
+</div>
+<div class="fig" id="fig-bp">
+  <div class="fig-head">
+    <span class="fig-title">The queue between the renderer and the socket</span>
+    <div class="fig-sp"></div>
+    <div class="ctl" data-stepper="bp">
+      <button data-act="reset" title="Reset">↺</button>
+      <button data-act="prev" title="Previous">‹</button>
+      <button data-act="play" title="Play">▶</button>
+      <button data-act="next" title="Next">›</button>
+      <span class="ticks" data-ticks></span>
+    </div>
+  </div>
+  <div class="fig-body"><div id="fig-bp-svg"></div></div>
+  <div class="cap" data-cap>Watch <code class="p">desiredSize</code> fall to zero and the producer go quiet.</div>
+</div>
+
+<div class="note" data-c="stream">
+<h4>React's own queue is not this queue</h4>
+<p>Fizz maintains its own internal buffer of completed work and decides when to flush it into the stream. Backpressure on the outbound stream slows the flush, which slows how fast completed boundaries leave the process — it does not pause the <em>rendering</em> of components that are already in flight. A stalled client therefore costs memory in the React scheduler before it costs anything in the stream's queue.</p>
+</div>
+</section>
+
+<section id="s8" data-lad data-ren data-req style="--lad:7;--ren:6;--req:9">
+<h2>One stream, two consumption strategies</h2>
+<p>The distinction between a statically generated route and a dynamically streamed one is not a different renderer. It is the same stream, read differently.</p>
+
+<div class="pane">
+  <div class="pane-head"><i class="dot"></i><span class="pane-file">probe/rest.mjs — measured on identical trees</span></div>
+  <div class="pane-grid" data-ann="1">
+    <div class="codewrap"><pre class="code"><span class="l"><span class="cmt">// stream it: take the first chunk and send it on</span></span><span class="l"><span class="kw">const</span> <span class="par">s1</span> <span class="pun">=</span> <span class="kwc">await</span> <span class="fn">renderToReadableStream</span><span class="pun">(</span><span class="fn">tree</span><span class="pun">());</span></span><span class="l"><span class="kw">const</span> <span class="par">first</span> <span class="pun">=</span> <span class="kwc">await</span> <span class="par">s1</span><span class="pun">.</span><span class="meth">getReader</span><span class="pun">().</span><span class="meth">read</span><span class="pun">();</span></span><span class="l"><span class="cmt">// → first bytes at +11ms (203 bytes)</span></span><span class="l"></span><span class="l"><span class="cmt">// buffer it: wait for everything</span></span><span class="l"><span class="kw">const</span> <span class="par">s2</span> <span class="pun">=</span> <span class="kwc">await</span> <span class="fn">renderToReadableStream</span><span class="pun">(</span><span class="fn">tree</span><span class="pun">());</span></span><span class="l"><span class="kwc">await</span> <span class="par">s2</span><span class="pun">.</span><span class="prop">allReady</span><span class="pun">;</span></span><span class="l"><span class="cmt">// → resolved at +53ms</span></span></pre></div>
+    <div class="anns">
+      <div class="ann" data-c="fizz"><b>allReady</b>A promise on the returned stream that settles when every boundary has completed. Awaiting it converts a streaming render into a batch one.</div>
+      <div class="ann" data-c="metric"><b>+11ms vs +53ms</b>Same tree, same work, same total cost. The difference is entirely in when the first byte is allowed to leave.</div>
+      <div class="ann" data-c="fizz"><b>Why static generation waits</b>A file on disk or in a CDN has no notion of partial content. Prerendering must have the whole document, so it awaits <code>allReady</code> and discards the streaming property it just paid for.</div>
+    </div>
+  </div>
+</div>
+
+<table class="tbl">
+<thead><tr><th></th><th>Streaming (dynamic)</th><th>Buffered (prerender)</th></tr></thead>
+<tbody>
+<tr><td>Consumption</td><td class="v">read chunks as they arrive</td><td class="h">await <code>allReady</code>, then read</td></tr>
+<tr><td>First byte</td><td class="v"><span class="num">+11ms</span></td><td class="h"><span class="num">+53ms</span></td></tr>
+<tr><td>Fallbacks in output</td><td class="v">yes, then patched by <code>$RC</code></td><td class="h">no — boundaries already resolved</td></tr>
+<tr><td>Errors mid-render</td><td class="v">already-sent bytes cannot be recalled</td><td class="h">can fail the whole build cleanly</td></tr>
+<tr><td>Where it runs</td><td class="v">per request</td><td class="h">build time, or on revalidation</td></tr>
+</tbody>
+</table>
+
+<p>The row about errors is the sharp one. Once the shell has been written to the socket, the status code is fixed and the <code class="p">&lt;head&gt;</code> is gone. A boundary that throws afterwards can only be reported inside the body, which is why streaming renders surface errors as client-side boundary failures rather than as a <span class="num">500</span>.</p>
+</section>
+
+<section id="s9" data-lad data-ren data-req="off" style="--lad:10;--ren:5;--req:11">
+<h2>Web streams and Node streams are both supported ends</h2>
+<p>React ships separate entry points rather than an adapter, because the two stream families differ in control flow, not just in naming.</p>
+
+<table class="tbl">
+<thead><tr><th></th><th>Web / Edge</th><th>Node</th></tr></thead>
+<tbody>
+<tr><td>Entry point</td><td class="v"><code>react-dom/server.edge</code></td><td class="h"><code>react-dom/server.node</code></td></tr>
+<tr><td>Function</td><td class="v"><code>renderToReadableStream</code></td><td class="h"><code>renderToPipeableStream</code></td></tr>
+<tr><td>Returns</td><td class="v">a <code>ReadableStream</code></td><td class="h">an object with <code>pipe</code> and <code>abort</code></td></tr>
+<tr><td>Direction</td><td class="v">consumer pulls</td><td class="h">you push into a <code>Writable</code></td></tr>
+<tr><td>Shell signal</td><td class="v">the returned promise resolves</td><td class="h"><code>onShellReady</code> callback</td></tr>
+<tr><td>Cancellation</td><td class="v"><code>AbortSignal</code> via <code>signal</code></td><td class="h"><code>abort()</code> on the returned object</td></tr>
+<tr><td>Backpressure</td><td class="v"><code>desiredSize</code> / <code>pull</code></td><td class="h"><code>write()</code> returning <code>false</code>, then <code>drain</code></td></tr>
+</tbody>
+</table>
+
+<div class="pane">
+  <div class="pane-head"><i class="dot"></i><span class="pane-file">probe/rest.mjs — Node side, writes observed on a Writable</span></div>
+  <div class="codewrap"><pre class="code"><span class="l"><span class="cmt">NODE renderToPipeableStream chunk writes:</span></span><span class="l">  <span class="numl">+9ms</span>  <span class="numl">203</span><span class="cmt">B</span>   <span class="cmt">← shell</span></span><span class="l">  <span class="numl">+11ms</span> <span class="numl">897</span><span class="cmt">B</span>   <span class="cmt">← boundary A + the inline runtime</span></span><span class="l">  <span class="numl">+51ms</span> <span class="numl">68</span><span class="cmt">B</span>    <span class="cmt">← boundary B, runtime already present</span></span><span class="l"></span><span class="l"><span class="cst">Readable</span><span class="pun">.</span><span class="prop">toWeb</span> <span class="pun">/</span> <span class="cst">Readable</span><span class="pun">.</span><span class="prop">fromWeb</span><span class="pun">:</span> <span class="str">function</span> <span class="str">function</span></span></pre></div>
+</div>
+
+<div class="pane" data-rt="web">
+  <div class="pane-head"><i class="dot"></i><span class="pane-file">the Web / Edge call shape</span><div class="fig-sp"></div><div class="seg mini" role="group" aria-label="Runtime"><button data-rt-btn="web" aria-pressed="true">Web</button><button data-rt-btn="node" aria-pressed="false">Node</button></div></div>
+  <div class="pane-grid" data-ann="1">
+    <div class="codewrap"><pre class="code"><span class="l"><span class="kw">import</span> <span class="pun">{</span> <span class="fn">renderToReadableStream</span> <span class="pun">}</span> <span class="kw">from</span> <span class="str">'react-dom/server.edge'</span><span class="pun">;</span></span><span class="l"></span><span class="l"><span class="kw">const</span> <span class="par">stream</span> <span class="pun">=</span> <span class="kwc">await</span> <span class="fn">renderToReadableStream</span><span class="pun">(</span><span class="par">tree</span><span class="pun">,</span> <span class="pun">{</span></span><span class="l">  <span class="prop">signal</span><span class="pun">:</span> <span class="par">req</span><span class="pun">.</span><span class="prop">signal</span><span class="pun">,</span></span><span class="l">  <span class="meth">onError</span><span class="pun">(</span><span class="par">err</span><span class="pun">)</span> <span class="pun">{</span> <span class="fn">report</span><span class="pun">(</span><span class="par">err</span><span class="pun">);</span> <span class="pun">},</span></span><span class="l"><span class="pun">});</span></span><span class="l"></span><span class="l"><span class="kwc">return</span> <span class="kw">new</span> <span class="cls">Response</span><span class="pun">(</span><span class="par">stream</span><span class="pun">,</span> <span class="pun">{</span></span><span class="l">  <span class="prop">headers</span><span class="pun">:</span> <span class="pun">{</span> <span class="str">'content-type'</span><span class="pun">:</span> <span class="str">'text/html'</span> <span class="pun">},</span></span><span class="l"><span class="pun">});</span></span></pre></div>
+    <div class="anns">
+      <div class="ann" data-c="fizz"><b>await renderToReadableStream</b>The promise resolves when the <i>shell</i> is ready, not when the render finishes. Rejecting means the shell itself failed, which is the one case you can still turn into a 500.</div>
+      <div class="ann" data-c="stream"><b>signal</b>Aborting tears down in-flight work and errors every unresolved boundary.</div>
+      <div class="ann" data-c="stream"><b>new Response(stream)</b>The stream <i>is</i> the body. Nothing copies it; the platform drains it, and that draining is where backpressure enters.</div>
+    </div>
+  </div>
+</div>
+<div class="pane" data-rt="node">
+  <div class="pane-head"><i class="dot"></i><span class="pane-file">the Node call shape</span><div class="fig-sp"></div><div class="seg mini" role="group" aria-label="Runtime"><button data-rt-btn="web" aria-pressed="true">Web</button><button data-rt-btn="node" aria-pressed="false">Node</button></div></div>
+  <div class="pane-grid" data-ann="1">
+    <div class="codewrap"><pre class="code"><span class="l"><span class="kw">import</span> <span class="pun">{</span> <span class="fn">renderToPipeableStream</span> <span class="pun">}</span> <span class="kw">from</span> <span class="str">'react-dom/server.node'</span><span class="pun">;</span></span><span class="l"></span><span class="l"><span class="kw">const</span> <span class="pun">{</span> <span class="par">pipe</span><span class="pun">,</span> <span class="par">abort</span> <span class="pun">}</span> <span class="pun">=</span> <span class="fn">renderToPipeableStream</span><span class="pun">(</span><span class="par">tree</span><span class="pun">,</span> <span class="pun">{</span></span><span class="l">  <span class="meth">onShellReady</span><span class="pun">()</span> <span class="pun">{</span></span><span class="l">    <span class="par">res</span><span class="pun">.</span><span class="meth">setHeader</span><span class="pun">(</span><span class="str">'content-type'</span><span class="pun">,</span> <span class="str">'text/html'</span><span class="pun">);</span></span><span class="l">    <span class="fn">pipe</span><span class="pun">(</span><span class="par">res</span><span class="pun">);</span></span><span class="l">  <span class="pun">},</span></span><span class="l">  <span class="meth">onShellError</span><span class="pun">(</span><span class="par">err</span><span class="pun">)</span> <span class="pun">{</span> <span class="par">res</span><span class="pun">.</span><span class="meth">writeHead</span><span class="pun">(</span><span class="numl">500</span><span class="pun">);</span> <span class="pun">},</span></span><span class="l">  <span class="meth">onError</span><span class="pun">(</span><span class="par">err</span><span class="pun">)</span> <span class="pun">{</span> <span class="fn">report</span><span class="pun">(</span><span class="par">err</span><span class="pun">);</span> <span class="pun">},</span></span><span class="l"><span class="pun">});</span></span></pre></div>
+    <div class="anns">
+      <div class="ann" data-c="fizz"><b>onShellReady</b>The callback equivalent of the resolved promise. Headers must be set before <code>pipe</code>, because writing the first chunk commits them.</div>
+      <div class="ann" data-c="fizz"><b>onShellError</b>Separate from <code>onError</code> precisely because this is the only failure that happens before any byte is on the wire.</div>
+      <div class="ann" data-c="stream"><b>pipe(res)</b>Push, not pull. Backpressure arrives as <code>write()</code> returning <code>false</code> followed by a <code>drain</code> event, which <code>pipe</code> handles internally.</div>
+    </div>
+  </div>
+</div>
+
+<p>The byte counts are the interesting part: <span class="num">897</span> bytes for the first completed boundary against <span class="num">68</span> for the second. The runtime is amortised across the whole document, so a page with twenty boundaries pays for <code class="p">$RC</code> once.</p>
+
+<p><code class="t" data-k="towebs">Readable.toWeb</code> and <code class="t" data-k="fromwebs">Readable.fromWeb</code> exist for crossing the boundary, and Next.js uses them where a Node HTTP response has to carry what a Web-stream renderer produced. They are not free — each adds a queue and a copy — which is part of why the Edge runtime avoids the round trip entirely.</p>
+</section>
+
+<section id="s10" data-lad data-ren="off" data-req style="--lad:11;--ren:11;--req:2">
+<h2>How <code class="p">cookies()</code> reaches a component nobody passed anything to</h2>
+<p>An async Server Component nested six levels deep can call <code class="t" data-k="cookies">cookies()</code> with no props and no imports carrying request state. The mechanism is <code class="t" data-k="als">AsyncLocalStorage</code>, which propagates a store across <code class="p">await</code> boundaries through V8's async context tracking.</p>
+
+<div class="pane">
+  <div class="pane-head"><i class="dot"></i><span class="pane-file">probe/rest.mjs — propagation depth</span></div>
+  <div class="pane-grid" data-ann="1">
+    <div class="codewrap"><pre class="code"><span class="l"><span class="kw">const</span> <span class="par">als</span> <span class="pun">=</span> <span class="kw">new</span> <span class="cls">AsyncLocalStorage</span><span class="pun">();</span></span><span class="l"></span><span class="l"><span class="kw">async</span> <span class="kw">function</span> <span class="fn">deep</span><span class="pun">(</span><span class="par">n</span><span class="pun">){</span></span><span class="l">  <span class="kwc">await</span> <span class="fn">sleep</span><span class="pun">(</span><span class="numl">1</span><span class="pun">);</span></span><span class="l">  <span class="kwc">return</span> <span class="par">n</span> <span class="pun">?</span> <span class="fn">deep</span><span class="pun">(</span><span class="par">n</span> <span class="pun">-</span> <span class="numl">1</span><span class="pun">)</span> <span class="pun">:</span> <span class="par">als</span><span class="pun">.</span><span class="meth">getStore</span><span class="pun">().</span><span class="prop">reqId</span><span class="pun">;</span></span><span class="l"><span class="pun">}</span></span><span class="l"></span><span class="l"><span class="kwc">await</span> <span class="par">als</span><span class="pun">.</span><span class="meth">run</span><span class="pun">({</span> <span class="prop">reqId</span><span class="pun">:</span> <span class="str">'req-7f3a'</span> <span class="pun">},</span> <span class="pun">()</span> <span class="pun">=&gt;</span> <span class="fn">deep</span><span class="pun">(</span><span class="numl">5</span><span class="pun">));</span></span><span class="l"><span class="cmt">// → 'req-7f3a'   (five awaits deep)</span></span><span class="l"><span class="par">als</span><span class="pun">.</span><span class="meth">getStore</span><span class="pun">();</span></span><span class="l"><span class="cmt">// → undefined    (outside the run scope)</span></span></pre></div>
+    <div class="anns">
+      <div class="ann" data-c="flight"><b>als.run(store, fn)</b>Every async resource created inside <code>fn</code> inherits the store — including the continuations scheduled by each <code>await</code>.</div>
+      <div class="ann" data-c="flight"><b>getStore()</b>Reads the current context. Returns <code>undefined</code> outside any run, which is the error Next.js reports when a request API is called from module scope.</div>
+      <div class="ann" data-c="stream"><b>Why it matters here</b>Rendering is interleaved — many components are suspended mid-flight at once. A module-level variable would be shared across concurrent requests; the async context is per-continuation.</div>
+    </div>
+  </div>
+</div>
+
+<p>This is the same async-context machinery <code class="p">async_hooks</code> exposes, and the reason calling a request API from module scope fails with a clear message rather than silently returning another request's data. It is also why Next.js can treat a call to <code class="p">cookies()</code> as the signal that a route must be dynamic: the call is observable at exactly the moment the store is read.</p>
+</section>
+
+<section id="s11" data-lad data-ren data-req style="--lad:9;--ren:10;--req:8">
+<h2>The client rebuilds the tree from a global array</h2>
+<p>The response carries both products, so the browser ends up with two independent consumers of the same document: the HTML goes to the parser and becomes DOM, and the Flight rows go to a decoder and become React elements. In the browser, as on the server, neither is derived from the other.</p>
+<div class="fig" id="fig-consumers"><div class="fig-head"><span class="fig-title">One response, two consumers</span><div class="fig-sp"></div><div class="ctl" data-stepper="consumers"><button data-act="reset" title="Reset">↺</button><button data-act="prev" title="Previous">‹</button><button data-act="play" title="Play">▶</button><button data-act="next" title="Next">›</button><span class="ticks" data-ticks></span></div></div><div class="fig-body"><div id="fig-consumers-svg"></div></div><div class="cap" data-cap></div></div>
+<p>The <span class="k-client">client</span> half of the story starts with a problem of its own: row data arrives while the bundle that knows how to read it is still downloading.</p>
+<p>The inlined half of the tee lands in the document as script tags that push into <code class="t" data-c="client" data-k="nextf">self.__next_f</code>. The trick is that the array exists before the framework does.</p>
+
+<div class="pane">
+  <div class="pane-head"><i class="dot"></i><span class="pane-file">what the browser receives, in order</span></div>
+  <div class="pane-grid" data-ann="1">
+    <div class="codewrap"><pre class="code"><span class="l"><span class="pun">&lt;</span><span class="cls">script</span><span class="pun">&gt;</span></span><span class="l">  <span class="cst">self</span><span class="pun">.</span><span class="prop">__next_f</span><span class="pun"> = </span><span class="cst">self</span><span class="pun">.</span><span class="prop">__next_f</span><span class="pun"> || [];</span></span><span class="l"><span class="pun">&lt;/</span><span class="cls">script</span><span class="pun">&gt;</span></span><span class="l"></span><span class="l"><span class="pun">&lt;</span><span class="cls">script</span><span class="pun">&gt;</span></span><span class="l">  <span class="cst">self</span><span class="pun">.</span><span class="prop">__next_f</span><span class="pun">.</span><span class="meth">push</span><span class="pun">([</span><span class="numl">1</span><span class="pun">,</span><span class="str">'1:"$Sreact.suspense"\n'</span><span class="pun">])</span></span><span class="l"><span class="pun">&lt;/</span><span class="cls">script</span><span class="pun">&gt;</span></span><span class="l"></span><span class="l"><span class="pun">&lt;</span><span class="cls">script</span><span class="pun">&gt;</span></span><span class="l">  <span class="cst">self</span><span class="pun">.</span><span class="prop">__next_f</span><span class="pun">.</span><span class="meth">push</span><span class="pun">([</span><span class="numl">1</span><span class="pun">,</span><span class="str">'0:["$","main",…]\n'</span><span class="pun">])</span></span><span class="l"><span class="pun">&lt;/</span><span class="cls">script</span><span class="pun">&gt;</span></span><span class="l"></span><span class="l"><span class="cmt">… framework bundle loads and replaces .push …</span></span><span class="l"></span><span class="l"><span class="pun">&lt;</span><span class="cls">script</span><span class="pun">&gt;</span></span><span class="l">  <span class="cst">self</span><span class="pun">.</span><span class="prop">__next_f</span><span class="pun">.</span><span class="meth">push</span><span class="pun">([</span><span class="numl">1</span><span class="pun">,</span><span class="str">'3:["$","p",…]\n'</span><span class="pun">])</span></span><span class="l"><span class="pun">&lt;/</span><span class="cls">script</span><span class="pun">&gt;</span></span></pre></div>
+    <div class="anns">
+      <div class="ann" data-c="client"><b>__next_f = […]</b>A plain array, defined in the first script the parser meets. Rows can start accumulating before any JavaScript bundle has been fetched.</div>
+      <div class="ann" data-c="client"><b>.push replaced</b>Once the runtime loads it swaps <code>push</code> for a function that feeds a stream controller, then replays everything already in the array. A buffer is promoted into a stream without losing anything.</div>
+      <div class="ann" data-c="client"><b>[1, …]</b>The leading <code>1</code> is a tag for the row-data channel; other tags carry bootstrap instructions.</div>
+      <div class="ann" data-c="flight"><b>Row ids again</b>Rows arrive interleaved with HTML boundary patches, and out of numeric order. Resolution is by id, so arrival order is irrelevant here too.</div>
+    </div>
+  </div>
+</div>
+
+<p>The client's parser is <code class="t" data-k="createfrom">createFromReadableStream</code>. It maintains a map of chunk id to a promise-like record, and every <code class="p">$L</code> or <code class="p">$@</code> reference becomes a lazy node resolved against that map. React then renders the tree normally, suspending wherever a referenced chunk has not arrived — which is how a <span class="k-bound">boundary</span> in the payload becomes a real Suspense boundary in the client tree.</p>
+
+<div class="fig" id="fig-client">
+  <div class="fig-head">
+    <span class="fig-title">Buffer promoted to stream, rows resolved by id</span>
+    <div class="fig-sp"></div>
+    <div class="ctl" data-stepper="client">
+      <button data-act="reset" title="Reset">↺</button>
+      <button data-act="prev" title="Previous">‹</button>
+      <button data-act="play" title="Play">▶</button>
+      <button data-act="next" title="Next">›</button>
+      <span class="ticks" data-ticks></span>
+    </div>
+  </div>
+  <div class="fig-body"><div id="fig-client-svg"></div></div>
+  <div class="cap" data-cap>Every stage opens its own breakdown.</div>
+</div>
+
+<div class="note" data-c="bound">
+<h4>Two independent repair mechanisms are running</h4>
+<p><code class="p">$RC</code> patches the <em>DOM</em> for users who have not hydrated yet, moving server-rendered HTML into place with no React involvement at all. <code class="p">__next_f</code> feeds the <em>React tree</em> for hydration and for anything rendered afterwards. They describe the same boundaries and are deliberately redundant — one works with JavaScript disabled mid-load, the other survives navigation.</p>
+</div>
+</section>
+
+<section id="s12" data-lad data-ren data-req style="--lad:12;--ren:12;--req:12">
+<h2>Partial prerendering: pausing a render and finishing it later</h2>
+<p>Everything above assumes one render, start to finish. Partial prerendering splits it in two across time: a <span class="k-fizz">static shell</span> produced at build, and the <span class="k-bound">holes</span> filled at request time.</p>
+
+<ul class="pts">
+<li>At build, the tree is rendered with a <code class="t" data-k="prerender">prerender</code> API. When a component reads request data it does not abort — it <em>postpones</em>, and the renderer records enough state to continue from that point.</li>
+<li>The output is a static shell plus a serialized postponed state. The shell goes to the CDN.</li>
+<li>At request time <code class="t" data-k="resume">resume</code> takes the postponed state and renders only the holes, streaming them into the already-delivered shell using the same <code class="p">$RC</code> mechanism.</li>
+</ul>
+
+<p>This is the strongest version of the argument the whole page has been making. A render that can be serialized at a suspension point, stored, and continued in a different process is only possible because the output was never a string — it was always a sequence of independently addressable pieces.</p>
+
+<div class="note">
+<h4>Version-sensitive surface</h4>
+<p>PPR's public API has moved more than the rest of this page. In Next 15 it sits behind <code class="p">experimental.ppr</code>; in Next 16 the surrounding model is reorganised around explicit caching directives. The underlying postpone-and-resume mechanism has been stable, but treat the configuration names here as something to check against the release you are on rather than as settled.</p>
+</div>
+</section>
+
+<section id="s13" data-lad data-ren data-req style="--lad:13;--ren:13;--req:13">
+<h2>What this part deliberately left out</h2>
+<p>Scope boundaries, so the next parts have somewhere to start:</p>
+
+<table class="tbl">
+<thead><tr><th>Part</th><th>Subject</th><th>Picks up</th></tr></thead>
+<tbody>
+<tr><td><strong>1</strong></td><td>App Router and Server Components <em>(this page)</em></td><td>—</td></tr>
+<tr><td>2</td><td>Request and response machinery</td><td>How the Web <code>Request</code> maps onto Node's <code>IncomingMessage</code></td></tr>
+<tr><td>3</td><td>Route Handlers and streaming responses</td><td><code>ReadableStream.from</code>, async generators as response bodies, SSE</td></tr>
+<tr><td>4</td><td>Data fetching and the cache</td><td>The patched <code>fetch</code>, deduplication, revalidation</td></tr>
+<tr><td>5</td><td>The build pipeline</td><td>Where the client manifest that Flight needs comes from</td></tr>
+<tr><td>6</td><td>Client router internals</td><td>RSC-only navigations, prefetch, <code>Next-Router-State-Tree</code></td></tr>
+<tr><td>7</td><td>Edge and Node runtimes</td><td>What actually differs beneath the two entry points</td></tr>
+</tbody>
+</table>
+
+<footer>
+<p>React <code class="p">19.3.0</code>, Node <code class="p">v22.22.2</code>. Every trace, byte count and timing on this page was produced by a probe script in a container and pasted in unedited; the scripts are shown beside their output throughout. Timings are from a single run on shared hardware — the ratios are the point, not the absolute numbers.</p>
+<p>Sibling documents: <em>From Loop to Iterator to Stream</em>, which builds the protocol ladder this page stands on; <em>Suspension and Settlement</em>, for what <code class="p">await</code> does to a frame; and <em>Node Streams</em>, for the producer/consumer decoupling underneath <code class="p">tee()</code>.</p>
+</footer>
+</section>
+</main>
+<script>
+(function(){
+"use strict";
+var $=function(s,r){return (r||document).querySelector(s)};
+var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+/* protocol pieces: one colour per role, the same roles in both wire formats */
+var PC={m:"--c-flight",i:"--c-ident",t:"--c-fizz",k:"--c-stream",d:"--ink3",w:"--c-metric",g:"--c-boundary"};
+function fx(t,c){return '<tspan fill="var('+PC[c]+')">'+t+'</tspan>'}
+
+
+/* ================= TERM POPOVERS (click, not hover) ================= */
+var TERMS={
+ rtrs:{h:"renderToReadableStream",k:"exported by two packages",c:"stream",
+  b:"<p>Two unrelated functions share this name. <code>react-server-dom-webpack/server</code> exports the <b>Flight serializer</b>: it turns a React tree into numbered rows. <code>react-dom/server</code> exports <b>Fizz</b>: it turns a React tree into HTML.</p><p>Next.js produces both on one request. Fizz does not read the Flight one\u2019s rows \u2014 a decoder rebuilds an element tree from them, and Fizz renders that, in a separate module graph.</p>"},
+ rs:{h:"ReadableStream",k:"WHATWG streams",c:"stream",
+  b:"<p>A source of chunks with a queue, a declared capacity, and a cancellation channel. Single-consumer: <code>getReader()</code> locks it.</p><p>Distinct from Node's <code>stream.Readable</code>, which predates it and pushes rather than being pulled.</p>"},
+ read:{h:"read()",k:"method on a reader",c:"stream",
+  b:"<p>Returns <code>Promise&lt;{value, done}&gt;</code> — the async iterator result contract exactly. Each call takes at most one chunk, and frees one slot of queue capacity, which is what lets <code>pull</code> fire again.</p>"},
+ asyncit:{h:"Symbol.asyncIterator",k:"protocol hook",c:"stream",
+  b:"<p>Present on <code>ReadableStream.prototype</code> in Node 22, so <code>for await…of</code> works over a stream directly. Browser support is uneven, which is why React's own code uses <code>read()</code> loops.</p>"},
+ lazyref:{h:"$L",k:"Flight row tag",c:"flight",
+  b:"<p>A forward reference: <i>the value here lives in a row that has not been sent yet</i>. The digits after it are the row id.</p><p>This is what makes a graph streamable — the parent can be written and shipped without its children existing.</p>"},
+ tee:{h:"tee()",k:"method on ReadableStream",c:"stream",
+  b:"<p>Splits one stream into two that can be read independently. The source is pulled at the rate of the faster branch, and anything the slower branch has not consumed is held in memory.</p><p>Next.js needs it because the Flight payload has two simultaneous consumers on a document request.</p>"},
+ createfrom:{h:"createFromReadableStream",k:"RSC client parser",c:"client",
+  b:"<p>Consumes Flight rows and rebuilds the React tree. Keeps a map of row id to a promise-like record; every <code>$L</code> or <code>$@</code> becomes a lazy node resolved against that map.</p><p>Runs on the <i>server</i> during SSR, and again in the browser.</p>"},
+ nextf:{h:"self.__next_f",k:"bootstrap channel",c:"client",
+  b:"<p>A plain array defined before any bundle loads, so inline row data can accumulate immediately. When the runtime arrives it replaces <code>push</code> with a stream-feeding function and replays what is already there.</p>"},
+ cookies:{h:"cookies()",k:"request API",c:"flight",
+  b:"<p>Reads from the request store held in an <code>AsyncLocalStorage</code>. Needs no props because the store follows the async context rather than the call graph.</p><p>Calling it is also the signal that the route cannot be fully static.</p>"},
+ als:{h:"AsyncLocalStorage",k:"node:async_hooks",c:"flight",
+  b:"<p>Propagates a value across <code>await</code> boundaries by hooking async resource creation. Each continuation inherits the store of the context that scheduled it.</p><p>A module-level variable cannot do this job: rendering interleaves many requests at once.</p>"},
+ towebs:{h:"Readable.toWeb",k:"node:stream",c:"stream",
+  b:"<p>Wraps a Node <code>Readable</code> as a <code>ReadableStream</code>. <code>fromWeb</code> goes the other way. Each adds a queue and a copy, so crossing the families is not free.</p>"},
+ fromwebs:{h:"Readable.fromWeb",k:"node:stream",c:"stream",
+  b:"<p>Wraps a <code>ReadableStream</code> as a Node <code>Readable</code>, so a Web-stream renderer's output can be piped into a Node HTTP response.</p>"},
+ prerender:{h:"prerender",k:"PPR build phase",c:"fizz",
+  b:"<p>Renders the tree at build time. A component that reads request data <i>postpones</i> rather than failing, and the renderer records the state needed to continue from that point.</p>"},
+ resume:{h:"resume",k:"PPR request phase",c:"bound",
+  b:"<p>Takes the serialized postponed state and renders only the holes, streaming them into the already-delivered static shell using the same <code>$RC</code> patching.</p>"}
+};
+var pop=$("#pop"),poph=$("#poph"),popk=$("#popk"),popb=$("#popb"),openTerm=null;
+function closePop(){pop.setAttribute("data-open","0");openTerm=null}
+function showPop(el){
+  var k=el.getAttribute("data-k"),t=TERMS[k];if(!t){return}
+  if(openTerm===el){closePop();return}
+  poph.textContent=t.h;popk.textContent=t.k;popb.innerHTML=t.b;
+  var col=t.c?"var(--c-"+(t.c==="bound"?"boundary":t.c)+")":"var(--c-ident)";
+  poph.style.color=col;pop.style.borderColor=col;
+  pop.setAttribute("data-open","1");openTerm=el;
+  var r=el.getBoundingClientRect(),pw=pop.offsetWidth,ph=pop.offsetHeight;
+  var left=r.left+window.scrollX+r.width/2-pw/2;
+  left=Math.max(12,Math.min(left,window.innerWidth-pw-12));
+  var top=r.bottom+window.scrollY+9;
+  if(r.bottom+ph+20>window.innerHeight){top=r.top+window.scrollY-ph-9}
+  pop.style.left=left+"px";pop.style.top=top+"px";
+}
+$$("code.t").forEach(function(el){
+  el.setAttribute("tabindex","0");el.setAttribute("role","button");
+  el.addEventListener("click",function(e){e.stopPropagation();showPop(el)});
+  el.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();showPop(el)}});
+});
+$("#popx").addEventListener("click",closePop);
+document.addEventListener("click",function(e){if(!pop.contains(e.target))closePop()});
+document.addEventListener("keydown",function(e){if(e.key==="Escape")closePop()});
+
+/* ================= MODALS ================= */
+/* ---- syntax highlighter for modal code (same palette as the page panes) ---- */
+var KW=/^(const|let|var|function|class|new|return|import|export|from|async|await|typeof|instanceof|this|extends|delete|void)$/;
+var KWC=/^(if|else|for|while|do|switch|case|break|continue|try|catch|finally|throw|yield|in|of)$/;
+var LIT=/^(true|false|null|undefined|Infinity|NaN)$/;
+var GLOB=/^(ReadableStream|WritableStream|TextDecoder|TextEncoder|Response|Request|Promise|Map|Set|Date|BigInt|Symbol|JSON|Uint8Array|CountQueuingStrategy|ByteLengthQueuingStrategy|AsyncLocalStorage|React|Suspense|document|window|self|console|Error)$/;
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+function hl(src){
+  var re=/(\/\/[^\n]*)|(`(?:[^`\\]|\\[\s\S])*`|'(?:[^'\\]|\\[\s\S])*'|"(?:[^"\\]|\\[\s\S])*")|(\b\d+(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)|([^\w\s])|(\s+)/g;
+  var out="",m,prevTok="",prevCh="";
+  while((m=re.exec(src))){
+    var t=m[0];
+    if(m[1]){out+='<span class="cmt">'+esc(t)+"</span>"}
+    else if(m[2]){out+='<span class="str">'+esc(t)+"</span>"}
+    else if(m[3]){out+='<span class="numl">'+esc(t)+"</span>"}
+    else if(m[4]){
+      var after=src.slice(re.lastIndex).match(/^\s*(.)/); after=after?after[1]:"";
+      var cls;
+      if(KW.test(t))cls="kw"; else if(KWC.test(t))cls="kwc"; else if(LIT.test(t))cls="kw";
+      else if(GLOB.test(t))cls="cst";
+      else if(prevCh==="."){cls=after==="("?"meth":"prop"}
+      else if(after==="("){cls="fn"}
+      else if(/^[A-Z][A-Za-z0-9]/.test(t))cls="cls";
+      else if(/^[A-Z_]{2,}$/.test(t))cls="cst";
+      else cls="par";
+      out+='<span class="'+cls+'">'+esc(t)+"</span>";
+    }
+    else if(m[5]){out+='<span class="pun">'+esc(t)+"</span>"}
+    else{out+=esc(t)}
+    if(!m[6]){prevCh=t.slice(-1);prevTok=t}
+  }
+  return out;
+}
+/* a code pane for modal bodies: line gutter, wrapping, no horizontal scroll */
+function mc(file,src){
+  var lines=src.replace(/\n$/,"").split("\n").map(function(l){return '<span class="l">'+hl(l)+"</span>"}).join("");
+  return '<div class="pane"><div class="pane-head"><i class="dot"></i><span class="pane-file">'+file+
+    '</span></div><div class="codewrap"><pre class="code">'+lines+"</pre></div></div>";
+}
+/* measured output block */
+function mout(src){
+  return '<div class="pane mout"><div class="pane-head"><i class="dot"></i><span class="pane-file">measured output</span></div>'+
+    '<div class="codewrap"><pre class="code">'+src.replace(/\n$/,"").split("\n").map(function(l){
+      return '<span class="l"><span class="cmt">'+esc(l)+"</span></span>"}).join("")+"</pre></div></div>";
+}
+/* modal figure */
+function mf(vb,inner,cap){
+  return '<figure class="mfig"><svg viewBox="'+vb+'" role="img" aria-label="'+cap.replace(/"/g,"")+'">'+inner+
+    '</svg><figcaption>'+cap+"</figcaption></figure>";
+}
+function mbox(x,y,w,h,fill){return '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="7" class="s-box"'+(fill?' style="fill:'+fill+'"':"")+"/>"}
+function mtx(x,y,s,c,a){return '<text x="'+x+'" y="'+y+'" class="'+(c||"s-lbl")+'" text-anchor="'+(a||"middle")+'">'+s+"</text>"}
+function marr(d,c){return '<path d="'+d+'" fill="none" stroke="'+(c||"var(--line2)")+'" stroke-width="1.5"/>'}
+
+var DEFS={
+
+"flight-render":{h:"The Flight renderer",k:"react-server-dom-webpack/server",
+ b:"<p>Flight walks the element tree and writes numbered rows. The rule that shapes everything else: it never blocks on a child that has a boundary above it. It writes a reference, hands the child to a task queue, and carries on walking.</p>"+
+ mf("0 0 520 190",
+   mbox(16,20,120,40)+mtx(76,38,"walk root","s-ttl")+mtx(76,53,"synchronous","s-sub")+
+   marr("M136 40 L176 40","var(--c-flight)")+
+   mbox(176,20,140,40)+mtx(246,38,"child pending?","s-ttl")+
+   marr("M316 40 L356 40","var(--c-flight)")+
+   mbox(356,8,150,30)+mtx(431,27,fx('write "',"d")+fx("$L","m")+fx("n","i")+fx('"',"d"),"s-mono")+
+   marr("M431 38 L431 62","var(--c-boundary)")+
+   mbox(356,62,150,30)+mtx(431,81,"push task n","s-mono")+
+   mbox(176,112,140,40)+mtx(246,130,"inline the value","s-ttl")+mtx(246,145,"no boundary above","s-sub")+
+   marr("M246 60 L246 112","var(--line2)")+
+   mbox(16,112,120,40)+mtx(76,130,"task queue","s-ttl")+mtx(76,145,"drains as work settles","s-sub")+
+   marr("M366 92 L366 164 Q366 172 358 172 L84 172 Q76 172 76 164 L76 154","var(--c-stream)"),
+   "A pending child under a boundary becomes a reference plus a queued task; without a boundary it is awaited inline.")+
+ "<p>The consequence is that a row's id is allocated at <i>walk</i> time and its content written at <i>settle</i> time. Those are different moments, and the gap between them is where streaming lives.</p>"+
+ mc("the shape of the emit, reduced to its decision",
+"function renderNode(node, emit, nextId) {\n"+
+"  if (isPending(node) && hasBoundaryAbove(node)) {\n"+
+"    const id = nextId();\n"+
+"    schedule(node, (value) => emit(id + ':' + serialize(value)));\n"+
+"    return '$L' + id;            // the parent can be written now\n"+
+"  }\n"+
+"  return serialize(node);        // otherwise it must be inlined\n"+
+"}")+
+ "<table class='tbl'><tr><th>Produces</th><td><code>text/x-component</code></td></tr>"+
+ "<tr><th>Needs</th><td>a client manifest mapping module ids to bundle chunks</td></tr>"+
+ "<tr><th>Runs under</th><td>the <code>react-server</code> export condition</td></tr>"+
+ "<tr><th>Blocks on</th><td>only children with no boundary above them</td></tr></table>"},
+
+"fizz-render":{h:"The HTML renderer",k:"react-dom/server",
+ b:"<p>Fizz keeps its own model of the document as <i>segments</i>. The shell is one segment; each boundary opens another. Completed segments queue inside React until it decides to flush, which is a separate decision from whether the outbound stream has room.</p>"+
+ mf("0 0 520 180",
+   mbox(16,24,150,50)+mtx(91,44,"shell segment","s-ttl")+mtx(91,60,"flushed at once","s-sub")+
+   mbox(16,96,150,50)+mtx(91,116,"boundary segments","s-ttl")+mtx(91,132,"flushed on completion","s-sub")+
+   marr("M166 50 C 210 50 210 80 250 80","var(--c-fizz)")+
+   marr("M166 120 C 210 120 210 90 250 90","var(--c-fizz)")+
+   mbox(250,58,130,44)+mtx(315,76,"React buffer","s-ttl")+mtx(315,92,"completed work","s-sub")+
+   marr("M380 80 L420 80","var(--c-stream)")+
+   mbox(420,58,84,44)+mtx(462,76,"stream","s-ttl")+mtx(462,92,"queue","s-sub")+
+   mtx(315,130,"two queues, not one","s-sub"),
+   "A stalled consumer backs up the stream queue; React's own buffer fills first.")+
+ "<p>That two-queue arrangement is why a slow client costs memory before it costs throughput — work already in flight still completes and still accumulates.</p>"+
+ mc("the callback contract, and what each one guarantees",
+"renderToPipeableStream(tree, {\n"+
+"  onShellReady()  { /* shell complete: nothing sent yet, headers still mutable */ },\n"+
+"  onShellError(e) { /* the only failure you can still turn into a 500 */ },\n"+
+"  onAllReady()    { /* every boundary resolved: the prerender signal */ },\n"+
+"  onError(e)      { /* a boundary failed after bytes were already sent */ },\n"+
+"});")+
+ "<p>Only <code>onShellError</code> fires before anything reaches the socket. Everything after it is a repair problem rather than a response-status problem.</p>"},
+
+"row-zero":{h:"Row 0 — the shell",k:"the element encoding",
+ b:"<p>Everything the user can see without waiting lives in this one row. Its arrival time is what time-to-first-byte actually measures.</p>"+
+ "<p>A React element serializes as a four-slot array, which is compact and — more usefully — positional, so the parser never has to look up key names.</p>"+
+ mf("0 0 520 150",
+   mbox(20,40,110,44)+mtx(75,60,fx('"',"d")+fx("$","m")+fx('"',"d"),"s-mono")+mtx(75,76,"element marker","s-sub")+
+   mbox(138,40,110,44)+mtx(193,60,fx('"',"d")+fx("main","t")+fx('"',"d"),"s-mono")+mtx(193,76,"type","s-sub")+
+   mbox(256,40,100,44)+mtx(306,60,"null","s-mono")+mtx(306,76,"key","s-sub")+
+   mbox(364,40,136,44)+mtx(432,60,fx("{ ","d")+fx("children","k")+fx(": … }","d"),"s-mono")+mtx(432,76,"props","s-sub")+
+   mtx(75,26,"0","s-sub")+mtx(193,26,"1","s-sub")+mtx(306,26,"2","s-sub")+mtx(432,26,"3","s-sub")+
+   mtx(260,120,'a type that is itself $-prefixed points at another row','s-lbl'),
+   "Slot 1 holding a string such as $1 is a reference, which is how one Suspense symbol is shared by every boundary.")+
+ mc("encoding and decoding one element",
+"// slot 1 may be a tag name, a client reference, or a pointer to another row\n"+
+"const el = ['$', 'main', null, { children: [] }];\n"+
+"\n"+
+"function toElement(row) {\n"+
+"  const [, type, key, props] = row;\n"+
+"  return { $$typeof: REACT_ELEMENT, type: deref(type), key, props };\n"+
+"}")+
+ "<p>Reusing row <code>1</code> for the Suspense symbol is not an optimisation detail — it is the same reference mechanism the holes use, applied to a value that happens to already exist.</p>"},
+
+"row-lazy":{h:"$L and the tag family",k:"forward references",
+ b:"<p>The <code>$</code> prefix is a small tagged union layered over JSON. JSON cannot express <code>undefined</code>, <code>BigInt</code>, <code>Map</code>, a cyclic reference, or a value that has not happened yet. Each gets a tag.</p>"+
+ mf("0 0 520 176",
+   mbox(14,16,120,30)+mtx(74,36,fx('"',"d")+fx("$L","m")+fx("2","i")+fx('"',"d"),"s-mono")+marr("M134 31 L180 31","var(--c-flight)")+mbox(180,16,150,30)+mtx(255,36,"pending record 2","s-lbl")+
+   mbox(14,54,120,30)+mtx(74,74,fx('"',"d")+fx("$@","m")+fx("3","i")+fx('"',"d"),"s-mono")+marr("M134 69 L180 69","var(--c-flight)")+mbox(180,54,150,30)+mtx(255,74,"promise for row 3","s-lbl")+
+   mbox(14,92,120,30)+mtx(74,112,fx('"',"d")+fx("$Q","m")+fx("1","i")+fx('"',"d"),"s-mono")+marr("M134 107 L180 107","var(--c-flight)")+mbox(180,92,150,30)+mtx(255,112,"new Map(row 1)","s-lbl")+
+   mbox(14,130,120,30)+mtx(74,150,fx('"',"d")+fx("$$","m")+fx("x","d")+fx('"',"d"),"s-mono")+marr("M134 145 L180 145","var(--c-metric)")+mbox(180,130,150,30)+mtx(255,150,'literal "$x"',"s-lbl")+
+   mbox(352,54,154,68)+mtx(429,78,"one dispatch","s-ttl")+mtx(429,96,"on charAt(1)","s-mono")+mtx(429,112,"before JSON.parse ends","s-sub")+
+   marr("M330 88 L352 88","var(--line2)"),
+   "Every tag resolves in the JSON reviver, so decoding costs one pass and no separate walk.")+
+ "<p>Below is a working reviver covering the tags this page uses. It was run against the real rows: feeding the parent row before the child row yields a pending record that the later row resolves.</p>"+
+ mc("a reviver that handles the tag family",
+"function revive(key, v) {\n"+
+"  if (typeof v !== 'string' || v[0] !== '$') return v;\n"+
+"  if (v[1] === '$') return v.slice(1);              // escaped literal dollar\n"+
+"  if (v[1] === 'L') return { lazy: record(v.slice(2)) };\n"+
+"  if (v[1] === '@') return record(v.slice(2)).promise;\n"+
+"  if (v[1] === 'D') return new Date(v.slice(2));\n"+
+"  if (v[1] === 'n') return BigInt(v.slice(2));\n"+
+"  if (v === '$undefined') return undefined;\n"+
+"  return v;\n"+
+"}")+
+ mout("parser   row 0 child is lazy -> {\"__lazy\":{\"status\":\"pending\"}}\nparser   row 2 now resolved -> resolved {\"children\":\"resolved late\"}")},
+
+"row-late":{h:"Rows 2 and 3 — the fills",k:"why completion order wins",
+ b:"<p>Row 3 was written second in the source and arrived first on the wire. Nothing chose that ordering — it fell out of a ready queue draining in the order promises settled.</p>"+
+ mf("0 0 520 156",
+   mtx(20,22,"task queue","s-ttl","start")+
+   mbox(20,32,150,32)+mtx(95,52,"task 2  (60ms)","s-mono")+
+   mbox(20,72,150,32)+mtx(95,92,"task 3  (20ms)","s-mono")+
+   marr("M170 88 C 220 88 220 52 262 52","var(--c-boundary)")+
+   marr("M170 48 C 230 48 230 108 262 108","var(--c-fizz)")+
+   mbox(262,32,110,40)+mtx(317,50,"settles 1st","s-ttl")+mtx(317,65,"+99ms","s-num")+
+   mbox(262,88,110,40)+mtx(317,106,"settles 2nd","s-ttl")+mtx(317,121,"+138ms","s-num")+
+   marr("M372 52 L410 52")+marr("M372 108 C 400 108 400 66 410 66")+
+   mbox(410,36,96,44)+mtx(458,56,"row 3","s-mono")+mtx(458,72,"then row 2","s-mono"),
+   "Source position determines the id; settle time determines the position on the wire.")+
+ "<p>A failure takes the same path. An error inside a boundary does not abort the response — it writes an error row against that id, and the client renders that boundary's error state while every other row proceeds untouched.</p>"+
+ mc("the three ways a row id can be closed out",
+"emit(id + ':' + JSON.stringify(value));   // resolved\n"+
+"emit(id + ':E' + JSON.stringify(err));    // rejected: this boundary only\n"+
+"// never emitted at all -> the client stays suspended on that record")+
+ "<p>The third case is the one worth remembering: a row that is never written is indistinguishable, from the client's side, from a row that is merely slow.</p>"},
+
+"boundary":{h:"The Suspense boundary",k:"the unit of streaming",
+ b:"<p>A boundary is the smallest region React will ship separately. Its presence is what makes a parent writable — remove it and there is no legal way to represent the hole, so the ancestry waits.</p>"+
+ mf("0 0 520 200",
+   mtx(120,20,"no boundary","s-ttl")+mtx(400,20,"with a boundary","s-ttl")+
+   marr("M260 10 L260 190","var(--line)")+
+   mbox(70,36,100,30)+mtx(120,56,"main","s-mono")+
+   marr("M120 66 L120 90","var(--line2)")+
+   mbox(70,90,100,30,"color-mix(in srgb,var(--c-metric) 22%,transparent)")+mtx(120,110,"async child","s-mono")+
+   mtx(120,146,"parent cannot be","s-lbl")+mtx(120,164,"written until this settles","s-lbl")+
+   mbox(350,36,100,30)+mtx(400,56,"main","s-mono")+
+   marr("M400 66 L400 90","var(--c-boundary)")+
+   mbox(350,90,100,30,"color-mix(in srgb,var(--c-boundary) 20%,transparent)")+mtx(400,110,"Suspense","s-mono")+
+   marr("M400 120 L400 144","var(--c-boundary)")+
+   mbox(350,144,100,30)+mtx(400,164,"async child","s-mono")+
+   mtx(400,192,"parent ships now","s-lbl"),
+   "The boundary is the seam the renderer is allowed to cut along.")+
+ "<p>The fallback is serialized eagerly into the parent row rather than deferred, because it is precisely the thing the client needs while the real row is outstanding. Deferring it would reintroduce the wait the boundary exists to remove.</p>"+
+ mc("what a boundary changes about the walk",
+"// without: the walk must await before it can finish the parent\n"+
+"const child = await renderChild(node);\n"+
+"return ['$', 'main', null, { children: child }];\n"+
+"\n"+
+"// with: the walk allocates an id and keeps going\n"+
+"const id = nextId();\n"+
+"schedule(node, id);\n"+
+"return ['$', 'main', null, { children: '$L' + id, fallback: renderSync(fb) }];")},
+
+"tee-split":{h:"tee()",k:"one stream, two readers",
+ b:"<p>Returns two streams over one source. Each has its own queue; a chunk pulled from the source is enqueued into both.</p>"+
+ mf("0 0 520 170",
+   mbox(16,62,110,44)+mtx(71,82,"source","s-ttl")+mtx(71,98,"pulled once","s-sub")+
+   marr("M126 74 C 160 74 160 40 196 40","var(--c-flight)")+
+   marr("M126 94 C 160 94 160 128 196 128","var(--c-client)")+
+   mbox(196,20,150,40)+mtx(271,38,"queue A","s-ttl")+mtx(271,53,"drained fast","s-sub")+
+   mbox(196,108,150,40,"color-mix(in srgb,var(--c-metric) 18%,transparent)")+mtx(271,126,"queue B","s-ttl")+mtx(271,141,"holds everything unread","s-sub")+
+   marr("M346 40 L400 40")+marr("M346 128 L400 128")+
+   mbox(400,20,104,40)+mtx(452,44,"reader A","s-lbl")+
+   mbox(400,108,104,40)+mtx(452,132,"reader B","s-lbl")+
+   mtx(271,84,"no backpressure between branches","s-sub"),
+   "The source advances at the faster reader's pace; the slower branch's queue absorbs the difference.")+
+ "<p>A minimal implementation makes the buffering unavoidable to see — <code>pump</code> pushes into both queues, and a branch that is never read never shrinks its own.</p>"+
+ mc("a tee reduced to its buffering behaviour",
+"function miniTee(src) {\n"+
+"  const r = src.getReader();\n"+
+"  const q = [[], []];\n"+
+"  let done = false;\n"+
+"\n"+
+"  const pump = () => r.read().then(({ value, done: d }) => {\n"+
+"    if (d) { done = true; return; }\n"+
+"    q[0].push(value);            // one pull, two enqueues\n"+
+"    q[1].push(value);\n"+
+"  });\n"+
+"\n"+
+"  const branch = (i) => new ReadableStream({\n"+
+"    async pull(c) {\n"+
+"      while (!q[i].length && !done) await pump();\n"+
+"      if (q[i].length) c.enqueue(q[i].shift());\n"+
+"      else c.close();\n"+
+"    },\n"+
+"  });\n"+
+"  return [branch(0), branch(1)];\n"+
+"}")+
+ mout("miniTee  branch A: [ 0, 1, 2, 3 ]  then branch B: [ 0, 1, 2, 3 ]")+
+ "<p>Branch B yields all four from its queue after branch A has already finished — the source was never touched again.</p>"},
+
+"ssr-consume":{h:"The decoder between them",k:"react-server-dom-webpack/client, on the server",
+ b:"<p>Fizz cannot render a Server Component, and the Flight renderer cannot produce HTML. They are not two functions in one program &mdash; they resolve React through different export conditions and will not load in each other\u2019s environment.</p>"+
+ mf("0 0 520 186",
+   mtx(130,20,"react-server graph","s-ttl")+mtx(390,20,"client graph","s-ttl")+
+   marr("M260 8 L260 150","var(--line)")+
+   mbox(30,34,200,38)+mtx(130,58,"\u2026/server.edge","s-mono")+
+   mbox(30,84,200,38)+mtx(130,102,"executes Server Components","s-sub")+mtx(130,116,"writes rows","s-lbl")+
+   mbox(290,34,200,38)+mtx(390,58,"\u2026/client.edge","s-mono")+
+   mbox(290,84,200,38)+mtx(390,102,"rebuilds an element tree","s-sub")+mtx(390,116,"reads rows","s-lbl")+
+   marr("M230 103 L290 103","var(--c-client)")+
+   mtx(260,146,"bytes are the only thing that crosses","s-sub")+
+   mtx(260,172,"two module graphs, two copies of React, one process","s-lbl"),
+   "Neither renderer can see the other\u2019s tree; the wire format is the entire interface between them.")+
+ "<p>Both refusals are explicit, and measured rather than inferred:</p>"+
+ mout("$ node --conditions react-server -e \"import('react-dom/server.edge')\"\n  react-dom/server is not supported in React Server Components.\n\n$ node -e \"import('react-server-dom-webpack/server.edge')\"\n  The \"react\" package in this environment is not configured correctly.\n  The \"react-server\" condition must be enabled in any environment\n  that runs React Server Components.")+
+ "<p>Next.js gets both in one process by building two module graphs as separate bundler layers, each resolving its own copy of React. The decoder is what bridges them, and it is the same function the browser will later run &mdash; which is why server output and client output agree: there is no second implementation to diverge from.</p>"+
+ mc("the wiring, in the order it happens",
+"// graph 1 \u2014 the react-server layer\n"+
+"const flight = renderToReadableStream(tree, clientManifest);\n"+
+"const [forHtml, forInline] = flight.tee();\n"+
+"\n"+
+"// graph 2 \u2014 the client layer, still on the server\n"+
+"const element = createFromReadableStream(forHtml, { ssrManifest });\n"+
+"const html = await renderToReadableStream(element, { bootstrapScripts });")+
+ "<p>Note what <code>element</code> is: a tree the decoder built, not the rows. Fizz has no idea a wire format was involved.</p>"},
+
+"inline-consume":{h:"Branch B — inlined into the document",k:"escaping is not optional",
+ b:"<p>The raw rows are written into the page as script tags so the browser needs no second request for them. Row data is arbitrary user content, and arbitrary content inside a script element can end that element early.</p>"+
+ mf("0 0 520 150",
+   mbox(20,28,220,44,"color-mix(in srgb,var(--c-metric) 18%,transparent)")+
+   mtx(130,48,"a row containing","s-lbl")+mtx(130,64,"a script-closing sequence","s-mono")+
+   marr("M240 50 L292 50","var(--c-metric)")+
+   mbox(292,28,208,44)+mtx(396,48,"script element ends","s-lbl")+mtx(396,64,"rest of the row is markup","s-sub")+
+   mbox(20,92,220,40)+mtx(130,117,"escape before embedding","s-lbl")+
+   marr("M240 112 L292 112","var(--c-boundary)")+
+   mbox(292,92,208,40)+mtx(396,117,"parser sees one string","s-lbl"),
+   "The same hazard as any JSON-in-HTML embedding, with the same fix.")+
+ mc("chunk, escape, embed",
+"function inline(row) {\n"+
+"  const safe = JSON.stringify(row)\n"+
+"    .replace(/</g, '\\\\u003c')     // neutralise any closing tag\n"+
+"    .replace(/\\u2028/g, '\\\\u2028') // line separators are not valid in JS strings\n"+
+"    .replace(/\\u2029/g, '\\\\u2029');\n"+
+"  return 'self.__next_f.push([1,' + safe + '])';\n"+
+"}")+
+ "<p>Escaping <code>&lt;</code> rather than matching a closing tag is deliberate: it is the only form that cannot be defeated by case, whitespace or partial matches split across two chunks.</p>"},
+
+"queue":{h:"The stream queue",k:"highWaterMark and desiredSize",
+ b:"<p>Capacity is declared by a queuing strategy. <code>desiredSize</code> is capacity minus current length, and <code>pull</code> is called only while it is above zero.</p>"+
+ mf("0 0 520 150",
+   mtx(60,30,"producer","s-ttl")+mbox(20,40,80,40)+mtx(60,65,"pull()","s-mono")+
+   marr("M100 60 L140 60","var(--c-stream)")+
+   mbox(140,32,240,56)+
+   mbox(152,44,68,32,"color-mix(in srgb,var(--c-stream) 30%,transparent)")+
+   mbox(228,44,68,32,"color-mix(in srgb,var(--c-stream) 30%,transparent)")+
+   mbox(304,44,68,32,"color-mix(in srgb,var(--c-stream) 30%,transparent)")+
+   mtx(260,24,"highWaterMark 3","s-sub")+mtx(260,106,"desiredSize 0 — pull stops","s-num")+
+   marr("M380 60 L420 60","var(--c-boundary)")+
+   mbox(420,40,80,40)+mtx(460,65,"read()","s-mono")+
+   mtx(460,30,"consumer","s-ttl")+
+   mtx(260,132,"one read frees one slot and causes exactly one pull","s-lbl"),
+   "It is advisory: enqueue never rejects, so a producer that ignores desiredSize drives it negative.")+
+ "<p>The strategy decides what <i>size</i> means. Counting chunks is the default; for byte streams, counting bytes is the honest measure, because one chunk can be a kilobyte or a megabyte.</p>"+
+ mc("the two strategies, and what they count",
+"new CountQueuingStrategy({ highWaterMark: 3 });\n"+
+"// size() is always 1 — capacity measured in chunks\n"+
+"\n"+
+"new ByteLengthQueuingStrategy({ highWaterMark: 64 * 1024 });\n"+
+"// size(chunk) is chunk.byteLength — capacity measured in bytes")+
+ mout("start desiredSize=3\npull  desiredSize=3 -> enqueue\npull  desiredSize=2 -> enqueue\npull  desiredSize=1 -> enqueue\n--- reader reads once ---\npull  desiredSize=1 -> enqueue")},
+
+"socket":{h:"Where backpressure actually starts",k:"the chain back from the client",
+ b:"<p>The pressure originates at the far end of the network and propagates backwards through four independent mechanisms, each with its own buffer.</p>"+
+ mf("0 0 520 160",
+   mbox(12,52,104,44)+mtx(64,72,"slow client","s-ttl")+mtx(64,88,"stops reading","s-sub")+
+   marr("M116 74 L152 74","var(--c-metric)")+
+   mbox(152,52,104,44)+mtx(204,72,"TCP window","s-ttl")+mtx(204,88,"closes","s-sub")+
+   marr("M256 74 L292 74","var(--c-metric)")+
+   mbox(292,52,104,44)+mtx(344,72,"stream queue","s-ttl")+mtx(344,88,"desiredSize 0","s-sub")+
+   marr("M396 74 L432 74","var(--c-metric)")+
+   mbox(432,52,76,44)+mtx(470,72,"React","s-ttl")+mtx(470,88,"not asked","s-sub")+
+   mtx(260,130,"in-flight components still settle and still accumulate","s-lbl")+
+   mtx(260,148,"memory grows before throughput drops","s-sub"),
+   "Four buffers in series; only the last one stops React being asked for chunks.")+
+ "<p>What this does <i>not</i> do is pause work already started. Promises still settle, results still accumulate in React's buffer, and the cost shows up as memory rather than as a slowdown.</p>"+
+ mc("the Node form of the same signal",
+"const ok = res.write(chunk);\n"+
+"if (!ok) {\n"+
+"  // the kernel buffer is full; stop until it drains\n"+
+"  await new Promise((r) => res.once('drain', r));\n"+
+"}")+
+ "<p>Web streams express this as a return value you must poll; Node expresses it as a boolean plus an event. <code>pipe()</code> exists so you do not have to write the loop above yourself.</p>"},
+
+"nextf-arr":{h:"__next_f before any bundle",k:"the cheapest possible buffer",
+ b:"<p>Defined in the first inline script the parser meets. From that moment row data can accumulate with no framework loaded and no network wait — the array is the entire mechanism.</p>"+
+ mf("0 0 520 150",
+   mtx(26,22,"document parse","s-ttl","start")+
+   marr("M26 40 L494 40","var(--line2)")+
+   mtx(78,62,"__next_f = []","s-mono")+marr("M78 30 L78 44","var(--c-client)")+
+   mtx(200,62,"push row","s-mono")+marr("M200 30 L200 44","var(--c-client)")+
+   mtx(310,62,"push row","s-mono")+marr("M310 30 L310 44","var(--c-client)")+
+   mtx(440,62,"bundle ready","s-mono")+marr("M440 30 L440 44","var(--c-boundary)")+
+   mbox(26,92,468,40,"color-mix(in srgb,var(--c-client) 14%,transparent)")+
+   mtx(260,117,"rows collected here need no JavaScript to have loaded","s-lbl"),
+   "The window between first byte and bundle ready is where an array beats a stream.")+
+ mc("the bootstrap, in full",
+"self.__next_f = self.__next_f || [];")+
+ "<p>The <code>|| []</code> matters more than it looks: the same snippet is emitted ahead of every chunk of inlined data, so it must be safe to run repeatedly without discarding what has already accumulated.</p>"},
+
+"nextf-promote":{h:"Promotion — push is replaced",k:"buffer becomes stream, with no gap",
+ b:"<p>When the runtime loads it swaps <code>push</code> for a function that enqueues into a stream controller, then replays everything already in the array. The order of those two operations is the whole trick.</p>"+
+ mf("0 0 520 160",
+   mtx(120,20,"before","s-ttl")+mtx(400,20,"after","s-ttl")+
+   marr("M260 10 L260 150","var(--line)")+
+   mbox(30,36,180,44)+mtx(120,56,"__next_f","s-mono")+mtx(120,72,"Array.prototype.push","s-sub")+
+   mbox(30,96,180,40)+mtx(120,121,"entries sit in memory","s-lbl")+
+   mbox(310,36,180,44)+mtx(400,56,"__next_f","s-mono")+mtx(400,72,"{ push: enqueue }","s-sub")+
+   mbox(310,96,180,40)+mtx(400,121,"entries reach a controller","s-lbl")+
+   marr("M210 58 L310 58","var(--c-client)"),
+   "Replaying the backlog before accepting live pushes is what keeps the order intact.")+
+ mc("the promotion, verified",
+"function promote(controller) {\n"+
+"  const backlog = self.__next_f;\n"+
+"  self.__next_f = { push: ([, data]) => controller.enqueue(data) };\n"+
+"  for (const entry of backlog) self.__next_f.push(entry);\n"+
+"}")+
+ mout("promotion  [ 'row-A', 'row-B', 'row-C' ] - backlog replayed before live pushes, order intact")+
+ "<p>Replacing the object rather than monkey-patching <code>push</code> on the array avoids a subtle failure: an array whose <code>push</code> has been reassigned still holds its old entries, and a later reader could drain them twice.</p>"},
+
+"client-parse":{h:"Rebuilding the tree",k:"resolution by id",
+ b:"<p>The parser holds a map from row id to a record. A reference creates the record immediately, in pending state; the row that arrives later resolves it. Nothing in the process depends on arrival order.</p>"+
+ mf("0 0 520 170",
+   mtx(24,22,"id → record","s-ttl","start")+
+   mbox(20,34,150,34)+mtx(95,55,fx("0","i")+"  "+fx("resolved","g"),"s-mono")+
+   mbox(20,76,150,34,"color-mix(in srgb,var(--c-metric) 18%,transparent)")+mtx(95,97,fx("2","i")+"  "+fx("pending","w"),"s-mono")+
+   mbox(20,118,150,34)+mtx(95,139,fx("3","i")+"  "+fx("resolved","g"),"s-mono")+
+   marr("M170 93 L215 93","var(--c-flight)")+
+   mbox(215,74,140,40)+mtx(285,99,"React suspends","s-lbl")+
+   marr("M355 94 C 390 94 390 60 420 60","var(--c-boundary)")+
+   mbox(420,40,84,40)+mtx(462,65,fx("row ","d")+fx("2","i"),"s-mono")+
+   marr("M462 80 C 462 120 380 130 285 116","var(--c-boundary)")+
+   mtx(285,150,"record resolves, subtree renders","s-sub"),
+   "A pending record and a slow network are the same thing from the tree's point of view.")+
+ "<p>This is also where the client and the DOM patching stay out of each other's way: the parser knows nothing about <code>$RC</code>, and <code>$RC</code> knows nothing about rows.</p>"+
+ mc("the record map, reduced",
+"function createParser() {\n"+
+"  const chunks = new Map();\n"+
+"\n"+
+"  const record = (id) => {\n"+
+"    if (!chunks.has(id)) {\n"+
+"      let resolve;\n"+
+"      const promise = new Promise((r) => (resolve = r));\n"+
+"      chunks.set(id, { status: 'pending', promise, resolve });\n"+
+"    }\n"+
+"    return chunks.get(id);\n"+
+"  };\n"+
+"\n"+
+"  return {\n"+
+"    feed(line) {\n"+
+"      const i = line.indexOf(':');\n"+
+"      const r = record(line.slice(0, i));\n"+
+"      r.value = JSON.parse(line.slice(i + 1), revive);\n"+
+"      r.status = 'resolved';\n"+
+"      r.resolve(r.value);\n"+
+"    },\n"+
+"  };\n"+
+"}")},
+
+"rc-patch":{h:"$RC — the DOM repair",k:"no React involved",
+ b:"<p>Pure DOM surgery in roughly 800 bytes, inlined once per document. It runs whether or not React has hydrated, which is why streamed content appears while the main bundle is still downloading.</p>"+
+ mf("0 0 520 190",
+   mtx(120,20,"before","s-ttl")+mtx(400,20,"after","s-ttl")+
+   marr("M260 10 L260 178","var(--line)")+
+   mbox(24,34,192,120)+
+   mtx(120,54,fx("&lt;!--$?--&gt;","m"),"s-mono")+
+   mtx(120,74,fx("&lt;","d")+fx("template","t")+" "+fx("id","k")+fx('="',"d")+fx("B:0","i")+fx('"&gt;',"d"),"s-mono")+
+   mtx(120,96,"&lt;i&gt;fallback&lt;/i&gt;","s-mono")+
+   mtx(120,118,"&lt;!--/$--&gt;","s-mono")+
+   mtx(120,144,"content parked elsewhere","s-sub")+
+   mbox(304,34,192,120)+
+   mtx(400,54,fx("&lt;!--$--&gt;","m"),"s-mono")+
+   mtx(400,78,"&lt;p&gt;real&lt;/p&gt;","s-mono")+
+   mtx(400,102,"&lt;!--/$--&gt;","s-mono")+
+   mtx(400,134,"anchor and husk removed","s-sub")+
+   marr("M216 94 L304 94","var(--c-boundary)")+
+   mtx(260,178,"the marker flips from $? to $, which is how hydration learns it resolved","s-sub"),
+   "The comment markers are the boundary's identity; the template is only an address.")+
+ "<p>Below is the operation written for reading rather than for bytes. It was run against a real DOM containing a multi-node fallback and sibling content after the boundary, to confirm it removes exactly the fallback and nothing else.</p>"+
+ mc("$RC, expanded",
+"function RC(boundaryId, contentId) {\n"+
+"  const anchor  = document.getElementById(boundaryId);\n"+
+"  const content = document.getElementById(contentId);\n"+
+"  const marker  = anchor.previousSibling;   // the <!--$?--> comment\n"+
+"  const parent  = anchor.parentNode;\n"+
+"\n"+
+"  let node = anchor.nextSibling;            // delete the fallback\n"+
+"  while (node && !(node.nodeType === 8 && node.data === '/$')) {\n"+
+"    const next = node.nextSibling;\n"+
+"    parent.removeChild(node);\n"+
+"    node = next;\n"+
+"  }\n"+
+"\n"+
+"  while (content.firstChild)                // move the real content in\n"+
+"    parent.insertBefore(content.firstChild, node);\n"+
+"\n"+
+"  marker.data = '$';                        // boundary is now resolved\n"+
+"  anchor.remove();\n"+
+"  content.remove();\n"+
+"}")+
+ mout("before   <!--$?--><template id=\"B:0\"></template><i>fallback</i><b>more</b><!--/$--><p>after</p>\nafter    <!--$--><p>real</p><span>content</span><!--/$--><p>after</p>")+
+ "<p>The trailing <code>&lt;p&gt;after&lt;/p&gt;</code> is untouched, which is the property that matters: boundaries nest and sit beside each other, so the walk has to stop at its own closing marker rather than at the end of the parent.</p>"}
+
+};
+var scrim=$("#scrim"),mb=$("#mb"),mh=$("#mh"),mk=$("#mk"),lastFocus=null;
+function openModal(id){
+  var d=DEFS[id];if(!d)return;
+  lastFocus=document.activeElement;
+  mh.textContent=d.h;mk.textContent=d.k||"";mb.innerHTML=d.b;
+  scrim.setAttribute("data-open","1");$("#mx").focus();
+}
+function closeModal(){scrim.setAttribute("data-open","0");if(lastFocus)lastFocus.focus()}
+$("#mx").addEventListener("click",closeModal);
+scrim.addEventListener("click",function(e){if(e.target===scrim)closeModal()});
+document.addEventListener("keydown",function(e){if(e.key==="Escape"&&scrim.getAttribute("data-open")==="1")closeModal()});
+
+/* ================= FIGURES ================= */
+function box(x,y,w,h,cls){return '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="8" class="s-box '+(cls||"")+'"/>'}
+function hit(id,inner,st){
+  return '<g class="s-hit" data-modal="'+id+'"'+(st?' data-appear="'+st+'"':'')+' tabindex="0" role="button">'+inner+'</g>';
+}
+function txt(x,y,s,cls,anchor){
+  return '<text x="'+x+'" y="'+y+'" class="'+(cls||"s-lbl")+'" text-anchor="'+(anchor||"middle")+'">'+s+'</text>';
+}
+
+var FIGS={};
+
+/* --- FIG: the claim --- */
+FIGS.claim=function(){
+  var s='<svg viewBox="0 0 700 270" role="img" aria-label="Source order against arrival order in both renderers">';
+  s+='<g data-appear="1">'+txt(140,42,"written in JSX","s-ttl")+'</g>';
+  s+=hit("flight-render",box(330,24,150,26)+txt(405,42,"Flight rows","s-ttl"),"1");
+  s+=hit("fizz-render",box(500,24,150,26)+txt(575,42,"Fizz chunks","s-ttl"),"1");
+
+  /* duration bars: the reason for everything below, visible at a glance */
+  s+='<g data-appear="1">'+box(40,66,200,56)+txt(62,84,"B","s-ttl","start")
+    +'<rect x="62" y="96" width="96" height="10" rx="3" fill="var(--c-metric)"/>'
+    +txt(166,105,"60ms","s-num","start")+txt(232,84,"written first","s-sub","end")+'</g>';
+  s+='<g data-appear="1">'+box(40,162,200,56)+txt(62,180,"A","s-ttl","start")
+    +'<rect x="62" y="192" width="32" height="10" rx="3" fill="var(--c-boundary)"/>'
+    +txt(102,201,"20ms","s-num","start")+txt(232,180,"written second","s-sub","end")+'</g>';
+
+  s+='<g data-appear="2"><path d="M240 190 C 280 190 285 94 330 94" stroke="var(--c-boundary)" stroke-width="1.8" fill="none" class="marching"/>'
+    +'<path d="M321 89.5 L330 94 L321 98.5 Z" fill="var(--c-boundary)"/></g>';
+  s+='<g data-appear="3"><path d="M240 94 C 280 94 285 190 330 190" stroke="var(--c-metric)" stroke-width="1.8" fill="none" class="marching"/>'
+    +'<path d="M321 185.5 L330 190 L321 194.5 Z" fill="var(--c-metric)"/></g>';
+
+  s+='<g data-appear="2">'+box(330,66,150,56)+'<rect x="330" y="66" width="4" height="56" fill="var(--c-boundary)"/>'
+    +txt(410,90,"row 3","s-mono")+txt(410,108,"+99ms","s-num")+'</g>';
+  s+='<g data-appear="2">'+box(500,66,150,56)+'<rect x="500" y="66" width="4" height="56" fill="var(--c-boundary)"/>'
+    +txt(578,90,"B:1","s-mono")+txt(578,108,"+8ms","s-num")+'</g>';
+  s+='<g data-appear="2">'+txt(490,140,"arrives first","s-sub")+'</g>';
+
+  s+='<g data-appear="3">'+box(330,162,150,56)+'<rect x="330" y="162" width="4" height="56" fill="var(--c-metric)"/>'
+    +txt(410,186,"row 2","s-mono")+txt(410,204,"+138ms","s-num")+'</g>';
+  s+='<g data-appear="3">'+box(500,162,150,56)+'<rect x="500" y="162" width="4" height="56" fill="var(--c-metric)"/>'
+    +txt(578,186,"B:0","s-mono")+txt(578,204,"+47ms","s-num")+'</g>';
+  s+='<g data-appear="3">'+txt(490,236,"arrives second","s-sub")+'</g>';
+
+  s+='<g data-appear="4">'+txt(240,258,"written B then A \u2192 shipped A then B","s-lbl")+'</g>';
+  s+='</svg>';
+  return {svg:s,steps:4,caps:[
+    "Two async components. The bars are their durations: <b>B</b> takes <span class='num'>60ms</span>, <b>A</b> takes <span class='num'>20ms</span>, and B is the one written first.",
+    "<b>A</b> finishes first, so its output ships first \u2014 in both renderers, even though it was written second.",
+    "<b>B</b> finishes last, so it ships last in both.",
+    "The arrows cross. Wire order is completion order; where a component sat in the source had no effect on either renderer."
+  ]};
+};
+
+/* --- FIG: tree to rows --- */
+FIGS.rows=function(){
+  var s='<svg viewBox="0 0 700 340" role="img" aria-label="React tree serialized into numbered rows">';
+  s+=txt(40,30,"element tree","s-ttl","start");
+  s+='<g data-appear="1">'+box(96,44,110,32)+txt(151,64,"main","s-mono")+'</g>';
+  s+='<g data-appear="1">'+box(40,110,84,30)+txt(82,129,"h1","s-mono")+'</g>';
+  s+=hit("boundary",box(134,110,84,30)+txt(176,129,"Suspense","s-mono"),"1");
+  s+=hit("boundary",box(228,110,84,30)+txt(270,129,"Suspense","s-mono"),"1");
+  s+='<g data-appear="1"><path d="M151 76 L82 110 M151 76 L176 110 M151 76 L270 110" stroke="var(--line2)" fill="none"/></g>';
+  s+='<g data-appear="2">'+box(134,172,84,30)+txt(176,191,"Slow B","s-mono")+txt(176,216,"60ms","s-num")+'</g>';
+  s+='<g data-appear="2">'+box(228,172,84,30)+txt(270,191,"Slow A","s-mono")+txt(270,216,"20ms","s-num")+'</g>';
+  s+='<g data-appear="2"><path d="M176 140 L176 172 M270 140 L270 172" stroke="var(--c-boundary)" stroke-dasharray="3 3" fill="none"/></g>';
+
+  /* divider moved left and the row column right, opening a 52px routing channel */
+  s+='<line x1="344" y1="24" x2="344" y2="316" stroke="var(--line)" />';
+  s+=txt(396,30,"wire rows","s-ttl","start");
+  s+=hit("row-zero",box(396,44,270,46)+txt(408,64,fx("1","i")+fx(':"','d')+fx("$S","m")+"react.suspense"+fx('"','d'),"s-mono","start")
+      +txt(408,80,fx("0","i")+fx(':["','d')+fx("$","m")+fx('","','d')+fx("main","t")+fx('",… ]','d'),"s-mono","start"),"3");
+  s+=hit("row-lazy",box(396,104,270,42)
+      +txt(408,122,fx("children","k")+fx(':"','d')+fx("$L","m")+fx("2","i")+fx('"','d'),"s-mono","start")
+      +txt(408,138,fx("children","k")+fx(':"','d')+fx("$L","m")+fx("3","i")+fx('"','d'),"s-mono","start"),"4");
+  s+=hit("row-late",box(396,178,270,32)+txt(408,198,fx("3","i")+fx(':["','d')+fx("$","m")+fx('","','d')+fx("p","t")+fx('",{…','d')+fx("A","g")+fx('}]','d'),"s-mono","start")+txt(654,198,"+99ms","s-num","end"),"5");
+  s+=hit("row-late",box(396,220,270,32)+txt(408,240,fx("2","i")+fx(':["','d')+fx("$","m")+fx('","','d')+fx("p","t")+fx('",{…','d')+fx("B","w")+fx('}]','d'),"s-mono","start")+txt(654,240,"+138ms","s-num","end"),"6");
+  /* each reference leaves its own line, drops down its own lane, and enters its row head-on */
+  s+='<g data-appear="5"><path d="M 396 138 L 380 138 Q 372 138 372 146 L 372 186 Q 372 194 380 194 L 392 194" stroke="var(--c-boundary)" stroke-width="1.6" fill="none" class="marching"/>'
+    +'<path d="M 387 189.5 L 396 194 L 387 198.5 Z" fill="var(--c-boundary)"/></g>';
+  s+='<g data-appear="6"><path d="M 396 122 L 366 122 Q 358 122 358 130 L 358 228 Q 358 236 366 236 L 392 236" stroke="var(--c-metric)" stroke-width="1.6" fill="none" class="marching"/>'
+    +'<path d="M 387 231.5 L 396 236 L 387 240.5 Z" fill="var(--c-metric)"/></g>';
+  s+='</svg>';
+  return {svg:s,steps:6,caps:[
+    "A React tree. Two boundaries, each wrapping an async component.",
+    "The async children cannot be serialized yet — neither has resolved.",
+    "The serializer writes the root <i>as far as it can be serialized now</i>. This is not the finished root \u2014 pending regions are represented indirectly and completed later.",
+    "In place of each pending child it writes a <b>forward reference</b> naming a row id.",
+    "The <span class='num'>20ms</span> component resolves; row <b>3</b> ships.",
+    "The <span class='num'>60ms</span> component resolves last; row <b>2</b> ships after row 3. Ids, not order, carry the structure."
+  ]};
+};
+
+/* --- FIG: same hole, two encodings --- */
+FIGS.two=function(){
+  var s='<svg viewBox="0 0 700 330" role="img" aria-label="Flight and Fizz encodings of a pending boundary">';
+  s+=txt(175,28,"Flight","s-ttl");s+=txt(525,28,"Fizz","s-ttl");
+  s+='<line x1="350" y1="14" x2="350" y2="282" stroke="var(--line)"/>';
+  s+=txt(175,50,"names the hole by id","s-sub");s+=txt(525,50,"fills the hole, repairs later","s-sub");
+
+  s+=hit("row-lazy",box(46,70,258,44)+txt(175,97,
+      fx('"','d')+fx("children","k")+fx('":"','d')+fx("$L2","m")+fx('"','d'),"s-mono"),"1");
+  s+='<g data-appear="1">'+box(396,70,258,44)
+     +txt(525,90,fx("&lt;!--$?--&gt;","m"),"s-mono")
+     +txt(525,106,fx("&lt;","d")+fx("template","t")+" "+fx("id","k")+fx('="','d')+fx("B:0","i")+fx('"&gt;','d'),"s-mono")+'</g>';
+
+  s+='<g data-appear="2">'+box(46,134,258,38)+txt(175,158,"row 2 does not exist yet","s-lbl")+'</g>';
+  s+='<g data-appear="2">'+box(396,134,258,38)+txt(525,158,"fallback rendered in place","s-lbl")+'</g>';
+
+  s+='<g data-appear="3">'+box(46,192,258,40)+txt(175,217,
+      fx("2","i")+fx(':["','d')+fx("$","m")+fx('","','d')+fx("p","t")+fx('",{…}]','d'),"s-mono")+'</g>';
+  s+=hit("rc-patch",box(396,192,258,40)
+     +txt(525,210,fx("&lt;","d")+fx("div","t")+" "+fx("hidden","k")+" "+fx("id","k")+fx('="','d')+fx("S:0","i")+fx('"&gt;','d'),"s-mono")
+     +txt(525,226,fx("$RC","m")+fx('("','d')+fx("B:0","i")+fx('","','d')+fx("S:0","i")+fx('")','d'),"s-mono"),"3");
+
+  s+='<g data-appear="4">'+box(46,248,258,34)+txt(175,270,"parser resolves record 2","s-lbl")+'</g>';
+  s+='<g data-appear="4">'+box(396,248,258,34)+txt(525,270,"script moves DOM into anchor","s-lbl")+'</g>';
+  s+='<rect x="206" y="300" width="10" height="10" rx="2" fill="var(--c-flight)"/>';
+  s+=txt(222,309,"$ mechanism","s-sub","start");
+  s+='<rect x="309" y="300" width="10" height="10" rx="2" fill="var(--c-ident)"/>';
+  s+=txt(325,309,"id","s-sub","start");
+  s+='<rect x="364" y="300" width="10" height="10" rx="2" fill="var(--c-fizz)"/>';
+  s+=txt(380,309,"tag / type","s-sub","start");
+  s+='<rect x="462" y="300" width="10" height="10" rx="2" fill="var(--c-stream)"/>';
+  s+=txt(478,309,"key","s-sub","start");
+  s+='</svg>';
+  return {svg:s,steps:4,caps:[
+    "Both must express <i>content is coming here later</i> without blocking the shell.",
+    "Flight can point at a future row. HTML cannot — so Fizz writes the fallback and leaves an anchor.",
+    "When the work finishes, Flight sends the row; Fizz sends the content parked out of view plus a script.",
+    "Resolution differs: one resolves a record in a parser, the other physically moves DOM nodes."
+  ]};
+};
+
+/* --- FIG: two products, one response --- */
+FIGS.tee=function(){
+  var s='<svg viewBox="0 0 700 330" role="img" aria-label="One application, two rendering products, one response">';
+  s+='<g data-appear="1">'+box(265,16,170,34)+txt(350,38,"React application","s-ttl")+'</g>';
+  s+='<g data-appear="2"><path d="M350 50 L350 72 M175 72 L525 72 M175 72 L175 94 M525 72 L525 94" stroke="var(--line2)" stroke-width="1.4" fill="none"/></g>';
+  s+=hit("flight-render",box(80,94,190,38)+txt(175,112,"RSC / Flight","s-ttl")+txt(175,127,"the component and data model","s-sub"),"2");
+  s+=hit("fizz-render",box(430,94,190,38)+txt(525,112,"HTML / Fizz","s-ttl")+txt(525,127,"what the browser paints","s-sub"),"2");
+  s+='<g data-appear="3"><path d="M175 132 L175 166 M525 132 L525 166" stroke="var(--line2)" stroke-width="1.4" fill="none"/></g>';
+  s+='<g data-appear="3">'+box(80,166,190,34)+txt(175,188,"Flight stream","s-mono")+'</g>';
+  s+='<g data-appear="3">'+box(430,166,190,34)+txt(525,188,"HTML stream","s-mono")+'</g>';
+  s+=hit("tee-split",box(150,204,50,22)+txt(175,219,"tee()","s-mono"),"4");
+  s+='<g data-appear="4"><path d="M175 200 L175 204" stroke="var(--c-flight)" stroke-width="1.5" fill="none"/></g>';
+  s+=hit("ssr-consume",box(300,158,104,34)+txt(352,176,"Flight decoder","s-ttl")+txt(352,189,"client.edge","s-sub"),"5");
+  s+='<g data-appear="5"><path d="M200 215 L282 215 Q290 215 290 207 L290 183 Q290 175 298 175 L300 175" stroke="var(--c-client)" stroke-width="1.6" fill="none" class="marching"/>'
+    +'<path d="M404 175 C 418 175 418 122 430 113" stroke="var(--c-client)" stroke-width="1.6" fill="none" class="marching"/></g>';
+  s+=hit("inline-consume",box(80,252,120,34)+txt(140,274,"inline rows","s-mono"),"6");
+  s+='<g data-appear="6"><path d="M175 226 L175 252 M200 269 L255 269 M525 200 L525 271 L445 271" stroke="var(--c-stream)" stroke-width="1.5" fill="none"/></g>';
+  s+='<g data-appear="6">'+box(255,252,190,38)+txt(350,270,"Next.js response","s-ttl")+txt(350,285,"both products interleaved","s-sub")+'</g>';
+  s+='</svg>';
+  return {svg:s,steps:6,caps:[
+    "One React application on the server.",
+    "It yields <b>two products</b>, not one: a component and data model, and HTML. Neither is a transformation of the other.",
+    "Each renderer emits its own stream.",
+    "The Flight stream has two consumers on this request, so it is teed.",
+    "Fizz does <b>not</b> read Flight rows. A decoder rebuilds an element tree from them, and <i>that tree</i> is what Fizz renders \u2014 in a separate module graph.",
+    "The other tee branch rides along as inline rows, and both products interleave into one response."
+  ]};
+};
+
+/* --- FIG: the browser's two consumers --- */
+FIGS.consumers=function(){
+  var s='<svg viewBox="0 0 700 250" role="img" aria-label="The response feeds two independent consumers, with the data shape at each stage">';
+  s+='<g data-appear="1">'+box(24,92,158,62)+txt(103,114,"HTTP response","s-ttl")
+    +txt(103,132,fx("text/html","t"),"s-mono")+txt(103,148,"both products","s-sub")+'</g>';
+  s+='<g data-appear="2"><path d="M182 123 L212 123 M212 123 L212 53 L246 53" stroke="var(--c-fizz)" stroke-width="1.5" fill="none"/></g>';
+  s+='<g data-appear="2">'+box(246,22,124,62)+txt(308,44,"HTML","s-ttl")
+    +txt(308,62,fx("&lt;","d")+fx("main","t")+fx("&gt;&lt;","d")+fx("h1","t")+fx("&gt;\u2026","d"),"s-mono")
+    +txt(308,78,"markup text","s-sub")+'</g>';
+  s+='<g data-appear="2"><path d="M370 53 L402 53" stroke="var(--c-fizz)" stroke-width="1.5" fill="none" class="marching"/></g>';
+  s+='<g data-appear="2">'+box(402,22,180,62)+txt(492,44,"browser DOM","s-ttl")
+    +txt(492,62,"element nodes","s-mono")+txt(492,78,"paintable before hydration","s-sub")+'</g>';
+  s+='<g data-appear="3"><path d="M212 123 L212 193 L246 193" stroke="var(--c-flight)" stroke-width="1.5" fill="none"/></g>';
+  s+='<g data-appear="3">'+box(246,162,124,62)+txt(308,184,"Flight rows","s-ttl")
+    +txt(308,202,fx("0","i")+fx(':["','d')+fx("$","m")+fx('","','d')+fx("main","t")+fx('",\u2026]','d'),"s-mono")
+    +txt(308,218,"newline-delimited","s-sub")+'</g>';
+  s+='<g data-appear="3"><path d="M370 193 L402 193" stroke="var(--c-flight)" stroke-width="1.5" fill="none" class="marching"/></g>';
+  s+=hit("client-parse",box(402,162,150,62)+txt(477,184,"Flight decoder","s-ttl")
+    +txt(477,202,fx("row id","i")+fx(" \u2192 ","d")+"record","s-mono")+txt(477,218,"resolves by id","s-sub"),"3");
+  s+='<g data-appear="4"><path d="M552 193 L584 193" stroke="var(--c-client)" stroke-width="1.5" fill="none" class="marching"/></g>';
+  s+='<g data-appear="4">'+box(584,162,104,62)+txt(636,184,"React elements","s-sub")
+    +txt(636,202,fx("{","d")+fx("type","k")+fx(",","d")+fx("props","k")+fx("}","d"),"s-mono")
+    +txt(636,218,"hydration input","s-sub")+'</g>';
+  s+='</svg>';
+  return {svg:s,steps:4,caps:[
+    "One response arrives carrying both products, under a single <code class='p'>text/html</code> content type.",
+    "The <span class='k-fizz'>HTML</span> goes to the parser and becomes DOM \u2014 paintable before any JavaScript runs.",
+    "The <span class='k-flight'>Flight rows</span> go to a decoder: a separate consumer reading the same document.",
+    "It yields React elements for hydration and for every navigation afterwards. Neither consumer is derived from the other."
+  ]};
+};
+
+/* --- FIG: backpressure --- */
+FIGS.bp=function(){
+  var s='<svg viewBox="0 0 700 260" role="img" aria-label="Queue filling until the producer goes quiet">';
+  s+=hit("fizz-render",box(30,96,116,52)+txt(88,118,"renderer","s-ttl")+txt(88,136,"pull()","s-mono"),"1");
+  s+=hit("queue",box(226,88,248,68)+txt(350,80,"queue \u2014 highWaterMark 3","s-sub"),"1");
+  /* capacity is visible from the first step, not inferred from what appears later */
+  for(var k=0;k<3;k++){s+='<rect x="'+(250+k*74)+'" y="104" width="60" height="36" rx="6" fill="none" stroke="var(--line2)" stroke-dasharray="4 3"/>'}
+  for(var i=0;i<3;i++){
+    s+='<g data-appear="'+(i+2)+'"><rect x="'+(250+i*74)+'" y="104" width="60" height="36" rx="6" fill="var(--c-stream)" opacity=".3" stroke="var(--c-stream)"/>'+txt(280+i*74,127,"chunk","s-mono")+'</g>';
+  }
+  s+=hit("socket",box(554,96,116,52)+txt(612,118,"socket","s-ttl")+txt(612,136,"read()","s-mono"),"1");
+  s+='<g data-appear="2"><path d="M146 122 L226 122" stroke="var(--c-stream)" stroke-width="1.8" class="marching" fill="none"/></g>';
+  s+='<g data-appear="2" data-until="2">'+txt(350,186,"desiredSize 3 \u2014 room for more","s-num")+'</g>';
+  s+='<g data-appear="3" data-until="3">'+txt(350,186,"desiredSize 2","s-num")+'</g>';
+  s+='<g data-appear="4" data-until="4">'+txt(350,186,"desiredSize 1","s-num")+'</g>';
+  s+='<g data-appear="5" data-until="5">'+txt(350,186,"desiredSize 0 \u2014 no more pull","s-num")+'</g>';
+  s+='<g data-appear="6" data-until="6">'+txt(350,186,"desiredSize 1 \u2014 exactly one pull","s-num")+'</g>';
+  s+='<g data-appear="6"><path d="M554 122 L474 122" stroke="var(--c-boundary)" stroke-width="1.8" class="marching" fill="none"/>'+txt(514,146,"read","s-sub")+'</g>';
+  s+='<g data-appear="5" data-until="5">'+txt(88,180,"quiet","s-sub")+'</g>';
+  s+='</svg>';
+  return {svg:s,steps:6,caps:[
+    "A producer, a queue with three slots, and a consumer. The dashed outlines are the declared capacity.",
+    "<code class='p'>pull</code> fires while there is room. First chunk enqueued.",
+    "Second pull, second chunk.",
+    "Third pull, third chunk. The queue is now at capacity.",
+    "<code class='p'>desiredSize</code> is <span class='num'>0</span>. The producer is not called again \u2014 no flag was checked, it simply stops being asked.",
+    "One <code class='p'>read()</code> frees one slot and causes exactly one more pull. The consumer's pace is now the producer's pace."
+  ]};
+};
+
+/* --- FIG: client bootstrap --- */
+FIGS.client=function(){
+  var s='<svg viewBox="0 0 700 320" role="img" aria-label="Array promoted to a stream, then rows resolved by id">';
+  s+=hit("nextf-arr",box(28,40,180,52)+txt(118,62,fx("__next_f","k")+fx(" = []","d"),"s-mono")+txt(118,80,"before any bundle","s-sub"),"1");
+  s+='<g data-appear="2">'+box(28,112,180,66)
+    +txt(118,132,fx('[1, "','d')+fx("1","i")+fx(':\u2026"]','d'),"s-mono")
+    +txt(118,150,fx('[1, "','d')+fx("0","i")+fx(':\u2026"]','d'),"s-mono")
+    +txt(118,168,"accumulating","s-sub")+'</g>';
+  s+=hit("nextf-promote",box(262,76,176,58)+txt(350,98,"push replaced","s-ttl")+txt(350,116,"+ replay backlog","s-sub"),"3");
+  s+='<g data-appear="3"><path d="M208 132 C 236 132 236 106 262 106" stroke="var(--c-client)" stroke-width="1.7" class="marching" fill="none"/></g>';
+  s+='<g data-appear="4">'+box(262,164,176,52)+txt(350,186,"ReadableStream","s-mono")+txt(350,204,"controller.enqueue","s-sub")+'</g>';
+  s+='<g data-appear="4"><path d="M350 134 L350 164" stroke="var(--c-stream)" stroke-width="1.7" class="marching" fill="none"/></g>';
+  s+=hit("client-parse",box(492,76,180,58)+txt(582,98,"createFrom-","s-mono")+txt(582,116,"ReadableStream","s-mono"),"5");
+  s+='<g data-appear="5"><path d="M438 190 C 470 190 470 106 492 106" stroke="var(--c-client)" stroke-width="1.7" class="marching" fill="none"/></g>';
+  s+='<g data-appear="6">'+box(492,164,180,66)
+    +txt(582,186,fx("row id","i")+fx(" \u2192 ","d")+"record","s-mono")
+    +txt(582,204,fx("$L2","m")+fx(" \u2192 ","d")+fx("pending","w"),"s-mono")
+    +txt(582,222,fx("row ","d")+fx("2","i")+fx(" \u2192 ","d")+fx("resolve","g"),"s-mono")+'</g>';
+  s+='<g data-appear="6"><path d="M582 134 L582 164" stroke="var(--c-boundary)" stroke-width="1.7" fill="none"/></g>';
+  s+='<g data-appear="7">'+txt(350,258,"React suspends on pending records and renders each as its row lands","s-lbl")+'</g>';
+  s+='<rect x="193" y="288" width="10" height="10" rx="2" fill="var(--c-flight)"/>';
+  s+=txt(209,297,"$ reference","s-sub","start");
+  s+='<rect x="294" y="288" width="10" height="10" rx="2" fill="var(--c-ident)"/>';
+  s+=txt(310,297,"row id","s-sub","start");
+  s+='<rect x="368" y="288" width="10" height="10" rx="2" fill="var(--c-metric)"/>';
+  s+=txt(384,297,"pending","s-sub","start");
+  s+='<rect x="453" y="288" width="10" height="10" rx="2" fill="var(--c-boundary)"/>';
+  s+=txt(469,297,"resolved","s-sub","start");
+  s+='</svg>';
+  return {svg:s,steps:7,caps:[
+    "The first inline script defines a plain array. No framework, no network wait.",
+    "Row data accumulates into it as the parser meets each script tag.",
+    "The runtime arrives and swaps <code class='p'>push</code>, then replays the backlog \u2014 no gap, no reordering.",
+    "From here every push enqueues into a real stream.",
+    "That stream is handed to the RSC client parser.",
+    "The parser resolves rows by id: a <code class='p'>$L2</code> creates a pending record, row 2 resolves it.",
+    "React suspends on pending records, rendering each subtree as its row arrives."
+  ]};
+};
+
+/* ================= STEPPER ENGINE ================= */
+var CAPS=[],capT;
+function mount(name,slot){
+  var f=FIGS[name]();var host=$(slot);if(!host)return;
+  host.innerHTML=f.svg;
+  var fig=host.closest(".fig");
+  var ctl=$('[data-stepper="'+name+'"]',fig);
+  var cap=$("[data-cap]",fig);var ticks=$("[data-ticks]",ctl);
+  var step=1,timer=null;
+  for(var i=0;i<f.steps;i++){ticks.insertAdjacentHTML("beforeend","<i></i>")}
+  var nodes=$$("[data-appear]",host);
+  function paint(){
+    nodes.forEach(function(n){
+      var a=parseInt(n.getAttribute("data-appear"),10);
+      var hideAfter=n.getAttribute("data-until");
+      var excl=!!hideAfter;
+      var on=step>=a&&(!excl||step<=parseInt(hideAfter,10));
+      var state=on?"s-lit":(excl?"s-off":"s-dim");
+      n.setAttribute("class",(n.getAttribute("class")||"").replace(/\bs-(lit|dim|off)\b/g,"").trim()+" "+state);
+    });
+    $$("i",ticks).forEach(function(t,i){t.setAttribute("data-on",i<step?"1":"0")});
+    if(cap)cap.innerHTML=f.caps[step-1]||"";
+    $('[data-act="prev"]',ctl).disabled=step<=1;
+    $('[data-act="next"]',ctl).disabled=step>=f.steps;
+  }
+  function stop(){if(timer){clearInterval(timer);timer=null;$('[data-act="play"]',ctl).textContent="▶"}}
+  ctl.addEventListener("click",function(e){
+    var b=e.target.closest("button");if(!b)return;
+    var a=b.getAttribute("data-act");
+    if(a==="next"){stop();if(step<f.steps)step++}
+    else if(a==="prev"){stop();if(step>1)step--}
+    else if(a==="reset"){stop();step=1}
+    else if(a==="play"){
+      if(timer){stop()}else{
+        if(step>=f.steps)step=1;
+        b.textContent="⏸";
+        timer=setInterval(function(){
+          if(step>=f.steps){stop();paint();return}
+          step++;paint();
+        },2100);
+      }
+    }
+    paint();
+  });
+  /* clicking a diagram component must NOT trigger anything else */
+  host.addEventListener("click",function(e){
+    var g=e.target.closest("[data-modal]");if(!g)return;
+    e.stopPropagation();openModal(g.getAttribute("data-modal"));
+  });
+  host.addEventListener("keydown",function(e){
+    if(e.key!=="Enter"&&e.key!==" ")return;
+    var g=e.target.closest("[data-modal]");if(!g)return;
+    e.preventDefault();openModal(g.getAttribute("data-modal"));
+  });
+  /* captions vary in length; reserve the tallest so stepping shifts nothing */
+  function sizeCap(){
+    if(!cap)return;
+    var keep=cap.innerHTML,max=0;
+    cap.style.minHeight="0px";
+    for(var i=0;i<f.steps;i++){cap.innerHTML=f.caps[i]||"";if(cap.offsetHeight>max)max=cap.offsetHeight}
+    cap.innerHTML=keep;
+    if(max)cap.style.minHeight=max+"px";
+  }
+  CAPS.push(sizeCap);
+  paint();sizeCap();
+}
+window.addEventListener("resize",function(){
+  clearTimeout(capT);capT=setTimeout(function(){CAPS.forEach(function(fn){fn()})},160);
+});
+mount("claim","#fig-claim-svg");
+mount("rows","#fig-rows-svg");
+mount("two","#fig-two-svg");
+mount("tee","#fig-tee-svg");
+mount("bp","#fig-bp-svg");
+mount("consumers","#fig-consumers-svg");
+mount("client","#fig-client-svg");
+
+/* ================= CHROME CONTROL ================= */
+var html=document.documentElement;
+function setTheme(t){html.setAttribute("data-theme",t)}
+function flip(){setTheme(html.getAttribute("data-theme")==="dark"?"light":"dark")}
+$("#themebtn").addEventListener("click",flip);
+$("#mtheme").addEventListener("click",function(e){e.stopPropagation();flip()});
+
+$$("[data-mode-btn]").forEach(function(b){
+  b.addEventListener("click",function(){
+    var m=b.getAttribute("data-mode-btn");
+    document.body.setAttribute("data-mode",m);
+    $$("[data-mode-btn]").forEach(function(o){
+      o.setAttribute("aria-pressed",String(o.getAttribute("data-mode-btn")===m));
+    });
+  });
+});
+/* several controls drive the same state, so match on value, not on identity */
+$$("[data-rt-btn]").forEach(function(b){
+  b.addEventListener("click",function(){
+    var v=b.getAttribute("data-rt-btn");
+    document.body.setAttribute("data-runtime",v);
+    $$("[data-rt-btn]").forEach(function(o){
+      o.setAttribute("aria-pressed",String(o.getAttribute("data-rt-btn")===v));
+    });
+  });
+});
+
+var nav=$("#topnav"),rail=$("#rail"),lastY=window.scrollY;
+window.addEventListener("scroll",function(){
+  var y=window.scrollY;
+  nav.setAttribute("data-hidden",(y>220&&y>lastY)?"1":"0");
+  lastY=y;
+  var max=document.body.scrollHeight-window.innerHeight;
+  rail.style.width=(max>0?(y/max)*100:0)+"%";
+},{passive:true});
+})();
+</script>
+</body>
+</html>

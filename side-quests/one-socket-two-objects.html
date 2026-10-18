@@ -1,0 +1,1419 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>One socket, two objects</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#070A10; --panel:#0C121B; --raised:#111A26; --sunk:#050810;
+  --line:#1C2837; --line2:#28374A;
+  --tx:#E4EDF7; --tx2:#9FB2C8; --tx3:#6B7F96;
+  --l0:#8FB3D9; --l1:#4FD6AC; --l2:#AC9DF7; --l3:#F0A566;
+  --l0b:#111C2B; --l1b:#062720; --l2b:#1A1440; --l3b:#2E1A0B;
+  --ck:#AC9DF7; --cc:#F291C8; --ct:#7FC2FF; --cp:#4FD6AC; --cf:#F3C26B;
+  --cy:#F0A0B8; --cm:#8FA3BA; --cn:#F5936B; --cs:#8FE0A8; --cu:#5A6E85; --cg:#5F7288;
+  --glow:0 0 0 1px rgba(127,194,255,.14), 0 18px 48px -24px rgba(0,0,0,.9);
+  --ff:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --fm:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+html[data-theme="light"]{
+  --bg:#FAF6EC; --panel:#FFFDF6; --raised:#F3EDDF; --sunk:#F1EADA;
+  --line:#E2D9C6; --line2:#D0C4AC;
+  --tx:#1A1815; --tx2:#5C564B; --tx3:#837B6C;
+  --l0:#2F5B86; --l1:#0C6A52; --l2:#5540B0; --l3:#A0501B;
+  --l0b:#E7EFF7; --l1b:#E0F3EC; --l2b:#EEEAFB; --l3b:#FBEDE0;
+  --ck:#6B3FC4; --cc:#B3277E; --ct:#1D5FA8; --cp:#0C6A52; --cf:#8A5A06;
+  --cy:#A83258; --cm:#6E6558; --cn:#B4501C; --cs:#2C6B34; --cu:#A3977F; --cg:#8E8574;
+  --glow:0 0 0 1px rgba(0,0,0,.05), 0 16px 40px -28px rgba(60,45,20,.5);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:var(--ff);font-size:16px;line-height:1.7;-webkit-font-smoothing:antialiased}
+html[data-theme="dark"] body{background:
+  radial-gradient(900px 480px at 78% -8%, rgba(60,110,190,.16), transparent 62%),
+  radial-gradient(700px 420px at 8% 8%, rgba(120,90,220,.10), transparent 60%), var(--bg);
+  background-attachment:fixed}
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line2);border-radius:99px;border:3px solid var(--bg)}
+::-webkit-scrollbar-thumb:hover{background:var(--tx3)}
+*{scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--l0);outline-offset:2px;border-radius:4px}
+h1,h2,h3{font-weight:600;letter-spacing:-.02em;line-height:1.2;margin:0}
+h1{font-size:clamp(30px,5vw,46px)}
+h2{font-size:clamp(22px,3vw,29px);margin:0 0 6px}
+h3{font-size:18px;margin:0 0 6px}
+p{margin:0 0 15px;max-width:74ch}
+a{color:var(--l0)}
+/* nav */
+nav{position:sticky;top:0;z-index:60;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:blur(14px);border-bottom:1px solid var(--line);transition:transform .28s ease}
+nav.hide{transform:translateY(-102%)}
+.nav-in{max-width:1180px;margin:0 auto;padding:11px 26px;display:flex;align-items:center;gap:20px}
+.brand{font-size:14px;font-weight:600;letter-spacing:-.01em;white-space:nowrap}
+.brand em{font-style:normal;font-family:var(--fm);color:var(--l3);font-weight:500}
+.nav-links{display:flex;gap:3px;overflow-x:auto;flex:1;scrollbar-width:none}
+.nav-links::-webkit-scrollbar{display:none}
+.nav-links a{font-size:13px;color:var(--tx2);text-decoration:none;padding:5px 9px;border-radius:7px;white-space:nowrap}
+.nav-links a:hover{color:var(--tx);background:var(--raised)}
+.nav-links a.cur{color:var(--tx);background:var(--raised)}
+.tbtn{flex:none;width:32px;height:32px;display:grid;place-items:center;border-radius:8px;border:1px solid var(--line2);
+  background:transparent;color:var(--tx2);cursor:pointer;font-size:14px;font-family:var(--ff)}
+.tbtn:hover{color:var(--tx);border-color:var(--tx3)}
+/* layout */
+main{max-width:1180px;margin:0 auto;padding:0 26px 120px}
+section{padding:66px 0 10px;scroll-margin-top:72px}
+.lede{color:var(--tx2);font-size:17px;max-width:70ch}
+.hero{padding:74px 0 18px;border-bottom:1px solid var(--line)}
+.hero p{font-size:18px;color:var(--tx2);max-width:68ch}
+.kicker{font-family:var(--fm);font-size:12.5px;color:var(--tx3);margin-bottom:14px}
+.chainline{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:26px 0 8px;font-family:var(--fm);font-size:13px}
+.chainline b{font-weight:500;padding:5px 10px;border-radius:7px;border:1px solid}
+.chainline i{font-style:normal;color:var(--tx3)}
+/* figures */
+figure{margin:24px 0 8px;background:var(--panel);border:1px solid var(--line);border-radius:16px;
+  padding:20px;box-shadow:var(--glow);position:relative}
+figure svg{display:block;width:100%;height:auto;margin:0 auto}
+.fig-body{display:flex;justify-content:center}
+.detail{min-height:150px;margin-top:14px;padding:15px 17px;background:var(--sunk);border:1px solid var(--line);border-radius:12px}
+.detail h4{margin:0 0 9px;font-size:15px;font-weight:600}
+.drow{display:flex;gap:12px;font-size:13.5px;line-height:1.6;margin-bottom:6px}
+.drow b{flex:none;width:46px;font-weight:500;color:var(--tx3);font-size:12px;padding-top:2px;font-family:var(--fm)}
+.drow span{color:var(--tx2)}
+.fhint{font-size:12.5px;color:var(--tx3);margin:12px 0 0;text-align:center}
+.corner{position:absolute;top:14px;right:14px;display:flex;gap:6px}
+.corner button{width:27px;height:27px;border-radius:7px;border:1px solid var(--line2);background:transparent;
+  color:var(--tx3);cursor:pointer;font-size:13px;line-height:1;display:grid;place-items:center;font-family:var(--ff)}
+.corner button:hover{color:var(--tx);border-color:var(--tx3)}
+/* control widget */
+.ctrl{display:inline-flex;align-items:center;gap:4px;padding:5px;border:1px solid var(--line2);
+  border-radius:11px;background:var(--sunk);margin:0 auto 16px;width:max-content}
+.ctrl button{min-width:32px;height:30px;padding:0 10px;border-radius:7px;border:none;background:transparent;
+  color:var(--tx2);cursor:pointer;font-size:13px;font-family:var(--ff)}
+.ctrl button:hover{background:var(--raised);color:var(--tx)}
+.ctrl .pos{font-family:var(--fm);font-size:12px;color:var(--tx3);padding:0 8px;min-width:54px;text-align:center}
+.ctrl-wrap{display:flex;justify-content:center}
+/* tokens + popovers */
+.tk{font-family:var(--fm);font-size:.88em;padding:1px 5px;border-radius:5px;border:1px solid transparent;
+  background:var(--raised);cursor:pointer;text-decoration:none;white-space:nowrap}
+.tk:hover{border-color:currentColor}
+.tk.l0{color:var(--l0);background:var(--l0b)}
+.tk.l1{color:var(--l1);background:var(--l1b)}
+.tk.l2{color:var(--l2);background:var(--l2b)}
+.tk.l3{color:var(--l3);background:var(--l3b)}
+code.plain{font-family:var(--fm);font-size:.88em;color:var(--tx2)}
+.c0{color:var(--l0)}.c1{color:var(--l1)}.c2{color:var(--l2)}.c3{color:var(--l3)}
+.pop{position:absolute;z-index:200;width:340px;max-width:calc(100vw - 32px);background:var(--panel);
+  border:1px solid var(--line2);border-radius:13px;padding:14px 16px;box-shadow:0 22px 60px -20px rgba(0,0,0,.65);
+  opacity:0;pointer-events:none;transform:translateY(5px);transition:opacity .13s,transform .13s}
+.pop.on{opacity:1;pointer-events:auto;transform:none}
+.pop h5{margin:0 0 3px;font-size:14px;font-weight:600}
+.pop .pk{font-family:var(--fm);font-size:11.5px;color:var(--tx3);margin-bottom:8px}
+.pop p{font-size:13.5px;line-height:1.6;color:var(--tx2);margin:0}
+.pop p+p{margin-top:8px}
+</style>
+
+<style>
+/* code panes */
+.pane{background:var(--sunk);border:1px solid var(--line);border-radius:13px;overflow:hidden}
+.pane-top{display:flex;align-items:center;gap:8px;padding:9px 13px;border-bottom:1px solid var(--line);background:var(--panel)}
+.pane-top .dot{width:9px;height:9px;border-radius:50%;background:var(--line2)}
+.pane-top .nm{font-family:var(--fm);font-size:12px;color:var(--tx3);margin-left:4px}
+.code{padding:10px 0 12px}
+.ln{display:grid;grid-template-columns:38px minmax(0,1fr) 268px;gap:0;align-items:baseline}
+.ln:hover{background:color-mix(in srgb,var(--raised) 60%,transparent)}
+.ln .g{font-family:var(--fm);font-size:12px;color:var(--cu);text-align:right;padding:0 11px 0 0;user-select:none;line-height:1.55}
+.ln .s{font-family:var(--fm);font-size:13px;line-height:1.55;white-space:pre-wrap;word-break:break-word;padding-right:14px}
+.ln .a{font-size:11.5px;line-height:1.5;padding:0 14px 2px 12px;border-left:1px solid var(--line);color:var(--tx3);align-self:stretch}
+.ln .a b{font-weight:500;font-size:11.5px;margin-right:6px}
+.ln.noa .a{border-left-color:var(--line);opacity:.35}
+.pane.bare .ln{grid-template-columns:38px minmax(0,1fr)}
+.pane.bare .ln .a{display:none}
+.pane.out .ln{grid-template-columns:minmax(0,1fr)}
+.pane.out .ln .g,.pane.out .ln .a{display:none}
+.pane.out .ln .s{padding-left:14px;line-height:1.7}
+.k{color:var(--ck)}.f{color:var(--cf)}.t{color:var(--ct)}.pr{color:var(--cp)}.pp{color:var(--cy)}
+.pm{color:var(--cm);font-style:italic}.n{color:var(--cn)}.st{color:var(--cs)}.pu{color:var(--cu)}.cm{color:var(--cg);font-style:italic}
+.switch{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:13px}
+.switch button{font-size:13px;padding:6px 12px;border-radius:9px;border:1px solid var(--line2);background:transparent;
+  color:var(--tx2);cursor:pointer;font-family:var(--ff)}
+.switch button:hover{color:var(--tx)}
+.switch button.on{background:var(--raised);color:var(--tx);border-color:var(--tx3)}
+.switch button.on.s0{color:var(--l0);border-color:var(--l0)}
+.switch button.on.s1{color:var(--l1);border-color:var(--l1)}
+.switch button.on.s2{color:var(--l2);border-color:var(--l2)}
+.switch button.on.s3{color:var(--l3);border-color:var(--l3)}
+/* matrix */
+.mx{width:100%;border-collapse:collapse;font-size:14px}
+.mx th{font-weight:500;font-size:12.5px;padding:0 6px 12px;text-align:center;vertical-align:bottom;line-height:1.35}
+.mx th.h0{text-align:left;color:var(--tx3);font-family:var(--fm)}
+.mx td{padding:11px 6px;text-align:center;border-top:1px solid var(--line);vertical-align:middle}
+.mx td.rh{text-align:left;padding-right:16px}
+.mx .rg{font-size:14px}
+.mx .rm{font-family:var(--fm);font-size:12px;line-height:1.45;margin-top:2px}
+.pip{display:inline-block;width:11px;height:11px;border-radius:50%;border:1.5px solid var(--c);box-sizing:border-box}
+.pip.new{background:var(--c);width:13px;height:13px}
+.pip.inh{opacity:.6}
+.nul{color:var(--tx3);font-family:var(--fm)}
+.legend{display:flex;gap:20px;flex-wrap:wrap;margin-top:16px;font-size:12.5px;color:var(--tx2);align-items:center}
+.legend .pip{--c:var(--tx3)}
+/* stage readout */
+.stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:14px}
+@media(max-width:820px){.stage{grid-template-columns:1fr}.ln{grid-template-columns:34px minmax(0,1fr)}.ln .a{display:none}}
+.stage .sx{background:var(--sunk);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-height:186px}
+.stage .sx h4{margin:0 0 7px;font-size:15px;font-weight:600}
+.stage .sx p{font-size:13.5px;color:var(--tx2);margin:0 0 10px}
+.shape{font-family:var(--fm);font-size:12.5px;line-height:1.7;white-space:pre-wrap;word-break:break-word;color:var(--tx2)}
+.shape .lbl{display:block;font-family:var(--ff);font-size:11px;color:var(--tx3);margin-bottom:4px}
+/* modal */
+.scrim{position:fixed;inset:0;z-index:300;background:rgba(2,5,10,.74);backdrop-filter:blur(5px);
+  display:none;align-items:flex-start;justify-content:center;padding:36px 18px;overflow-y:auto}
+html[data-theme="light"] .scrim{background:rgba(70,58,36,.42)}
+.scrim.on{display:flex}
+.modal{width:min(860px,100%);background:var(--panel);border:1px solid var(--line2);border-radius:18px;
+  box-shadow:0 40px 90px -30px rgba(0,0,0,.8);overflow:hidden;margin:auto 0}
+.mhead{display:flex;align-items:flex-start;gap:14px;padding:20px 22px 16px;border-bottom:1px solid var(--line)}
+.mhead h3{font-size:20px;margin:0}
+.mhead .mk{font-family:var(--fm);font-size:12px;color:var(--tx3);margin-top:3px}
+.mhead .sp{flex:1}
+.mbody{padding:20px 22px 26px;max-height:none}
+.mbody h4{font-size:13px;font-weight:600;color:var(--tx3);margin:22px 0 8px;font-family:var(--fm)}
+.mbody h4:first-child{margin-top:0}
+.mbody p{font-size:14.5px;color:var(--tx2);max-width:none}
+.mbody svg{display:block;width:100%;height:auto}
+.mfig{background:var(--sunk);border:1px solid var(--line);border-radius:12px;padding:16px}
+.mgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.mcard{background:var(--sunk);border:1px solid var(--line);border-radius:11px;padding:12px 13px}
+.mcard b{display:block;font-size:13px;margin-bottom:3px}
+.mcard span{font-size:12.5px;color:var(--tx3);line-height:1.5}
+.note{border-left:2px solid var(--l3);padding:2px 0 2px 14px;margin:18px 0;font-size:14px;color:var(--tx2)}
+footer{border-top:1px solid var(--line);margin-top:70px;padding:28px 0 0;color:var(--tx3);font-size:13px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}html{scroll-behavior:auto}}
+</style>
+
+</style>
+<style>
+:root{--lw:#F09BC4;--lwb:#2E1024}
+html[data-theme="light"]{--lw:#A8325F;--lwb:#FBE9F0}
+.clw{color:var(--lw)}
+.tk.lw{color:var(--lw);background:var(--lwb)}
+.switch button.on.sx{color:var(--lw);border-color:var(--lw)}
+.kc{color:var(--cc)}
+.sides{display:inline-flex;gap:4px;padding:5px;border:1px solid var(--line2);border-radius:12px;background:var(--sunk);margin:8px 0 22px}
+#sides-bottom{margin:54px 0 0}
+.sides button{padding:8px 18px;border-radius:8px;border:none;background:transparent;color:var(--tx2);cursor:pointer;font-size:14px;font-family:var(--ff);font-weight:500;display:flex;align-items:baseline;gap:8px}
+.sides button:hover{color:var(--tx)}
+.sides button span{font-family:var(--fm);font-size:12px;opacity:.75}
+.sides button.on{background:var(--raised);color:var(--tx);box-shadow:inset 0 0 0 1px var(--line2)}
+.sides button.on.req{color:var(--l2)}
+.sides button.on.res{color:var(--lw)}
+.sideline{font-size:14.5px;max-width:74ch;padding-left:13px;margin:0 0 4px}
+.sideline.req{border-left:2px solid var(--l2)}
+.sideline.res{border-left:2px solid var(--lw)}
+.invgrp{margin-bottom:20px}
+.invgrp:last-child{margin-bottom:0}
+.invhead{display:flex;align-items:baseline;gap:10px;margin-bottom:9px}
+.invhead .cls{font-family:var(--fm);font-size:13px}
+.invhead .ct{font-size:12px;color:var(--tx3)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-family:var(--fm);font-size:12.5px;padding:3px 9px;border-radius:7px;cursor:pointer;border:1px solid transparent}
+.chip:hover{border-color:currentColor}
+.chip.k0{color:var(--l0);background:var(--l0b)}
+.chip.k1{color:var(--l1);background:var(--l1b)}
+.chip.k2{color:var(--l2);background:var(--l2b)}
+.chip.k3{color:var(--l3);background:var(--l3b)}
+.chip em{font-style:normal;opacity:.55}
+.dv{width:100%;border-collapse:collapse;font-size:14px}
+.dv th{font-weight:500;font-size:13px;padding:0 12px 12px;text-align:left}
+.dv th.h0{color:var(--tx3);font-family:var(--fm);font-size:12px}
+.dv td{padding:12px;border-top:1px solid var(--line);vertical-align:top;line-height:1.55}
+.dv td.rl{color:var(--tx2);font-size:13.5px;width:23%}
+.dv td.rq{color:var(--l2);width:38.5%}
+.dv td.rs{color:var(--lw);width:38.5%}
+@media(max-width:760px){.dv,.dv tbody,.dv tr,.dv td,.dv th{display:block;width:auto}.dv td.rl{padding-bottom:2px}}
+.detail .drow{display:block;gap:0;margin:0 0 16px}
+.detail .drow:last-of-type{margin-bottom:10px}
+.detail .drow b{display:block;width:auto;flex:none;font-family:var(--fm);font-size:10.5px;
+  letter-spacing:.1em;text-transform:uppercase;font-weight:500;margin:0 0 6px;padding:0}
+.detail .drow .v{display:block;font-size:14px;line-height:1.7;color:var(--tx)}
+.decchips{display:flex;flex-wrap:wrap;gap:6px}
+.idc{font-family:var(--fm);font-size:.87em;padding:1px 5px;border-radius:5px;background:var(--raised)}
+.num{font-family:var(--fm);font-size:.87em;color:var(--cn)}
+.tk.n0{color:var(--tx2);background:var(--raised)}
+.shape .ob{color:var(--tx3)}
+.shape .pz{color:var(--tx3)}
+.shape .hk{color:var(--ck)}
+.tk.n0{color:var(--tx2);background:var(--raised)}
+</style>
+
+</head>
+<body>
+<nav id="nav"><div class="nav-in">
+  <div class="brand">One socket, <em>two objects</em></div>
+  <div class="nav-links" id="navlinks">
+    <a href="#chain">The chain</a><a href="#inventory">What each layer declares</a><a href="#shapes">Declared shapes</a>
+    <a href="#trace">One message traced</a><a href="#irreversible">The irreversible step</a><a href="#diverge">Where the two diverge</a>
+  </div>
+  <button class="tbtn" id="theme" aria-label="Switch theme">&#9681;</button>
+</div></nav>
+<main>
+<header class="hero">
+  <div class="kicker">stream base &rarr; HTTP layer &rarr; framework layer</div>
+  <h1>One socket, two objects</h1>
+  <p>A request object and a response object are built the same way: a stream base, an HTTP layer that adds protocol semantics, and a framework layer that adds conveniences. Both are assembled by rewriting one object's prototype chain, not by wrapping it. Every section below shows the same structure on whichever side you pick. The last section is where the symmetry breaks.</p>
+  <div class="sides" id="sides-top" role="tablist" aria-label="Request or response"></div>
+  <div class="chainline" id="chainline"></div>
+  <div class="chainline" id="chainline2" style="margin-top:10px"></div>
+  <p class="fhint" style="text-align:left;margin-top:14px">Coloured terms open an explanation. Boxes in every diagram open a detailed panel.</p>
+</header>
+
+<section id="chain">
+  <h2>The chain</h2>
+  <p class="lede">Every member you use lives on one of these objects. The instance holds almost nothing of its own, so each property access walks upward until it finds a declaring class.</p>
+  <p class="sideline" id="sl-chain"></p>
+  <figure>
+    <div class="corner"><button id="corner-chain">&#9656;</button></div>
+    <div class="fig-body" id="f-chain"></div>
+    <div class="detail">
+      <h4 id="nh"></h4>
+      <div class="drow"><b>declares</b><div class="v" id="na"></div></div>
+      <div class="drow"><b>why</b><div class="v" id="nw"></div></div>
+      <div class="drow"><b>cost</b><div class="v" id="nc"></div></div>
+      <button class="tbtn" id="nopen" style="width:auto;padding:0 12px;height:29px;font-size:12.5px;margin-top:8px">Open breakdown</button>
+    </div>
+    <p class="fhint">Click a link in the chain to change the panel.</p>
+  </figure>
+</section>
+
+<section id="inventory">
+  <h2>What each layer declares</h2>
+  <p class="lede">The full public surface, grouped by the class that declares it. Colour is the declaring layer, so a name's colour tells you how far up the chain the lookup travels.</p>
+  <p class="sideline" id="sl-inventory"></p>
+  <figure><div id="f-inventory"></div>
+    <p class="fhint">Click any name for its one-line meaning. Names ending in () are methods.</p>
+  </figure>
+</section>
+
+<section id="shapes">
+  <h2>Declared shapes</h2>
+  <p class="lede">The same members again, as declarations with types and return types. The unions carry most of the meaning, so they are annotated beside the lines they sit on.</p>
+  <p class="sideline" id="sl-shapes"></p>
+  <div class="switch" id="ifsw"></div>
+  <div class="pane" id="ifpane"><div class="pane-top"><span class="dot"></span><span class="nm" id="ifnm"></span></div><div class="code" id="ifcode"></div></div>
+</section>
+
+<section id="trace">
+  <h2>One message, traced</h2>
+  <p class="lede">Seven moments in the life of a single message, with the state at each one.</p>
+  <p class="sideline" id="sl-trace"></p>
+  <figure>
+    <div class="ctrl-wrap"><div class="ctrl">
+      <button id="tp" aria-label="Previous step">&#8249;</button>
+      <button id="tplay">Play</button>
+      <span class="pos" id="tpos"></span>
+      <button id="tn" aria-label="Next step">&#8250;</button>
+      <button id="tr" aria-label="Reset">Reset</button>
+    </div></div>
+    <div class="fig-body" id="f-trace"></div>
+    <div class="stage">
+      <div class="sx"><h4 id="sh"></h4><p id="sp"></p></div>
+      <div class="sx"><span class="lbl" id="slbl"></span><div class="shape" id="ss"></div></div>
+    </div>
+  </figure>
+</section>
+
+<section id="irreversible">
+  <h2>The irreversible step</h2>
+  <p class="lede">Each side has exactly one action that cannot be undone, and most of the confusing errors on that side trace back to it.</p>
+  <p class="sideline" id="sl-irreversible"></p>
+  <figure>
+    <div class="ctrl-wrap"><div class="ctrl">
+      <button id="bp" aria-label="Previous step">&#8249;</button>
+      <span class="pos" id="bpos"></span>
+      <button id="bn" aria-label="Next step">&#8250;</button>
+      <button id="br" aria-label="Reset">Reset</button>
+    </div></div>
+    <div class="fig-body" id="f-final"></div>
+  </figure>
+  <div class="pane" id="spane"><div class="pane-top"><span class="dot"></span><span class="nm" id="spanenm"></span></div><div class="code" id="scode"></div></div>
+</section>
+
+<section id="diverge">
+  <h2>Where the two diverge</h2>
+  <p class="lede">Same assembly, six points of asymmetry. This section does not follow the toggle.</p>
+  <figure><div id="f-diverge"></div></figure>
+</section>
+
+<div class="sides" id="sides-bottom" role="tablist" aria-label="Request or response"></div>
+<footer>
+  <p>Node 20 and later, Express 4 and 5. The inventories are the public surface, not the full internal one.</p>
+</footer>
+</main>
+<div class="scrim" id="scrim">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mt">
+    <div class="mhead">
+      <button class="tbtn" id="mback" aria-label="Back" style="display:none">&#8592;</button>
+      <div><h3 id="mt"></h3><div class="mk" id="mk"></div></div>
+      <div class="sp"></div>
+      <button class="tbtn" id="mtheme" aria-label="Switch theme">&#9681;</button>
+      <button class="tbtn" id="mclose" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="mbody" id="mb"></div>
+  </div>
+</div>
+<div class="pop" id="pop"><h5 id="popt"></h5><div class="pk" id="popk"></div><div id="popb"></div></div>
+
+<script>
+/* ---------- syntax highlighting ---------- */
+var RX=/(\/\/[^\n]*)|("[^"]*"|'[^']*'|`[^`]*`)|\b(class|interface|extends|type|const|let|var|function|new)\b|\b(return|if|else|await|async|for|of|throw|try|catch)\b|\b(string|number|boolean|any|void|null|undefined|true|false|this)\b|\b([A-Z][A-Za-z0-9_$]*)\b|\b(\d+)\b|([a-z_$][\w$]*)(?=\s*[(<])|([a-z_$][\w$]*)(?=\??\s*:)|([{}()\[\]<>|?:;,.=&!+\-*/])/g;
+var CLS=["cm","st","k","kc","pr","t","n","f","pp","pu"];
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+function hl(src){
+  var out="",last=0,m;RX.lastIndex=0;
+  while((m=RX.exec(src))){
+    out+=esc(src.slice(last,m.index));
+    var g=-1;for(var i=1;i<=10;i++){if(m[i]!==undefined){g=i;break}}
+    var c=CLS[g-1];
+    if(g===9){
+      var pre=src.slice(0,m.index);
+      var d=(pre.match(/\(/g)||[]).length-(pre.match(/\)/g)||[]).length;
+      if(d>0)c="pm";
+    }
+    out+='<span class="'+c+'">'+esc(m[0])+"</span>";
+    last=m.index+m[0].length;
+  }
+  return out+esc(src.slice(last));
+}
+function renderPane(el,src,notes){
+  notes=notes||{};
+  var lines=hl(src).split("\n"),h="";
+  for(var i=0;i<lines.length;i++){
+    var n=notes[i+1],a="",cls="ln";
+    if(n){a='<b class="'+n[0]+'">'+n[1]+"</b>"+n[2]}else{cls+=" noa"}
+    h+='<div class="'+cls+'"><span class="g">'+(i+1)+'</span><span class="s">'+(lines[i]||"&nbsp;")+'</span><span class="a">'+a+"</span></div>";
+  }
+  el.innerHTML=h;
+}
+/* ---------- interface declarations ---------- */
+
+/* state readouts: key/value object state, parser state, and raw wire text */
+var SHTOK=/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\b(true|false|null|undefined)\b|\b(instanceof|typeof)\b|\b(\d+)\b|([A-Z][A-Za-z0-9_$]*)|([a-z_$][\w$]*)|([{}\[\](),.:;=<>?!\/+\-])/g;
+function shval(v){
+  var out="",last=0,m;SHTOK.lastIndex=0;
+  while((m=SHTOK.exec(v))){
+    out+=esc(v.slice(last,m.index));
+    var c;
+    if(m[1])c="st";
+    else if(m[2])c="pr";
+    else if(m[3])c="kc";
+    else if(m[4])c="n";
+    else if(m[5])c="t";
+    else if(m[6]){
+      var after=v.slice(m.index+m[0].length),before=v.slice(0,m.index);
+      c=/^\s*\(/.test(after)?"f"
+        :/\.$/.test(before)?"pp"
+        :/^\s*:/.test(after)?"pp"
+        :/^\s*\./.test(after)?"ob"
+        :(m[6]==="req"||m[6]==="res")?"ob":"pz";
+    }
+    else c="pu";
+    out+='<span class="'+c+'">'+esc(m[0])+"</span>";
+    last=m.index+m[0].length;
+  }
+  return out+esc(v.slice(last));
+}
+function shkey(k){
+  if(/^[A-Z][A-Za-z0-9]*(-[A-Za-z0-9]+)*$/.test(k))return '<span class="hk">'+esc(k)+"</span>";
+  if(/^[a-z_$][\w$]*(\.[\w$]+)*$/.test(k)){
+    var p=k.split(".");
+    return p.map(function(seg,i){
+      return '<span class="'+(i===0&&p.length>1?"ob":"pp")+'">'+esc(seg)+"</span>"
+    }).join('<span class="pu">.</span>');
+  }
+  if(/^[a-z][a-z0-9-]*$/.test(k))return '<span class="pp">'+esc(k)+"</span>";
+  if(/^[a-z][a-z ]*$/.test(k))return '<span class="pz">'+esc(k)+"</span>";
+  return shval(k);
+}
+function shline(l){
+  if(!l.trim())return "";
+  var m;
+  if((m=l.match(/^(HTTP\/[\d.]+) (\d+) (.+)$/)))
+    return '<span class="pu">'+esc(m[1])+'</span> <span class="n">'+esc(m[2])+
+           '</span> <span class="st">'+esc(m[3])+"</span>";
+  if((m=l.match(/^([A-Z]+) (\S+) (HTTP\/[\d.]+)$/)))
+    return '<span class="f">'+esc(m[1])+'</span> <span class="st">'+esc(m[2])+
+           '</span> <span class="pu">'+esc(m[3])+"</span>";
+  if(/^\s*[{}\[\]]/.test(l)||/^\s*"/.test(l))return shval(l);
+  var i=l.indexOf(": ");
+  if(i<0)return '<span class="pz">'+esc(l)+"</span>";
+  var k=l.slice(0,i),v=l.slice(i+2);
+  if(/^[A-Z][A-Za-z0-9]*(-[A-Za-z0-9]+)*$/.test(k))
+    return shkey(k)+'<span class="pu">:</span> '+
+      (/^\d+$/.test(v)?'<span class="n">'+esc(v)+"</span>":'<span class="st">'+esc(v)+"</span>");
+  return shkey(k)+'<span class="pu">:</span> '+shval(v);
+}
+window.shline=shline;
+function renderShape(el,src){
+  el.innerHTML=src.split("\n").map(shline).join("\n");
+}
+
+</script>
+<script>var DATA={};var DIVERGE=[["d-ancestry", "Stream ancestry", "Real inheritance. <code class='plain'>Readable.prototype</code> sits in the chain.", "A copied surface. <code class='plain'>Writable.prototype</code> is not in the chain."], ["d-instanceof", "instanceof the stream class", "<code class='plain'>true</code>", "<code class='plain'>false</code>"], ["d-weight", "Weight of the HTTP layer", "Eleven members, ten of them data and one method.", "Twenty-four members, including the whole header store."], ["d-irrev", "The irreversible step", "Draining the body.", "Flushing the head."], ["d-fail", "How it fails afterwards", "Silently. <code class='plain'>read()</code> returns <code class='plain'>null</code> and nothing is raised.", "Loudly. <code class='plain'>setHeader</code> throws <code class='plain'>ERR_HTTP_HEADERS_SENT</code>."], ["d-framework", "What the framework layer declares", "Recomputable views over the head, plus one parsed body.", "Outcome dispatchers that each end the message exactly once."]];var DGLOSS={"d-ancestry": ["Stream ancestry", "how the chain terminates", "<p>Whether the stream class you would name is actually in the prototype chain, or only its surface is present on the object.</p>"], "d-instanceof": ["instanceof", "a chain walk", "<p>It walks the prototype chain looking for one specific prototype object. A copied surface never satisfies it, however complete that surface is.</p>"], "d-weight": ["Weight of the HTTP layer", "member count", "<p>How much the protocol layer declares itself rather than inheriting from the stream base below it.</p>"], "d-irrev": ["The irreversible step", "one action per side", "<p>The single action on each side that cannot be undone, and which most of that side's confusing errors trace back to.</p>"], "d-fail": ["How it fails afterwards", "loud or silent", "<p>Whether using the object after its irreversible step raises an error or quietly returns nothing at all.</p>"], "d-framework": ["What the framework layer declares", "conveniences", "<p>What Express puts on the instance, and whether those members are recomputable views or one-shot results.</p>"]};
+DATA.req=(function(){
+var IFACE=[
+{n:"stream.Stream",c:"s0",f:"stream.d.ts",
+ src:'class Stream extends EventEmitter {\n  pipe<T extends Writable>(\n    dest: T,\n    opts?: { end?: boolean }\n  ): T\n}\n\ntype Listener = (...args: any[]) => void\n\non(event: string, fn: Listener): this\nonce(event: string, fn: Listener): this\noff(event: string, fn: Listener): this\nemit(event: string, ...args: any[]): boolean\nlistenerCount(event: string): number',
+ notes:{1:["c0","one method","Everything else on this layer comes from EventEmitter."],
+        5:["c0","returns dest","Returning the destination is what lets a.pipe(b).pipe(c) chain."],
+        8:["c0","untyped payload","The contract is positional arguments, nothing more."],
+        13:["c0","leak warning","Node warns past 11 listeners on one event of one emitter."]}},
+{n:"stream.Readable",c:"s1",f:"stream.d.ts",
+ src:'type ReadEvent =\n  | "data" | "end" | "error"\n  | "close" | "readable" | "pause" | "resume"\n\nclass Readable extends Stream {\n  readable: boolean\n  readableEnded: boolean\n  readableFlowing: boolean | null\n  readableHighWaterMark: number\n  readableLength: number\n  readableObjectMode: boolean\n  destroyed: boolean\n\n  read(size?: number): Buffer | string | null\n  setEncoding(enc: BufferEncoding): this\n  pause(): this\n  resume(): this\n  isPaused(): boolean\n  unpipe(dest?: Writable): this\n  unshift(chunk: Buffer | string): void\n  destroy(err?: Error): this\n  [Symbol.asyncIterator](): AsyncIterator<Buffer>\n}',
+ notes:{2:["c1","two data paths","data pushes chunks at you, readable tells you to pull."],
+        8:["c1","three states","null means no consumer has picked a mode yet."],
+        9:["c1","16 KB default","The point at which push() starts returning false."],
+        10:["c1","bytes queued","How full the queue is now, not its capacity."],
+        14:["c1","null is normal","Empty queue, not an error. Wait for readable."],
+        15:["c1","changes read()","After this the queue yields strings, not Buffers."],
+        20:["c1","pushes back","Returns a chunk to the front of the same queue."],
+        22:["c1","for await","The same queue surfaced as an async iterator."]}},
+{n:"http.IncomingMessage",c:"s2",f:"http.d.ts",
+ src:'class IncomingMessage extends Readable {\n  method: string | undefined\n  url: string | undefined\n  headers: IncomingHttpHeaders\n  headersDistinct: NodeJS.Dict<string[]>\n  rawHeaders: string[]\n  trailers: NodeJS.Dict<string>\n  httpVersion: string\n  httpVersionMajor: number\n  httpVersionMinor: number\n  complete: boolean\n  aborted: boolean\n  socket: net.Socket\n\n  statusCode?: number\n  statusMessage?: string\n\n  setTimeout(ms: number, cb?: () => void): this\n  destroy(err?: Error): this\n}',
+ notes:{2:["c2","optional for a reason","Undefined on a client response. One class, two directions."],
+        3:["c2","path only","No scheme or host. The origin form the client sent."],
+        4:["c2","lowercased","Keys normalised, duplicates joined, except set-cookie."],
+        6:["c2","as received","Flat array, original casing, wire order preserved."],
+        11:["c2","body finished","True only once the whole body has arrived."],
+        13:["c2","the source","The same socket the body bytes still sit in."],
+        15:["c2","client side only","Populated on responses, never on a server request."],
+        18:["c2","the one method","This layer adds behaviour once. The rest is data."]}},
+{n:"Express req",c:"s3",f:"express/index.d.ts",
+ src:'interface Request extends IncomingMessage {\n  params: Record<string, string>\n  query: Record<string, any>\n  body: any\n  cookies: Record<string, string>\n  signedCookies: Record<string, string>\n\n  baseUrl: string\n  originalUrl: string\n  path: string\n  hostname: string\n  subdomains: string[]\n  protocol: string\n  secure: boolean\n  ip: string\n  xhr: boolean\n  fresh: boolean\n\n  app: Application\n  res: Response\n  next: NextFunction\n  route: Route\n\n  get(name: string): string | undefined\n  accepts(...types: string[]): string | false\n  is(type: string): string | false | null\n  param(name: string, def?: any): string | undefined\n}',
+ notes:{2:["c3","reassigned","Replaced on every router match as the stack is walked."],
+        3:["c3","lazy getter","Parsed on first access with the configured query parser."],
+        4:["c3","any, for a reason","Undefined until a parser runs; its type depends on which one."],
+        9:["c3","never rewritten","Keeps the original URL even after mounting changes url."],
+        10:["c3","derived","Recomputed from url. Free to read as often as you like."],
+        14:["c3","trust proxy","Reads X-Forwarded-Proto only when that setting allows it."],
+        24:["c3","case-insensitive","Wraps headers, with referer and referrer aliased."],
+        26:["c3","three outcomes","false for a mismatch, null when there is no body at all."]}}];
+/* ---------- nested layer detail ---------- */
+var LAYER=[
+{t:"stream.Stream extends EventEmitter",m:"m-stream",dec:["on()", "once()", "off()", "emit()", "pipe()"],w:"Files, sockets, HTTP bodies and zlib transforms all become reachable through one event vocabulary, so a producer and a consumer that know nothing about each other still meet at <code class=\"idc c0\">on()</code> and <code class=\"idc c0\">emit()</code>.",c:"None at runtime. This layer declares <code class=\"idc c0\">pipe()</code> and nothing that holds data."},
+{t:"stream.Readable",m:"m-readable",dec:["read()", "pause()", "resume()", "setEncoding()", "readableFlowing", "readableHighWaterMark"],w:"Events alone push data at you with no way to say stop. This layer declares the pull side and the queue behind it, which is what makes backpressure expressible at all.",c:"One internal queue per stream, advisory-bounded by <code class=\"idc c1\">readableHighWaterMark</code>, <span class=\"num\">16 KB</span> by default for byte streams."},
+{t:"http.IncomingMessage",m:"m-incoming",dec:["method", "url", "headers", "rawHeaders", "socket", "complete"],w:"A socket yields only bytes. The parser has already consumed the head by the time your handler runs, so <code class=\"idc c2\">method</code>, <code class=\"idc c2\">url</code> and <code class=\"idc c2\">headers</code> are attached to the same object that streams the body.",c:"The head is parsed once at ingest. The body is untouched and still arrives lazily."},
+{t:"Express req",m:"m-express",dec:["params", "query", "body", "cookies", "path", "get()"],w:"Most handlers want values, not a stream. Express rewrites the prototype of the object Node made, then lets middleware fill <code class=\"idc c3\">params</code>, <code class=\"idc c3\">query</code>, <code class=\"idc c3\">body</code> and <code class=\"idc c3\">cookies</code> on it.",c:"<code class=\"idc c3\">body</code> exists only if a parser ran, and producing it ends the <code class=\"idc c1\">Readable</code> for everyone downstream."}];
+/* ---------- traced request ---------- */
+var TRACE=[
+{box:0,h:"Bytes arrive on the socket",
+ p:"A TCP connection delivers bytes. Nothing has been interpreted yet and no request object exists, only a net.Socket emitting data events.",
+ s:'socket: net.Socket\nbytes buffered: 148\n\nPOST /users/42?q=a HTTP/1.1\nHost: api.local\nContent-Type: application/json\n\n{\"name\":\"ada\"}'},
+{box:1,h:"llhttp reads the head",
+ p:"Node's parser consumes bytes up to the blank line that ends the head, and stops there. The body bytes stay where they are.",
+ s:'parser state\n\nmethod: "POST"\nurl: "/users/42?q=a"\nheaders complete: true\nbody bytes consumed: 0'},
+{box:2,h:"IncomingMessage is constructed",
+ p:"One object is created over that socket. The head fields are assigned, and the Readable machinery underneath is wired up so body chunks queue as they arrive.",
+ s:'req instanceof Readable: true\nreq.method: "POST"\nreq.url: "/users/42?q=a"\nreq.headers: { host: "api.local", ... }\nreq.readableFlowing: null\nreq.complete: false'},
+{box:3,h:"Express rewrites the prototype",
+ p:"Express sets the prototype of this same object to express.request, whose own prototype is IncomingMessage.prototype. Nothing is copied and nothing is wrapped. query is installed as a lazy getter.",
+ s:'Object.getPrototypeOf(req) === express.request: true\nreq instanceof http.IncomingMessage: true\nreq.query: not evaluated yet\nreq.params: {}\nreq.body: undefined'},
+{box:3,h:"The router matches",
+ p:"The router walks its layer stack. Every matching layer reassigns req.params from its own path pattern, which is why the value depends on where in the stack you read it.",
+ s:'req.route.path: "/users/:id"\nreq.params: { id: "42" }\nreq.baseUrl: ""\nreq.originalUrl: "/users/42?q=a"\nreq.query: { q: "a" }'},
+{box:3,h:"The body parser drains the stream",
+ p:"express.json() subscribes to the same Readable, collects every chunk, parses the result and assigns it. This is the only step in the whole trace that consumes bytes.",
+ s:'req.readableFlowing: true, then false\nreq.readableEnded: true\nreq.complete: true\nreq.body: { name: "ada" }'},
+{box:4,h:"Your handler runs",
+ p:"Every layer is still present on the object. The stream interface is intact but exhausted, which is why a late req.pipe() writes nothing and reports no error.",
+ s:'req.readableEnded: true\nreq.read(): null\nreq.body: { name: "ada" }\nreq.get("host"): "api.local"'}];
+/* ---------- body spent once ---------- */
+var SPENT=[
+{chunks:4,ended:"readableEnded: false",body:"undefined",later:"waiting",arrow:0,
+ cap:"Chunks sit in the queue. Nothing has subscribed yet."},
+{chunks:0,ended:"readableEnded: true",body:'{ name: "ada" }',later:"waiting",arrow:1,
+ cap:"express.json() drains every chunk, parses it, and assigns req.body."},
+{chunks:0,ended:"readableEnded: true",body:'{ name: "ada" }',later:"req.pipe() wrote 0 bytes",arrow:1,
+ cap:"The stream interface is still there. It has nothing left to give."}];
+var SPENT_SRC='app.use(express.json())\n\napp.post("/users/:id", (req, res) => {\n  req.pipe(fs.createWriteStream("out.bin"))\n  res.end()\n})';
+var SPENT_NOTES={1:["c3","drains here","This line consumes the stream, long before your route runs."],
+ 3:["c3","already too late","The route is reached after the parser has ended the stream."],
+ 4:["c1","writes nothing","No error is thrown. out.bin is created and stays empty."]};
+/* ---------- glossary ---------- */
+var GLOSS={
+"g-stream":["stream.Stream","the base contract","<p>A near-empty class extending <span class='c0'>EventEmitter</span>. It declares <span class='c0'>pipe</span> and little else.</p><p>Its value is the shared vocabulary: every stream in Node, whatever its source, speaks the same events.</p>"],
+"g-readable":["stream.Readable","the consumption side","<p>Declares the internal queue and the methods that pull from it. This is the layer that makes <span class='c1'>backpressure</span> expressible.</p>"],
+"g-incoming":["http.IncomingMessage","HTTP semantics","<p>A <span class='c1'>Readable</span> with the parsed request head attached. Used for both server-side requests and client-side responses, so half its fields are meaningless in either direction.</p>"],
+"g-expressreq":["Express req","the same object","<p>Not a wrapper. Express rewrites the prototype of the object Node created, then lets middleware assign parsed fields onto it.</p>"],
+"g-flowing":["readableFlowing","three states","<p><code class='plain'>null</code> means no consumer has chosen a mode. <code class='plain'>true</code> means chunks are being pushed. <code class='plain'>false</code> means a consumer paused it explicitly.</p>"],
+"g-body":["req.body","spent once","<p>Undefined until a parser runs, and undefined forever if none does. Producing it ends the underlying <span class='c1'>Readable</span>.</p>"]};
+var CODE={
+"c-ee":['function emit(type) {\n  const handlers = this._events[type]\n  if (handlers === undefined) return false\n\n  const args = Array.prototype.slice.call(arguments, 1)\n  const copy = arrayClone(handlers)\n\n  for (let i = 0; i < copy.length; i++) {\n    Reflect.apply(copy[i], this, args)\n  }\n  return true\n}',
+ {2:["c0","a plain array","Listeners are stored in insertion order under the event name."],
+  6:["c0","copy first","A listener that calls off() mid-emit cannot shorten the loop."],
+  8:["c0","synchronous","No microtask, no timer. emit() returns after the last listener."]}],
+"c-stream":['Stream.prototype.pipe = function (dest, options) {\n  const source = this\n\n  source.on("data", function (chunk) {\n    if (dest.write(chunk) === false) source.pause()\n  })\n\n  dest.on("drain", function () {\n    source.resume()\n  })\n\n  return dest\n}',
+ {4:["c0","starts flowing","Subscribing to data is what puts the source into flowing mode."],
+  5:["c1","the whole protocol","A false return is the only backpressure signal there is."],
+  13:["c0","returns dest","This single line is why pipe chains read left to right."]}],
+"c-readable":['const req = getRequest()\n\nreq.on("readable", () => {\n  let chunk\n  while ((chunk = req.read()) !== null) {\n    handle(chunk)\n  }\n})\n\nfor await (const chunk of req) {\n  handle(chunk)\n}',
+ {3:["c1","paused mode","The event says the queue is non-empty, not that data was delivered."],
+  5:["c1","drain the queue","One readable event can cover many chunks. Loop until null."],
+  10:["c1","same queue","The async iterator pauses and resumes for you between turns."]}],
+"c-incoming":['server.on("request", (req, res) => {\n  req.method\n  req.url\n  req.statusCode\n})\n\nhttp.get(url, (res) => {\n  res.statusCode\n  res.method\n})',
+ {2:["c2","populated","Server side: the parser filled this from the request line."],
+  4:["c2","undefined here","Same class, wrong direction. There is no status on a request."],
+  9:["c2","undefined here","And no method on a response, for the same reason."]}],
+"c-express":['function createRequest(req, app) {\n  Object.setPrototypeOf(req, app.request)\n  req.app = app\n\n  Object.defineProperty(req, "query", {\n    configurable: true,\n    get() {\n      const parse = app.get("query parser fn")\n      return parse(parseUrl(this).query)\n    }\n  })\n}',
+ {2:["c3","same object","Not a copy and not a wrapper. The instance is mutated in place."],
+  5:["c3","lazy","Nothing is parsed until the first read of req.query."],
+  8:["c3","configurable","Which parser runs is an app setting, resolved at access time."]}],
+"c-proto":['Object.getPrototypeOf(req) === app.request\napp.request.__proto__ === http.IncomingMessage.prototype\n\nreq instanceof http.IncomingMessage\nreq instanceof stream.Readable\nreq instanceof events.EventEmitter',
+ {1:["c3","one link inserted","Express splices its own object into an existing chain."],
+  2:["c2","chain preserved","Which is why nothing below Express is lost."],
+  4:["c2","still true","Every instanceof check that held before still holds."]}],
+"c-socket":['server.on("request", (req, res) => {\n  req.socket === res.socket\n  req.socket.remoteAddress\n  req.socket.write("raw bytes")\n})',
+ {2:["c2","one connection","Both objects are views onto the same duplex socket."],
+  4:["c2","bypasses HTTP","Writing here skips the response state machine entirely."]}],
+"c-parser":['parser.onHeadersComplete = function (info) {\n  incoming.method = info.method\n  incoming.url = info.url\n  incoming.headers = toLowerCase(info.headers)\n  server.emit("request", incoming, response)\n}\n\nparser.onBody = function (chunk) {\n  if (!incoming.push(chunk)) socket.pause()\n}',
+ {1:["c2","the cut point","Fired at the blank line. The body has not been touched."],
+  5:["c2","your code runs","Handlers are invoked with head only. Body arrives after."],
+  9:["c1","backpressure","A full queue pauses the socket, which pauses the kernel read."]}],
+"c-bodyparser":['function json(req, res, next) {\n  const chunks = []\n\n  req.on("data", (chunk) => chunks.push(chunk))\n  req.on("end", () => {\n    const raw = Buffer.concat(chunks).toString("utf8")\n    req.body = raw.length ? JSON.parse(raw) : {}\n    next()\n  })\n}',
+ {4:["c1","consumes the stream","This subscription is what puts req into flowing mode."],
+  6:["c1","buffered in full","Whole body in memory before parsing. Hence the size limit."],
+  7:["c3","the assignment","The only moment req.body stops being undefined."]}],
+"c-hwm":['const ok = readable.push(chunk)\n\nreadable.readableLength\nreadable.readableHighWaterMark',
+ {1:["c1","advisory","false means over threshold. The chunk is still queued."],
+  3:["c1","can exceed","readableLength is free to sit above the high water mark."]}],
+"c-flowing":['req.readableFlowing\n\nreq.on("data", handler)\nreq.pause()\nreq.resume()',
+ {1:["c1","starts null","No consumer has chosen a mode yet."],
+  3:["c1","null to true","Subscribing flips it and starts pushing chunks immediately."],
+  4:["c1","true to false","An explicit pause. Never returns to null."]}]};
+var MODAL={};
+MODAL["m-ee"]={t:"EventEmitter",k:"the base every stream inherits",h:`
+<p>The whole notification layer is one array per event name and one synchronous loop. There is no queue, no scheduler and no ordering guarantee beyond registration order.</p>
+<div class="mfig"><svg viewBox="0 0 760 170" role="img"><title>emit copies the listener array before looping</title>
+<rect x="40" y="30" width="140" height="40" rx="8" fill="var(--l0b)" stroke="var(--l0)"/><text x="110" y="55" text-anchor="middle" font-size="12" fill="var(--l0)" font-family="JetBrains Mono,monospace">fn a</text>
+<rect x="190" y="30" width="140" height="40" rx="8" fill="var(--l0b)" stroke="var(--l0)"/><text x="260" y="55" text-anchor="middle" font-size="12" fill="var(--l0)" font-family="JetBrains Mono,monospace">fn b</text>
+<rect x="340" y="30" width="140" height="40" rx="8" fill="var(--l0b)" stroke="var(--l0)"/><text x="410" y="55" text-anchor="middle" font-size="12" fill="var(--l0)" font-family="JetBrains Mono,monospace">fn c</text>
+<text x="504" y="55" font-size="12" fill="var(--tx3)" font-family="Inter,sans-serif">registered listeners, live</text>
+<path d="M260 76 L260 96" stroke="var(--line2)" stroke-width="1.5" fill="none"/>
+<rect x="40" y="102" width="140" height="40" rx="8" fill="none" stroke="var(--l0)" stroke-dasharray="4 4"/><text x="110" y="127" text-anchor="middle" font-size="12" fill="var(--l0)" font-family="JetBrains Mono,monospace">fn a</text>
+<rect x="190" y="102" width="140" height="40" rx="8" fill="none" stroke="var(--l0)" stroke-dasharray="4 4"/><text x="260" y="127" text-anchor="middle" font-size="12" fill="var(--l0)" font-family="JetBrains Mono,monospace">fn b</text>
+<rect x="340" y="102" width="140" height="40" rx="8" fill="none" stroke="var(--l0)" stroke-dasharray="4 4"/><text x="410" y="127" text-anchor="middle" font-size="12" fill="var(--l0)" font-family="JetBrains Mono,monospace">fn c</text>
+<text x="504" y="127" font-size="12" fill="var(--tx3)" font-family="Inter,sans-serif">the copy the loop walks</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-ee"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>Removing during emit is safe</b><span>Calling off() inside a handler cannot shorten the loop already in flight, because it walks a copy.</span></div>
+<div class="mcard"><b>A throwing listener stops the rest</b><span>The loop has no try around each call. Listener c never runs if b throws.</span></div>
+<div class="mcard"><b>error has a special rule</b><span>Emitting error with no listener rethrows it as an uncaught exception.</span></div>
+</div>`};
+MODAL["m-stream"]={t:"stream.Stream",k:"a near-empty class that earns its place",h:`
+<p>This layer declares almost nothing. Its job is to be the place where <code class="plain">pipe</code> lives and to tie every stream in Node to one event vocabulary, so a file stream and a socket can be joined without either knowing what the other is.</p>
+<div class="mfig"><svg viewBox="0 0 760 130" role="img"><title>pipe returns its destination, which is what makes chaining work</title>
+<rect x="40" y="26" width="180" height="52" rx="10" fill="var(--l0b)" stroke="var(--l0)"/><text x="130" y="57" text-anchor="middle" font-size="13" fill="var(--l0)" font-family="JetBrains Mono,monospace">a</text>
+<rect x="290" y="26" width="180" height="52" rx="10" fill="var(--l0b)" stroke="var(--l0)"/><text x="380" y="57" text-anchor="middle" font-size="13" fill="var(--l0)" font-family="JetBrains Mono,monospace">b</text>
+<rect x="540" y="26" width="180" height="52" rx="10" fill="var(--l0b)" stroke="var(--l0)"/><text x="630" y="57" text-anchor="middle" font-size="13" fill="var(--l0)" font-family="JetBrains Mono,monospace">c</text>
+<path d="M226 52 L284 52" stroke="var(--line2)" stroke-width="1.5" fill="none"/>
+<path d="M476 52 L534 52" stroke="var(--line2)" stroke-width="1.5" fill="none"/>
+<text x="255" y="100" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">returns b</text>
+<text x="505" y="100" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">returns c</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-stream"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>pipe does not forward errors</b><span>An error on the source leaves the destination open. This is why pipeline() exists.</span></div>
+<div class="mcard"><b>The chain reads left to right</b><span>Returning the destination rather than the source is the single decision that allows it.</span></div>
+</div>
+<h4>related</h4><div class="mgrid">
+<div class="mcard" data-open="m-ee" style="cursor:pointer"><b>EventEmitter &#8250;</b><span>The base below this one: how emit walks its listener array, and which events matter on this side.</span></div>
+</div>`};
+MODAL["m-readable"]={t:"stream.Readable",k:"one queue, two ways to empty it",h:`
+<p>Everything this layer declares exists to serve one internal array of chunks. The two consumption modes are two doors onto that same queue, and a stream is only ever in one of them.</p>
+<div class="mfig"><svg viewBox="0 0 760 180" role="img"><title>The internal queue with a paused-mode exit and a flowing-mode exit</title>
+<rect x="250" y="30" width="260" height="92" rx="12" fill="var(--l1b)" stroke="var(--l1)"/>
+<text x="380" y="52" text-anchor="middle" font-size="12.5" fill="var(--l1)" font-family="Inter,sans-serif">internal queue</text>
+<rect x="268" y="64" width="50" height="34" rx="6" fill="var(--l1)" opacity=".8"/>
+<rect x="326" y="64" width="50" height="34" rx="6" fill="var(--l1)" opacity=".8"/>
+<rect x="384" y="64" width="50" height="34" rx="6" fill="var(--l1)" opacity=".8"/>
+<rect x="442" y="64" width="50" height="34" rx="6" fill="var(--l1)" opacity=".8"/>
+<path d="M244 76 L206 76" stroke="var(--line2)" stroke-width="1.5" fill="none"/>
+<path d="M516 76 L554 76" stroke="var(--line2)" stroke-width="1.5" fill="none"/>
+<rect x="40" y="54" width="162" height="44" rx="10" fill="none" stroke="var(--line2)"/>
+<text x="121" y="81" text-anchor="middle" font-size="12" fill="var(--tx2)" font-family="JetBrains Mono,monospace">read()</text>
+<rect x="558" y="54" width="162" height="44" rx="10" fill="none" stroke="var(--line2)"/>
+<text x="639" y="81" text-anchor="middle" font-size="12" fill="var(--tx2)" font-family="JetBrains Mono,monospace">on("data")</text>
+<text x="121" y="136" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">paused mode, you pull</text>
+<text x="639" y="136" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">flowing mode, it pushes</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-readable"></div>
+<h4>related</h4><div class="mgrid">
+<div class="mcard" data-open="m-hwm" style="cursor:pointer"><b>highWaterMark &#8250;</b><span>Why the threshold is advisory and what push() returning false actually means.</span></div>
+<div class="mcard" data-open="m-flowing" style="cursor:pointer"><b>readableFlowing &#8250;</b><span>The three states and the transitions that are one-way.</span></div>
+</div>`};
+MODAL["m-incoming"]={t:"http.IncomingMessage",k:"one class, two directions",h:`
+<p>The same constructor is used for a request arriving at your server and a response arriving at your client. Which half of the field list is populated depends entirely on which side created it, and the type declaration marks that with optionals rather than two classes.</p>
+<div class="mfig"><svg viewBox="0 0 760 200" role="img"><title>Fields populated on a server request versus a client response</title>
+<rect x="30" y="24" width="330" height="152" rx="12" fill="var(--l2b)" stroke="var(--l2)"/>
+<text x="52" y="50" font-size="12.5" fill="var(--l2)" font-family="Inter,sans-serif">server: incoming request</text>
+<text x="52" y="80" font-size="12" fill="var(--l2)" font-family="JetBrains Mono,monospace">method: "POST"</text>
+<text x="52" y="102" font-size="12" fill="var(--l2)" font-family="JetBrains Mono,monospace">url: "/users/42"</text>
+<text x="52" y="124" font-size="12" fill="var(--tx3)" font-family="JetBrains Mono,monospace">statusCode: undefined</text>
+<text x="52" y="146" font-size="12" fill="var(--tx3)" font-family="JetBrains Mono,monospace">statusMessage: undefined</text>
+<rect x="400" y="24" width="330" height="152" rx="12" fill="none" stroke="var(--line2)"/>
+<text x="422" y="50" font-size="12.5" fill="var(--tx2)" font-family="Inter,sans-serif">client: incoming response</text>
+<text x="422" y="80" font-size="12" fill="var(--tx3)" font-family="JetBrains Mono,monospace">method: undefined</text>
+<text x="422" y="102" font-size="12" fill="var(--tx3)" font-family="JetBrains Mono,monospace">url: undefined</text>
+<text x="422" y="124" font-size="12" fill="var(--l2)" font-family="JetBrains Mono,monospace">statusCode: 201</text>
+<text x="422" y="146" font-size="12" fill="var(--l2)" font-family="JetBrains Mono,monospace">statusMessage: "Created"</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-incoming"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>headers is not the wire</b><span>Keys are lowercased and duplicates joined with a comma. set-cookie stays an array.</span></div>
+<div class="mcard"><b>rawHeaders is the wire</b><span>A flat array alternating name and value, original casing, original order.</span></div>
+<div class="mcard"><b>The body is untouched</b><span>This layer attaches the head. Body bytes still flow through the Readable underneath.</span></div>
+</div>`};
+MODAL["m-express"]={t:"Express req",k:"what the object gains",h:`
+<p>Express does not construct anything. It takes the instance Node already made and inserts one object into its prototype chain, then lets middleware assign parsed fields onto the instance itself.</p>
+<div class="mfig"><svg viewBox="0 0 760 225" role="img"><title>The prototype chain before and after Express inserts its own object</title>
+<text x="40" y="26" font-size="12" fill="var(--tx3)" font-family="Inter,sans-serif">before</text>
+<rect x="40" y="38" width="300" height="32" rx="8" fill="var(--l3b)" stroke="var(--l3)"/><text x="190" y="59" text-anchor="middle" font-size="11.5" fill="var(--l3)" font-family="JetBrains Mono,monospace">req</text>
+<rect x="40" y="82" width="300" height="32" rx="8" fill="var(--l2b)" stroke="var(--l2)"/><text x="190" y="103" text-anchor="middle" font-size="11.5" fill="var(--l2)" font-family="JetBrains Mono,monospace">IncomingMessage.prototype</text>
+<rect x="40" y="126" width="300" height="32" rx="8" fill="var(--l1b)" stroke="var(--l1)"/><text x="190" y="147" text-anchor="middle" font-size="11.5" fill="var(--l1)" font-family="JetBrains Mono,monospace">Readable.prototype</text>
+<text x="400" y="26" font-size="12" fill="var(--tx3)" font-family="Inter,sans-serif">after</text>
+<rect x="400" y="38" width="300" height="32" rx="8" fill="var(--l3b)" stroke="var(--l3)"/><text x="550" y="59" text-anchor="middle" font-size="11.5" fill="var(--l3)" font-family="JetBrains Mono,monospace">req</text>
+<rect x="400" y="82" width="300" height="32" rx="8" fill="var(--l3b)" stroke="var(--l3)" stroke-width="1.5"/><text x="550" y="103" text-anchor="middle" font-size="11.5" fill="var(--l3)" font-family="JetBrains Mono,monospace">express.request</text>
+<rect x="400" y="126" width="300" height="32" rx="8" fill="var(--l2b)" stroke="var(--l2)"/><text x="550" y="147" text-anchor="middle" font-size="11.5" fill="var(--l2)" font-family="JetBrains Mono,monospace">IncomingMessage.prototype</text>
+<rect x="400" y="170" width="300" height="32" rx="8" fill="var(--l1b)" stroke="var(--l1)"/><text x="550" y="191" text-anchor="middle" font-size="11.5" fill="var(--l1)" font-family="JetBrains Mono,monospace">Readable.prototype</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-express"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>query is a getter, not a field</b><span>It is computed on first access, so the parser setting can change until then.</span></div>
+<div class="mcard"><b>params is not stable</b><span>Reassigned by each matching layer. Read it inside the handler that needs it.</span></div>
+<div class="mcard" data-open="m-proto" style="cursor:pointer"><b>How the swap is done &#8250;</b><span>The mechanism, and what it costs in V8 terms.</span></div>
+</div>`};
+MODAL["m-proto"]={t:"Prototype chain surgery",k:"the mechanism, and its price",h:`
+<p>The insertion is a single call against the live instance. Nothing is copied, so every member below stays reachable and every <code class="plain">instanceof</code> check that held before still holds.</p>
+<div class="mfig"><svg viewBox="0 0 760 190" role="img"><title>The instance prototype slot redirected from IncomingMessage.prototype to express.request</title>
+<rect x="40" y="58" width="220" height="80" rx="11" fill="var(--l3b)" stroke="var(--l3)"/>
+<text x="150" y="84" text-anchor="middle" font-size="12.5" fill="var(--l3)" font-family="JetBrains Mono,monospace">req</text>
+<rect x="58" y="96" width="184" height="26" rx="6" fill="none" stroke="var(--l3)" stroke-dasharray="4 4"/>
+<text x="150" y="114" text-anchor="middle" font-size="11" fill="var(--l3)" font-family="JetBrains Mono,monospace">[[Prototype]]</text>
+<path d="M266 100 L414 46" stroke="var(--line2)" stroke-width="1.5" stroke-dasharray="4 4" fill="none"/>
+<path d="M266 106 L414 140" stroke="var(--l3)" stroke-width="1.5" fill="none"/>
+<rect x="420" y="20" width="300" height="42" rx="10" fill="none" stroke="var(--line2)"/>
+<text x="570" y="46" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="JetBrains Mono,monospace">IncomingMessage.prototype</text>
+<rect x="420" y="118" width="300" height="42" rx="10" fill="var(--l3b)" stroke="var(--l3)"/>
+<text x="570" y="144" text-anchor="middle" font-size="11.5" fill="var(--l3)" font-family="JetBrains Mono,monospace">express.request</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-proto"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>Lookups get one link longer</b><span>Reading req.method now walks two objects instead of one before it hits the field.</span></div>
+<div class="mcard"><b>setPrototypeOf deoptimises</b><span>V8 discards the object's hidden-class assumptions. It is done once per request, not per access.</span></div>
+<div class="mcard"><b>Nothing below is shadowed</b><span>express.request defines no member that IncomingMessage already has, so no layer is hidden.</span></div>
+</div>`};
+MODAL["m-socket"]={t:"The socket",k:"one connection, two objects",h:`
+<p>The request and the response are read and write views onto a single duplex socket. Bytes keep arriving on it whether or not anything has subscribed, which is what makes the queue behind the request necessary.</p>
+<div class="mfig"><svg viewBox="0 0 760 200" role="img"><title>One socket surfaced as a request object and a response object</title>
+<rect x="90" y="26" width="200" height="52" rx="11" fill="var(--l2b)" stroke="var(--l2)"/>
+<text x="190" y="57" text-anchor="middle" font-size="12.5" fill="var(--l2)" font-family="JetBrains Mono,monospace">req</text>
+<rect x="470" y="26" width="200" height="52" rx="11" fill="none" stroke="var(--line2)"/>
+<text x="570" y="57" text-anchor="middle" font-size="12.5" fill="var(--tx2)" font-family="JetBrains Mono,monospace">res</text>
+<rect x="280" y="126" width="200" height="52" rx="11" fill="none" stroke="var(--line2)"/>
+<text x="380" y="157" text-anchor="middle" font-size="12.5" fill="var(--tx2)" font-family="JetBrains Mono,monospace">net.Socket</text>
+<path d="M330 120 L214 84" stroke="var(--line2)" stroke-width="1.5" fill="none"/>
+<path d="M430 120 L546 84" stroke="var(--line2)" stroke-width="1.5" fill="none"/>
+<text x="196" y="112" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">read side</text>
+<text x="486" y="112" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">write side</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-socket"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>Keep-alive reuses it</b><span>The same socket carries the next request, with a fresh request object built over it.</span></div>
+<div class="mcard"><b>Destroying it kills both</b><span>req.destroy() tears down the connection, not just the read side.</span></div>
+</div>`};
+MODAL["m-parser"]={t:"The HTTP parser",k:"where the head stops and the body starts",h:`
+<p>llhttp reads forward until the blank line that terminates the head, fires a callback, and stops. Your handler is invoked at that moment, with a complete head and a body that has not been looked at.</p>
+<div class="mfig"><svg viewBox="0 0 760 150" role="img"><title>The byte stream cut at the blank line separating head from body</title>
+<rect x="40" y="52" width="380" height="44" rx="8" fill="var(--l2b)" stroke="var(--l2)"/>
+<rect x="420" y="52" width="300" height="44" rx="8" fill="var(--l1b)" stroke="var(--l1)"/>
+<path d="M420 34 L420 112" stroke="var(--tx3)" stroke-width="1.5" stroke-dasharray="4 4" fill="none"/>
+<text x="420" y="26" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="JetBrains Mono,monospace">\\r\\n\\r\\n</text>
+<text x="230" y="80" text-anchor="middle" font-size="12" fill="var(--l2)" font-family="Inter,sans-serif">parsed into fields</text>
+<text x="570" y="80" text-anchor="middle" font-size="12" fill="var(--l1)" font-family="Inter,sans-serif">queued as chunks</text>
+<text x="230" y="130" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">method, url, headers</text>
+<text x="570" y="130" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">still Buffers, untouched</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-parser"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>Head size is capped</b><span>Roughly 16 KB by default. Exceeding it produces a 431 before your code sees anything.</span></div>
+<div class="mcard"><b>Backpressure reaches the kernel</b><span>A full queue pauses the socket, which stops reading, which eventually shrinks the TCP window.</span></div>
+</div>`};
+MODAL["m-bodyparser"]={t:"The body parser",k:"the one step that consumes bytes",h:`
+<p>A body parser is ordinary middleware with no privileged access. It subscribes to the same stream your handler could have read, collects the chunks, and assigns the result before calling next.</p>
+<div class="mfig"><svg viewBox="0 0 760 150" role="img"><title>Chunks concatenated, decoded, parsed and assigned to req.body</title>
+<rect x="24" y="34" width="162" height="48" rx="10" fill="var(--l1b)" stroke="var(--l1)"/>
+<text x="105" y="63" text-anchor="middle" font-size="12" fill="var(--l1)" font-family="Inter,sans-serif">chunks</text>
+<rect x="212" y="34" width="162" height="48" rx="10" fill="var(--l1b)" stroke="var(--l1)"/>
+<text x="293" y="63" text-anchor="middle" font-size="12" fill="var(--l1)" font-family="Inter,sans-serif">one Buffer</text>
+<rect x="400" y="34" width="162" height="48" rx="10" fill="none" stroke="var(--line2)"/>
+<text x="481" y="63" text-anchor="middle" font-size="12" fill="var(--tx2)" font-family="Inter,sans-serif">utf8 string</text>
+<rect x="588" y="34" width="162" height="48" rx="10" fill="var(--l3b)" stroke="var(--l3)"/>
+<text x="669" y="63" text-anchor="middle" font-size="12" fill="var(--l3)" font-family="Inter,sans-serif">req.body</text>
+<g stroke="var(--line2)" stroke-width="1.5" fill="none"><path d="M190 58 L208 58"/><path d="M378 58 L396 58"/><path d="M566 58 L584 58"/></g>
+<text x="105" y="110" text-anchor="middle" font-size="11" fill="var(--tx3)" font-family="JetBrains Mono,monospace">[&lt;Buffer 7b..&gt;, ..]</text>
+<text x="293" y="110" text-anchor="middle" font-size="11" fill="var(--tx3)" font-family="JetBrains Mono,monospace">&lt;Buffer 7b 22 6e..&gt;</text>
+<text x="481" y="110" text-anchor="middle" font-size="11" fill="var(--tx3)" font-family="JetBrains Mono,monospace">'{"name":"ada"}'</text>
+<text x="669" y="110" text-anchor="middle" font-size="11" fill="var(--tx3)" font-family="JetBrains Mono,monospace">{ name: "ada" }</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-bodyparser"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>The whole body is resident</b><span>Concatenation needs it all in memory at once, which is what the limit option guards.</span></div>
+<div class="mcard"><b>It skips on content type</b><span>A mismatched Content-Type means the parser calls next without touching the stream, leaving body undefined.</span></div>
+<div class="mcard"><b>Mounting it globally costs</b><span>app.use puts it ahead of every route, including ones that wanted the raw stream.</span></div>
+</div>`};
+MODAL["m-hwm"]={t:"highWaterMark",k:"a threshold, not a ceiling",h:`
+<p>The high water mark changes what <code class="plain">push()</code> returns. It never refuses a chunk. A producer that ignores the return value will happily drive the queue past it.</p>
+<div class="mfig"><svg viewBox="0 0 760 160" role="img"><title>Queue length shown against the advisory high water mark</title>
+<rect x="60" y="54" width="640" height="30" rx="8" fill="none" stroke="var(--line2)"/>
+<rect x="60" y="54" width="520" height="30" rx="8" fill="var(--l1b)" stroke="var(--l1)"/>
+<path d="M508 40 L508 100" stroke="var(--l3)" stroke-width="1.5" fill="none"/>
+<text x="508" y="32" text-anchor="middle" font-size="11.5" fill="var(--l3)" font-family="Inter,sans-serif">highWaterMark</text>
+<text x="284" y="120" text-anchor="middle" font-size="11.5" fill="var(--l1)" font-family="Inter,sans-serif">push() returns true</text>
+<text x="620" y="120" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">push() returns false, chunk still queued</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-hwm"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>16 KB, and 16 objects</b><span>The byte default and the objectMode default are different units entirely.</span></div>
+<div class="mcard"><b>Raising it does not fix slowness</b><span>It buys a larger buffer, which moves the memory cost rather than removing it.</span></div>
+</div>`};
+MODAL["m-flowing"]={t:"readableFlowing",k:"three states, one of them unreachable again",h:`
+<p>A stream starts without a mode. The first consumer decides it, and once decided the stream can never return to the undecided state.</p>
+<div class="mfig"><svg viewBox="0 0 760 150" role="img"><title>Transitions between the null, true and false flowing states</title>
+<rect x="40" y="50" width="180" height="46" rx="10" fill="none" stroke="var(--line2)" stroke-dasharray="4 4"/>
+<text x="130" y="79" text-anchor="middle" font-size="12.5" fill="var(--tx3)" font-family="JetBrains Mono,monospace">null</text>
+<rect x="290" y="50" width="180" height="46" rx="10" fill="var(--l1b)" stroke="var(--l1)"/>
+<text x="380" y="79" text-anchor="middle" font-size="12.5" fill="var(--l1)" font-family="JetBrains Mono,monospace">true</text>
+<rect x="540" y="50" width="180" height="46" rx="10" fill="none" stroke="var(--line2)"/>
+<text x="630" y="79" text-anchor="middle" font-size="12.5" fill="var(--tx2)" font-family="JetBrains Mono,monospace">false</text>
+<g stroke="var(--line2)" stroke-width="1.5" fill="none"><path d="M226 66 L284 66"/><path d="M476 60 L534 60"/><path d="M534 86 L476 86"/></g>
+<text x="255" y="42" text-anchor="middle" font-size="11" fill="var(--tx3)" font-family="Inter,sans-serif">on("data")</text>
+<text x="505" y="42" text-anchor="middle" font-size="11" fill="var(--tx3)" font-family="Inter,sans-serif">pause()</text>
+<text x="505" y="118" text-anchor="middle" font-size="11" fill="var(--tx3)" font-family="Inter,sans-serif">resume()</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-flowing"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>Late subscription loses data</b><span>Once flowing, chunks emitted before your listener attached are gone.</span></div>
+<div class="mcard"><b>A body parser decides for you</b><span>By the time your handler runs the mode is already set, and the queue is already empty.</span></div>
+</div>`};
+TRACE.forEach(function(s,i){s.lbl=["what the socket holds", "what the parser holds", "what the object holds", "what the object holds", "what the object holds", "what the object holds", "what the object holds"][i]});
+return {IFACE:IFACE,LAYER:LAYER,TRACE:TRACE,SPENT:SPENT,SPENT_SRC:SPENT_SRC,SPENT_NOTES:SPENT_NOTES,GLOSS:GLOSS,MODAL:MODAL,CODE:CODE,chain:[["stream.Stream", 0], ["stream.Readable", 1], ["http.IncomingMessage", 2], ["Express req", 3]],chain2:"",corner:"m-proto",cornerTitle:"How Express splices into the chain",paneName:"middleware order matters",INVKEY:["g-stream", "g-readable", "g-incoming", "g-expressreq"],INV:[[0, "stream base", [["on", "m", "register a listener for an event"], ["once", "m", "register a listener that fires a single time"], ["off", "m", "remove a listener"], ["emit", "m", "call every listener synchronously, in order"], ["listenerCount", "m", "how many listeners an event currently has"], ["pipe", "m", "wire this stream into a writable destination"], ["unpipe", "m", "detach a destination wired by pipe"]]], [1, "stream.Readable", [["read", "m", "pull a chunk from the queue, or null if empty"], ["setEncoding", "m", "make the queue yield strings instead of Buffers"], ["pause", "m", "stop the queue pushing chunks at you"], ["resume", "m", "start it pushing again"], ["isPaused", "m", "whether pushing is currently stopped"], ["unshift", "m", "put a chunk back at the front of the queue"], ["destroy", "m", "tear the stream down, optionally with an error"], ["asyncIterator", "m", "the same queue, walked with for await"], ["readable", "f", "whether the stream can still be read from"], ["readableEnded", "f", "true once the end event has fired"], ["readableFlowing", "f", "null, true or false: which mode the queue is in"], ["readableHighWaterMark", "f", "the threshold that flips push to false"], ["readableLength", "f", "bytes sitting in the queue right now"], ["readableObjectMode", "f", "whether chunks are objects rather than bytes"]]], [2, "http.IncomingMessage", [["method", "f", "the verb from the request line"], ["url", "f", "the origin form: path and query, no host"], ["headers", "f", "lowercased names, duplicates joined"], ["headersDistinct", "f", "the same headers, values kept as arrays"], ["rawHeaders", "f", "flat array, original casing, wire order"], ["trailers", "f", "headers that arrived after the body"], ["httpVersion", "f", "the protocol version the client spoke"], ["complete", "f", "true once the whole body has been received"], ["aborted", "f", "true if the client hung up mid-message"], ["socket", "f", "the connection the bytes arrived on"], ["setTimeout", "m", "set an inactivity timeout on that socket"]]], [3, "Express req", [["params", "f", "route pattern captures, reassigned on each match"], ["query", "f", "parsed query string, computed on first read"], ["body", "f", "undefined until a body parser drains the stream"], ["cookies", "f", "parsed Cookie header, needs cookie-parser"], ["signedCookies", "f", "cookies whose signature verified"], ["baseUrl", "f", "the path prefix the current router is mounted at"], ["originalUrl", "f", "the url as it arrived, never rewritten"], ["path", "f", "the path portion of url, recomputed on read"], ["hostname", "f", "host header, minus the port"], ["subdomains", "f", "hostname split on dots, minus the base"], ["protocol", "f", "http or https, proxy-aware if configured"], ["secure", "f", "whether protocol is https"], ["ip", "f", "remote address, proxy-aware if configured"], ["xhr", "f", "whether X-Requested-With says XMLHttpRequest"], ["fresh", "f", "whether the client cache is still valid"], ["app", "f", "back-reference to the application"], ["res", "f", "back-reference to the paired response"], ["route", "f", "the route object currently being handled"], ["get", "m", "read one header, case-insensitively"], ["accepts", "m", "pick the best type the client will take"], ["acceptsLanguages", "m", "the same, for Accept-Language"], ["is", "m", "test the body content type"], ["param", "m", "read one route parameter with a fallback"]]]],sideline:{"chain": "The walk reaches <span class=\"tk l1\" data-pop=\"g-readable\">stream.Readable</span>, so <code class=\"plain\">req instanceof stream.Readable</code> is true.", "inventory": "55 members over four layers. Twenty-three come from Express, and every one except <span class=\"tk l3\" data-pop=\"g-body\">body</span> is a recomputable view over the head.", "shapes": "<code class=\"plain\">read()</code> returning <code class=\"plain\">null</code> means an empty queue, not an error, and <span class=\"tk l1\" data-pop=\"g-flowing\">readableFlowing</span> is <code class=\"plain\">boolean | null</code> because it has three states.", "trace": "The head is parsed before your handler runs. The body is not.", "irreversible": "Draining the body. The bytes are gone, and a later read returns <code class=\"plain\">null</code> with no error raised."},SVG:{"chain": "<svg viewBox=\"0 0 860 470\" role=\"img\" aria-labelledby=\"ct cd\">\n      <title id=\"ct\">The prototype chain of an Express request object</title>\n      <desc id=\"cd\">A vertical chain from the req instance up through express.request, IncomingMessage.prototype, Readable.prototype, Stream.prototype, EventEmitter.prototype, Object.prototype, ending at null.</desc>\n      <g stroke=\"var(--line2)\" stroke-width=\"1.5\">\n        <path d=\"M410 58 L410 74\" fill=\"none\"/><path d=\"M410 112 L410 128\" fill=\"none\"/>\n        <path d=\"M410 166 L410 182\" fill=\"none\"/><path d=\"M410 220 L410 236\" fill=\"none\"/>\n        <path d=\"M410 274 L410 290\" fill=\"none\"/><path d=\"M410 328 L410 344\" fill=\"none\"/>\n        <path d=\"M410 382 L410 398\" fill=\"none\"/>\n      </g>\n      <g class=\"lay\" data-i=\"3\" style=\"cursor:pointer\">\n        <rect x=\"200\" y=\"20\" width=\"420\" height=\"38\" rx=\"9\" fill=\"var(--l3b)\" stroke=\"var(--l3)\" stroke-width=\"1\" stroke-dasharray=\"5 4\"/>\n        <text x=\"410\" y=\"44\" text-anchor=\"middle\" font-size=\"13\" fill=\"var(--l3)\" font-family=\"JetBrains Mono,monospace\">req</text>\n        <text x=\"636\" y=\"44\" font-size=\"12\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">the instance</text>\n      </g>\n      <g class=\"lay\" data-i=\"3\" style=\"cursor:pointer\">\n        <rect x=\"200\" y=\"74\" width=\"420\" height=\"38\" rx=\"9\" fill=\"var(--l3b)\" stroke=\"var(--l3)\" stroke-width=\"1\"/>\n        <text x=\"410\" y=\"98\" text-anchor=\"middle\" font-size=\"13\" fill=\"var(--l3)\" font-family=\"JetBrains Mono,monospace\">express.request</text>\n        <text x=\"636\" y=\"98\" font-size=\"12\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">get, accepts, is, path</text>\n      </g>\n      <g class=\"lay\" data-i=\"2\" style=\"cursor:pointer\">\n        <rect x=\"200\" y=\"128\" width=\"420\" height=\"38\" rx=\"9\" fill=\"var(--l2b)\" stroke=\"var(--l2)\" stroke-width=\"1\"/>\n        <text x=\"410\" y=\"152\" text-anchor=\"middle\" font-size=\"13\" fill=\"var(--l2)\" font-family=\"JetBrains Mono,monospace\">IncomingMessage.prototype</text>\n        <text x=\"636\" y=\"152\" font-size=\"12\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">setTimeout, destroy</text>\n      </g>\n      <g class=\"lay\" data-i=\"1\" style=\"cursor:pointer\">\n        <rect x=\"200\" y=\"182\" width=\"420\" height=\"38\" rx=\"9\" fill=\"var(--l1b)\" stroke=\"var(--l1)\" stroke-width=\"1\"/>\n        <text x=\"410\" y=\"206\" text-anchor=\"middle\" font-size=\"13\" fill=\"var(--l1)\" font-family=\"JetBrains Mono,monospace\">Readable.prototype</text>\n        <text x=\"636\" y=\"206\" font-size=\"12\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">read, pause, resume</text>\n      </g>\n      <g class=\"lay\" data-i=\"0\" style=\"cursor:pointer\">\n        <rect x=\"200\" y=\"236\" width=\"420\" height=\"38\" rx=\"9\" fill=\"var(--l0b)\" stroke=\"var(--l0)\" stroke-width=\"1\"/>\n        <text x=\"410\" y=\"260\" text-anchor=\"middle\" font-size=\"13\" fill=\"var(--l0)\" font-family=\"JetBrains Mono,monospace\">Stream.prototype</text>\n        <text x=\"636\" y=\"260\" font-size=\"12\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">pipe</text>\n      </g>\n      <g class=\"lay\" data-i=\"0\" style=\"cursor:pointer\">\n        <rect x=\"200\" y=\"290\" width=\"420\" height=\"38\" rx=\"9\" fill=\"var(--l0b)\" stroke=\"var(--l0)\" stroke-width=\"1\"/>\n        <text x=\"410\" y=\"314\" text-anchor=\"middle\" font-size=\"13\" fill=\"var(--l0)\" font-family=\"JetBrains Mono,monospace\">EventEmitter.prototype</text>\n        <text x=\"636\" y=\"314\" font-size=\"12\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">on, once, emit, off</text>\n      </g>\n      <g>\n        <rect x=\"200\" y=\"344\" width=\"420\" height=\"38\" rx=\"9\" fill=\"none\" stroke=\"var(--line2)\" stroke-width=\"1\"/>\n        <text x=\"410\" y=\"368\" text-anchor=\"middle\" font-size=\"13\" fill=\"var(--tx3)\" font-family=\"JetBrains Mono,monospace\">Object.prototype</text>\n      </g>\n      <g>\n        <rect x=\"200\" y=\"398\" width=\"420\" height=\"38\" rx=\"9\" fill=\"none\" stroke=\"var(--line2)\" stroke-width=\"1\" stroke-dasharray=\"5 4\"/>\n        <text x=\"410\" y=\"422\" text-anchor=\"middle\" font-size=\"13\" fill=\"var(--tx3)\" font-family=\"JetBrains Mono,monospace\">null</text>\n      </g>\n    </svg>", "trace": "<svg viewBox=\"0 0 860 150\" role=\"img\" aria-labelledby=\"tt td\">\n      <title id=\"tt\">Request pipeline from socket to handler</title>\n      <desc id=\"td\">Five stages: socket, HTTP parser, IncomingMessage, Express chain, route handler.</desc>\n      <g stroke=\"var(--line2)\" stroke-width=\"1.5\" fill=\"none\">\n        <path d=\"M155 74 L183 74\"/><path d=\"M329 74 L357 74\"/><path d=\"M503 74 L531 74\"/><path d=\"M677 74 L705 74\"/>\n      </g>\n      <g class=\"tstage\" data-open=\"m-socket\" style=\"cursor:pointer\">\n        <rect id=\"ts0\" x=\"9\" y=\"42\" width=\"146\" height=\"64\" rx=\"11\" fill=\"var(--sunk)\" stroke=\"var(--line2)\" stroke-width=\"1\"/>\n        <text x=\"82\" y=\"70\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"600\" fill=\"var(--tx)\" font-family=\"Inter,sans-serif\">socket</text>\n        <text x=\"82\" y=\"90\" text-anchor=\"middle\" font-size=\"11\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">raw bytes</text>\n      </g>\n      <g class=\"tstage\" data-open=\"m-parser\" style=\"cursor:pointer\">\n        <rect id=\"ts1\" x=\"183\" y=\"42\" width=\"146\" height=\"64\" rx=\"11\" fill=\"var(--sunk)\" stroke=\"var(--line2)\" stroke-width=\"1\"/>\n        <text x=\"256\" y=\"70\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"600\" fill=\"var(--tx)\" font-family=\"Inter,sans-serif\">llhttp parser</text>\n        <text x=\"256\" y=\"90\" text-anchor=\"middle\" font-size=\"11\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">reads the head</text>\n      </g>\n      <g class=\"tstage\" data-open=\"m-incoming\" style=\"cursor:pointer\">\n        <rect id=\"ts2\" x=\"357\" y=\"42\" width=\"146\" height=\"64\" rx=\"11\" fill=\"var(--sunk)\" stroke=\"var(--line2)\" stroke-width=\"1\"/>\n        <text x=\"430\" y=\"70\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"600\" fill=\"var(--tx)\" font-family=\"Inter,sans-serif\">IncomingMessage</text>\n        <text x=\"430\" y=\"90\" text-anchor=\"middle\" font-size=\"11\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">head plus stream</text>\n      </g>\n      <g class=\"tstage\" data-open=\"m-express\" style=\"cursor:pointer\">\n        <rect id=\"ts3\" x=\"531\" y=\"42\" width=\"146\" height=\"64\" rx=\"11\" fill=\"var(--sunk)\" stroke=\"var(--line2)\" stroke-width=\"1\"/>\n        <text x=\"604\" y=\"70\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"600\" fill=\"var(--tx)\" font-family=\"Inter,sans-serif\">Express chain</text>\n        <text x=\"604\" y=\"90\" text-anchor=\"middle\" font-size=\"11\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">fills the fields</text>\n      </g>\n      <g class=\"tstage\" data-open=\"m-bodyparser\" style=\"cursor:pointer\">\n        <rect id=\"ts4\" x=\"705\" y=\"42\" width=\"146\" height=\"64\" rx=\"11\" fill=\"var(--sunk)\" stroke=\"var(--line2)\" stroke-width=\"1\"/>\n        <text x=\"778\" y=\"70\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"600\" fill=\"var(--tx)\" font-family=\"Inter,sans-serif\">your handler</text>\n        <text x=\"778\" y=\"90\" text-anchor=\"middle\" font-size=\"11\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">reads values</text>\n      </g>\n    </svg>", "final": "<svg viewBox=\"0 0 860 230\" role=\"img\" aria-labelledby=\"bt bd\">\n      <title id=\"bt\">The internal queue draining into req.body</title>\n      <desc id=\"bd\">Chunks move out of the Readable internal queue into a parsed body object, leaving the queue ended and empty for later consumers.</desc>\n      <rect x=\"40\" y=\"46\" width=\"300\" height=\"118\" rx=\"12\" fill=\"var(--l1b)\" stroke=\"var(--l1)\" stroke-width=\"1\"/>\n      <text x=\"58\" y=\"72\" font-size=\"13\" font-weight=\"600\" fill=\"var(--l1)\" font-family=\"Inter,sans-serif\">internal queue</text>\n      <g id=\"chunks\">\n        <rect x=\"58\" y=\"88\" width=\"58\" height=\"30\" rx=\"6\" fill=\"var(--l1)\" opacity=\".85\"/>\n        <rect x=\"124\" y=\"88\" width=\"58\" height=\"30\" rx=\"6\" fill=\"var(--l1)\" opacity=\".85\"/>\n        <rect x=\"190\" y=\"88\" width=\"58\" height=\"30\" rx=\"6\" fill=\"var(--l1)\" opacity=\".85\"/>\n        <rect x=\"256\" y=\"88\" width=\"58\" height=\"30\" rx=\"6\" fill=\"var(--l1)\" opacity=\".85\"/>\n      </g>\n      <text id=\"qstate\" x=\"58\" y=\"144\" font-size=\"11.5\" fill=\"var(--l1)\" opacity=\".85\" font-family=\"JetBrains Mono,monospace\">readableEnded: false</text>\n      <path id=\"barrow\" d=\"M352 105 L428 105\" stroke=\"var(--line2)\" stroke-width=\"1.5\" fill=\"none\"/>\n      <rect id=\"bbox\" x=\"440\" y=\"46\" width=\"180\" height=\"118\" rx=\"12\" fill=\"var(--sunk)\" stroke=\"var(--line2)\" stroke-width=\"1\"/>\n      <text x=\"458\" y=\"72\" font-size=\"13\" font-weight=\"600\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">req.body</text>\n      <text id=\"bval\" x=\"458\" y=\"100\" font-size=\"12\" fill=\"var(--tx3)\" font-family=\"JetBrains Mono,monospace\">undefined</text>\n      <path id=\"larrow\" d=\"M352 105 L428 105\" stroke=\"var(--l3)\" stroke-width=\"1.5\" fill=\"none\" opacity=\"0\"/>\n      <rect id=\"lbox\" x=\"660\" y=\"46\" width=\"170\" height=\"118\" rx=\"12\" fill=\"none\" stroke=\"var(--line2)\" stroke-width=\"1\" stroke-dasharray=\"5 4\"/>\n      <text x=\"678\" y=\"72\" font-size=\"13\" font-weight=\"600\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">later middleware</text>\n      <text id=\"lval\" x=\"678\" y=\"100\" font-size=\"12\" fill=\"var(--tx3)\" font-family=\"JetBrains Mono,monospace\">waiting</text>\n      <text id=\"bcap\" x=\"430\" y=\"200\" text-anchor=\"middle\" font-size=\"12.5\" fill=\"var(--tx2)\" font-family=\"Inter,sans-serif\">Chunks sit in the queue, nobody has subscribed yet</text>\n    </svg>"}};
+})();
+</script>
+<script>DATA.res=(function(){
+var IFACE=[
+{n:"stream.Stream",c:"s0",f:"stream.d.ts",
+ src:'class Stream extends EventEmitter {\n  pipe<T extends Writable>(\n    dest: T,\n    opts?: { end?: boolean }\n  ): T\n}\n\ntype Listener = (...args: any[]) => void\n\non(event: string, fn: Listener): this\nonce(event: string, fn: Listener): this\nemit(event: string, ...args: any[]): boolean',
+ notes:{1:["c0","the real base","OutgoingMessage sets its prototype to this, not to Writable."],
+        2:["c0","inherited, unused","res.pipe() exists. Node's own maintainers advise against it."],
+        12:["c0","finish and close","Both write-side lifecycle events arrive through this contract."]}},
+{n:"stream.Writable",c:"sx",f:"stream.d.ts",
+ src:'class Writable extends Stream {\n  writable: boolean\n  writableEnded: boolean\n  writableFinished: boolean\n  writableHighWaterMark: number\n  writableLength: number\n  writableCorked: number\n  destroyed: boolean\n\n  write(\n    chunk: any,\n    enc?: BufferEncoding,\n    cb?: (e?: Error | null) => void\n  ): boolean\n  end(chunk?: any, cb?: () => void): this\n  cork(): void\n  uncork(): void\n  setDefaultEncoding(enc: BufferEncoding): this\n  destroy(err?: Error): this\n\n  _write(\n    chunk: any,\n    enc: BufferEncoding,\n    cb: (e?: Error | null) => void\n  ): void\n}',
+ notes:{1:["clw","the model","Every member below is reimplemented by hand one layer up."],
+        3:["clw","end was called","Flips when end() is called, before the flush has completed."],
+        4:["clw","flush completed","Only true after finish. The gap between these two is real time."],
+        14:["clw","backpressure","false means over the high water mark. Wait for drain."],
+        21:["clw","the hook","Subclasses implement this. OutgoingMessage never does."]}},
+{n:"http.OutgoingMessage",c:"s1",f:"http.d.ts",
+ src:'class OutgoingMessage extends Stream {\n  writable: boolean\n  writableEnded: boolean\n  writableFinished: boolean\n  writableHighWaterMark: number\n  writableLength: number\n  writableCorked: number\n  headersSent: boolean\n  chunkedEncoding: boolean\n  sendDate: boolean\n  socket: net.Socket | null\n\n  write(\n    chunk: string | Buffer,\n    enc?: BufferEncoding,\n    cb?: (e?: Error | null) => void\n  ): boolean\n  end(chunk?: any, cb?: () => void): this\n  cork(): void\n  uncork(): void\n  setHeader(name: string, value: number | string): this\n  getHeader(name: string): number | string | undefined\n  getHeaders(): OutgoingHttpHeaders\n  getHeaderNames(): string[]\n  hasHeader(name: string): boolean\n  removeHeader(name: string): void\n  appendHeader(name: string, value: string): this\n  flushHeaders(): void\n  addTrailers(headers: OutgoingHttpHeaders): void\n}',
+ notes:{1:["c1","extends Stream","Not Writable. This single line is the whole asymmetry."],
+        2:["c1","a plain field","On a real Writable this is a getter over _writableState."],
+        8:["c1","the one-way door","Flips on the first flush and never flips back."],
+        11:["c1","nulled on end","After end() this becomes null, so read it before."],
+        17:["c1","identical contract","Same signature as Writable.write, different implementation."],
+        21:["c1","before the flush","Mutates the store. Throws once headersSent is true."],
+        28:["c1","send the head early","Useful ahead of a slow computation, to start the client clock."]}},
+{n:"http.ServerResponse",c:"s2",f:"http.d.ts",
+ src:'class ServerResponse extends OutgoingMessage {\n  statusCode: number\n  statusMessage: string\n  strictContentLength: boolean\n  req: IncomingMessage\n\n  writeHead(\n    status: number,\n    message?: string,\n    headers?: OutgoingHttpHeaders\n  ): this\n  writeContinue(cb?: () => void): void\n  writeEarlyHints(hints: Record<string, string>): void\n  setTimeout(ms: number, cb?: () => void): this\n}',
+ notes:{2:["c2","mutable until flush","Assigning after the head is sent changes nothing on the wire."],
+        5:["c2","back-reference","The paired request, so middleware can reach it from here."],
+        11:["c2","merges, not replaces","Headers passed here join the store rather than clearing it."],
+        12:["c2","100 Continue","Sent as its own interim head, ahead of the real one."]}},
+{n:"Express res",c:"s3",f:"express/index.d.ts",
+ src:'interface Response extends ServerResponse {\n  locals: Record<string, any>\n  app: Application\n  req: Request\n\n  status(code: number): this\n  sendStatus(code: number): this\n  send(body?: any): this\n  json(body?: any): this\n  jsonp(body?: any): this\n  type(mime: string): this\n  format(obj: Record<string, () => void>): this\n  set(field: string, value?: string | string[]): this\n  get(field: string): string | undefined\n  append(field: string, value: string | string[]): this\n  vary(field: string): this\n  location(path: string): this\n  redirect(status: number, path: string): void\n  cookie(name: string, val: any, o?: CookieOptions): this\n  clearCookie(name: string, o?: CookieOptions): this\n  attachment(filename?: string): this\n  sendFile(path: string, o?: SendFileOptions): void\n  download(path: string, name?: string): void\n  render(view: string, locals?: object): void\n}',
+ notes:{2:["c3","per-request scope","Lives only for this request. View templates read from it."],
+        6:["c3","chainable","Returning this is why res.status(201).json(x) reads the way it does."],
+        8:["c3","a dispatcher","Branches on the body type, then calls end exactly once."],
+        9:["c3","stringify then send","Uses app settings for spacing, replacer and escaping."],
+        18:["c3","writes and ends","Sets Location, writes a short body, ends. Nothing follows it."],
+        22:["c3","streams the file","One of the few paths that pipes instead of buffering."]}}];
+var LAYER=[
+{t:"stream.Stream extends EventEmitter",m:"m-stream",dec:["on()", "once()", "off()", "emit()", "pipe()"],w:"It is the only stream class in this chain. Every Writable-shaped member above it is declared by hand on top of this base rather than inherited from <code class=\"idc c0\">Stream</code>.",c:"None at runtime, though it does leave <code class=\"idc c3\">res</code> with a <code class=\"idc c0\">pipe()</code> method that Node's maintainers advise against using."},
+{t:"http.OutgoingMessage",m:"m-outgoing",dec:["write()", "end()", "cork()", "setHeader()", "headersSent", "writableEnded"],w:"HTTP must buffer the head until the first body byte, a concept a generic Writable has no room for, so <code class=\"idc c1\">headersSent</code> and the header store are declared here alongside <code class=\"idc c1\">write()</code>.",c:"The Writable contract is duplicated rather than inherited, so anything reaching for <code class=\"idc c1\">instanceof</code> rather than the methods fails."},
+{t:"http.ServerResponse",m:"m-serverresponse",dec:["statusCode", "statusMessage", "writeHead()", "writeContinue()", "req"],w:"A response needs a status line, which a generic outgoing message does not have. This is the layer that knows it is answering a request rather than making one.",c:"Small. <span class=\"num\">Four</span> fields and <span class=\"num\">four</span> methods over the layer below."},
+{t:"Express res",m:"m-express",dec:["status()", "send()", "json()", "redirect()", "cookie()", "locals"],w:"Handlers want to name an outcome rather than assemble a message. Every method here resolves to <code class=\"idc c1\">setHeader()</code> calls plus exactly one <code class=\"idc c1\">end()</code>.",c:"<code class=\"idc c3\">send()</code> infers Content-Type from the body and computes an ETag, both of which can surprise you if you already set them."}];
+var TRACE=[
+{box:0,h:"Your handler is called",
+ p:"Express has already spliced express.response into the chain. The status defaults to 200, the header store holds almost nothing, and no byte has reached the socket.",
+ s:'res instanceof ServerResponse: true\nres instanceof stream.Writable: false\nres.statusCode: 200\nres.headersSent: false\nres.getHeaders(): {}'},
+{box:1,h:"status() sets a field",
+ p:"status() assigns statusCode and returns this. Nothing is serialised, which is why the call can sit anywhere before the flush and can be repeated harmlessly.",
+ s:'res.statusCode: 201\nres.headersSent: false\nbytes written to socket: 0'},
+{box:1,h:"Headers go into the store",
+ p:"set() and cookie() write into a plain object keyed by lowercased name. A repeated set overwrites, append() joins, and set-cookie is kept as an array.",
+ s:'res.getHeaders(): {\n  "x-request-id": "b41f",\n  "set-cookie": ["sid=9a; HttpOnly"]\n}\nres.headersSent: false'},
+{box:1,h:"json() prepares the body",
+ p:"json() stringifies using the app settings, sets Content-Type and Content-Length, computes an ETag, then hands off to send, which calls end.",
+ s:'body: \'{"id":42,"name":"ada"}\'\ncontent-type: "application/json; charset=utf-8"\ncontent-length: "22"\netag: \'W/"16-9d8f"\''},
+{box:2,h:"The head is serialised",
+ p:"The first write triggers the flush. The status line and every stored header become one string, handed to the socket in a single write.",
+ s:'HTTP/1.1 201 Created\nX-Request-Id: b41f\nSet-Cookie: sid=9a; HttpOnly\nContent-Type: application/json; charset=utf-8\nContent-Length: 22'},
+{box:3,h:"Body bytes go out",
+ p:"write() returns a boolean exactly as a real Writable would. A false return means the socket buffer is over its threshold and you should wait for drain before writing more.",
+ s:'res.headersSent: true\nres.write(chunk): true\nres.writableEnded: false\nres.writableFinished: false'},
+{box:4,h:"end() completes the message",
+ p:"end() flushes what remains, marks the message ended, and emits finish once the last byte has been handed to the socket. The connection itself may stay open for the next request.",
+ s:'res.writableEnded: true\nres.writableFinished: true\n"finish" emitted: yes\nres.socket: null'}];
+var SPENT=[
+{chunks:4,ended:"headersSent: false",body:"nothing yet",later:"allowed",arrow:0,
+ cap:"Entries live in a plain object. Nothing has reached the wire."},
+{chunks:0,ended:"headersSent: true",body:"HTTP/1.1 201 Created",later:"ERR_HTTP_HEADERS_SENT",arrow:1,
+ cap:"The first write serialises the status line and every stored header."},
+{chunks:0,ended:"writableFinished: true",body:"head + 22 bytes of body",later:"ERR_HTTP_HEADERS_SENT",arrow:1,
+ cap:"The message is finished. The head cannot be revised, only the connection closed."}];
+var SPENT_SRC='res.status(201)\nres.set("X-Request-Id", id)\nres.json(payload)\nres.set("X-Too-Late", "1")';
+var SPENT_NOTES={1:["c2","a field assignment","Nothing is serialised. Safe to call more than once."],
+ 2:["c1","into the store","A plain object keyed by the lowercased header name."],
+ 3:["c3","closes the head","json calls send, send calls end, end flushes. Door shut."],
+ 4:["c2","throws here","ERR_HTTP_HEADERS_SENT. The bytes are already on the socket."]};
+var GLOSS={
+"g-stream":["stream.Stream","the real base","<p>A near-empty class extending <span class='c0'>EventEmitter</span>. On the write side it is the actual parent, which is the surprise.</p><p>It contributes the event vocabulary and a <code class='plain'>pipe</code> method that nothing here should use.</p>"],
+"g-writable":["stream.Writable","the copied surface, not the parent","<p>The class whose surface <span class='c1'>OutgoingMessage</span> reimplements: <code class='plain'>write</code>, <code class='plain'>end</code>, <code class='plain'>cork</code>, the writable state fields, the <code class='plain'>drain</code> event.</p><p>It is never in the response's prototype chain, so <code class='plain'>res instanceof Writable</code> is <code class='plain'>false</code>.</p>"],
+"g-outgoing":["http.OutgoingMessage","two jobs at once","<p>Imitates a <span class='clw'>Writable</span> and holds the header store until the head is flushed. It is the busiest layer in the chain.</p>"],
+"g-serverresponse":["http.ServerResponse","the status line","<p>The layer that knows it is answering a request. It adds <span class='c2'>statusCode</span>, <span class='c2'>writeHead</span>, and the server-only interim responses.</p>"],
+"g-expressres":["Express res","outcomes, not messages","<p>Every method here resolves to header assignments plus one <code class='plain'>end()</code>. The same prototype surgery Express performs on the request.</p>"],
+"g-wshape":["Writable-shaped surface","copied, not inherited","<p>Same names, same signatures, same return types as <span class='clw'>stream.Writable</span>, written out by hand one layer up.</p><p>Duck-typed checks pass. <code class='plain'>instanceof</code> checks do not.</p>"],
+"g-headerssent":["headersSent","the one-way door","<p>Flips to true on the first flush and never flips back. Every late-header error and every double-send bug is this flag being checked.</p>"]};
+var CODE={
+"c-ee":['res.on("drain", onDrain)\nres.on("finish", onFinish)\nres.on("close", onClose)\nres.on("error", onError)',
+ {2:["c0","handed over","finish means Node gave the bytes to the socket, not that the client has them."],
+  3:["c0","connection gone","close can arrive without finish if the client disconnected first."]}],
+"c-stream":['res.pipe\nstream.Stream.prototype.pipe === res.pipe\n\nreadable.pipe(res)',
+ {1:["c0","exists anyway","Inherited from Stream, not from Writable."],
+  4:["c0","this direction is fine","Piping into res works because pipe only needs write and end."]}],
+"c-writable":['class MyWritable extends stream.Writable {\n  _write(chunk, enc, cb) {\n    doSomething(chunk)\n    cb()\n  }\n}',
+ {1:["clw","the normal path","A real Writable is subclassed and given a _write hook."],
+  2:["clw","never implemented","OutgoingMessage has no _write. It overrides write() itself."]}],
+"c-ducktype":['res instanceof http.ServerResponse\nres instanceof http.OutgoingMessage\nres instanceof stream.Stream\nres instanceof events.EventEmitter\n\nres instanceof stream.Writable\n\ntypeof res.write === "function"\ntypeof res.end === "function"',
+ {1:["c2","true","The direct class."],
+  4:["c0","true","The chain reaches EventEmitter as expected."],
+  6:["clw","false","The only check in this list that fails."],
+  8:["c1","true","Which is why nearly every library works anyway."]}],
+"c-outgoing":['const { Stream } = require("stream")\n\nfunction OutgoingMessage() {\n  Stream.call(this)\n  this.outputData = []\n  this[kOutHeaders] = null\n  this.finished = false\n}\n\nObjectSetPrototypeOf(OutgoingMessage.prototype,\n  Stream.prototype)',
+ {1:["c1","the import","Stream, not Writable. The choice is made on line one."],
+  5:["c1","the output buffer","Pending writes queue here until the socket accepts them."],
+  6:["c1","the header store","A null-prototype object, created on first setHeader."],
+  10:["c1","the link","This is the line that decides every instanceof result."]}],
+"c-serverresponse":['res.setHeader("X-A", "1")\nres.writeHead(201, { "X-B": "2" })\n\nres.getHeader("X-A")\nres.statusCode',
+ {2:["c2","merges and flushes","Store entries are kept, the argument joins them, then the head goes out."],
+  4:["c2","still readable","getHeader reads the store, which writeHead did not clear."]}],
+"c-express":['res.send = function (body) {\n  if (typeof body === "object") return this.json(body)\n  if (!this.get("Content-Type")) this.type("html")\n  this.set("Content-Length", byteLength(body))\n  return this.end(body)\n}',
+ {2:["c3","the branch","An object is routed to json. A string is sent as html by default."],
+  3:["c3","only if unset","A Content-Type you set earlier is respected."],
+  5:["c3","the single end","Every branch converges here. One end() per response."]}],
+"c-socket":['server.on("request", (req, res) => {\n  req.socket === res.socket\n  res.socket.remoteAddress\n})\n\nres.end()\nres.socket',
+ {2:["c2","one connection","The same duplex socket, as a read view and a write view."],
+  7:["c2","null now","end() nulls the reference, so capture it before you finish."]}],
+"c-headermap":['res.setHeader("Set-Cookie", ["a=1", "b=2"])\nres.appendHeader("Vary", "Accept-Encoding")\nres.getHeaders()\nres.removeHeader("X-Powered-By")',
+ {1:["c1","arrays stay arrays","Set-Cookie is the header that must repeat on the wire."],
+  2:["c1","joins, not replaces","append adds to an existing value instead of overwriting."],
+  3:["c1","a shallow copy","Mutating the returned object does not change the store."]}],
+"c-flush":['res.write("first chunk")\n\nres.headersSent\nres.setHeader("X-Late", "1")',
+ {1:["c1","the trigger","The first body write serialises the head before the chunk."],
+  3:["c1","true from here","Nothing flips this back."],
+  4:["c2","throws","ERR_HTTP_HEADERS_SENT."]}],
+"c-backpressure":['function pump(res, source) {\n  for (const chunk of source) {\n    if (!res.write(chunk)) {\n      res.once("drain", () => pump(res, source))\n      return\n    }\n  }\n  res.end()\n}',
+ {3:["c1","the signal","false means the socket buffer is over its threshold."],
+  4:["c1","wait, do not loop","Ignoring this grows the output buffer without limit."],
+  8:["c1","only when drained","end() after the last accepted chunk, never before."]}],
+"c-endfinish":['res.end("last chunk")\n\nres.writableEnded\nres.on("finish", () => log("handed to socket"))\nres.on("close", () => log("connection released"))',
+ {3:["c1","immediately true","Set synchronously by end(), before anything is flushed."],
+  4:["c1","later","finish waits for the output buffer to empty into the socket."]}]};
+var MODAL={};
+MODAL["m-ee"]={t:"EventEmitter",k:"the write-side lifecycle",h:`
+<p>On the read side the events tell you data arrived. Here they tell you the buffer emptied, the message ended, or the connection went away. Two of them look interchangeable and are not.</p>
+<div class="mfig"><svg viewBox="0 0 760 170" role="img"><title>finish and close mark different moments</title>
+<rect x="30" y="34" width="200" height="46" rx="10" fill="var(--l0b)" stroke="var(--l0)"/>
+<text x="130" y="63" text-anchor="middle" font-size="12.5" fill="var(--l0)" font-family="JetBrains Mono,monospace">end() called</text>
+<rect x="280" y="34" width="200" height="46" rx="10" fill="var(--l0b)" stroke="var(--l0)"/>
+<text x="380" y="63" text-anchor="middle" font-size="12.5" fill="var(--l0)" font-family="JetBrains Mono,monospace">"finish"</text>
+<rect x="530" y="34" width="200" height="46" rx="10" fill="none" stroke="var(--line2)"/>
+<text x="630" y="63" text-anchor="middle" font-size="12.5" fill="var(--tx2)" font-family="JetBrains Mono,monospace">"close"</text>
+<g stroke="var(--line2)" stroke-width="1.5" fill="none"><path d="M236 57 L274 57"/><path d="M486 57 L524 57"/></g>
+<text x="130" y="112" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">writableEnded true</text>
+<text x="380" y="112" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">buffer emptied to socket</text>
+<text x="630" y="112" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">connection released</text>
+<text x="380" y="146" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">close can arrive without finish if the client leaves early</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-ee"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>finish is not delivery</b><span>It means Node handed the last byte to the socket. The client may still never receive it.</span></div>
+<div class="mcard"><b>Log on close, clean up on close</b><span>An aborted request fires close without finish, so finish-only cleanup leaks.</span></div>
+<div class="mcard"><b>drain is the only backpressure event</b><span>Nothing else tells you the socket is ready for more.</span></div>
+</div>`};
+MODAL["m-stream"]={t:"stream.Stream",k:"the actual parent, and its leftovers",h:`
+<p>On the request side this class was a convenient shared base. Here it is the literal parent of the whole response chain, which is both the reason the write side works and the reason it carries a method nobody should call.</p>
+<div class="mfig"><svg viewBox="0 0 760 150" role="img"><title>pipe into a response works, pipe out of one does not</title>
+<rect x="30" y="34" width="190" height="48" rx="10" fill="var(--l1b)" stroke="var(--l1)"/>
+<text x="125" y="63" text-anchor="middle" font-size="12" fill="var(--l1)" font-family="JetBrains Mono,monospace">readable</text>
+<rect x="300" y="34" width="190" height="48" rx="10" fill="var(--l2b)" stroke="var(--l2)"/>
+<text x="395" y="63" text-anchor="middle" font-size="12" fill="var(--l2)" font-family="JetBrains Mono,monospace">res</text>
+<rect x="570" y="34" width="160" height="48" rx="10" fill="none" stroke="var(--lw)" stroke-dasharray="5 4"/>
+<text x="650" y="63" text-anchor="middle" font-size="12" fill="var(--lw)" font-family="JetBrains Mono,monospace">anything</text>
+<path d="M226 58 L294 58" stroke="var(--line2)" stroke-width="1.5" fill="none"/>
+<path d="M496 58 L564 58" stroke="var(--lw)" stroke-width="1.5" stroke-dasharray="5 4" fill="none"/>
+<text x="260" y="108" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">works, needs only write and end</text>
+<text x="530" y="108" text-anchor="middle" font-size="11.5" fill="var(--lw)" font-family="Inter,sans-serif">inherited, historical, avoid</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-stream"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>Piping into res is the common case</b><span>pipe calls write and end on the destination. Both exist, so the destination need not be a Writable.</span></div>
+<div class="mcard"><b>res.pipe is a historical artefact</b><span>It comes from Stream and has no meaning for an outgoing message.</span></div>
+</div>
+<h4>related</h4><div class="mgrid">
+<div class="mcard" data-open="m-ee" style="cursor:pointer"><b>EventEmitter &#8250;</b><span>The base below this one: how emit walks its listener array, and which events matter on this side.</span></div>
+</div>`};
+MODAL["m-writable"]={t:"stream.Writable",k:"the copied surface",h:`
+<p>Worth reading on its own, because it is the reference the layer above copies. A real Writable owns an internal state object and expects a subclass to supply one hook. The HTTP path does neither.</p>
+<div class="mfig"><svg viewBox="0 0 760 190" role="img"><title>A real Writable subclass compared with the HTTP path</title>
+<rect x="30" y="26" width="330" height="140" rx="12" fill="var(--lwb)" stroke="var(--lw)"/>
+<text x="52" y="52" font-size="12.5" fill="var(--lw)" font-family="Inter,sans-serif">a real Writable subclass</text>
+<text x="52" y="80" font-size="12" fill="var(--lw)" font-family="JetBrains Mono,monospace">extends stream.Writable</text>
+<text x="52" y="102" font-size="12" fill="var(--lw)" font-family="JetBrains Mono,monospace">_writableState: object</text>
+<text x="52" y="124" font-size="12" fill="var(--lw)" font-family="JetBrains Mono,monospace">_write(chunk, enc, cb)</text>
+<text x="52" y="146" font-size="12" fill="var(--lw)" font-family="JetBrains Mono,monospace">write() inherited</text>
+<rect x="400" y="26" width="330" height="140" rx="12" fill="var(--l1b)" stroke="var(--l1)"/>
+<text x="422" y="52" font-size="12.5" fill="var(--l1)" font-family="Inter,sans-serif">http.OutgoingMessage</text>
+<text x="422" y="80" font-size="12" fill="var(--l1)" font-family="JetBrains Mono,monospace">extends stream.Stream</text>
+<text x="422" y="102" font-size="12" fill="var(--tx3)" font-family="JetBrains Mono,monospace">_writableState: absent</text>
+<text x="422" y="124" font-size="12" fill="var(--tx3)" font-family="JetBrains Mono,monospace">_write: absent</text>
+<text x="422" y="146" font-size="12" fill="var(--l1)" font-family="JetBrains Mono,monospace">write() hand-written</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-writable"></div>
+<h4>related</h4><div class="mgrid">
+<div class="mcard" data-open="m-ducktype" style="cursor:pointer"><b>What the difference breaks &#8250;</b><span>The checks that pass, the one that fails, and the adapter that throws.</span></div>
+<div class="mcard" data-open="m-backpressure" style="cursor:pointer"><b>Backpressure on this side &#8250;</b><span>write() returning false, and the only event that tells you to resume.</span></div>
+</div>`};
+MODAL["m-ducktype"]={t:"The copied surface",k:"what it costs in practice",h:`
+<p>Almost nothing notices. The surface is identical, so any code that calls methods works. The failures are narrow and specific: code that tests the class, and code that reaches for the internal state object a real Writable carries.</p>
+<div class="mfig"><svg viewBox="0 0 760 175" role="img"><title>Checks that pass and the check that fails</title>
+<rect x="30" y="26" width="330" height="128" rx="12" fill="var(--l1b)" stroke="var(--l1)"/>
+<text x="52" y="52" font-size="12.5" fill="var(--l1)" font-family="Inter,sans-serif">passes</text>
+<text x="52" y="80" font-size="12" fill="var(--l1)" font-family="JetBrains Mono,monospace">typeof res.write === "function"</text>
+<text x="52" y="102" font-size="12" fill="var(--l1)" font-family="JetBrains Mono,monospace">readable.pipe(res)</text>
+<text x="52" y="124" font-size="12" fill="var(--l1)" font-family="JetBrains Mono,monospace">pipeline(readable, res, cb)</text>
+<rect x="400" y="26" width="330" height="128" rx="12" fill="var(--lwb)" stroke="var(--lw)"/>
+<text x="422" y="52" font-size="12.5" fill="var(--lw)" font-family="Inter,sans-serif">fails</text>
+<text x="422" y="80" font-size="12" fill="var(--lw)" font-family="JetBrains Mono,monospace">res instanceof stream.Writable</text>
+<text x="422" y="102" font-size="12" fill="var(--lw)" font-family="JetBrains Mono,monospace">Writable.toWeb(res)</text>
+<text x="422" y="124" font-size="12" fill="var(--lw)" font-family="JetBrains Mono,monospace">checks on _writableState</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-ducktype"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>Test for methods, not for classes</b><span>Surface checking is the only check that holds across both sides of an HTTP transaction.</span></div>
+<div class="mcard"><b>The types can disagree with the runtime</b><span>Some declarations model this as extends stream.Writable, so an instanceof branch type-checks and still fails.</span></div>
+<div class="mcard"><b>Web stream adapters are the sharp edge</b><span>They look for the internal state object, which this object does not have.</span></div>
+</div>
+<h4>related</h4><div class="mgrid">
+<div class="mcard" data-open="m-writable" style="cursor:pointer"><b>stream.Writable &#8250;</b><span>The declaration being copied, beside what OutgoingMessage does instead.</span></div>
+</div>`};
+MODAL["m-outgoing"]={t:"http.OutgoingMessage",k:"two jobs in one class",h:`
+<p>This layer is doing something a generic stream cannot: holding a mutable header store alongside an output buffer, and keeping them in the right order. The head must go out before the first body byte, but you may set headers right up until that moment.</p>
+<div class="mfig"><svg viewBox="0 0 760 200" role="img"><title>The header store and the output buffer inside one object</title>
+<rect x="30" y="26" width="700" height="152" rx="13" fill="var(--l1b)" stroke="var(--l1)"/>
+<text x="52" y="52" font-size="12.5" fill="var(--l1)" font-family="Inter,sans-serif">http.OutgoingMessage</text>
+<rect x="56" y="70" width="300" height="88" rx="10" fill="none" stroke="var(--l1)" stroke-dasharray="5 4"/>
+<text x="206" y="96" text-anchor="middle" font-size="12" fill="var(--l1)" font-family="JetBrains Mono,monospace">kOutHeaders</text>
+<text x="206" y="120" text-anchor="middle" font-size="11.5" fill="var(--l1)" opacity=".85" font-family="Inter,sans-serif">mutable until the flush</text>
+<text x="206" y="140" text-anchor="middle" font-size="11.5" fill="var(--l1)" opacity=".85" font-family="Inter,sans-serif">goes out first, exactly once</text>
+<rect x="404" y="70" width="300" height="88" rx="10" fill="none" stroke="var(--l1)" stroke-dasharray="5 4"/>
+<text x="554" y="96" text-anchor="middle" font-size="12" fill="var(--l1)" font-family="JetBrains Mono,monospace">outputData</text>
+<text x="554" y="120" text-anchor="middle" font-size="11.5" fill="var(--l1)" opacity=".85" font-family="Inter,sans-serif">pending body writes</text>
+<text x="554" y="140" text-anchor="middle" font-size="11.5" fill="var(--l1)" opacity=".85" font-family="Inter,sans-serif">drains into the socket</text>
+<path d="M362 114 L398 114" stroke="var(--l1)" stroke-width="1.5" fill="none"/>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-outgoing"></div>
+<h4>related</h4><div class="mgrid">
+<div class="mcard" data-open="m-headermap" style="cursor:pointer"><b>The header store &#8250;</b><span>Casing, arrays, append versus set, and what getHeaders returns.</span></div>
+<div class="mcard" data-open="m-backpressure" style="cursor:pointer"><b>The output buffer &#8250;</b><span>Why write() returns a boolean and what ignoring it costs.</span></div>
+<div class="mcard" data-open="m-flush" style="cursor:pointer"><b>The flush &#8250;</b><span>The moment the two are joined and sent.</span></div>
+</div>`};
+MODAL["m-serverresponse"]={t:"http.ServerResponse",k:"the status line and the interim heads",h:`
+<p>A thin layer. It adds the first line of the message and the two responses that are sent before the real one. Everything else it exposes came from below.</p>
+<div class="mfig"><svg viewBox="0 0 760 180" role="img"><title>Interim heads sent ahead of the final head</title>
+<rect x="30" y="34" width="200" height="46" rx="10" fill="none" stroke="var(--line2)" stroke-dasharray="5 4"/>
+<text x="130" y="63" text-anchor="middle" font-size="12" fill="var(--tx2)" font-family="JetBrains Mono,monospace">100 Continue</text>
+<rect x="280" y="34" width="200" height="46" rx="10" fill="none" stroke="var(--line2)" stroke-dasharray="5 4"/>
+<text x="380" y="63" text-anchor="middle" font-size="12" fill="var(--tx2)" font-family="JetBrains Mono,monospace">103 Early Hints</text>
+<rect x="530" y="34" width="200" height="46" rx="10" fill="var(--l2b)" stroke="var(--l2)"/>
+<text x="630" y="63" text-anchor="middle" font-size="12" fill="var(--l2)" font-family="JetBrains Mono,monospace">201 Created</text>
+<g stroke="var(--line2)" stroke-width="1.5" fill="none"><path d="M236 57 L274 57"/><path d="M486 57 L524 57"/></g>
+<text x="130" y="112" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">headersSent stays false</text>
+<text x="380" y="112" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">headersSent stays false</text>
+<text x="630" y="112" text-anchor="middle" font-size="11.5" fill="var(--l2)" font-family="Inter,sans-serif">headersSent becomes true</text>
+<text x="380" y="150" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">Interim heads are separate messages on the same connection</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-serverresponse"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>writeHead does not clear the store</b><span>Headers you set earlier survive. The object passed in joins them.</span></div>
+<div class="mcard"><b>statusMessage is optional</b><span>Omit it and Node writes the standard reason phrase for the code.</span></div>
+<div class="mcard"><b>strictContentLength catches mismatches</b><span>With it on, writing more or fewer bytes than declared throws instead of corrupting the message.</span></div>
+</div>`};
+MODAL["m-express"]={t:"Express res",k:"one end() per response",h:`
+<p>The whole Express surface is a funnel. Twenty methods, one exit. Each one sets headers and then either returns for chaining or calls <code class="plain">end</code>, and calling two terminal methods is the double-send bug every Express codebase eventually hits.</p>
+<div class="mfig"><svg viewBox="0 0 760 210" role="img"><title>Express response methods converging on a single end call</title>
+<rect x="30" y="26" width="180" height="38" rx="9" fill="var(--l3b)" stroke="var(--l3)"/>
+<text x="120" y="50" text-anchor="middle" font-size="12" fill="var(--l3)" font-family="JetBrains Mono,monospace">json()</text>
+<rect x="30" y="76" width="180" height="38" rx="9" fill="var(--l3b)" stroke="var(--l3)"/>
+<text x="120" y="100" text-anchor="middle" font-size="12" fill="var(--l3)" font-family="JetBrains Mono,monospace">sendStatus()</text>
+<rect x="30" y="126" width="180" height="38" rx="9" fill="var(--l3b)" stroke="var(--l3)"/>
+<text x="120" y="150" text-anchor="middle" font-size="12" fill="var(--l3)" font-family="JetBrains Mono,monospace">redirect()</text>
+<rect x="290" y="76" width="180" height="38" rx="9" fill="var(--l3b)" stroke="var(--l3)" stroke-width="1.5"/>
+<text x="380" y="100" text-anchor="middle" font-size="12" fill="var(--l3)" font-family="JetBrains Mono,monospace">send()</text>
+<rect x="550" y="76" width="180" height="38" rx="9" fill="var(--l1b)" stroke="var(--l1)"/>
+<text x="640" y="100" text-anchor="middle" font-size="12" fill="var(--l1)" font-family="JetBrains Mono,monospace">end()</text>
+<g stroke="var(--line2)" stroke-width="1.5" fill="none">
+<path d="M216 45 L252 45 L252 91 L284 91"/>
+<path d="M216 95 L284 95"/>
+<path d="M216 145 L252 145 L252 99 L284 99"/>
+<path d="M476 95 L544 95"/></g>
+<text x="380" y="180" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">Every path sets headers first, then converges on one end()</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-express"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>Two terminal calls is the classic bug</b><span>The second one throws, and it throws inside a callback where it is easy to swallow.</span></div>
+<div class="mcard"><b>send guesses Content-Type</b><span>A string becomes html, a Buffer becomes octet-stream, an object goes to json.</span></div>
+<div class="mcard"><b>ETag is computed for you</b><span>Which costs a hash over the body, and can be turned off with an app setting.</span></div>
+</div>`};
+MODAL["m-socket"]={t:"The socket",k:"the write view of one connection",h:`
+<p>The request and the response are two views onto the same duplex socket. The response owns the write half, and gives the reference up as soon as the message is finished.</p>
+<div class="mfig"><svg viewBox="0 0 760 200" role="img"><title>One socket surfaced as a request and a response</title>
+<rect x="90" y="26" width="200" height="52" rx="11" fill="none" stroke="var(--line2)"/>
+<text x="190" y="57" text-anchor="middle" font-size="12.5" fill="var(--tx2)" font-family="JetBrains Mono,monospace">req</text>
+<rect x="470" y="26" width="200" height="52" rx="11" fill="var(--l2b)" stroke="var(--l2)"/>
+<text x="570" y="57" text-anchor="middle" font-size="12.5" fill="var(--l2)" font-family="JetBrains Mono,monospace">res</text>
+<rect x="280" y="126" width="200" height="52" rx="11" fill="none" stroke="var(--line2)"/>
+<text x="380" y="157" text-anchor="middle" font-size="12.5" fill="var(--tx2)" font-family="JetBrains Mono,monospace">net.Socket</text>
+<path d="M330 120 L214 84" stroke="var(--line2)" stroke-width="1.5" fill="none"/>
+<path d="M430 120 L546 84" stroke="var(--l2)" stroke-width="1.5" fill="none"/>
+<text x="196" y="112" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">read half</text>
+<text x="486" y="112" font-size="11.5" fill="var(--l2)" font-family="Inter,sans-serif">write half</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-socket"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>res.socket is null after end</b><span>Capture the address or the remote port before you finish the message.</span></div>
+<div class="mcard"><b>Keep-alive means the socket outlives res</b><span>A new response object is built over the same connection for the next request.</span></div>
+</div>`};
+MODAL["m-headermap"]={t:"The header store",k:"a plain object with rules",h:`
+<p>Not a Map and not the wire format. Names are stored lowercased with their original casing kept alongside, values may be arrays, and the whole thing is replaced by a serialised string the moment the head flushes.</p>
+<div class="mfig"><svg viewBox="0 0 760 180" role="img"><title>The stored header shape compared with the serialised wire form</title>
+<rect x="30" y="26" width="330" height="130" rx="12" fill="var(--l1b)" stroke="var(--l1)"/>
+<text x="52" y="52" font-size="12.5" fill="var(--l1)" font-family="Inter,sans-serif">stored</text>
+<text x="52" y="80" font-size="11.5" fill="var(--l1)" font-family="JetBrains Mono,monospace">"content-type": [..]</text>
+<text x="52" y="102" font-size="11.5" fill="var(--l1)" font-family="JetBrains Mono,monospace">"set-cookie": ["a=1", "b=2"]</text>
+<text x="52" y="132" font-size="11.5" fill="var(--l1)" opacity=".85" font-family="Inter,sans-serif">mutable, lowercased keys</text>
+<rect x="400" y="26" width="330" height="130" rx="12" fill="none" stroke="var(--line2)"/>
+<text x="422" y="52" font-size="12.5" fill="var(--tx2)" font-family="Inter,sans-serif">serialised</text>
+<text x="422" y="80" font-size="11.5" fill="var(--tx3)" font-family="JetBrains Mono,monospace">Content-Type: text/html</text>
+<text x="422" y="102" font-size="11.5" fill="var(--tx3)" font-family="JetBrains Mono,monospace">Set-Cookie: a=1</text>
+<text x="422" y="120" font-size="11.5" fill="var(--tx3)" font-family="JetBrains Mono,monospace">Set-Cookie: b=2</text>
+<text x="422" y="146" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">frozen, original casing</text>
+<path d="M366 90 L394 90" stroke="var(--line2)" stroke-width="1.5" fill="none"/>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-headermap"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>One array becomes repeated lines</b><span>Set-Cookie is the header that must appear more than once, so it is stored as an array.</span></div>
+<div class="mcard"><b>Casing is preserved for the wire</b><span>Lookups are case-insensitive, but what you typed is what gets serialised.</span></div>
+<div class="mcard"><b>getHeaders hands back a copy</b><span>Mutating the result changes nothing. Use setHeader.</span></div>
+</div>`};
+MODAL["m-flush"]={t:"The flush",k:"the irreversible moment",h:`
+<p>There is no explicit send step. The head is serialised by whichever call first needs to put a byte on the socket, and from that instant the header store is read-only.</p>
+<div class="mfig"><svg viewBox="0 0 760 175" role="img"><title>Calls that trigger the flush and the state afterwards</title>
+<rect x="30" y="26" width="200" height="120" rx="11" fill="var(--l1b)" stroke="var(--l1)"/>
+<text x="130" y="52" text-anchor="middle" font-size="12.5" fill="var(--l1)" font-family="Inter,sans-serif">triggers</text>
+<text x="130" y="80" text-anchor="middle" font-size="11.5" fill="var(--l1)" font-family="JetBrains Mono,monospace">write()</text>
+<text x="130" y="102" text-anchor="middle" font-size="11.5" fill="var(--l1)" font-family="JetBrains Mono,monospace">end()</text>
+<text x="130" y="124" text-anchor="middle" font-size="11.5" fill="var(--l1)" font-family="JetBrains Mono,monospace">flushHeaders()</text>
+<rect x="290" y="26" width="200" height="120" rx="11" fill="none" stroke="var(--line2)"/>
+<text x="390" y="52" text-anchor="middle" font-size="12.5" fill="var(--tx2)" font-family="Inter,sans-serif">head on the wire</text>
+<text x="390" y="88" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="JetBrains Mono,monospace">headersSent: true</text>
+<text x="390" y="116" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">store now read-only</text>
+<rect x="550" y="26" width="180" height="120" rx="11" fill="var(--lwb)" stroke="var(--lw)"/>
+<text x="640" y="52" text-anchor="middle" font-size="12.5" fill="var(--lw)" font-family="Inter,sans-serif">after</text>
+<text x="640" y="84" text-anchor="middle" font-size="11" fill="var(--lw)" font-family="JetBrains Mono,monospace">setHeader throws</text>
+<text x="640" y="108" text-anchor="middle" font-size="11" fill="var(--lw)" font-family="JetBrains Mono,monospace">writeHead throws</text>
+<text x="640" y="132" text-anchor="middle" font-size="11" fill="var(--lw)" font-family="JetBrains Mono,monospace">statusCode ignored</text>
+<g stroke="var(--line2)" stroke-width="1.5" fill="none"><path d="M236 86 L284 86"/><path d="M496 86 L544 86"/></g>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-flush"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>flushHeaders buys latency, not correctness</b><span>Send the head early so the client can start, then take your time over the body.</span></div>
+<div class="mcard"><b>Error middleware runs too late</b><span>If a handler already flushed, an error handler cannot change the status. Check headersSent first.</span></div>
+<div class="mcard"><b>statusCode fails silently</b><span>Assigning after the flush updates the property and leaves the wire untouched.</span></div>
+</div>`};
+MODAL["m-backpressure"]={t:"Backpressure on the write side",k:"the boolean and the one event",h:`
+<p>The mirror of the read side. There a full queue made <code class="plain">push()</code> return false. Here a full socket buffer makes <code class="plain">write()</code> return false, and the only way to learn it has cleared is the drain event.</p>
+<div class="mfig"><svg viewBox="0 0 760 160" role="img"><title>Output buffer against its threshold, with the drain event</title>
+<rect x="60" y="54" width="640" height="30" rx="8" fill="none" stroke="var(--line2)"/>
+<rect x="60" y="54" width="520" height="30" rx="8" fill="var(--l1b)" stroke="var(--l1)"/>
+<path d="M508 40 L508 100" stroke="var(--l3)" stroke-width="1.5" fill="none"/>
+<text x="508" y="32" text-anchor="middle" font-size="11.5" fill="var(--l3)" font-family="Inter,sans-serif">writableHighWaterMark</text>
+<text x="284" y="120" text-anchor="middle" font-size="11.5" fill="var(--l1)" font-family="Inter,sans-serif">write() returns true</text>
+<text x="622" y="120" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">returns false, wait for drain</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-backpressure"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>The chunk is still accepted</b><span>false is advice, not refusal. Ignoring it buffers in your process instead of the socket.</span></div>
+<div class="mcard"><b>pipe does this for you</b><span>Which is the argument for piping a file rather than looping over it by hand.</span></div>
+</div>`};
+MODAL["m-endfinish"]={t:"end and finish",k:"two moments, not one",h:`
+<p><code class="plain">end()</code> returns immediately and sets the ended flag synchronously. The message is not actually complete until the output buffer has emptied into the socket, which is what <code class="plain">finish</code> announces.</p>
+<div class="mfig"><svg viewBox="0 0 760 160" role="img"><title>The gap between end returning and finish firing</title>
+<rect x="30" y="40" width="200" height="46" rx="10" fill="var(--l1b)" stroke="var(--l1)"/>
+<text x="130" y="69" text-anchor="middle" font-size="12" fill="var(--l1)" font-family="JetBrains Mono,monospace">end() returns</text>
+<rect x="530" y="40" width="200" height="46" rx="10" fill="var(--l1b)" stroke="var(--l1)"/>
+<text x="630" y="69" text-anchor="middle" font-size="12" fill="var(--l1)" font-family="JetBrains Mono,monospace">"finish"</text>
+<path d="M236 63 L524 63" stroke="var(--line2)" stroke-width="1.5" stroke-dasharray="5 4" fill="none"/>
+<text x="380" y="55" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">buffer drains into the socket</text>
+<text x="130" y="112" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">writableEnded: true</text>
+<text x="630" y="112" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">writableFinished: true</text>
+<text x="380" y="140" text-anchor="middle" font-size="11.5" fill="var(--tx3)" font-family="Inter,sans-serif">Real time passes here on a slow client</text>
+</svg></div>
+<h4>in code</h4><div class="pane" data-code="c-endfinish"></div>
+<h4>what follows from it</h4><div class="mgrid">
+<div class="mcard"><b>Two flags, two questions</b><span>writableEnded answers did I call end. writableFinished answers did it complete.</span></div>
+<div class="mcard"><b>Timing metrics belong on finish</b><span>Stopping the clock when end() returns measures your code, not the response.</span></div>
+<div class="mcard"><b>cork batches the small writes</b><span>Several writes in a row become one socket write, which matters for chunked responses.</span></div>
+</div>`};
+TRACE.forEach(function(s,i){s.lbl=["what the object holds", "what the object holds", "what the object holds", "what the object holds", "what goes on the wire", "what the object holds", "what the object holds"][i]});
+return {IFACE:IFACE,LAYER:LAYER,TRACE:TRACE,SPENT:SPENT,SPENT_SRC:SPENT_SRC,SPENT_NOTES:SPENT_NOTES,GLOSS:GLOSS,MODAL:MODAL,CODE:CODE,chain:[["stream.Stream", 0], ["http.OutgoingMessage", 1], ["http.ServerResponse", 2], ["Express res", 3]],chain2:"<b class=\"clw\" style=\"border-color:var(--lw);background:var(--lwb);border-style:dashed\">stream.Writable</b><i>copied surface, never in the chain</i>",corner:"m-ducktype",cornerTitle:"The copied surface",paneName:"the call that closes the head",INVKEY:["g-stream", "g-outgoing", "g-serverresponse", "g-expressres"],INV:[[0, "stream base", [["on", "m", "register a listener for an event"], ["once", "m", "register a listener that fires a single time"], ["off", "m", "remove a listener"], ["emit", "m", "call every listener synchronously, in order"], ["listenerCount", "m", "how many listeners an event currently has"], ["pipe", "m", "inherited from Stream, meaningless on a response"]]], [1, "http.OutgoingMessage", [["write", "m", "queue body bytes, false if over the threshold"], ["end", "m", "finish the message, flushing whatever is left"], ["cork", "m", "batch the next writes into one socket write"], ["uncork", "m", "release a cork and flush the batch"], ["destroy", "m", "tear the message down, optionally with an error"], ["setHeader", "m", "write one entry into the header store"], ["getHeader", "m", "read one entry back out"], ["getHeaders", "m", "a shallow copy of the whole store"], ["getHeaderNames", "m", "the stored names, lowercased"], ["hasHeader", "m", "whether a name is present"], ["removeHeader", "m", "delete one entry before the flush"], ["appendHeader", "m", "join a value onto an existing entry"], ["flushHeaders", "m", "send the head now, without body bytes"], ["addTrailers", "m", "headers to send after the body"], ["writable", "f", "whether the message can still take writes"], ["writableEnded", "f", "true as soon as end has been called"], ["writableFinished", "f", "true only once the flush completed"], ["writableHighWaterMark", "f", "the threshold that flips write to false"], ["writableLength", "f", "bytes queued and not yet handed over"], ["writableCorked", "f", "how many corks are currently held"], ["headersSent", "f", "the one-way door: true once the head flushed"], ["chunkedEncoding", "f", "whether the body is framed in chunks"], ["sendDate", "f", "whether Node adds a Date header for you"], ["socket", "f", "the connection, nulled once end completes"]]], [2, "http.ServerResponse", [["statusCode", "f", "the code for the status line"], ["statusMessage", "f", "the reason phrase, defaulted if unset"], ["strictContentLength", "f", "throw if the body length disagrees"], ["req", "f", "back-reference to the paired request"], ["writeHead", "m", "set status and headers, then flush the head"], ["writeContinue", "m", "send an interim 100 Continue"], ["writeEarlyHints", "m", "send an interim 103 Early Hints"], ["setTimeout", "m", "set an inactivity timeout on the socket"]]], [3, "Express res", [["status", "f", "set the code and return this for chaining"], ["sendStatus", "m", "set the code and send its name as the body"], ["send", "m", "branch on the body type, then end"], ["json", "m", "stringify with app settings, then send"], ["jsonp", "m", "the same, wrapped in a callback"], ["type", "m", "set Content-Type from a shorthand"], ["format", "m", "pick a branch from what the client accepts"], ["set", "m", "set one or many headers"], ["get", "m", "read one header back"], ["append", "m", "join a value onto an existing header"], ["vary", "m", "add a field to the Vary header"], ["location", "m", "set the Location header"], ["redirect", "m", "set status and Location, then end"], ["cookie", "m", "serialise one Set-Cookie entry"], ["clearCookie", "m", "set an expired Set-Cookie entry"], ["attachment", "m", "set Content-Disposition"], ["sendFile", "m", "stream a file, one of the few piping paths"], ["download", "m", "sendFile plus attachment"], ["render", "m", "run a view template, then send"], ["locals", "f", "values scoped to this one request"], ["app", "f", "back-reference to the application"], ["req", "f", "back-reference to the paired request"]]]],sideline:{"chain": "The walk never reaches <span class=\"tk lw\" data-pop=\"g-writable\">stream.Writable</span>. <code class=\"plain\">OutgoingMessage</code> <span class=\"tk l1\" data-pop=\"g-wshape\">declares that surface itself</span>, so <code class=\"plain\">res instanceof stream.Writable</code> is false.", "inventory": "60 members over four layers. Twenty-four come from <code class=\"plain\">OutgoingMessage</code>, including <span class=\"tk l1\" data-pop=\"g-headerssent\">headersSent</span>, the flag every late-write error checks.", "shapes": "<code class=\"plain\">OutgoingMessage</code> is declared <code class=\"plain\">extends Stream</code>. Some published type declarations say <code class=\"plain\">extends stream.Writable</code>, which type-checks and is wrong at runtime.", "trace": "The head is mutable for the first four steps and frozen for the last three.", "irreversible": "Flushing the head. The bytes are on the socket, and a later <code class=\"plain\">setHeader</code> throws."},SVG:{"chain": "<svg viewBox=\"0 0 860 420\" role=\"img\" aria-labelledby=\"ct cd\">\n      <title id=\"ct\">The prototype chain of an Express response object</title>\n      <desc id=\"cd\">From the res instance up through express.response, ServerResponse.prototype, OutgoingMessage.prototype, Stream.prototype, EventEmitter.prototype, Object.prototype, ending at null. Writable.prototype does not appear.</desc>\n      <g stroke=\"var(--line2)\" stroke-width=\"1.5\">\n        <path d=\"M370 58 L370 74\" fill=\"none\"/><path d=\"M370 112 L370 128\" fill=\"none\"/>\n        <path d=\"M370 166 L370 182\" fill=\"none\"/><path d=\"M370 220 L370 236\" fill=\"none\"/>\n        <path d=\"M370 274 L370 290\" fill=\"none\"/><path d=\"M370 328 L370 344\" fill=\"none\"/>\n      </g>\n      <g class=\"lay\" data-i=\"3\" style=\"cursor:pointer\">\n        <rect x=\"160\" y=\"20\" width=\"420\" height=\"38\" rx=\"9\" fill=\"var(--l3b)\" stroke=\"var(--l3)\" stroke-width=\"1\" stroke-dasharray=\"5 4\"/>\n        <text x=\"370\" y=\"44\" text-anchor=\"middle\" font-size=\"13\" fill=\"var(--l3)\" font-family=\"JetBrains Mono,monospace\">res</text>\n        <text x=\"596\" y=\"44\" font-size=\"12\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">the instance</text>\n      </g>\n      <g class=\"lay\" data-i=\"3\" style=\"cursor:pointer\">\n        <rect x=\"160\" y=\"74\" width=\"420\" height=\"38\" rx=\"9\" fill=\"var(--l3b)\" stroke=\"var(--l3)\" stroke-width=\"1\"/>\n        <text x=\"370\" y=\"98\" text-anchor=\"middle\" font-size=\"13\" fill=\"var(--l3)\" font-family=\"JetBrains Mono,monospace\">express.response</text>\n        <text x=\"596\" y=\"98\" font-size=\"12\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">send, json, redirect</text>\n      </g>\n      <g class=\"lay\" data-i=\"2\" style=\"cursor:pointer\">\n        <rect x=\"160\" y=\"128\" width=\"420\" height=\"38\" rx=\"9\" fill=\"var(--l2b)\" stroke=\"var(--l2)\" stroke-width=\"1\"/>\n        <text x=\"370\" y=\"152\" text-anchor=\"middle\" font-size=\"13\" fill=\"var(--l2)\" font-family=\"JetBrains Mono,monospace\">ServerResponse.prototype</text>\n        <text x=\"596\" y=\"152\" font-size=\"12\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">writeHead, statusCode</text>\n      </g>\n      <g class=\"lay\" data-i=\"1\" style=\"cursor:pointer\">\n        <rect x=\"160\" y=\"182\" width=\"420\" height=\"38\" rx=\"9\" fill=\"var(--l1b)\" stroke=\"var(--l1)\" stroke-width=\"1\"/>\n        <text x=\"370\" y=\"206\" text-anchor=\"middle\" font-size=\"13\" fill=\"var(--l1)\" font-family=\"JetBrains Mono,monospace\">OutgoingMessage.prototype</text>\n        <text x=\"596\" y=\"206\" font-size=\"12\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">write, end, setHeader</text>\n      </g>\n      <g class=\"lay\" data-i=\"0\" style=\"cursor:pointer\">\n        <rect x=\"160\" y=\"236\" width=\"420\" height=\"38\" rx=\"9\" fill=\"var(--l0b)\" stroke=\"var(--l0)\" stroke-width=\"1\"/>\n        <text x=\"370\" y=\"260\" text-anchor=\"middle\" font-size=\"13\" fill=\"var(--l0)\" font-family=\"JetBrains Mono,monospace\">Stream.prototype</text>\n        <text x=\"596\" y=\"260\" font-size=\"12\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">pipe</text>\n      </g>\n      <g class=\"lay\" data-i=\"0\" style=\"cursor:pointer\">\n        <rect x=\"160\" y=\"290\" width=\"420\" height=\"38\" rx=\"9\" fill=\"var(--l0b)\" stroke=\"var(--l0)\" stroke-width=\"1\"/>\n        <text x=\"370\" y=\"314\" text-anchor=\"middle\" font-size=\"13\" fill=\"var(--l0)\" font-family=\"JetBrains Mono,monospace\">EventEmitter.prototype</text>\n        <text x=\"596\" y=\"314\" font-size=\"12\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">on, once, emit, off</text>\n      </g>\n      <g>\n        <rect x=\"160\" y=\"344\" width=\"420\" height=\"38\" rx=\"9\" fill=\"none\" stroke=\"var(--line2)\" stroke-width=\"1\"/>\n        <text x=\"370\" y=\"368\" text-anchor=\"middle\" font-size=\"13\" fill=\"var(--tx3)\" font-family=\"JetBrains Mono,monospace\">Object.prototype</text>\n      </g>\n      <g data-open=\"m-ducktype\" style=\"cursor:pointer\">\n        <rect x=\"18\" y=\"182\" width=\"124\" height=\"38\" rx=\"9\" fill=\"none\" stroke=\"var(--lw)\" stroke-width=\"1\" stroke-dasharray=\"5 4\"/>\n        <text x=\"80\" y=\"206\" text-anchor=\"middle\" font-size=\"12\" fill=\"var(--lw)\" font-family=\"JetBrains Mono,monospace\">Writable</text>\n      </g>\n      <path d=\"M148 201 L154 201\" stroke=\"var(--lw)\" stroke-width=\"1.5\" stroke-dasharray=\"4 3\" fill=\"none\"/>\n      <text x=\"80\" y=\"240\" text-anchor=\"middle\" font-size=\"11\" fill=\"var(--lw)\" font-family=\"Inter,sans-serif\">not linked</text>\n    </svg>", "trace": "<svg viewBox=\"0 0 860 150\" role=\"img\" aria-labelledby=\"tt td\">\n      <title id=\"tt\">Response pipeline from handler to client</title>\n      <desc id=\"td\">Five stages: your handler, the header store, the serialiser, the socket, the client.</desc>\n      <g stroke=\"var(--line2)\" stroke-width=\"1.5\" fill=\"none\">\n        <path d=\"M155 74 L183 74\"/><path d=\"M329 74 L357 74\"/><path d=\"M503 74 L531 74\"/><path d=\"M677 74 L705 74\"/>\n      </g>\n      <g class=\"tstage\" data-open=\"m-express\" style=\"cursor:pointer\">\n        <rect id=\"ts0\" x=\"9\" y=\"42\" width=\"146\" height=\"64\" rx=\"11\" fill=\"var(--sunk)\" stroke=\"var(--line2)\" stroke-width=\"1\"/>\n        <text x=\"82\" y=\"70\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"600\" fill=\"var(--tx)\" font-family=\"Inter,sans-serif\">your handler</text>\n        <text x=\"82\" y=\"90\" text-anchor=\"middle\" font-size=\"11\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">sets values</text>\n      </g>\n      <g class=\"tstage\" data-open=\"m-headermap\" style=\"cursor:pointer\">\n        <rect id=\"ts1\" x=\"183\" y=\"42\" width=\"146\" height=\"64\" rx=\"11\" fill=\"var(--sunk)\" stroke=\"var(--line2)\" stroke-width=\"1\"/>\n        <text x=\"256\" y=\"70\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"600\" fill=\"var(--tx)\" font-family=\"Inter,sans-serif\">header store</text>\n        <text x=\"256\" y=\"90\" text-anchor=\"middle\" font-size=\"11\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">still mutable</text>\n      </g>\n      <g class=\"tstage\" data-open=\"m-flush\" style=\"cursor:pointer\">\n        <rect id=\"ts2\" x=\"357\" y=\"42\" width=\"146\" height=\"64\" rx=\"11\" fill=\"var(--sunk)\" stroke=\"var(--line2)\" stroke-width=\"1\"/>\n        <text x=\"430\" y=\"70\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"600\" fill=\"var(--tx)\" font-family=\"Inter,sans-serif\">serialiser</text>\n        <text x=\"430\" y=\"90\" text-anchor=\"middle\" font-size=\"11\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">writes the head</text>\n      </g>\n      <g class=\"tstage\" data-open=\"m-socket\" style=\"cursor:pointer\">\n        <rect id=\"ts3\" x=\"531\" y=\"42\" width=\"146\" height=\"64\" rx=\"11\" fill=\"var(--sunk)\" stroke=\"var(--line2)\" stroke-width=\"1\"/>\n        <text x=\"604\" y=\"70\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"600\" fill=\"var(--tx)\" font-family=\"Inter,sans-serif\">socket</text>\n        <text x=\"604\" y=\"90\" text-anchor=\"middle\" font-size=\"11\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">bytes out</text>\n      </g>\n      <g class=\"tstage\" data-open=\"m-endfinish\" style=\"cursor:pointer\">\n        <rect id=\"ts4\" x=\"705\" y=\"42\" width=\"146\" height=\"64\" rx=\"11\" fill=\"var(--sunk)\" stroke=\"var(--line2)\" stroke-width=\"1\"/>\n        <text x=\"778\" y=\"70\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"600\" fill=\"var(--tx)\" font-family=\"Inter,sans-serif\">finish</text>\n        <text x=\"778\" y=\"90\" text-anchor=\"middle\" font-size=\"11\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">message complete</text>\n      </g>\n    </svg>", "final": "<svg viewBox=\"0 0 860 230\" role=\"img\" aria-labelledby=\"bt bd\">\n      <title id=\"bt\">The header store flushing onto the socket</title>\n      <desc id=\"bd\">Header entries move from a mutable store onto the socket as a serialised head, after which a late setHeader call throws.</desc>\n      <rect x=\"40\" y=\"46\" width=\"300\" height=\"118\" rx=\"12\" fill=\"var(--l1b)\" stroke=\"var(--l1)\" stroke-width=\"1\"/>\n      <text x=\"58\" y=\"72\" font-size=\"13\" font-weight=\"600\" fill=\"var(--l1)\" font-family=\"Inter,sans-serif\">header store</text>\n      <g id=\"chunks\">\n        <rect x=\"58\" y=\"88\" width=\"58\" height=\"30\" rx=\"6\" fill=\"var(--l1)\" opacity=\".85\"/>\n        <rect x=\"124\" y=\"88\" width=\"58\" height=\"30\" rx=\"6\" fill=\"var(--l1)\" opacity=\".85\"/>\n        <rect x=\"190\" y=\"88\" width=\"58\" height=\"30\" rx=\"6\" fill=\"var(--l1)\" opacity=\".85\"/>\n        <rect x=\"256\" y=\"88\" width=\"58\" height=\"30\" rx=\"6\" fill=\"var(--l1)\" opacity=\".85\"/>\n      </g>\n      <text id=\"qstate\" x=\"58\" y=\"144\" font-size=\"11.5\" fill=\"var(--l1)\" opacity=\".85\" font-family=\"JetBrains Mono,monospace\">headersSent: false</text>\n      <path id=\"barrow\" d=\"M352 105 L428 105\" stroke=\"var(--line2)\" stroke-width=\"1.5\" fill=\"none\"/>\n      <rect id=\"bbox\" x=\"440\" y=\"46\" width=\"180\" height=\"118\" rx=\"12\" fill=\"var(--sunk)\" stroke=\"var(--line2)\" stroke-width=\"1\"/>\n      <text x=\"458\" y=\"72\" font-size=\"13\" font-weight=\"600\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">on the socket</text>\n      <text id=\"bval\" x=\"458\" y=\"100\" font-size=\"12\" fill=\"var(--tx3)\" font-family=\"JetBrains Mono,monospace\">nothing yet</text>\n      <rect id=\"lbox\" x=\"660\" y=\"46\" width=\"180\" height=\"118\" rx=\"12\" fill=\"none\" stroke=\"var(--line2)\" stroke-width=\"1\" stroke-dasharray=\"5 4\"/>\n      <text x=\"678\" y=\"72\" font-size=\"13\" font-weight=\"600\" fill=\"var(--tx3)\" font-family=\"Inter,sans-serif\">late setHeader</text>\n      <text id=\"lval\" x=\"678\" y=\"100\" font-size=\"12\" fill=\"var(--tx3)\" font-family=\"JetBrains Mono,monospace\">allowed</text>\n      <text id=\"bcap\" x=\"430\" y=\"200\" text-anchor=\"middle\" font-size=\"12.5\" fill=\"var(--tx2)\" font-family=\"Inter,sans-serif\">Entries live in a plain object. Nothing has reached the wire.</text>\n    </svg>"}};
+})();</script>
+<script>
+(function(){
+var root=document.documentElement,$=function(i){return document.getElementById(i)};
+try{var sv=localStorage.getItem("os-theme");if(sv)root.setAttribute("data-theme",sv)}catch(e){}
+function flip(){var n=root.getAttribute("data-theme")==="dark"?"light":"dark";
+  root.setAttribute("data-theme",n);try{localStorage.setItem("os-theme",n)}catch(e){}}
+$("theme").onclick=flip;$("mtheme").onclick=flip;
+
+var side="req";
+try{var ss=localStorage.getItem("os-side");if(ss==="req"||ss==="res")side=ss}catch(e){}
+function D(){return DATA[side]}
+
+var nav=$("nav"),lastY=0;
+addEventListener("scroll",function(){var y=scrollY;
+  if(y>140&&y>lastY)nav.classList.add("hide");else nav.classList.remove("hide");lastY=y},{passive:true});
+var links=[].slice.call(document.querySelectorAll("#navlinks a"));
+if("IntersectionObserver" in window){
+  var io=new IntersectionObserver(function(es){es.forEach(function(e){
+    if(!e.isIntersecting)return;
+    links.forEach(function(a){a.classList.toggle("cur",a.getAttribute("href")==="#"+e.target.id)})})},
+    {rootMargin:"-20% 0px -70% 0px"});
+  document.querySelectorAll("section[id]").forEach(function(s){io.observe(s)});
+}
+
+/* popovers: glossary terms and inventory chips share one surface */
+var pop=$("pop"),popOwner=null,INVPOP={};
+function hidePop(){pop.classList.remove("on");popOwner=null}
+function showPop(el){
+  var k=el.getAttribute("data-pop"),g=D().GLOSS[k]||INVPOP[k]||DGLOSS[k];
+  if(!g)return;
+  $("popt").textContent=g[0];$("popk").textContent=g[1];$("popb").innerHTML=g[2];
+  pop.classList.add("on");
+  var r=el.getBoundingClientRect(),pw=pop.offsetWidth;
+  var left=Math.max(12+scrollX,Math.min(r.left+scrollX+r.width/2-pw/2,scrollX+innerWidth-pw-12));
+  var top=r.bottom+scrollY+9;
+  if(r.bottom+pop.offsetHeight+20>innerHeight)top=r.top+scrollY-pop.offsetHeight-9;
+  pop.style.left=left+"px";pop.style.top=top+"px";popOwner=el;
+}
+
+function showIface(i){
+  var o=D().IFACE[i];
+  $("ifnm").textContent=o.f;
+  renderPane($("ifcode"),o.src,o.notes);
+  [].forEach.call($("ifsw").children,function(b,j){b.className=D().IFACE[j].c+(j===i?" on":"")});
+}
+$("ifsw").addEventListener("click",function(e){var b=e.target.closest("button");if(b)showIface(+b.dataset.i)});
+
+function pickLayer(i){
+  document.querySelectorAll("#f-chain .lay").forEach(function(g){
+    var on=+g.dataset.i===i;
+    g.querySelectorAll("rect").forEach(function(r){r.setAttribute("stroke-width",on?"2.5":"1")});
+  });
+  var d=D().LAYER[i];
+  $("nh").textContent=d.t;$("nh").className="c"+i;
+  document.querySelectorAll("#chain .detail .drow b").forEach(function(b){b.className="c"+i});
+  $("na").innerHTML='<div class="decchips">'+d.dec.map(function(m){
+    return '<span class="chip k'+i+'">'+m+"</span>"}).join("")+"</div>";
+  $("nw").innerHTML=d.w;$("nc").innerHTML=d.c;
+  $("nopen").setAttribute("data-open",d.m);
+}
+function lockDetail(){
+  var el=document.querySelector("#chain .detail");if(!el)return;
+  el.style.minHeight="";
+  var max=0;
+  for(var i=0;i<4;i++){pickLayer(i);max=Math.max(max,el.offsetHeight||0)}
+  if(max>0)el.style.minHeight=max+"px";
+  pickLayer(0);
+}
+document.addEventListener("click",function(e){
+  var g=e.target.closest(".lay");
+  if(g&&!e.target.closest("[data-open]"))pickLayer(+g.dataset.i);
+});
+
+var ti=0,timer=null;
+function showTrace(n){
+  var T=D().TRACE;ti=n;var s=T[n];
+  for(var k=0;k<5;k++){var r=$("ts"+k);if(!r)continue;
+    r.setAttribute("stroke",k===s.box?"var(--l2)":"var(--line2)");
+    r.setAttribute("stroke-width",k===s.box?"2":"1");
+    r.setAttribute("fill",k===s.box?"var(--l2b)":"var(--sunk)")}
+  $("sh").textContent=s.h;$("sp").textContent=s.p;renderShape($("ss"),s.s);
+  $("slbl").textContent=s.lbl;
+  $("tpos").textContent=(n+1)+" / "+T.length;
+}
+function stop(){if(timer){clearInterval(timer);timer=null;$("tplay").textContent="Play"}}
+$("tn").onclick=function(){stop();showTrace((ti+1)%D().TRACE.length)};
+$("tp").onclick=function(){stop();showTrace((ti-1+D().TRACE.length)%D().TRACE.length)};
+$("tr").onclick=function(){stop();showTrace(0)};
+$("tplay").onclick=function(){if(timer){stop();return}this.textContent="Pause";
+  timer=setInterval(function(){if(ti===D().TRACE.length-1){stop();return}showTrace(ti+1)},3400)};
+
+var bi=0;
+function showSpent(n){
+  var P=D().SPENT;bi=n;var s=P[n];
+  document.querySelectorAll("#chunks rect").forEach(function(c,i){
+    c.setAttribute("opacity",i<s.chunks?".85":"0")});
+  $("qstate").textContent=s.ended;
+  $("bval").textContent=s.body;$("bval").setAttribute("fill",n===0?"var(--tx3)":"var(--l3)");
+  $("lval").textContent=s.later;$("lval").setAttribute("fill",n===2?"var(--l3)":"var(--tx3)");
+  $("barrow").setAttribute("opacity",s.arrow?"1":".25");
+  $("bcap").textContent=s.cap;
+  $("bpos").textContent=(n+1)+" / "+P.length;
+}
+$("bn").onclick=function(){showSpent((bi+1)%D().SPENT.length)};
+$("bp").onclick=function(){showSpent((bi-1+D().SPENT.length)%D().SPENT.length)};
+$("br").onclick=function(){showSpent(0)};
+
+/* modals, with a back stack so cross-links never strand you */
+var scrim=$("scrim"),mb=$("mb"),mstack=[],cur=null;
+function paint(key){
+  var m=D().MODAL[key];if(!m)return false;
+  cur=key;$("mt").textContent=m.t;$("mk").textContent=m.k;mb.innerHTML=m.h;
+  mb.querySelectorAll("[data-code]").forEach(function(el){
+    var c=D().CODE[el.getAttribute("data-code")];if(!c)return;
+    var inner=document.createElement("div");inner.className="code";
+    renderPane(inner,c[0],c[1]);
+    el.innerHTML='<div class="pane-top"><span class="dot"></span><span class="nm">'+m.t+"</span></div>";
+    el.appendChild(inner);
+  });
+  $("mback").style.display=mstack.length?"":"none";
+  scrim.scrollTop=0;
+  return true;
+}
+function openModal(key,nested){
+  if(nested&&cur)mstack.push(cur);else mstack=[];
+  if(!paint(key))return;
+  scrim.classList.add("on");document.body.style.overflow="hidden";
+}
+function closeModal(){scrim.classList.remove("on");document.body.style.overflow="";mstack=[];cur=null}
+$("mback").onclick=function(){var p=mstack.pop();if(p)paint(p)};
+$("mclose").onclick=closeModal;
+scrim.addEventListener("click",function(e){if(e.target===scrim)closeModal()});
+addEventListener("keydown",function(e){if(e.key==="Escape"){closeModal();hidePop()}});
+document.addEventListener("click",function(ev){
+  var t=ev.target.closest("[data-pop]");
+  if(t){ev.preventDefault();if(popOwner===t)hidePop();else showPop(t);return}
+  if(!ev.target.closest(".pop"))hidePop();
+  var o=ev.target.closest("[data-open]");
+  if(o){ev.preventDefault();openModal(o.getAttribute("data-open"),!!ev.target.closest("#mb"))}
+});
+
+/* inventory */
+function buildInventory(){
+  var h="";INVPOP={};
+  D().INV.forEach(function(grp){
+    var i=grp[0];
+    h+='<div class="invgrp"><div class="invhead"><span class="tk l'+i+'" data-pop="'+
+       D().INVKEY[i]+'">'+grp[1]+'</span><span class="ct">'+grp[2].length+' members</span></div><div class="chips">';
+    grp[2].forEach(function(m,j){
+      var key="inv-"+i+"-"+j;
+      INVPOP[key]=[m[0]+(m[1]==="m"?"()":""),
+        (m[1]==="m"?"method":"field")+" declared by "+grp[1],
+        "<p>"+m[2]+"</p>"];
+      h+='<span class="chip k'+i+'" data-pop="'+key+'">'+m[0]+
+         (m[1]==="m"?"<em>()</em>":"")+"</span>";
+    });
+    h+="</div></div>";
+  });
+  $("f-inventory").innerHTML=h;
+}
+function buildDiverge(){
+  var h='<table class="dv"><tr><th class="h0">axis</th><th style="color:var(--l2)">req</th><th style="color:var(--lw)">res</th></tr>';
+  DIVERGE.forEach(function(r){
+    h+='<tr><td class="rl"><span class="tk n0" data-pop="'+r[0]+'">'+r[1]+'</span></td><td class="rq">'+r[2]+'</td><td class="rs">'+r[3]+"</td></tr>";
+  });
+  $("f-diverge").innerHTML=h+"</table>";
+}
+function buildToggles(){
+  var h="";
+  [["req","Request","req"],["res","Response","res"]].forEach(function(x){
+    h+='<button class="'+x[0]+(side===x[0]?" on":"")+'" data-side="'+x[0]+
+       '" role="tab" aria-selected="'+(side===x[0])+'">'+x[1]+"<span>"+x[2]+"</span></button>"});
+  $("sides-top").innerHTML=h;$("sides-bottom").innerHTML=h;
+}
+document.addEventListener("click",function(e){
+  var b=e.target.closest("[data-side]");if(!b)return;
+  var next=b.getAttribute("data-side");if(next===side)return;
+  var anchor=null,best=1e9;
+  document.querySelectorAll("section[id]").forEach(function(s){
+    var t=Math.abs(s.getBoundingClientRect().top-80);if(t<best){best=t;anchor=s.id}});
+  side=next;try{localStorage.setItem("os-side",side)}catch(err){}
+  closeModal();hidePop();stop();renderSide();
+  if(anchor&&scrollY>200)$(anchor).scrollIntoView();
+});
+
+function renderSide(){
+  var d=D();
+  $("chainline").innerHTML=d.chain.map(function(x,k){
+    return (k?"<i>&rarr;</i>":"")+'<b class="c'+x[1]+'" style="border-color:var(--l'+x[1]+
+      ');background:var(--l'+x[1]+'b)">'+x[0]+"</b>"}).join("");
+  $("chainline2").innerHTML=d.chain2;
+  $("chainline2").style.display=d.chain2?"":"none";
+  ["chain","inventory","shapes","trace","irreversible"].forEach(function(k){
+    var el=$("sl-"+k);el.innerHTML=d.sideline[k];el.className="sideline "+side});
+  $("corner-chain").setAttribute("data-open",d.corner);
+  $("corner-chain").setAttribute("title",d.cornerTitle);
+  $("f-chain").innerHTML=d.SVG.chain;
+  $("f-trace").innerHTML=d.SVG.trace;
+  $("f-final").innerHTML=d.SVG.final;
+  buildInventory();
+  $("ifsw").innerHTML=d.IFACE.map(function(o,i){
+    return '<button class="'+o.c+'" data-i="'+i+'">'+o.n+"</button>"}).join("");
+  showIface(0);lockDetail();showTrace(0);showSpent(0);
+  $("spanenm").textContent=d.paneName;
+  renderPane($("scode"),d.SPENT_SRC,d.SPENT_NOTES);
+  buildToggles();
+}
+window.__setSide=function(s){side=s;renderSide()};
+window.__getSide=function(){return side};
+buildDiverge();renderSide();
+})();
+
+</script>
+</body>
+</html>

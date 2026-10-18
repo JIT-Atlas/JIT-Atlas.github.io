@@ -1,0 +1,2487 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>App Router vs Pages Router — A Next.js Architecture Deep-Dive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ─────────────────────────────────────────────────────────────
+   THEME TOKENS
+   ───────────────────────────────────────────────────────────── */
+:root,
+[data-theme="dark"] {
+  --bg:           #08080a;
+  --bg-grid:      rgba(255,255,255,0.025);
+  --surface:      #101014;
+  --surface-2:    #18181d;
+  --surface-3:    #22222a;
+  --surface-hover:#26262e;
+  --border:       #2a2a32;
+  --border-strong:#3e3e48;
+  --text:         #f7f7fa;
+  --text-2:       #a8a8b3;
+  --text-3:       #6c6c78;
+  --shadow-lg:    0 32px 72px -12px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.05);
+  --shadow-md:    0 12px 32px -8px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04);
+
+  --blue:         #93c5fd;
+  --blue-bg:      rgba(96,165,250,0.16);
+  --blue-bg-2:    rgba(96,165,250,0.34);
+  --blue-border:  rgba(96,165,250,0.58);
+  --blue-glow:    rgba(96,165,250,0.70);
+
+  --purple:       #d8b4fe;
+  --purple-bg:    rgba(192,132,252,0.16);
+  --purple-bg-2:  rgba(192,132,252,0.34);
+  --purple-border:rgba(192,132,252,0.58);
+  --purple-glow:  rgba(192,132,252,0.70);
+
+  --teal:         #5eead4;
+  --teal-bg:      rgba(45,212,191,0.16);
+  --teal-bg-2:    rgba(45,212,191,0.34);
+  --teal-border:  rgba(45,212,191,0.58);
+  --teal-glow:    rgba(45,212,191,0.70);
+
+  --slate:        #d4d4dc;
+  --slate-bg:     rgba(180,180,196,0.10);
+  --slate-bg-2:   rgba(180,180,196,0.22);
+  --slate-border: rgba(180,180,196,0.42);
+  --slate-glow:   rgba(180,180,196,0.55);
+
+  --amber:        #fbbf24;
+  --amber-bg:     rgba(251,191,36,0.16);
+  --amber-bg-2:   rgba(251,191,36,0.34);
+  --amber-border: rgba(251,191,36,0.58);
+  --amber-glow:   rgba(251,191,36,0.70);
+
+  --orange:       #fb923c;
+  --orange-bg:    rgba(251,146,60,0.16);
+  --orange-bg-2:  rgba(251,146,60,0.34);
+  --orange-border:rgba(251,146,60,0.60);
+  --orange-glow:  rgba(251,146,60,0.72);
+
+  --rose:         #fb7185;
+  --rose-bg:      rgba(251,113,133,0.16);
+  --rose-bg-2:    rgba(251,113,133,0.34);
+  --rose-border:  rgba(251,113,133,0.60);
+  --rose-glow:    rgba(251,113,133,0.72);
+
+  --green:        #86efac;
+  --green-bg:     rgba(74,222,128,0.16);
+  --green-bg-2:   rgba(74,222,128,0.32);
+  --green-border: rgba(74,222,128,0.55);
+  --green-glow:   rgba(74,222,128,0.65);
+
+  --hi:           #facc15;
+  --hi-soft:      rgba(250,204,21,0.20);
+}
+
+[data-theme="light"] {
+  --bg:           #faf9f6;
+  --bg-grid:      rgba(0,0,0,0.025);
+  --surface:      #ffffff;
+  --surface-2:    #f4f3ee;
+  --surface-3:    #ebeae3;
+  --surface-hover:#e2e1d9;
+  --border:       #e0dfd6;
+  --border-strong:#c2c1b6;
+  --text:         #0a0a0c;
+  --text-2:       #4a4a52;
+  --text-3:       #74747e;
+  --shadow-lg:    0 32px 72px -12px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.05);
+  --shadow-md:    0 12px 32px -8px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04);
+
+  --blue:         #1d4ed8;
+  --blue-bg:      rgba(59,130,246,0.10);
+  --blue-bg-2:    rgba(59,130,246,0.20);
+  --blue-border:  rgba(29,78,216,0.40);
+  --blue-glow:    rgba(59,130,246,0.40);
+
+  --purple:       #7e22ce;
+  --purple-bg:    rgba(168,85,247,0.10);
+  --purple-bg-2:  rgba(168,85,247,0.20);
+  --purple-border:rgba(126,34,206,0.40);
+  --purple-glow:  rgba(168,85,247,0.40);
+
+  --teal:         #0f766e;
+  --teal-bg:      rgba(20,184,166,0.10);
+  --teal-bg-2:    rgba(20,184,166,0.20);
+  --teal-border:  rgba(15,118,110,0.38);
+  --teal-glow:    rgba(20,184,166,0.36);
+
+  --slate:        #3f3f46;
+  --slate-bg:     rgba(0,0,0,0.05);
+  --slate-bg-2:   rgba(0,0,0,0.10);
+  --slate-border: rgba(0,0,0,0.22);
+  --slate-glow:   rgba(0,0,0,0.22);
+
+  --amber:        #b45309;
+  --amber-bg:     rgba(245,158,11,0.12);
+  --amber-bg-2:   rgba(245,158,11,0.22);
+  --amber-border: rgba(180,83,9,0.45);
+  --amber-glow:   rgba(245,158,11,0.40);
+
+  --orange:       #c2410c;
+  --orange-bg:    rgba(249,115,22,0.12);
+  --orange-bg-2:  rgba(249,115,22,0.22);
+  --orange-border:rgba(194,65,12,0.45);
+  --orange-glow:  rgba(249,115,22,0.40);
+
+  --rose:         #be123c;
+  --rose-bg:      rgba(244,63,94,0.10);
+  --rose-bg-2:    rgba(244,63,94,0.20);
+  --rose-border:  rgba(190,18,60,0.45);
+  --rose-glow:    rgba(244,63,94,0.36);
+
+  --green:        #15803d;
+  --green-bg:     rgba(34,197,94,0.10);
+  --green-bg-2:   rgba(34,197,94,0.20);
+  --green-border: rgba(21,128,61,0.40);
+  --green-glow:   rgba(34,197,94,0.36);
+
+  --hi:           #a16207;
+  --hi-soft:      rgba(161,98,7,0.12);
+}
+
+/* ─── RESET + BASE ─── */
+*,*::before,*::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--bg);
+  background-image:
+    linear-gradient(to right, var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--bg-grid) 1px, transparent 1px);
+  background-size: 64px 64px;
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'ss01', 'ss03', 'cv11';
+  transition: background-color 0.3s ease, color 0.3s ease;
+  overflow-x: hidden;
+}
+.mono { font-family: 'Geist Mono', ui-monospace, Menlo, Consolas, monospace; }
+.eyebrow {
+  font-family: 'Geist Mono', ui-monospace, Menlo, monospace;
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--text-3);
+}
+a { color: inherit; text-decoration: none; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+.shell { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+@media (max-width: 720px) { .shell { padding: 0 16px; } }
+
+/* ─── NAV ─── */
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 28px;
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+  transition: transform 0.3s ease;
+}
+.nav.nav-hidden { transform: translateY(-100%); }
+.nav.is-hidden { transform: translateY(-100%); }
+.nav-brand { display: inline-flex; align-items: center; gap: 11px; font-weight: 600; letter-spacing: -0.01em; }
+.nav-mark {
+  width: 28px; height: 28px; border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--text); color: var(--bg);
+  font-family: 'Geist Mono', monospace; font-weight: 700; font-size: 13px;
+}
+.nav-brand .sub { color: var(--text-3); font-weight: 400; font-size: 13px; }
+.nav-links { display: flex; gap: 4px; }
+.nav-link {
+  padding: 7px 13px; border-radius: 8px; font-size: 14px; color: var(--text-2);
+  transition: color 0.18s, background-color 0.18s;
+}
+.nav-link:hover { color: var(--text); background: var(--surface-2); }
+.nav-tools { display: flex; align-items: center; gap: 8px; }
+.icon-btn {
+  width: 38px; height: 38px; border-radius: 10px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-2); background: var(--surface); border: 1px solid var(--border);
+  transition: color 0.18s, background-color 0.18s, border-color 0.18s;
+}
+.icon-btn:hover { color: var(--text); background: var(--surface-2); border-color: var(--border-strong); }
+.icon-btn svg { width: 17px; height: 17px; }
+.theme-toggle .moon { display: none; }
+[data-theme="light"] .theme-toggle .sun { display: none; }
+[data-theme="light"] .theme-toggle .moon { display: block; }
+@media (max-width: 720px) { .nav-links { display: none; } }
+
+/* ─── HERO ─── */
+.hero { position: relative; padding: 116px 0 56px; }
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px; margin-bottom: 20px;
+  padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
+}
+.hero-eyebrow .dot {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--green);
+  box-shadow: 0 0 0 2px var(--green-bg-2), 0 0 10px var(--green-glow);
+  animation: pulse 2.4s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:0.55; transform:scale(0.82);} }
+.hero h1 {
+  margin: 0 0 18px; font-size: clamp(34px, 5.4vw, 66px); font-weight: 700;
+  line-height: 1; letter-spacing: -0.035em; max-width: 16ch;
+}
+.hero h1 em {
+  font-style: normal;
+  background: linear-gradient(135deg, var(--blue) 0%, var(--purple) 38%, var(--orange) 72%, var(--rose) 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.hero-lede {
+  max-width: 60ch; font-size: clamp(14.5px, 1.05vw, 16px); line-height: 1.55;
+  color: var(--text-2); margin: 0 0 32px;
+}
+.hero-lede code {
+  font-family:'Geist Mono',monospace; font-size:0.9em; padding:1px 5px;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:4px;
+}
+.hero-stats {
+  display: flex; gap: 36px; flex-wrap: wrap; padding-top: 24px; border-top: 1px solid var(--border);
+}
+.hero-stat .num {
+  font-family:'Geist Mono',monospace; font-size:28px; font-weight:500;
+  letter-spacing:-0.025em; color:var(--text); line-height:1;
+}
+.hero-stat .label {
+  font-family:'Geist Mono',monospace; font-size:10px; font-weight:500;
+  letter-spacing:0.2em; text-transform:uppercase; color:var(--text-3); margin-top:8px;
+}
+.rise { opacity: 0; transform: translateY(16px); animation: rise 0.7s cubic-bezier(0.16,1,0.3,1) forwards; }
+.rise-1{animation-delay:.05s;} .rise-2{animation-delay:.13s;} .rise-3{animation-delay:.21s;}
+.rise-4{animation-delay:.29s;}
+@keyframes rise { to { opacity:1; transform:translateY(0); } }
+@media (prefers-reduced-motion: reduce){ .rise{animation:none;opacity:1;transform:none;} }
+
+/* ─── SECTION HEADER ─── */
+.section { padding: 70px 0; }
+.section-head { margin-bottom: 44px; }
+.section-head .num {
+  display:inline-block; font-family:'Geist Mono',monospace; font-size:11px; font-weight:600;
+  letter-spacing:0.22em; text-transform:uppercase; color:var(--text-3); margin-bottom:18px;
+  padding:4px 11px; border:1px solid var(--border); border-radius:999px; background:var(--surface);
+}
+.section-head h2 {
+  margin:0 0 12px; font-size:clamp(28px,3.4vw,44px); font-weight:600;
+  letter-spacing:-0.02em; line-height:1.05;
+}
+.section-head p { margin:0; max-width:64ch; color:var(--text-2); font-size:16px; }
+.section-head p code {
+  font-family:'Geist Mono',monospace; font-size:0.9em; padding:1px 5px;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:4px;
+}
+
+/* ─── DIAGRAM ─── */
+.diagram-wrap {
+  position: relative; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 20px; padding: 28px; overflow: hidden;
+}
+.diagram-wrap::before {
+  content:''; position:absolute; inset:-1px; border-radius:20px;
+  background: radial-gradient(80% 45% at 50% 0%, var(--blue-bg) 0%, transparent 60%);
+  pointer-events:none; z-index:0;
+}
+.diagram-toolbar {
+  position:relative; z-index:1; display:flex; align-items:center;
+  justify-content:space-between; margin-bottom:20px; gap:14px; flex-wrap:wrap;
+}
+.diagram-legend { display:flex; gap:16px; flex-wrap:wrap; }
+.legend-chip {
+  display:inline-flex; align-items:center; gap:7px; font-family:'Geist Mono',monospace;
+  font-size:10px; font-weight:500; letter-spacing:0.18em;
+  color:var(--text-3); text-transform:uppercase;
+}
+.legend-chip .swatch { width:9px; height:9px; border-radius:3px; border:1px solid; }
+.legend-chip.blue   .swatch { background:var(--blue-bg-2);   border-color:var(--blue-border); }
+.legend-chip.purple .swatch { background:var(--purple-bg-2); border-color:var(--purple-border); }
+.legend-chip.teal   .swatch { background:var(--teal-bg-2);   border-color:var(--teal-border); }
+.legend-chip.amber  .swatch { background:var(--amber-bg-2);  border-color:var(--amber-border); }
+.legend-chip.rose   .swatch { background:var(--rose-bg-2);   border-color:var(--rose-border); }
+.diagram-scroll { position:relative; z-index:1; }
+.diagram-svg { width:100%; height:auto; display:block; max-width:100%; }
+
+.dgm-node {
+  cursor:pointer; transition:transform 0.18s ease;
+  transform-box:fill-box; transform-origin:center;
+}
+.dgm-node:hover { transform: scale(1.015); }
+.dgm-node:focus { outline:none; }
+.dgm-node:focus-visible .dgm-rect { stroke-width:2.2; filter:drop-shadow(0 0 10px currentColor); }
+.dgm-rect { stroke-width:1; transition:stroke-width 0.2s, filter 0.2s; }
+.dgm-node:hover .dgm-rect { stroke-width:1.8; filter:drop-shadow(0 0 12px currentColor); }
+.dgm-iconbox { transition:filter 0.2s, stroke-width 0.2s, fill-opacity 0.2s; stroke-width:1; fill-opacity:0.6; }
+.dgm-node:hover .dgm-iconbox { fill-opacity:1; stroke-width:1.3; }
+.dgm-num { font-family:'Geist Mono',monospace; font-weight:600; font-size:9.5px; letter-spacing:0.22em; text-transform:uppercase; opacity:0.78; }
+.dgm-title { font-family:'Geist',sans-serif; font-weight:600; font-size:14px; letter-spacing:-0.008em; }
+.dgm-sub   { font-family:'Geist Mono',monospace; font-size:10.5px; letter-spacing:0.02em; opacity:0.78; }
+.dgm-layer-label {
+  font-family:'Geist Mono',monospace; font-size:9.5px; font-weight:600; letter-spacing:0.22em;
+  text-transform:uppercase; fill:var(--text-3);
+}
+.dgm-io { font-family:'Geist',sans-serif; font-weight:600; font-size:14px; letter-spacing:-0.008em; }
+.dgm-arrow {
+  stroke:color-mix(in srgb, var(--text-3) 65%, transparent);
+  stroke-width:1.6; fill:none; stroke-linecap:round;
+  stroke-dasharray:4 6;
+  animation:dgmFlow 1.6s linear infinite;
+}
+@keyframes dgmFlow { to { stroke-dashoffset:-50; } }
+.dgm-arrow-head { fill:color-mix(in srgb, var(--text-3) 80%, transparent); }
+@media (prefers-reduced-motion:reduce) { .dgm-arrow { animation:none; stroke-dasharray:none; } }
+.dgm-term {
+  cursor:help; transition:fill 0.18s ease, text-decoration-color 0.18s ease;
+  text-decoration:underline; text-decoration-style:dotted;
+  text-decoration-color:transparent;
+  text-decoration-thickness:1px; text-underline-offset:2px;
+}
+.dgm-node:hover .dgm-term { text-decoration-color:color-mix(in srgb, currentColor 22%, transparent); }
+.dgm-term:hover { fill:var(--text); text-decoration-color:color-mix(in srgb, currentColor 55%, transparent); }
+.dgm-term.is-lit { fill:var(--hi); text-decoration-color:var(--hi); }
+
+@media (max-width:760px){
+  .diagram-wrap{padding:14px;}
+  .diagram-svg{min-width:740px;}
+  .diagram-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .diagram-toolbar{flex-direction:column;align-items:flex-start;}
+}
+
+/* ─── TRANSFORM WIDGET ─── */
+.xform {
+  position:relative; background:var(--surface); border:1px solid var(--border);
+  border-radius:20px; padding:28px; overflow:hidden;
+}
+.xform-head { display:flex; align-items:baseline; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:18px; }
+.xform-stage-label { font-family:'Geist Mono',monospace; font-size:13px; color:var(--text-2); }
+.xform-stage-label b { color:var(--hi); font-weight:600; }
+.xform-bar-track { height:30px; border-radius:8px; background:var(--surface-2); border:1px solid var(--border); overflow:hidden; position:relative; }
+.xform-bar-fill {
+  height:100%; border-radius:7px 0 0 7px;
+  background:linear-gradient(90deg,var(--blue),var(--purple));
+  border-right:2px solid var(--purple);
+  box-shadow:0 0 12px color-mix(in srgb,var(--purple) 30%,transparent);
+  transition:width 0.55s cubic-bezier(0.16,1,0.3,1);
+  display:flex; align-items:center; justify-content:flex-end; padding-right:10px; min-width:64px;
+}
+.xform-bar-fill span { font-family:'Geist Mono',monospace; font-size:11px; color:#fff; white-space:nowrap; font-weight:600; }
+.xform-code {
+  margin-top:18px; background:var(--bg); border:1px solid var(--border); border-radius:12px;
+  padding:18px 20px; font-family:'Geist Mono',monospace; font-size:12.5px; line-height:1.7;
+  color:var(--text-2); overflow-x:auto; white-space:pre; min-height:150px;
+}
+.xform-code .c-kw { color:var(--purple); } .xform-code .c-fn { color:var(--blue); }
+.xform-code .c-str { color:var(--teal); } .xform-code .c-num { color:var(--orange); }
+.xform-code .c-com { color:var(--text-3); font-style:italic; } .xform-code .c-rm { opacity:0.3; }
+.xform-steps { display:flex; gap:6px; margin-top:20px; flex-wrap:wrap; }
+.xform-step {
+  flex:1 1 0; min-width:104px; padding:10px 12px; border-radius:10px; text-align:left;
+  background:var(--surface-2); border:1px solid var(--border);
+  transition:border-color 0.2s, background 0.2s; cursor:pointer;
+}
+.xform-step:hover { border-color:var(--border-strong); }
+.xform-step.is-active { background:var(--surface-3); border-color:var(--hi); box-shadow:0 0 0 3px var(--hi-soft); }
+.xform-step .s-n { font-family:'Geist Mono',monospace; font-size:10px; color:var(--text-3); letter-spacing:0.08em; }
+.xform-step .s-t { font-size:12.5px; font-weight:600; margin-top:3px; }
+.xform-step .s-d { font-family:'Geist Mono',monospace; font-size:11px; color:var(--text-2); margin-top:4px; }
+.xform-step.is-active .s-d { color:var(--hi); }
+
+/* ─── CARDS ─── */
+.cards {
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:18px;
+}
+.card {
+  position:relative; display:flex; flex-direction:column; padding:24px 24px 22px;
+  background:
+    radial-gradient(120% 80% at 50% -10%, var(--card-bg, transparent) 0%, transparent 55%),
+    var(--surface);
+  border:1px solid var(--border); border-radius:16px; cursor:pointer; text-align:left; width:100%;
+  transition:transform 0.28s cubic-bezier(0.16,1,0.3,1), border-color 0.28s, background 0.28s, box-shadow 0.28s;
+  overflow:hidden; isolation:isolate;
+}
+/* hairline accent strip flush against the top */
+.card::after {
+  content:''; position:absolute; top:0; left:0; right:0; height:1.5px;
+  background:linear-gradient(90deg, transparent, var(--card-accent, var(--blue)) 35%, var(--card-accent, var(--blue)) 65%, transparent);
+  opacity:0.5; transition:opacity 0.3s, height 0.3s;
+}
+/* hover wash */
+.card::before {
+  content:''; position:absolute; inset:0; border-radius:16px; pointer-events:none;
+  background:radial-gradient(80% 100% at 50% 0%, var(--card-glow, transparent) 0%, transparent 70%);
+  opacity:0; transition:opacity 0.3s; z-index:-1;
+}
+.card:hover {
+  transform:translateY(-2px); border-color:var(--card-border, var(--border-strong));
+  box-shadow:0 8px 32px -16px color-mix(in srgb, var(--card-accent, var(--blue)) 40%, transparent), var(--shadow-md);
+}
+.card:hover::before { opacity:0.6; }
+.card:hover::after { opacity:1; height:2px; }
+.card.blue   { --card-accent:var(--blue);   --card-bg:var(--blue-bg);   --card-bg-2:var(--blue-bg-2);   --card-border:var(--blue-border);   --card-glow:var(--blue-bg-2); }
+.card.purple { --card-accent:var(--purple); --card-bg:var(--purple-bg); --card-bg-2:var(--purple-bg-2); --card-border:var(--purple-border); --card-glow:var(--purple-bg-2); }
+.card.teal   { --card-accent:var(--teal);   --card-bg:var(--teal-bg);   --card-bg-2:var(--teal-bg-2);   --card-border:var(--teal-border);   --card-glow:var(--teal-bg-2); }
+.card.slate  { --card-accent:var(--slate);  --card-bg:var(--slate-bg);  --card-bg-2:var(--slate-bg-2);  --card-border:var(--slate-border);  --card-glow:var(--slate-bg-2); }
+.card.amber  { --card-accent:var(--amber);  --card-bg:var(--amber-bg);  --card-bg-2:var(--amber-bg-2);  --card-border:var(--amber-border);  --card-glow:var(--amber-bg-2); }
+.card.orange { --card-accent:var(--orange); --card-bg:var(--orange-bg); --card-bg-2:var(--orange-bg-2); --card-border:var(--orange-border); --card-glow:var(--orange-bg-2); }
+.card.rose   { --card-accent:var(--rose);   --card-bg:var(--rose-bg);   --card-bg-2:var(--rose-bg-2);   --card-border:var(--rose-border);   --card-glow:var(--rose-bg-2); }
+
+/* ── Top metadata row: layer · num ── */
+.card-meta-top {
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  margin-bottom:18px; line-height:1;
+}
+.card-layer {
+  font-family:'Geist Mono',monospace; font-size:9.5px; font-weight:600;
+  letter-spacing:0.22em; text-transform:uppercase; color:var(--card-accent);
+}
+.card-num {
+  font-family:'Geist Mono',monospace; font-size:10px; font-weight:500;
+  color:var(--text-3); letter-spacing:0.06em; font-variant-numeric:tabular-nums;
+}
+.card-num strong { color:var(--text-2); font-weight:600; }
+.card-num .sep { opacity:0.5; margin:0 2px; }
+
+/* ── Title row: icon + h3 ── */
+.card-title-row {
+  display:flex; align-items:flex-start; gap:13px; margin-bottom:10px;
+}
+.card h3 {
+  margin:0; font-size:18.5px; font-weight:600; letter-spacing:-0.018em; line-height:1.3;
+  color:var(--text); padding-top:3px;       /* optical alignment against the 36px icon */
+  flex:1; min-width:0;
+}
+.card-tagline {
+  margin:0 0 22px; color:var(--text-2); font-size:14px; line-height:1.6;
+}
+
+/* ── Footer row: pills, with CTA as part of the line ── */
+.card-foot {
+  display:flex; align-items:center; gap:10px;
+  padding-top:16px; margin-top:auto;
+  border-top:1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+.card-meta {
+  display:flex; flex-wrap:wrap; gap:5px; min-width:0; flex:1;
+}
+.card-pill {
+  font-family:'Geist Mono',monospace; font-size:10px; font-weight:500;
+  padding:3px 9px; line-height:1.4;
+  background:color-mix(in srgb, var(--surface-2) 80%, transparent);
+  border:1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius:5px; color:var(--text-3); letter-spacing:0.02em;
+  transition:color 0.2s, border-color 0.2s, background 0.2s;
+}
+.card:hover .card-pill {
+  border-color:color-mix(in srgb, var(--card-accent) 30%, var(--border));
+  background:color-mix(in srgb, var(--card-accent) 8%, var(--surface-2));
+  color:var(--text-2);
+}
+.card-cta {
+  display:inline-flex; align-items:center; gap:6px; flex-shrink:0;
+  font-family:'Geist Mono',monospace; font-size:9.5px; font-weight:600;
+  letter-spacing:0.22em; text-transform:uppercase; color:var(--card-accent);
+  opacity:0.7; transition:opacity 0.22s, gap 0.22s; line-height:1;
+}
+.card-cta svg { width:9px; height:9px; transition:transform 0.22s; }
+.card:hover .card-cta { opacity:1; gap:8px; }
+.card:hover .card-cta svg { transform:translateX(3px); }
+
+/* ─── GLOSSARY TERMS ─── */
+.term {
+  display:inline; padding:0; margin:0; font:inherit; color:inherit; background:none; border:0;
+  border-radius:0; cursor:help; text-align:inherit; line-height:inherit; vertical-align:baseline;
+  text-decoration:underline; text-decoration-style:dotted;
+  text-decoration-color:color-mix(in srgb, currentColor 14%, transparent);
+  text-decoration-thickness:1px; text-underline-offset:3px; position:relative;
+  transition:color 0.15s ease, text-decoration-color 0.15s ease, text-shadow 0.15s ease;
+}
+.term:hover { text-decoration-color:color-mix(in srgb, currentColor 50%, transparent); }
+.term.is-lit { color:var(--hi); text-decoration-color:var(--hi); text-shadow:0 0 18px var(--hi-soft); }
+.term.is-lit code { color:var(--hi); border-color:var(--hi-soft); background:var(--hi-soft); }
+code.is-term { cursor:help; transition:color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease; }
+code.is-term:hover { color:var(--hi); border-color:var(--hi-soft); }
+code.is-term.is-lit { color:var(--hi); border-color:var(--hi-soft); background:var(--hi-soft); text-shadow:0 0 14px var(--hi-soft); }
+
+.term-popover {
+  position:fixed; z-index:200; min-width:280px; max-width:368px; padding:16px 18px;
+  background:var(--surface); border:1px solid var(--border-strong); border-radius:12px;
+  box-shadow:var(--shadow-lg); opacity:0; pointer-events:none;
+  transform:translateY(-6px) scale(0.98); transition:opacity 0.16s, transform 0.16s;
+}
+.term-popover.is-open { opacity:1; pointer-events:auto; transform:translateY(0) scale(1); }
+.term-popover .pop-label {
+  font-family:'Geist Mono',monospace; font-size:9.5px; font-weight:600; letter-spacing:0.22em;
+  text-transform:uppercase; color:var(--text-3); margin-bottom:8px;
+}
+.term-popover .pop-title { font-size:16px; font-weight:600; letter-spacing:-0.01em; margin:0 0 8px; color:var(--hi); }
+.term-popover .pop-body { font-size:13.5px; line-height:1.55; color:var(--text-2); }
+.term-popover .pop-body code {
+  font-family:'Geist Mono',monospace; font-size:12px; padding:1px 5px;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:4px; color:var(--text);
+}
+.term-popover .pop-body strong { color:var(--text); font-weight:600; }
+.term-popover .pop-body em { color:var(--text); font-style:italic; }
+.term-popover .pop-body .term { text-decoration-color:color-mix(in srgb, var(--text-2) 50%, transparent); color:var(--text); }
+
+/* ─── MODAL ─── */
+.modal-backdrop {
+  position:fixed; inset:0; z-index:150; background:rgba(0,0,0,0.55);
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  opacity:0; pointer-events:none; transition:opacity 0.28s;
+}
+[data-theme="light"] .modal-backdrop { background:rgba(20,20,30,0.45); }
+.modal-backdrop.is-open { opacity:1; pointer-events:auto; }
+.modal {
+  position:fixed; inset:0; z-index:160; display:flex; align-items:flex-start;
+  justify-content:center; padding:80px 24px 40px; pointer-events:none; overflow:hidden;
+}
+.modal.is-open { overflow-y:auto; }
+.modal-panel {
+  position:relative; width:100%; max-width:860px; background:var(--surface);
+  border:1px solid var(--border); border-radius:20px; box-shadow:var(--shadow-lg);
+  pointer-events:none; opacity:0; transform:translateY(20px) scale(0.985);
+  transition:opacity 0.32s cubic-bezier(0.16,1,0.3,1), transform 0.32s cubic-bezier(0.16,1,0.3,1);
+  overflow:hidden;
+}
+.modal.is-open .modal-panel { opacity:1; transform:translateY(0) scale(1); pointer-events:auto; }
+.modal-header {
+  position:relative; padding:36px 40px 28px; border-bottom:1px solid var(--border);
+  background:linear-gradient(180deg, var(--m-bg, transparent) 0%, transparent 100%);
+}
+.modal-header::before {
+  content:''; position:absolute; inset:0;
+  background:radial-gradient(90% 130% at 0% 0%, var(--m-glow, transparent) 0%, transparent 60%);
+  pointer-events:none;
+}
+.modal-close {
+  position:absolute; top:20px; right:20px; width:36px; height:36px; border-radius:10px;
+  display:inline-flex; align-items:center; justify-content:center; color:var(--text-2);
+  background:var(--surface-2); border:1px solid var(--border);
+  transition:color 0.18s, background-color 0.18s, transform 0.32s cubic-bezier(0.16,1,0.3,1); z-index:2;
+}
+.modal-close:hover { color:var(--text); background:var(--surface-3); transform:rotate(90deg); }
+.modal-close svg { width:14px; height:14px; }
+#modalTheme { right:64px; }
+#modalTheme svg { width:15px; height:15px; }
+.modal-eyebrow {
+  display:inline-flex; align-items:center; gap:10px; padding:4px 12px; border-radius:999px;
+  font-family:'Geist Mono',monospace; font-size:10.5px; font-weight:600; letter-spacing:0.2em;
+  text-transform:uppercase; margin-bottom:12px; position:relative; z-index:1;
+}
+.modal-panel.blue   .modal-eyebrow { background:var(--blue-bg);   border:1px solid var(--blue-border);   color:var(--blue); }
+.modal-panel.purple .modal-eyebrow { background:var(--purple-bg); border:1px solid var(--purple-border); color:var(--purple); }
+.modal-panel.teal   .modal-eyebrow { background:var(--teal-bg);   border:1px solid var(--teal-border);   color:var(--teal); }
+.modal-panel.slate  .modal-eyebrow { background:var(--slate-bg);  border:1px solid var(--slate-border);  color:var(--slate); }
+.modal-panel.amber  .modal-eyebrow { background:var(--amber-bg);  border:1px solid var(--amber-border);  color:var(--amber); }
+.modal-panel.orange .modal-eyebrow { background:var(--orange-bg); border:1px solid var(--orange-border); color:var(--orange); }
+.modal-panel.rose   .modal-eyebrow { background:var(--rose-bg);   border:1px solid var(--rose-border);   color:var(--rose); }
+.modal-header h2 {
+  position:relative; z-index:1; margin:0 0 12px; font-size:clamp(26px,3.5vw,38px);
+  font-weight:600; letter-spacing:-0.022em; line-height:1.08;
+}
+.modal-header .modal-tag {
+  position:relative; z-index:1; margin:0; color:var(--text-2); font-size:16px; max-width:62ch; line-height:1.55;
+}
+.modal-body { padding:32px 40px 40px; }
+.modal-body section { margin-bottom:32px; }
+.modal-body section:last-child { margin-bottom:0; }
+.modal-body h3 {
+  display:flex; align-items:baseline; gap:14px; margin:0 0 14px; font-size:11px; font-weight:600;
+  letter-spacing:0.22em; text-transform:uppercase; color:var(--m-accent, var(--text));
+  font-family:'Geist Mono',monospace; text-shadow:0 0 24px var(--m-glow, transparent);
+}
+.modal-body h3::before {
+  content:''; flex:0 0 26px; height:1px; background:var(--m-accent, var(--border-strong));
+  opacity:0.85; box-shadow:0 0 12px var(--m-glow, transparent); align-self:center;
+}
+.modal-body h3::after {
+  content:''; flex:1; height:1px; align-self:center;
+  background:linear-gradient(90deg, color-mix(in srgb, var(--m-accent, var(--border-strong)) 38%, transparent), transparent);
+}
+.modal-panel.blue   { --m-accent:var(--blue);   --m-glow:var(--blue-bg-2);   --m-bg:var(--blue-bg);   }
+.modal-panel.purple { --m-accent:var(--purple); --m-glow:var(--purple-bg-2); --m-bg:var(--purple-bg); }
+.modal-panel.teal   { --m-accent:var(--teal);   --m-glow:var(--teal-bg-2);   --m-bg:var(--teal-bg);   }
+.modal-panel.slate  { --m-accent:var(--slate);  --m-glow:var(--slate-bg-2);  --m-bg:var(--slate-bg);  }
+.modal-panel.amber  { --m-accent:var(--amber);  --m-glow:var(--amber-bg-2);  --m-bg:var(--amber-bg);  }
+.modal-panel.orange { --m-accent:var(--orange); --m-glow:var(--orange-bg-2); --m-bg:var(--orange-bg); }
+.modal-panel.rose   { --m-accent:var(--rose);   --m-glow:var(--rose-bg-2);   --m-bg:var(--rose-bg);   }
+.modal-body p { margin:0 0 14px; font-size:15.5px; line-height:1.65; color:var(--text-2); }
+.modal-body p:last-child { margin-bottom:0; }
+.modal-body strong { color:var(--hi); font-weight:600; text-shadow:0 0 24px var(--hi-soft); }
+.modal-body em { color:var(--text); font-style:italic; font-weight:500; }
+.modal-body code {
+  font-family:'Geist Mono',monospace; font-size:0.86em; padding:1px 6px;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:5px; color:var(--text);
+}
+.modal-body ul { margin:2px 0 14px; padding-left:4px; list-style:none; }
+.modal-body ul li {
+  position:relative; padding-left:22px; margin-bottom:9px; color:var(--text-2);
+  font-size:15px; line-height:1.6;
+}
+.modal-body ul li::before {
+  content:''; position:absolute; left:4px; top:9px; width:6px; height:6px; border-radius:2px;
+  background:var(--m-accent, var(--text-3));
+}
+.modal-pre {
+  background:var(--bg); border:1px solid var(--border); border-radius:12px;
+  padding:16px 18px; font-family:'Geist Mono',monospace; font-size:12.5px; line-height:1.65;
+  color:var(--text-2); overflow-x:auto; white-space:pre; margin:0 0 16px;
+}
+.modal-pre .c-kw{color:var(--purple);} .modal-pre .c-fn{color:var(--blue);} .modal-pre .c-str{color:var(--teal);}
+.modal-pre .c-num{color:var(--orange);} .modal-pre .c-com{color:var(--text-3);font-style:italic;}
+.modal-pre .c-good{color:var(--green);} .modal-pre .c-bad{color:var(--rose);}
+.modal-callout {
+  display:flex; gap:13px; align-items:flex-start; padding:15px 17px; border-radius:12px;
+  background:var(--m-bg, var(--surface-2)); border:1px solid var(--border); margin:0 0 16px;
+}
+.modal-callout .co-icon { flex:0 0 auto; color:var(--m-accent, var(--text)); margin-top:1px; }
+.modal-callout .co-icon svg { width:18px; height:18px; display:block; }
+.modal-callout .co-text { font-size:14px; line-height:1.6; color:var(--text-2); }
+.modal-callout .co-text b { color:var(--text); font-weight:600; }
+.modal-metrics { display:flex; gap:10px; flex-wrap:wrap; margin:0 0 16px; }
+.modal-metric {
+  flex:1 1 130px; padding:13px 15px; border-radius:12px; background:var(--surface-2); border:1px solid var(--border);
+}
+.modal-metric .mm-label {
+  font-family:'Geist Mono',monospace; font-size:10px; letter-spacing:0.12em;
+  text-transform:uppercase; color:var(--text-3);
+}
+.modal-metric .mm-value {
+  font-family:'Geist Mono',monospace; font-size:18px; font-weight:500; color:var(--m-accent, var(--text)); margin-top:5px;
+}
+@media (max-width:600px){
+  .modal { padding:64px 12px 28px; }
+  .modal-header { padding:28px 22px 22px; }
+  .modal-body { padding:24px 22px 30px; }
+}
+
+/* ─── FOOTER ─── */
+.footer { padding:48px 0 64px; border-top:1px solid var(--border); margin-top:40px; }
+.footer-row {
+  display:flex; align-items:flex-end; justify-content:space-between; gap:24px; flex-wrap:wrap;
+  color:var(--text-2); font-size:14px;
+}
+.footer-row .mono { color:var(--text-3); font-size:12px; }
+.footer-row code {
+  font-family:'Geist Mono',monospace; font-size:0.92em; padding:1px 5px;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:4px;
+}
+
+/* ─── GREEN modal panel (for Source / Output endpoints) ─── */
+.modal-panel.green   .modal-eyebrow { background:var(--green-bg); border:1px solid var(--green-border); color:var(--green); }
+.modal-panel.green   { --m-accent:var(--green); --m-glow:var(--green-bg-2); --m-bg:var(--green-bg); }
+
+/* ═══════════ IN-MODAL INTERACTIVE VISUALS ═══════════ */
+.mvis {
+  --mv: var(--m-accent, var(--text));
+  margin:2px 0 26px; padding:18px; border-radius:14px;
+  background:var(--bg); border:1px solid var(--border); position:relative; overflow:hidden;
+}
+.mvis::before {
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--mv) 9%, transparent) 0%, transparent 60%);
+}
+.mvis > * { position:relative; z-index:1; }
+.mvis-cap {
+  display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px;
+  font-family:'Geist Mono',monospace; font-size:10px; font-weight:600; letter-spacing:0.2em;
+  text-transform:uppercase; color:var(--text-3);
+}
+.mvis-cap .mvis-read { color:var(--mv); font-weight:600; letter-spacing:0.16em; }
+.mvis-controls { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+.mvis-btn {
+  font-family:'Geist Mono',monospace; font-size:11px; padding:6px 11px; border-radius:8px; cursor:pointer;
+  background:var(--surface-2); border:1px solid var(--border); color:var(--text-2);
+  transition:border-color 0.18s, background 0.18s, color 0.18s;
+}
+.mvis-btn:hover { border-color:var(--border-strong); color:var(--text); }
+.mvis-btn.is-active { background:color-mix(in srgb, var(--mv) 18%, transparent); border-color:var(--mv); color:var(--mv); font-weight:600; }
+.mvis-btn.is-go { background:color-mix(in srgb, var(--mv) 18%, transparent); border-color:var(--mv); color:var(--mv); font-weight:600; }
+
+/* toggle switch */
+.mvis-switch { display:inline-flex; align-items:center; gap:10px; font-size:13px; color:var(--text-2); cursor:pointer; user-select:none; }
+.mvis-track { width:42px; height:24px; border-radius:999px; background:var(--surface-3); border:1px solid var(--border); position:relative; transition:background 0.2s, border-color 0.2s; flex:0 0 auto; }
+.mvis-track .mvis-knob { position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:var(--text-2); transition:transform 0.2s, background 0.2s; }
+.mvis-switch.is-on .mvis-track { background:color-mix(in srgb,var(--mv) 55%,transparent); border-color:var(--mv); }
+.mvis-switch.is-on .mvis-track .mvis-knob { transform:translateX(18px); background:var(--text); }
+
+/* bars */
+.mvis-bar-row { display:grid; grid-template-columns:84px 1fr auto; align-items:center; gap:10px; margin-bottom:9px; font-size:12.5px; color:var(--text-2); }
+.mvis-bar-row .mvis-bk { font-family:'Geist Mono',monospace; font-size:11px; color:var(--text-3); }
+.mvis-track2 { height:14px; border-radius:7px; background:var(--surface-2); border:1px solid var(--border); overflow:hidden; }
+.mvis-fill { height:100%; border-radius:7px; background:color-mix(in srgb,var(--mv) 85%,var(--surface-3)); transition:width 0.5s cubic-bezier(0.4,0,0.2,1); }
+.mvis-bv { font-family:'Geist Mono',monospace; font-size:11.5px; color:var(--text); min-width:54px; text-align:right; }
+
+/* big readout number */
+.mvis-num { font-family:'Geist Mono',monospace; font-size:30px; font-weight:600; color:var(--mv); letter-spacing:-0.01em; line-height:1; transition:color 0.2s; }
+.mvis-num .u { font-size:14px; color:var(--text-3); margin-left:4px; }
+.mvis-sub { font-size:12.5px; color:var(--text-2); margin-top:6px; line-height:1.5; }
+
+/* code morph */
+.mvis-code { font-family:'Geist Mono',monospace; font-size:12px; line-height:1.6; color:var(--text-2); white-space:pre-wrap; word-break:break-word; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:13px 15px; }
+.mvis-code .k{color:var(--purple);} .mvis-code .f{color:var(--blue);} .mvis-code .s{color:var(--teal);} .mvis-code .n{color:var(--orange);} .mvis-code .c{color:var(--text-3);font-style:italic;} .mvis-code .rm{opacity:0.28; text-decoration:line-through;}
+
+/* tree / list rows */
+.mvis-list { display:flex; flex-direction:column; gap:7px; }
+.mvis-item { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 12px; border-radius:9px; background:var(--surface-2); border:1px solid var(--border); font-size:13px; color:var(--text-2); transition:opacity 0.4s, border-color 0.2s, background 0.2s; cursor:default; }
+.mvis-item.is-kept { border-color:color-mix(in srgb,var(--mv) 70%,var(--border)); background:color-mix(in srgb,var(--mv) 9%, var(--surface-2)); color:var(--text); }
+.mvis-item.is-dropped { opacity:0.42; filter:saturate(0.55); text-decoration:line-through; text-decoration-color:color-mix(in srgb,var(--rose) 70%,transparent); text-decoration-thickness:1.5px; }
+.mvis-item .mvis-tag { font-family:'Geist Mono',monospace; font-size:9.5px; font-weight:600; letter-spacing:0.14em; text-transform:uppercase; padding:2.5px 8px; border-radius:6px; background:var(--surface-3); color:var(--text-3); }
+.mvis-item.is-kept .mvis-tag { background:color-mix(in srgb,var(--mv) 22%,transparent); color:var(--mv); font-weight:600; }
+.mvis-item code { font-family:'Geist Mono',monospace; font-size:12px; color:var(--text); }
+
+/* chunk pills */
+.mvis-pills { display:flex; flex-wrap:wrap; gap:6px; }
+.mvis-pill { font-family:'Geist Mono',monospace; font-size:11px; padding:5px 9px; border-radius:7px; background:var(--surface-2); border:1px solid var(--border); color:var(--text-3); transition:all 0.2s; }
+.mvis-pill.is-hot { background:color-mix(in srgb,var(--mv) 18%,transparent); border-color:var(--mv); color:var(--mv); font-weight:600; }
+
+/* clickable rows (routes / folders) */
+.mvis-row-btn { width:100%; text-align:left; cursor:pointer; }
+.mvis-row-btn.is-active { border-color:var(--mv); background:color-mix(in srgb,var(--mv) 12%,transparent); color:var(--text); }
+
+/* timeline */
+.mvis-lane { display:grid; grid-template-columns:1fr 1fr; gap:0; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+.mvis-lane > div { padding:14px 14px 30px; position:relative; min-height:72px; }
+.mvis-lane > div:first-child { border-right:1px solid var(--border); background:color-mix(in srgb,var(--surface-2) 60%,transparent); }
+.mvis-lane h5 { margin:0 0 6px; font-family:'Geist Mono',monospace; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-3); font-weight:500; }
+.mvis-lane .mvis-dot { position:absolute; bottom:12px; width:12px; height:12px; border-radius:50%; background:var(--mv); box-shadow:0 0 0 4px color-mix(in srgb,var(--mv) 28%,transparent); transition:left 0.4s, opacity 0.3s; }
+
+/* graph svg */
+.mvis-graph { width:100%; height:auto; display:block; }
+.mvis-graph .gn { fill:var(--surface-2); stroke:var(--border); transition:fill 0.3s, stroke 0.3s; }
+.mvis-graph .gn.lit { fill:color-mix(in srgb,var(--mv) 26%,transparent); stroke:var(--mv); stroke-width:1.8; filter:drop-shadow(0 0 4px color-mix(in srgb,var(--mv) 40%,transparent)); }
+.mvis-graph .ge { stroke:var(--border); stroke-width:1.5; transition:stroke 0.3s; }
+.mvis-graph .ge.lit { stroke:var(--mv); stroke-width:2.2; }
+.mvis-graph text { font-family:'Geist Mono',monospace; font-size:10px; fill:var(--text-2); }
+
+/* prefetch */
+.mvis-link { display:inline-flex; align-items:center; gap:8px; padding:9px 14px; border-radius:9px; background:var(--surface-2); border:1px solid var(--border); font-size:13px; color:var(--text); cursor:pointer; }
+.mvis-link:hover { border-color:var(--mv); }
+.mvis-prog { height:6px; border-radius:4px; background:var(--surface-2); border:1px solid var(--border); overflow:hidden; margin-top:12px; }
+.mvis-prog-fill { height:100%; width:0; background:var(--mv); transition:width 0.6s linear; }
+
+/* slider */
+.mvis-slider { width:100%; margin:4px 0 2px; accent-color:var(--mv); }
+
+
+/* ─── card & modal phase icons (Lucide-style 24x24 line glyphs) ─── */
+.card-icon {
+  display:flex; align-items:center; justify-content:center;
+  width:36px; height:36px; flex:0 0 36px; border-radius:9px;
+  color:var(--card-accent, var(--blue));
+  background:color-mix(in srgb, var(--card-accent, var(--blue)) 10%, transparent);
+  border:1px solid color-mix(in srgb, var(--card-accent, var(--blue)) 28%, transparent);
+  transition:transform 0.32s cubic-bezier(0.16,1,0.3,1), border-color 0.3s, background 0.3s;
+}
+.card-icon svg { width:17px; height:17px; }
+.card:hover .card-icon {
+  transform:rotate(-3deg);
+  border-color:color-mix(in srgb, var(--card-accent, var(--blue)) 55%, transparent);
+  background:color-mix(in srgb, var(--card-accent, var(--blue)) 15%, transparent);
+}
+
+.modal-head-row { display:flex; align-items:center; gap:14px; margin-bottom:14px; }
+.modal-head-text { min-width:0; flex:1; }
+.modal-icon {
+  display:flex; align-items:center; justify-content:center;
+  width:48px; height:48px; flex:0 0 48px; border-radius:13px;
+  color:var(--m-accent, var(--blue));
+  background:color-mix(in srgb, var(--m-accent, var(--blue)) 14%, transparent);
+  border:1px solid color-mix(in srgb, var(--m-accent, var(--blue)) 50%, transparent);
+}
+.modal-icon svg { width:22px; height:22px; }
+
+/* ─── SEMANTIC INDICATORS (second signal beyond brightness) ─── */
+
+.mvis-delta { font-family:'Geist Mono',monospace; font-size:12.5px; font-weight:600; display:inline-flex; gap:3px; align-items:center; }
+.mvis-delta.down { color:var(--green); }   /* smaller = good */
+.mvis-delta.up   { color:var(--rose); }
+.mvis-delta.flat { color:var(--text-3); }
+
+.mvis-arrow { color:var(--text-3); margin:0 6px; }
+.mvis-ico { width:15px; height:15px; flex:0 0 auto; vertical-align:-2px; }
+
+/* state-tinted item variants (hue carries meaning, not just glow) */
+.mvis-item.is-good { border-color:color-mix(in srgb,var(--green) 55%,var(--border)); background:color-mix(in srgb,var(--green) 8%,var(--surface-2)); }
+.mvis-item.is-bad  { border-color:color-mix(in srgb,var(--rose) 60%,var(--border));  background:color-mix(in srgb,var(--rose) 9%,var(--surface-2)); }
+.mvis-item.is-empty { border-style:dashed; color:var(--text-3); }
+
+/* two-zone layout (server | browser, etc.) */
+.mvis-zones { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.mvis-zone { border:1px solid var(--border); border-radius:11px; padding:12px; background:var(--surface-2); min-height:104px; display:flex; flex-direction:column; gap:8px; }
+.mvis-zone h6 { margin:0; display:flex; align-items:center; gap:7px; font-family:'Geist Mono',monospace; font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-3); font-weight:500; }
+.mvis-chip { font-family:'Geist Mono',monospace; font-size:11.5px; padding:6px 9px; border-radius:7px; background:var(--surface-3); border:1px solid var(--border); color:var(--text); transition:transform 0.3s, background 0.3s, border-color 0.3s; }
+.mvis-chip.exposed { border-color:color-mix(in srgb,var(--rose) 55%,transparent); background:color-mix(in srgb,var(--rose) 12%,transparent); color:var(--rose); }
+.mvis-chip.safe    { border-color:color-mix(in srgb,var(--green) 45%,transparent); }
+.mvis-zone .empty { font-family:'Geist Mono',monospace; font-size:11px; color:var(--text-3); font-style:italic; opacity:0.7; }
+
+/* compare rows (race / latency) */
+.mvis-cmp-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 12px; border-radius:9px; background:var(--surface-2); border:1px solid var(--border); font-size:13px; }
+.mvis-cmp-row.win { border-color:color-mix(in srgb,var(--green) 55%,var(--border)); }
+.mvis-cmp-row.lose { color:var(--text-2); }
+
+/* banner */
+.mvis-banner { display:flex; align-items:center; gap:9px; padding:11px 14px; border-radius:10px; font-size:13.5px; margin-top:14px; }
+.mvis-banner.good { background:color-mix(in srgb,var(--green) 10%,transparent); border:1px solid color-mix(in srgb,var(--green) 40%,transparent); color:var(--text); }
+.mvis-banner.bad  { background:color-mix(in srgb,var(--rose) 10%,transparent);  border:1px solid color-mix(in srgb,var(--rose) 40%,transparent);  color:var(--text); }
+.mvis-banner b.g { color:var(--green); } .mvis-banner b.r { color:var(--rose); }
+
+/* ─── modal-visual indicator system (icons, deltas, diff, badges, stats) ─── */
+.mvis-status { display:inline-flex; flex:0 0 18px; width:18px; height:18px; align-items:center; justify-content:center; border-radius:50%; font-size:11px; font-family:'Geist Mono',monospace; font-weight:700; background:var(--surface-3); color:var(--text-3); border:1px solid var(--border); transition:background 0.18s, color 0.18s, border-color 0.18s; }
+.mvis-status.on   { background:color-mix(in srgb,var(--mv) 22%,transparent); color:var(--mv); border-color:var(--mv); }
+.mvis-status.off  { background:transparent; color:var(--text-3); border-color:var(--border); }
+.mvis-status.warn { background:color-mix(in srgb,var(--rose) 22%,transparent); color:var(--rose); border-color:var(--rose); }
+
+.mvis-cmp { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.mvis-cmp > div { padding:13px 14px; border-radius:10px; background:var(--surface-2); border:1px solid var(--border); position:relative; min-width:0; }
+.mvis-cmp .ph { font-family:'Geist Mono',monospace; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-3); margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+
+.mvis-diff { font-family:'Geist Mono',monospace; font-size:12px; line-height:1.65; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:8px 6px; overflow-x:auto; margin:0 0 4px; }
+.mvis-diff .l { display:block; padding:0 8px 0 22px; position:relative; white-space:pre; }
+.mvis-diff .l::before { position:absolute; left:8px; top:0; font-weight:700; }
+.mvis-diff .l.add  { color:var(--green); background:color-mix(in srgb,var(--green) 8%,transparent); }
+.mvis-diff .l.add::before { content:'+'; color:var(--green); }
+.mvis-diff .l.rm   { color:var(--rose); background:color-mix(in srgb,var(--rose) 8%,transparent); opacity:0.9; }
+.mvis-diff .l.rm::before { content:'\2212'; color:var(--rose); }
+.mvis-diff .l.keep { color:var(--text-2); }
+.mvis-diff .l.keep::before { content:' '; }
+
+.mvis-badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:999px; font-family:'Geist Mono',monospace; font-size:9.5px; font-weight:600; letter-spacing:0.14em; text-transform:uppercase; background:var(--surface-3); color:var(--text-3); border:1px solid var(--border); white-space:nowrap; }
+.mvis-badge.warn  { background:color-mix(in srgb,var(--rose) 13%,transparent); color:var(--rose); border-color:color-mix(in srgb,var(--rose) 45%,transparent); }
+.mvis-badge.ok    { background:color-mix(in srgb,var(--mv) 13%,transparent); color:var(--mv); border-color:color-mix(in srgb,var(--mv) 45%,transparent); }
+.mvis-badge.muted { background:var(--surface-3); color:var(--text-3); border-color:var(--border); }
+
+.mvi { display:inline-flex; align-items:center; justify-content:center; vertical-align:-2px; }
+.mvi svg { width:13px; height:13px; }
+
+.mvis-stat { display:inline-flex; flex-direction:column; gap:3px; padding:8px 12px; background:var(--surface-2); border:1px solid var(--border); border-radius:9px; min-width:0; flex:1 1 110px; }
+.mvis-stat .lbl { font-family:'Geist Mono',monospace; font-size:9.5px; font-weight:600; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-3); display:inline-flex; align-items:center; gap:5px; }
+.mvis-stat .val { font-family:'Geist Mono',monospace; font-size:14.5px; color:var(--text); font-weight:500; }
+.mvis-stat.accent .val { color:var(--mv); }
+.mvis-stat.warn .val { color:var(--rose); }
+.mvis-stats { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+
+.mvis-codeline { font-family:'Geist Mono',monospace; font-size:12.5px; line-height:1.5; padding:10px 14px; background:var(--surface-2); border:1px solid var(--border); border-radius:9px; color:var(--text-2); white-space:pre-wrap; word-break:break-word; }
+.mvis-codeline .hl { background:color-mix(in srgb,var(--mv) 22%,transparent); color:var(--mv); padding:1px 5px; border-radius:4px; font-weight:600; }
+.mvis-codeline .hl-srv { color:var(--text); }
+
+
+/* ════════════════════════════════════════════════════════════════
+   SUPPLEMENTAL — comparison-specific components
+   (built on the same tokens as the reused design system above)
+   ════════════════════════════════════════════════════════════════ */
+
+/* ─── VS diagram: two stacked router lanes side by side ─── */
+.vs-lane-head {
+  font-family:'Geist',sans-serif; font-weight:700; font-size:15px; letter-spacing:-0.01em;
+}
+.vs-lane-sub { font-family:'Geist Mono',monospace; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; opacity:0.8; }
+.dgm-divider { stroke:var(--border-strong); stroke-width:1; stroke-dasharray:3 7; opacity:0.7; }
+
+/* ─── FORCES: the "why the switch" panels ─── */
+.forces { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:16px; }
+.force {
+  position:relative; padding:22px 22px 20px; border-radius:16px; overflow:hidden;
+  background:radial-gradient(120% 90% at 0% 0%, var(--f-bg,transparent) 0%, transparent 60%), var(--surface);
+  border:1px solid var(--border); isolation:isolate;
+}
+.force::after { content:''; position:absolute; left:0; top:0; bottom:0; width:2.5px; background:var(--f-accent,var(--blue)); opacity:0.75; }
+.force.blue   { --f-accent:var(--blue);   --f-bg:var(--blue-bg); }
+.force.purple { --f-accent:var(--purple); --f-bg:var(--purple-bg); }
+.force.teal   { --f-accent:var(--teal);   --f-bg:var(--teal-bg); }
+.force.orange { --f-accent:var(--orange); --f-bg:var(--orange-bg); }
+.force.rose   { --f-accent:var(--rose);   --f-bg:var(--rose-bg); }
+.force-n { font-family:'Geist Mono',monospace; font-size:10px; font-weight:600; letter-spacing:0.2em; text-transform:uppercase; color:var(--f-accent,var(--blue)); }
+.force-icon { width:34px; height:34px; border-radius:9px; display:inline-flex; align-items:center; justify-content:center;
+  color:var(--f-accent,var(--blue)); background:color-mix(in srgb,var(--f-accent,var(--blue)) 11%,transparent);
+  border:1px solid color-mix(in srgb,var(--f-accent,var(--blue)) 30%,transparent); margin:12px 0 12px; }
+.force-icon svg { width:17px; height:17px; }
+.force h3 { margin:0 0 8px; font-size:17px; font-weight:600; letter-spacing:-0.015em; }
+.force p { margin:0; font-size:14px; line-height:1.6; color:var(--text-2); }
+.force p .term { color:var(--text); }
+
+/* ─── VERSUS table: head-to-head rows ─── */
+.vstable { border:1px solid var(--border); border-radius:18px; overflow:hidden; background:var(--surface); }
+.vstable-head, .vstable-row { display:grid; grid-template-columns:1.1fr 1fr 1fr; }
+.vstable-head { background:var(--surface-2); border-bottom:1px solid var(--border); }
+.vstable-head > div { padding:15px 18px; font-family:'Geist Mono',monospace; font-size:10.5px; font-weight:600; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-3); }
+.vstable-head .vh-pages { color:var(--amber); }
+.vstable-head .vh-app   { color:var(--blue); }
+.vstable-row { border-bottom:1px solid color-mix(in srgb,var(--border) 70%,transparent); transition:background 0.18s; }
+.vstable-row:last-child { border-bottom:0; }
+.vstable-row:hover { background:color-mix(in srgb,var(--surface-2) 55%,transparent); }
+.vstable-row > div { padding:15px 18px; font-size:14px; line-height:1.55; color:var(--text-2); min-width:0; }
+.vstable-row .vr-dim { color:var(--text); font-weight:600; font-size:14px; }
+.vstable-row code { font-family:'Geist Mono',monospace; font-size:0.85em; padding:1px 5px; background:var(--surface-2); border:1px solid var(--border); border-radius:4px; color:var(--text); }
+.vstable-row .vr-app   { border-left:1px solid color-mix(in srgb,var(--blue) 22%,var(--border)); }
+.vstable-row .vr-pages { border-left:1px solid color-mix(in srgb,var(--amber) 18%,var(--border)); }
+@media (max-width:720px){
+  .vstable-head, .vstable-row { grid-template-columns:1fr; }
+  .vstable-head .vh-dim { display:none; }
+  .vstable-row .vr-pages, .vstable-row .vr-app { border-left:0; border-top:1px solid var(--border); }
+  .vstable-row .vr-pages::before { content:'Pages Router'; display:block; font-family:'Geist Mono',monospace; font-size:9px; letter-spacing:0.16em; text-transform:uppercase; color:var(--amber); margin-bottom:5px; }
+  .vstable-row .vr-app::before { content:'App Router'; display:block; font-family:'Geist Mono',monospace; font-size:9px; letter-spacing:0.16em; text-transform:uppercase; color:var(--blue); margin-bottom:5px; }
+}
+
+/* ─── VERDICT: when-to-use-which split panel ─── */
+.verdict { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+@media (max-width:680px){ .verdict { grid-template-columns:1fr; } }
+.verdict-card { position:relative; padding:26px 26px 24px; border-radius:18px; background:var(--surface); border:1px solid var(--border); overflow:hidden; }
+.verdict-card.app   { --v:var(--blue); }
+.verdict-card.pages { --v:var(--amber); }
+.verdict-card::before { content:''; position:absolute; inset:0; pointer-events:none; background:radial-gradient(90% 60% at 50% 0%, color-mix(in srgb,var(--v) 12%,transparent) 0%, transparent 65%); }
+.verdict-card > * { position:relative; z-index:1; }
+.verdict-tag { display:inline-flex; align-items:center; gap:8px; font-family:'Geist Mono',monospace; font-size:10px; font-weight:600; letter-spacing:0.18em; text-transform:uppercase; color:var(--v); padding:4px 11px; border-radius:999px; border:1px solid color-mix(in srgb,var(--v) 40%,transparent); background:color-mix(in srgb,var(--v) 10%,transparent); margin-bottom:16px; }
+.verdict-card h3 { margin:0 0 14px; font-size:21px; font-weight:600; letter-spacing:-0.02em; }
+.verdict-card ul { margin:0; padding:0; list-style:none; }
+.verdict-card li { position:relative; padding-left:24px; margin-bottom:11px; font-size:14.5px; line-height:1.55; color:var(--text-2); }
+.verdict-card li:last-child { margin-bottom:0; }
+.verdict-card li::before { content:''; position:absolute; left:3px; top:8px; width:7px; height:7px; border-radius:2px; background:var(--v); }
+.verdict-card li .term { color:var(--text); }
+.verdict-note { margin-top:22px; padding:16px 18px; border-radius:13px; background:var(--surface-2); border:1px solid var(--border); font-size:14px; line-height:1.6; color:var(--text-2); }
+.verdict-note b { color:var(--text); font-weight:600; }
+
+/* ─── small inline "where it runs" pill used in visuals ─── */
+.run-pill { font-family:'Geist Mono',monospace; font-size:9.5px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; padding:3px 9px; border-radius:6px; }
+.run-pill.server { color:var(--blue); background:var(--blue-bg); border:1px solid var(--blue-border); }
+.run-pill.client { color:var(--orange); background:var(--orange-bg); border:1px solid var(--orange-border); }
+.run-pill.both { color:var(--purple); background:var(--purple-bg); border:1px solid var(--purple-border); }
+
+/* tree rows for the layout-navigation visual */
+.mvis-tree { display:flex; flex-direction:column; gap:6px; }
+.mvis-tnode { display:flex; align-items:center; gap:9px; padding:9px 12px; border-radius:9px; background:var(--surface-2); border:1px solid var(--border); font-family:'Geist Mono',monospace; font-size:12px; color:var(--text-2); transition:background 0.35s, border-color 0.35s, color 0.35s, transform 0.35s; }
+.mvis-tnode .ti { width:14px; height:14px; flex:0 0 auto; color:var(--text-3); }
+.mvis-tnode.depth1 { margin-left:18px; }
+.mvis-tnode.depth2 { margin-left:36px; }
+.mvis-tnode.flash { border-color:var(--rose); background:color-mix(in srgb,var(--rose) 13%,var(--surface-2)); color:var(--text); }
+.mvis-tnode.persist { border-color:color-mix(in srgb,var(--green) 45%,var(--border)); }
+.mvis-tnode .tbadge { margin-left:auto; font-size:9px; letter-spacing:0.12em; text-transform:uppercase; padding:2px 7px; border-radius:5px; background:var(--surface-3); color:var(--text-3); }
+.mvis-tnode.flash .tbadge { background:color-mix(in srgb,var(--rose) 22%,transparent); color:var(--rose); }
+.mvis-tnode.persist .tbadge { background:color-mix(in srgb,var(--green) 20%,transparent); color:var(--green); }
+
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════ NAV ═══════════════════════ -->
+<nav class="nav" id="nav">
+  <a href="#top" class="nav-brand">
+    <span class="nav-mark">▲</span>
+    <span>App Router <span class="sub">vs</span> Pages Router</span>
+  </a>
+  <div class="nav-links">
+    <a href="#flow" class="nav-link">Mental models</a>
+    <a href="#data" class="nav-link">Data fetching</a>
+    <a href="#compare" class="nav-link">Compare</a>
+    <a href="#why" class="nav-link">Why switch</a>
+    <a href="#verdict" class="nav-link">Verdict</a>
+  </div>
+  <div class="nav-tools">
+    <button class="icon-btn theme-toggle" id="themeToggle" aria-label="Toggle theme">
+      <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+</nav>
+
+<main id="top">
+
+  <!-- ═══════════════════════ HERO ═══════════════════════ -->
+  <section class="hero shell">
+    <div class="hero-eyebrow rise rise-1"><span class="dot"></span><span class="eyebrow">Architecture deep-dive · Next.js 16 · App Router vs Pages Router</span></div>
+    <h1 class="rise rise-2">Two routers,<br>one <em>framework</em></h1>
+    <p class="hero-lede rise rise-3">Next.js ships <em>two</em> complete routing systems. The original <code>pages/</code> router made React server-rendering easy and ruled from 2016. The newer <code>app/</code> router, stable since 2023 and the default since v13, rebuilt the foundation on <code>React Server Components</code> — moving the default execution environment from the browser to the server. This is a tour of both architectures: how each one turns a request into a page, what problem each was built to solve, and the specific forces that made Next.js change its mind. Click any node, card, or highlighted term to dig in.</p>
+    <div class="hero-stats rise rise-4">
+      <div class="hero-stat"><div class="num">2</div><div class="label">Routers, one app</div></div>
+      <div class="hero-stat"><div class="num">'23</div><div class="label">App Router stable</div></div>
+      <div class="hero-stat"><div class="num">0 KB</div><div class="label">JS from a Server Component</div></div>
+      <div class="hero-stat"><div class="num">11</div><div class="label">Axes compared</div></div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ MENTAL MODELS DIAGRAM ═══════════════════════ -->
+  <section class="section shell" id="flow">
+    <div class="section-head">
+      <div class="num">01 — Two mental models</div>
+      <h2>One request, two lifecycles.</h2>
+      <p>The same HTTP request enters the top. On the left, the <code>Pages Router</code> renders an entire React tree on the server and then ships <em>all</em> of it to the browser to hydrate. On the right, the <code>App Router</code> renders Server Components to a serialized payload that ships <em>no</em> JavaScript, streams the result, and hydrates only the interactive islands. Click any node to open its deep-dive.</p>
+    </div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-toolbar">
+        <span class="eyebrow">Request → response · left vs right</span>
+        <div class="diagram-legend">
+          <span class="legend-chip amber"><span class="swatch"></span>Pages Router</span>
+          <span class="legend-chip blue"><span class="swatch"></span>App Router</span>
+          <span class="legend-chip purple"><span class="swatch"></span>Render</span>
+          <span class="legend-chip teal"><span class="swatch"></span>Data / hydrate</span>
+          <span class="legend-chip rose"><span class="swatch"></span>Cost</span>
+        </div>
+      </div>
+
+      <div class="diagram-scroll">
+        <svg class="diagram-svg" viewBox="0 0 960 700" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Pages Router vs App Router request lifecycle">
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="dgm-arrow-head"/></marker>
+            <linearGradient id="g-blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" style="stop-color:var(--blue-bg-2)"/><stop offset="100%" style="stop-color:var(--blue-bg)"/></linearGradient>
+            <linearGradient id="g-purple" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" style="stop-color:var(--purple-bg-2)"/><stop offset="100%" style="stop-color:var(--purple-bg)"/></linearGradient>
+            <linearGradient id="g-teal" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" style="stop-color:var(--teal-bg-2)"/><stop offset="100%" style="stop-color:var(--teal-bg)"/></linearGradient>
+            <linearGradient id="g-amber" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" style="stop-color:var(--amber-bg-2)"/><stop offset="100%" style="stop-color:var(--amber-bg)"/></linearGradient>
+            <linearGradient id="g-orange" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" style="stop-color:var(--orange-bg-2)"/><stop offset="100%" style="stop-color:var(--orange-bg)"/></linearGradient>
+            <linearGradient id="g-rose" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" style="stop-color:var(--rose-bg-2)"/><stop offset="100%" style="stop-color:var(--rose-bg)"/></linearGradient>
+            <linearGradient id="g-slate" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" style="stop-color:var(--slate-bg-2)"/><stop offset="100%" style="stop-color:var(--slate-bg)"/></linearGradient>
+            <linearGradient id="g-green" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" style="stop-color:var(--green-bg-2)"/><stop offset="100%" style="stop-color:var(--green-bg)"/></linearGradient>
+          </defs>
+
+          <!-- center divider -->
+          <line class="dgm-divider" x1="480" y1="104" x2="480" y2="648"/>
+
+          <!-- REQUEST (shared) -->
+          <g class="dgm-node" data-phase="request" style="color:var(--green);" tabindex="0" role="button" aria-label="Incoming HTTP request">
+            <rect class="dgm-rect" x="340" y="24" width="280" height="50" rx="10" fill="url(#g-green)" stroke="var(--green-border)"/>
+            <text x="480" y="44" fill="var(--green)" class="dgm-num" text-anchor="middle" dominant-baseline="central">INPUT</text>
+            <text x="480" y="60" fill="var(--text)" class="dgm-io" text-anchor="middle" dominant-baseline="central">HTTP request → /blog/hello</text>
+          </g>
+          <path class="dgm-arrow" d="M480 74 L480 92 L240 92 L240 120" marker-end="url(#arr)"/>
+          <path class="dgm-arrow" d="M480 74 L480 92 L720 92 L720 120" marker-end="url(#arr)"/>
+
+          <!-- ░░░ LEFT LANE — PAGES ROUTER ░░░ -->
+          <g class="dgm-node" data-phase="pages-flow" style="color:var(--amber);" tabindex="0" role="button" aria-label="Pages Router overview">
+            <rect class="dgm-rect" x="60" y="120" width="360" height="56" rx="11" fill="url(#g-amber)" stroke="var(--amber-border)" stroke-width="1.4"/>
+            <text x="80" y="142" fill="var(--amber)" class="vs-lane-sub">Pages Router · since 2016</text>
+            <text x="80" y="160" fill="var(--text)" class="vs-lane-head">pages/blog/[slug].tsx</text>
+          </g>
+          <path class="dgm-arrow" d="M240 176 L240 206" marker-end="url(#arr)"/>
+
+          <g class="dgm-node" data-phase="routing" style="color:var(--amber);" tabindex="0" role="button" aria-label="Match pages file">
+            <rect class="dgm-rect" x="60" y="206" width="360" height="60" rx="10" fill="url(#g-amber)" stroke="var(--amber-border)"/>
+            <text x="80" y="226" fill="var(--amber)" class="dgm-num" dominant-baseline="central">STEP 01 · ROUTE</text>
+            <text x="80" y="244" fill="var(--text)" class="dgm-title" dominant-baseline="central">Match the <tspan class="dgm-term" data-term="page-file">page file</tspan></text>
+            <text x="80" y="260" fill="var(--amber)" class="dgm-sub" dominant-baseline="central">one file = one route, flat</text>
+          </g>
+          <path class="dgm-arrow" d="M240 266 L240 296" marker-end="url(#arr)"/>
+
+          <g class="dgm-node" data-phase="data" style="color:var(--teal);" tabindex="0" role="button" aria-label="Run data fetching methods">
+            <rect class="dgm-rect" x="60" y="296" width="360" height="60" rx="10" fill="url(#g-teal)" stroke="var(--teal-border)"/>
+            <text x="80" y="316" fill="var(--teal)" class="dgm-num" dominant-baseline="central">STEP 02 · DATA (SERVER)</text>
+            <text x="80" y="334" fill="var(--text)" class="dgm-title" dominant-baseline="central">Run <tspan class="dgm-term" data-term="getserversideprops">get*Props</tspan> for the page</text>
+            <text x="80" y="350" fill="var(--teal)" class="dgm-sub" dominant-baseline="central">page-level only · props flow down</text>
+          </g>
+          <path class="dgm-arrow" d="M240 356 L240 386" marker-end="url(#arr)"/>
+
+          <g class="dgm-node" data-phase="rendering" style="color:var(--purple);" tabindex="0" role="button" aria-label="Render whole tree to HTML">
+            <rect class="dgm-rect" x="60" y="386" width="360" height="60" rx="10" fill="url(#g-purple)" stroke="var(--purple-border)"/>
+            <text x="80" y="406" fill="var(--purple)" class="dgm-num" dominant-baseline="central">STEP 03 · RENDER</text>
+            <text x="80" y="424" fill="var(--text)" class="dgm-title" dominant-baseline="central">Render the whole tree → HTML</text>
+            <text x="80" y="440" fill="var(--purple)" class="dgm-sub" dominant-baseline="central">one mode per page: <tspan class="dgm-term" data-term="ssr">SSR</tspan> or <tspan class="dgm-term" data-term="ssg">SSG</tspan></text>
+          </g>
+          <path class="dgm-arrow" d="M240 446 L240 476" marker-end="url(#arr)"/>
+
+          <g class="dgm-node" data-phase="bundle" style="color:var(--rose);" tabindex="0" role="button" aria-label="Ship and hydrate the whole tree">
+            <rect class="dgm-rect" x="60" y="476" width="360" height="60" rx="10" fill="url(#g-rose)" stroke="var(--rose-border)"/>
+            <text x="80" y="496" fill="var(--rose)" class="dgm-num" dominant-baseline="central">STEP 04 · SHIP + HYDRATE</text>
+            <text x="80" y="514" fill="var(--text)" class="dgm-title" dominant-baseline="central">Ship the entire tree as JS</text>
+            <text x="80" y="530" fill="var(--rose)" class="dgm-sub" dominant-baseline="central">full-tree <tspan class="dgm-term" data-term="hydration">hydration</tspan></text>
+          </g>
+          <path class="dgm-arrow" d="M240 536 L240 572" marker-end="url(#arr)"/>
+
+          <g class="dgm-node" data-phase="bundle" style="color:var(--slate);" tabindex="0" role="button" aria-label="Pages Router outcome">
+            <rect class="dgm-rect" x="80" y="572" width="320" height="50" rx="10" fill="url(#g-slate)" stroke="var(--slate-border)"/>
+            <text x="240" y="591" fill="var(--text)" class="dgm-io" text-anchor="middle" dominant-baseline="central">Interactive page</text>
+            <text x="240" y="609" fill="var(--slate)" class="dgm-sub" text-anchor="middle" dominant-baseline="central">heavy <tspan class="dgm-term" data-term="first-load-js">First Load JS</tspan></text>
+          </g>
+
+          <!-- ░░░ RIGHT LANE — APP ROUTER ░░░ -->
+          <g class="dgm-node" data-phase="app-flow" style="color:var(--blue);" tabindex="0" role="button" aria-label="App Router overview">
+            <rect class="dgm-rect" x="540" y="120" width="360" height="56" rx="11" fill="url(#g-blue)" stroke="var(--blue-border)" stroke-width="1.4"/>
+            <text x="560" y="142" fill="var(--blue)" class="vs-lane-sub">App Router · default since v13</text>
+            <text x="560" y="160" fill="var(--text)" class="vs-lane-head">app/blog/[slug]/page.tsx</text>
+          </g>
+          <path class="dgm-arrow" d="M720 176 L720 206" marker-end="url(#arr)"/>
+
+          <g class="dgm-node" data-phase="layouts" style="color:var(--blue);" tabindex="0" role="button" aria-label="Match nested segments">
+            <rect class="dgm-rect" x="540" y="206" width="360" height="60" rx="10" fill="url(#g-blue)" stroke="var(--blue-border)"/>
+            <text x="560" y="226" fill="var(--blue)" class="dgm-num" dominant-baseline="central">STEP 01 · ROUTE</text>
+            <text x="560" y="244" fill="var(--text)" class="dgm-title" dominant-baseline="central">Match nested <tspan class="dgm-term" data-term="segment">segments</tspan></text>
+            <text x="560" y="260" fill="var(--blue)" class="dgm-sub" dominant-baseline="central"><tspan class="dgm-term" data-term="layout-file">layout</tspan> wraps <tspan class="dgm-term" data-term="page-file">page</tspan>, composable</text>
+          </g>
+          <path class="dgm-arrow" d="M720 266 L720 296" marker-end="url(#arr)"/>
+
+          <g class="dgm-node" data-phase="rendering" style="color:var(--purple);" tabindex="0" role="button" aria-label="Render server components">
+            <rect class="dgm-rect" x="540" y="296" width="360" height="60" rx="10" fill="url(#g-purple)" stroke="var(--purple-border)"/>
+            <text x="560" y="316" fill="var(--purple)" class="dgm-num" dominant-baseline="central">STEP 02 · RENDER (SERVER)</text>
+            <text x="560" y="334" fill="var(--text)" class="dgm-title" dominant-baseline="central">Render <tspan class="dgm-term" data-term="rsc">Server Components</tspan></text>
+            <text x="560" y="350" fill="var(--purple)" class="dgm-sub" dominant-baseline="central">fetch in-component · 0 KB JS</text>
+          </g>
+          <path class="dgm-arrow" d="M720 356 L720 386" marker-end="url(#arr)"/>
+
+          <g class="dgm-node" data-phase="streaming" style="color:var(--orange);" tabindex="0" role="button" aria-label="Stream the payload">
+            <rect class="dgm-rect" x="540" y="386" width="360" height="60" rx="10" fill="url(#g-orange)" stroke="var(--orange-border)"/>
+            <text x="560" y="406" fill="var(--orange)" class="dgm-num" dominant-baseline="central">STEP 03 · STREAM</text>
+            <text x="560" y="424" fill="var(--text)" class="dgm-title" dominant-baseline="central">Stream HTML + <tspan class="dgm-term" data-term="rsc-payload">RSC payload</tspan></text>
+            <text x="560" y="440" fill="var(--orange)" class="dgm-sub" dominant-baseline="central">shell first, <tspan class="dgm-term" data-term="suspense">Suspense</tspan> holes fill</text>
+          </g>
+          <path class="dgm-arrow" d="M720 446 L720 476" marker-end="url(#arr)"/>
+
+          <g class="dgm-node" data-phase="bundle" style="color:var(--teal);" tabindex="0" role="button" aria-label="Hydrate islands only">
+            <rect class="dgm-rect" x="540" y="476" width="360" height="60" rx="10" fill="url(#g-teal)" stroke="var(--teal-border)"/>
+            <text x="560" y="496" fill="var(--teal)" class="dgm-num" dominant-baseline="central">STEP 04 · HYDRATE</text>
+            <text x="560" y="514" fill="var(--text)" class="dgm-title" dominant-baseline="central">Hydrate <tspan class="dgm-term" data-term="use-client">'use client'</tspan> islands</text>
+            <text x="560" y="530" fill="var(--teal)" class="dgm-sub" dominant-baseline="central">only the interactive parts</text>
+          </g>
+          <path class="dgm-arrow" d="M720 536 L720 572" marker-end="url(#arr)"/>
+
+          <g class="dgm-node" data-phase="bundle" style="color:var(--green);" tabindex="0" role="button" aria-label="App Router outcome">
+            <rect class="dgm-rect" x="560" y="572" width="320" height="50" rx="10" fill="url(#g-green)" stroke="var(--green-border)"/>
+            <text x="720" y="591" fill="var(--text)" class="dgm-io" text-anchor="middle" dominant-baseline="central">Interactive page</text>
+            <text x="720" y="609" fill="var(--green)" class="dgm-sub" text-anchor="middle" dominant-baseline="central">minimal <tspan class="dgm-term" data-term="first-load-js">First Load JS</tspan></text>
+          </g>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ DATA-FETCHING EVOLUTION WIDGET ═══════════════════════ -->
+  <section class="section shell" id="data">
+    <div class="section-head">
+      <div class="num">02 — How data fetching evolved</div>
+      <h2>The same task, four eras.</h2>
+      <p>"Fetch the posts, render the list." Watch how Next.js answered that one request over time — and how the client-side JavaScript cost collapses as the work moves onto the server. Step through from the earliest pattern to today's async <code>Server Component</code>.</p>
+    </div>
+    <div class="xform" id="xform">
+      <div class="xform-head">
+        <span class="xform-stage-label" id="xformLabel"></span>
+        <span class="eyebrow" id="xformDelta"></span>
+      </div>
+      <div class="xform-bar-track">
+        <div class="xform-bar-fill" id="xformBar"><span id="xformBytes"></span></div>
+      </div>
+      <pre class="xform-code" id="xformCode"></pre>
+      <div class="xform-steps" id="xformSteps"></div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ COMPARISON CARDS ═══════════════════════ -->
+  <section class="section shell" id="compare">
+    <div class="section-head">
+      <div class="num">03 — Head to head</div>
+      <h2>Eleven axes of difference.</h2>
+      <p>Each card is one dimension where the two routers diverge. Click for the deep cut: how the <code>Pages Router</code> did it, how the <code>App Router</code> does it, why the change, and what it costs you. Several cards include a small interactive diagram, and every highlighted term is clickable.</p>
+    </div>
+    <div class="cards" id="cards"><!-- injected from DIMS --></div>
+  </section>
+
+  <!-- ═══════════════════════ WHY THE SWITCH ═══════════════════════ -->
+  <section class="section shell" id="why">
+    <div class="section-head">
+      <div class="num">04 — Why Next.js switched</div>
+      <h2>Five forces, one rewrite.</h2>
+      <p>The App Router wasn't a coat of paint on the old one — it's a different architecture because the old one had hit structural ceilings. These are the forces that pushed the default execution environment from the browser back to the server.</p>
+    </div>
+    <div class="forces">
+      <div class="force purple">
+        <span class="force-n">Force 01</span>
+        <span class="force-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="6" rx="2"/><rect x="2" y="14" width="20" height="6" rx="2"/></svg></span>
+        <h3>React itself moved</h3>
+        <p>React shipped <button class="term" data-term="rsc">Server Components</button> as a first-class primitive. A framework built around the old "everything is a client component" model couldn't expose them cleanly. The App Router is the runtime that makes RSC real.</p>
+      </div>
+      <div class="force teal">
+        <span class="force-n">Force 02</span>
+        <span class="force-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg></span>
+        <h3>Layouts that persist</h3>
+        <p>The Pages Router had no real <button class="term" data-term="nested-layouts">nested layouts</button>; the <button class="term" data-term="getlayout">getLayout</button> hack re-ran on every navigation. The App Router makes <button class="term" data-term="layout-file">layout.tsx</button> a true tree that survives navigation — <button class="term" data-term="partial-rendering">partial rendering</button>.</p>
+      </div>
+      <div class="force orange">
+        <span class="force-n">Force 03</span>
+        <span class="force-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg></span>
+        <h3>Streaming &amp; Suspense</h3>
+        <p>Page-level data fetching is all-or-nothing: nothing renders until <button class="term" data-term="getserversideprops">getServerSideProps</button> resolves. The App Router is built on React 18 <button class="term" data-term="streaming">streaming</button>, so a static shell ships instantly and slow data fills in via <button class="term" data-term="suspense">Suspense</button>.</p>
+      </div>
+      <div class="force rose">
+        <span class="force-n">Force 04</span>
+        <span class="force-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></span>
+        <h3>Kill the waterfall</h3>
+        <p>Tying data to the page meant child components fetched on the client, one after another — a <button class="term" data-term="waterfall">request waterfall</button>. With server-side <button class="term" data-term="colocation">colocation</button>, each component fetches its own data on the server, in parallel.</p>
+      </div>
+      <div class="force blue">
+        <span class="force-n">Force 05</span>
+        <span class="force-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
+        <h3>Less JavaScript shipped</h3>
+        <p>In the Pages Router the whole tree hydrates whether it's interactive or not. Server Components ship <strong>zero</strong> JS, so a content-heavy page can hand the browser almost nothing — the single biggest lever on <button class="term" data-term="first-load-js">First Load JS</button>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ HEAD-TO-HEAD TABLE ═══════════════════════ -->
+  <section class="section shell">
+    <div class="section-head">
+      <div class="num">05 — At a glance</div>
+      <h2>The cheat sheet.</h2>
+      <p>The same eleven dimensions, side by side, for when you just need the one-liner.</p>
+    </div>
+    <div class="vstable">
+      <div class="vstable-head">
+        <div class="vh-dim">Dimension</div>
+        <div class="vh-pages">Pages Router</div>
+        <div class="vh-app">App Router</div>
+      </div>
+      <div class="vstable-row"><div class="vr-dim">Directory</div><div class="vr-pages"><code>pages/</code>, one file per route</div><div class="vr-app"><code>app/</code>, folders with special files</div></div>
+      <div class="vstable-row"><div class="vr-dim">Default component</div><div class="vr-pages">Client Component (ships + hydrates)</div><div class="vr-app">Server Component (0 KB JS)</div></div>
+      <div class="vstable-row"><div class="vr-dim">Data fetching</div><div class="vr-pages"><code>getServerSideProps</code> / <code>getStaticProps</code></div><div class="vr-app"><code>async</code> components + <code>fetch</code></div></div>
+      <div class="vstable-row"><div class="vr-dim">Shared UI</div><div class="vr-pages"><code>_app</code> + <code>getLayout</code> pattern</div><div class="vr-app">Nested, persistent <code>layout.tsx</code></div></div>
+      <div class="vstable-row"><div class="vr-dim">Loading states</div><div class="vr-pages">Manual, per-page</div><div class="vr-app"><code>loading.tsx</code> + streaming Suspense</div></div>
+      <div class="vstable-row"><div class="vr-dim">Mutations</div><div class="vr-pages">API routes + client fetch</div><div class="vr-app">Server Actions (<code>'use server'</code>)</div></div>
+      <div class="vstable-row"><div class="vr-dim">Rendering choice</div><div class="vr-pages">Per page (SSR or SSG)</div><div class="vr-app">Per component; PPR blends both</div></div>
+      <div class="vstable-row"><div class="vr-dim">Errors</div><div class="vr-pages"><code>_error.tsx</code>, app-wide</div><div class="vr-app"><code>error.tsx</code> boundary per segment</div></div>
+      <div class="vstable-row"><div class="vr-dim">Caching</div><div class="vr-pages">Mostly explicit / simple</div><div class="vr-app">Layered cache; defaults changed in v15</div></div>
+      <div class="vstable-row"><div class="vr-dim">Status (2026)</div><div class="vr-pages">Supported, maintenance mode</div><div class="vr-app">Default, recommended for new apps</div></div>
+      <div class="vstable-row"><div class="vr-dim">Mental model</div><div class="vr-pages">Client-first, server bolted on</div><div class="vr-app">Server-first, client opt-in</div></div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ VERDICT ═══════════════════════ -->
+  <section class="section shell" id="verdict">
+    <div class="section-head">
+      <div class="num">06 — Which should you use?</div>
+      <h2>It is not a clean kill.</h2>
+      <p>The App Router is the future and the default, but "default" is not "always." The new model trades simplicity for power: the server/client boundary and the caching layers are real cognitive cost. Here is the honest split.</p>
+    </div>
+    <div class="verdict">
+      <div class="verdict-card app">
+        <span class="verdict-tag">Reach for App Router</span>
+        <h3>Default for anything new</h3>
+        <ul>
+          <li>You want minimal client JS on content-heavy pages — marketing, docs, commerce, dashboards with a static shell.</li>
+          <li>You need <button class="term" data-term="nested-layouts">persistent nested layouts</button> or per-section <button class="term" data-term="streaming">streaming</button> and <button class="term" data-term="suspense">Suspense</button>.</li>
+          <li>You want data and secrets to stay on the server via <button class="term" data-term="rsc">Server Components</button> and <button class="term" data-term="server-action">Server Actions</button>.</li>
+          <li>You're starting fresh and want the features Next.js ships to first.</li>
+        </ul>
+      </div>
+      <div class="verdict-card pages">
+        <span class="verdict-tag">Pages Router still fits</span>
+        <h3>Stable, simple, known</h3>
+        <ul>
+          <li>You have a large, working app where a rewrite buys little — it's in <button class="term" data-term="pages-router">maintenance mode</button>, not removed.</li>
+          <li>Your app is fundamentally a client-side SPA and the server-first model adds friction, not value.</li>
+          <li>You depend on libraries or patterns that haven't fully adapted to the RSC boundary.</li>
+          <li>The team already moves fast in it and the <button class="term" data-term="caching">caching model</button>'s learning curve isn't worth paying right now.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="verdict-note">
+      <b>You don't have to choose globally.</b> Both routers run in the same app — <code>app/</code> and <code>pages/</code> coexist, so teams routinely migrate <button class="term" data-term="interop">route by route</button> rather than all at once. New surfaces go in <code>app/</code>; the old ones keep working until they're worth moving.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ FOOTER ═══════════════════════ -->
+  <footer class="footer shell">
+    <div class="footer-row">
+      <div>
+        <div class="mono" style="margin-bottom:6px;">App Router vs Pages Router · architecture deep-dive</div>
+        <div>Two routing systems, one framework — from <code>pages/</code> to <code>app/</code> and the forces in between. Click anything that lights up.</div>
+      </div>
+      <div class="mono">Next.js 16 · RSC · interactive</div>
+    </div>
+  </footer>
+</main>
+
+<!-- ═══════════════════════ MODAL ROOT ═══════════════════════ -->
+<div class="modal-backdrop" id="backdrop"></div>
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal-panel" id="modalPanel">
+    <button class="modal-close theme-toggle" id="modalTheme" aria-label="Toggle theme">
+      <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+    <button class="modal-close" id="modalClose" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <header class="modal-header" id="modalHeader"></header>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ TERM POPOVER ═══════════════════════ -->
+<div class="term-popover" id="termPopover" role="tooltip">
+  <div class="pop-label">Glossary</div>
+  <h4 class="pop-title" id="popTitle"></h4>
+  <div class="pop-body" id="popBody"></div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════════
+   APP ROUTER vs PAGES ROUTER — interactive logic
+   (machinery modeled on the reused design-system reference)
+   ════════════════════════════════════════════════════════════════ */
+"use strict";
+
+function term(slug, label) {
+  var t = TERMS[slug];
+  var text = label || (t ? t.title : slug);
+  return '<button class="term" data-term="' + slug + '">' + text + '</button>';
+}
+
+/* ════════════════════════════════════════════════════════════════
+   GLOSSARY
+   ════════════════════════════════════════════════════════════════ */
+var TERMS = {
+
+  /* ── the two routers ── */
+  "pages-router": { title: "Pages Router", body: "The original Next.js routing system, living in the <code>pages/</code> directory since 2016. Each file is a route; pages are Client Components that fully <button class=\"term\" data-term=\"hydration\">hydrate</button>, with data supplied by special exports like <button class=\"term\" data-term=\"getserversideprops\">getServerSideProps</button>. Still fully supported in v16 but in <strong>maintenance mode</strong> — new features land in the App Router first." },
+  "app-router": { title: "App Router", body: "The routing system in the <code>app/</code> directory, stable since v13.4 (2023) and the <strong>default</strong> since v13. Built on <button class=\"term\" data-term=\"rsc\">React Server Components</button>: folders are routes, <button class=\"term\" data-term=\"page-file\">page.tsx</button> renders UI, <button class=\"term\" data-term=\"layout-file\">layout.tsx</button> wraps it, and components are Server Components unless marked <button class=\"term\" data-term=\"use-client\">'use client'</button>." },
+  "interop": { title: "Coexistence", body: "Both routers run in the <em>same</em> application. <code>app/</code> and <code>pages/</code> resolve side by side, so you can adopt the App Router <strong>one route at a time</strong> instead of rewriting everything. A common migration path: new surfaces in <code>app/</code>, legacy ones left in <code>pages/</code> until they're worth moving." },
+
+  /* ── routing files ── */
+  "page-file": { title: "page.tsx", body: "In the App Router, <code>page.tsx</code> is what makes a folder a publicly routable URL and renders its UI. Without it, a folder is just structure (it can still hold a <button class=\"term\" data-term=\"layout-file\">layout</button>). The Pages Router equivalent is simply the file itself in <code>pages/</code>." },
+  "layout-file": { title: "layout.tsx", body: "Wraps a route segment and <strong>all of its children</strong>. Unlike a Pages Router wrapper, a layout <em>persists</em> across navigation between sibling routes — its state and DOM are not torn down. This is the basis of <button class=\"term\" data-term=\"nested-layouts\">nested layouts</button> and <button class=\"term\" data-term=\"partial-rendering\">partial rendering</button>." },
+  "loading-file": { title: "loading.tsx", body: "An App Router convention: drop a <code>loading.tsx</code> in a segment and Next.js automatically wraps that segment's <button class=\"term\" data-term=\"page-file\">page</button> in a <button class=\"term\" data-term=\"suspense\">Suspense</button> boundary, showing your loading UI instantly while the server <button class=\"term\" data-term=\"streaming\">streams</button> the real content." },
+  "error-file": { title: "error.tsx", body: "A per-segment error boundary. An error in one segment renders <em>its</em> <code>error.tsx</code> while the rest of the page stays alive and interactive. The Pages Router only had a single app-wide <button class=\"term\" data-term=\"document-file\">_error</button> page." },
+  "template-file": { title: "template.tsx", body: "Like a <button class=\"term\" data-term=\"layout-file\">layout</button>, but it <strong>does</strong> remount on navigation — a fresh instance per route change. Useful when you specifically want enter animations or per-navigation effects that a persistent layout would skip." },
+  "not-found-file": { title: "not-found.tsx", body: "Renders when a segment calls <code>notFound()</code> or a route doesn't resolve. Scoped per segment in the App Router, versus the single global 404 page (<code>pages/404.tsx</code>) in the Pages Router." },
+  "route-handler": { title: "Route Handler", body: "<code>route.ts</code> defines server endpoints (GET, POST, …) in the App Router, using the Web <code>Request</code>/<code>Response</code> APIs. It replaces the Pages Router's <button class=\"term\" data-term=\"api-routes\">API routes</button>. Since v15, GET handlers are <strong>not</strong> cached by default." },
+  "api-routes": { title: "API routes", body: "Pages Router server endpoints under <code>pages/api/*</code>, using Node-style <code>(req, res)</code> handlers. The App Router replaces them with <button class=\"term\" data-term=\"route-handler\">Route Handlers</button> (<code>route.ts</code>) — and, for mutations, with <button class=\"term\" data-term=\"server-action\">Server Actions</button>." },
+  "app-file": { title: "_app.tsx", body: "The Pages Router's single root wrapper for every page — where you'd put global CSS, providers, and a shared shell. Combined with <button class=\"term\" data-term=\"document-file\">_document.tsx</button> it's the closest thing the old model had to a layout. The App Router replaces it with the root <button class=\"term\" data-term=\"layout-file\">layout.tsx</button>." },
+  "document-file": { title: "_document.tsx", body: "A Pages Router file that customizes the outer HTML document (the <code>&lt;html&gt;</code> and <code>&lt;body&gt;</code> tags). In the App Router, the root <button class=\"term\" data-term=\"layout-file\">layout.tsx</button> owns those tags directly." },
+  "getlayout": { title: "getLayout pattern", body: "The Pages Router had no native nested layouts, so the community settled on attaching a <code>Page.getLayout</code> function and calling it in <button class=\"term\" data-term=\"app-file\">_app</button>. It worked, but the layout <strong>re-ran on every navigation</strong> — the exact limitation <button class=\"term\" data-term=\"nested-layouts\">App Router layouts</button> were built to fix." },
+  "segment": { title: "Route segment", body: "One folder level in an App Router URL. Each segment can own a <button class=\"term\" data-term=\"layout-file\">layout</button>, <button class=\"term\" data-term=\"loading-file\">loading</button>, <button class=\"term\" data-term=\"error-file\">error</button>, and <button class=\"term\" data-term=\"page-file\">page</button> — letting Next.js render, stream, and cache each level independently." },
+  "parallel-routes": { title: "Parallel routes", body: "An App Router feature (<code>@slot</code> folders) for rendering multiple independent pages into one layout at the same time — think a dashboard with simultaneously-routable panels. No real Pages Router equivalent." },
+  "nested-layouts": { title: "Nested layouts", body: "Layouts that compose down the route tree, each wrapping the one below it. The shared shell renders once and <strong>persists</strong> as you navigate between sibling pages, so only the changed segment re-renders. See <button class=\"term\" data-term=\"partial-rendering\">partial rendering</button>." },
+  "partial-rendering": { title: "Partial rendering", body: "On navigation, the App Router re-renders only the route <button class=\"term\" data-term=\"segment\">segments</button> that actually changed, reusing the <button class=\"term\" data-term=\"layout-file\">layouts</button> above them. The Pages Router, by contrast, effectively re-ran the whole page tree on each navigation." },
+
+  /* ── rendering model ── */
+  "rsc": { title: "React Server Components", body: "Components that render <strong>only on the server</strong> and ship <em>zero</em> JavaScript to the browser — the client receives serialized output, not the component code. The default in the <button class=\"term\" data-term=\"app-router\">App Router</button>, and the single biggest reason it ships less JS than the <button class=\"term\" data-term=\"pages-router\">Pages Router</button>." },
+  "server-component": { title: "Server Component", body: "The App Router default. Runs on the server, can <code>await</code> data directly, can read secrets and hit the database — and sends no JS for itself. It cannot use state, effects, or browser APIs; for those you reach for a <button class=\"term\" data-term=\"client-component\">Client Component</button>." },
+  "client-component": { title: "Client Component", body: "A component marked <button class=\"term\" data-term=\"use-client\">'use client'</button> — it ships to the browser and <button class=\"term\" data-term=\"hydration\">hydrates</button>, so it can use <code>useState</code>, effects, and event handlers. In the Pages Router <em>every</em> component was effectively this; in the App Router it's opt-in." },
+  "use-client": { title: "'use client'", body: "A directive at the top of a file marking it (and everything it imports) as a <button class=\"term\" data-term=\"client-component\">Client Component</button> that ships to the browser. It draws the server/client boundary — everything above it stays a <button class=\"term\" data-term=\"server-component\">Server Component</button>." },
+  "use-server": { title: "'use server'", body: "Marks a function as a <button class=\"term\" data-term=\"server-action\">Server Action</button>: it runs on the server even when called from client code. The build wires up a secure RPC boundary so the browser never sees the implementation." },
+  "server-action": { title: "Server Action", body: "An <code>async</code> function (<button class=\"term\" data-term=\"use-server\">'use server'</button>) you can call directly from a component — including from a form — to mutate data on the server, no hand-written <button class=\"term\" data-term=\"api-routes\">API route</button> needed. The App Router's answer to forms and mutations." },
+  "hydration": { title: "Hydration", body: "Attaching React's event listeners and state to server-rendered HTML so it becomes interactive. In the Pages Router the <strong>whole tree</strong> hydrates; in the App Router only <button class=\"term\" data-term=\"use-client\">'use client'</button> islands do — far less work, far less JS." },
+  "selective-hydration": { title: "Selective hydration", body: "React 18 hydrates interactive parts independently and prioritizes the ones the user touches first, instead of one blocking pass over the entire tree. Pairs naturally with the App Router's <button class=\"term\" data-term=\"use-client\">island</button> model." },
+  "island-architecture": { title: "Islands", body: "A page that's mostly static server-rendered HTML with small, independent interactive 'islands' that hydrate on their own. The App Router's <button class=\"term\" data-term=\"rsc\">Server</button>/<button class=\"term\" data-term=\"client-component\">Client</button> split is essentially islands built into the framework." },
+  "rsc-payload": { title: "RSC payload", body: "The compact serialized description of the rendered Server Component tree that the server streams to the client — rendered output and references to <button class=\"term\" data-term=\"use-client\">Client Components</button>, not the server code itself. React uses it to reconcile the UI without re-downloading server logic." },
+  "streaming": { title: "Streaming", body: "Sending HTML to the browser in chunks as it becomes ready, instead of waiting for the whole page. The App Router streams a static shell immediately and fills in slow, data-dependent holes as they resolve — built on React 18 and <button class=\"term\" data-term=\"suspense\">Suspense</button>." },
+  "suspense": { title: "Suspense", body: "A React boundary that shows a fallback while its children are still loading. In the App Router it's the unit of <button class=\"term\" data-term=\"streaming\">streaming</button>: anything inside a <code>&lt;Suspense&gt;</code> (or a <button class=\"term\" data-term=\"loading-file\">loading.tsx</button>) can stream in after the shell." },
+  "ppr": { title: "Partial Prerendering", body: "An App Router rendering mode where a single route ships a <strong>static prerendered shell</strong> and <button class=\"term\" data-term=\"streaming\">streams</button> its dynamic holes at request time — combining CDN-speed static delivery with per-request data in one response. There is no Pages Router equivalent; rendering there was one mode per page." },
+  "waterfall": { title: "Request waterfall", body: "Sequential, dependent requests where each fetch can't start until the previous finishes — parent renders, child mounts, child fetches, and so on. Common in client-fetching Pages Router apps. Server-side <button class=\"term\" data-term=\"colocation\">colocation</button> lets the App Router run independent fetches <strong>in parallel</strong> instead." },
+  "colocation": { title: "Data colocation", body: "Putting data fetching <em>inside</em> the component that needs it, rather than hoisting it to a page-level export. The App Router enables this because any <button class=\"term\" data-term=\"server-component\">Server Component</button> can <code>await</code> its own data on the server." },
+
+  /* ── pages-era data fetching ── */
+  "getserversideprops": { title: "getServerSideProps", body: "A Pages Router export that runs on the server <strong>on every request</strong>, returning props for the page (<button class=\"term\" data-term=\"ssr\">SSR</button>). Page-level only — children couldn't use it — which is what pushed nested data to the client and created <button class=\"term\" data-term=\"waterfall\">waterfalls</button>." },
+  "getstaticprops": { title: "getStaticProps", body: "A Pages Router export that runs at <strong>build time</strong>, baking data into static HTML (<button class=\"term\" data-term=\"ssg\">SSG</button>). Pair it with <button class=\"term\" data-term=\"getstaticpaths\">getStaticPaths</button> for dynamic routes and <button class=\"term\" data-term=\"isr\">ISR</button> to revalidate." },
+  "getstaticpaths": { title: "getStaticPaths", body: "Tells the Pages Router <em>which</em> dynamic route values to prerender at build time (every blog slug, every product id). The App Router replaces it with <button class=\"term\" data-term=\"generatestaticparams\">generateStaticParams</button>." },
+  "getinitialprops": { title: "getInitialProps", body: "The earliest Next.js data method. It ran on the server for the first request and <strong>on the client</strong> for subsequent navigations — convenient, but it opted the whole page out of automatic static optimization. Superseded by <button class=\"term\" data-term=\"getserversideprops\">getServerSideProps</button> / <button class=\"term\" data-term=\"getstaticprops\">getStaticProps</button>." },
+  "generatestaticparams": { title: "generateStaticParams", body: "The App Router's build-time list of dynamic-segment values to prerender — the successor to <button class=\"term\" data-term=\"getstaticpaths\">getStaticPaths</button>. Paths not returned are rendered on demand." },
+
+  /* ── rendering strategies ── */
+  "ssr": { title: "SSR", body: "<strong>Server-Side Rendering</strong>: HTML is generated on the server per request. In the Pages Router this was a whole-page choice via <button class=\"term\" data-term=\"getserversideprops\">getServerSideProps</button>; in the App Router it's the behavior of any route that reads request-time data." },
+  "ssg": { title: "SSG", body: "<strong>Static Site Generation</strong>: pages are rendered to HTML at build time and served from a CDN. <button class=\"term\" data-term=\"getstaticprops\">getStaticProps</button> in the Pages Router; the default for data-free routes in the App Router." },
+  "isr": { title: "ISR", body: "<strong>Incremental Static Regeneration</strong>: serve a static page, then quietly regenerate it after a revalidation window — CDN speed with data that stays reasonably fresh. Available in both routers." },
+  "csr": { title: "CSR", body: "<strong>Client-Side Rendering</strong>: the browser downloads JS and renders in place. The Pages Router leaned heavily on this for anything past the initial paint; the App Router pushes most rendering back to the server." },
+  "dynamic-rendering": { title: "Dynamic rendering", body: "Rendering a route per request because it depends on request-time data (cookies, headers, search params). In the App Router this is decided automatically by the APIs a route uses, rather than by a page-level config." },
+  "static-rendering": { title: "Static rendering", body: "Rendering a route once (at build or first request) and reusing the result. The App Router default unless a route opts into <button class=\"term\" data-term=\"dynamic-rendering\">dynamic</button> behavior." },
+
+  /* ── caching ── */
+  "caching": { title: "App Router caching", body: "The App Router layers several caches — <button class=\"term\" data-term=\"request-memoization\">request memoization</button>, the <button class=\"term\" data-term=\"data-cache\">Data Cache</button>, the <button class=\"term\" data-term=\"full-route-cache\">Full Route Cache</button>, and the client <button class=\"term\" data-term=\"router-cache\">Router Cache</button>. Powerful, but its early <em>defaults</em> confused many teams — which is why v15 changed several of them." },
+  "request-memoization": { title: "Request memoization", body: "Within a single render, identical <code>fetch</code> calls are de-duplicated automatically, so you can fetch the same data in several components without N round-trips. Lives only for that one render pass." },
+  "data-cache": { title: "Data Cache", body: "A persistent server cache for fetched data across requests and deploys, controlled per-<code>fetch</code> with options like <code>revalidate</code>. As of v15, <code>fetch</code> is <strong>not</strong> cached by default — you opt in." },
+  "full-route-cache": { title: "Full Route Cache", body: "Caches the rendered HTML and <button class=\"term\" data-term=\"rsc-payload\">RSC payload</button> of static routes on the server at build time, so they're served without re-rendering. Invalidated when the underlying <button class=\"term\" data-term=\"data-cache\">data</button> is revalidated." },
+  "router-cache": { title: "Router Cache", body: "An in-memory client cache of visited route segments, so back/forward and re-navigation feel instant. v15 made page segments uncached by default (a <code>staleTime</code> of 0) to avoid serving stale content." },
+  "use-cache": { title: "'use cache'", body: "The Cache Components directive introduced around v16 — an explicit <code>'use cache'</code> marker that opts a function, component, or route into caching, replacing the older implicit, hard-to-predict defaults with something you declare on purpose." },
+
+  /* ── perf & misc ── */
+  "first-load-js": { title: "First Load JS", body: "The JavaScript a visitor must download before a route becomes interactive — the headline number in <code>next build</code>'s per-route table. Cutting it is the App Router's central performance pitch, mostly via <button class=\"term\" data-term=\"rsc\">Server Components</button> shipping none." },
+  "ttfb": { title: "TTFB", body: "<strong>Time To First Byte</strong> — how long until the browser gets the first chunk of the response. <button class=\"term\" data-term=\"streaming\">Streaming</button> improves perceived TTFB by sending the shell before slow data is ready." },
+  "prefetch": { title: "Prefetch", body: "Loading a route's code (and, in the App Router, its <button class=\"term\" data-term=\"rsc-payload\">payload</button>) before the user clicks, so navigation feels instant. <code>&lt;Link&gt;</code> prefetches automatically in both routers; the App Router prefetches at the segment level." },
+  "link": { title: "next/link", body: "Next.js's client-side navigation component. It intercepts clicks for soft navigation and <button class=\"term\" data-term=\"prefetch\">prefetches</button> destinations. In the App Router it prefetches <button class=\"term\" data-term=\"segment\">segments</button> and pairs with the <button class=\"term\" data-term=\"router-cache\">Router Cache</button>." },
+  "metadata-api": { title: "Metadata API", body: "The App Router's way to set <code>&lt;title&gt;</code>, Open Graph tags, and the rest — a <code>metadata</code> export or <code>generateMetadata()</code> per segment, rendered on the server. Replaces manually rendering <code>next/head</code> in the Pages Router." },
+  "middleware": { title: "Middleware", body: "Code that runs <em>before</em> a request completes, at the edge — auth checks, redirects, rewrites. Shared by both routers, defined once at the project root." },
+  "edge-runtime": { title: "Edge runtime", body: "A lightweight, globally-distributed runtime (a constrained subset of Node APIs) that runs code close to users. Available to both routers for <button class=\"term\" data-term=\"middleware\">middleware</button> and selected routes." }
+};
+
+/* exact <code> text → glossary slug (auto-lights inline code) */
+var CODE_TERMS = {
+  "app/": "app-router",
+  "pages/": "pages-router",
+  "page.tsx": "page-file",
+  "layout.tsx": "layout-file",
+  "loading.tsx": "loading-file",
+  "error.tsx": "error-file",
+  "template.tsx": "template-file",
+  "route.ts": "route-handler",
+  "_app.tsx": "app-file",
+  "_app": "app-file",
+  "_document.tsx": "document-file",
+  "_error.tsx": "document-file",
+  "'use client'": "use-client",
+  "'use server'": "use-server",
+  "'use cache'": "use-cache",
+  "getServerSideProps": "getserversideprops",
+  "getStaticProps": "getstaticprops",
+  "getStaticPaths": "getstaticpaths",
+  "getInitialProps": "getinitialprops",
+  "generateStaticParams": "generatestaticparams",
+  "next/link": "link",
+  "next/head": "metadata-api"
+};
+
+/* ════════════════════════════════════════════════════════════════
+   DIMENSIONS — one card + modal per axis of comparison.
+   (kept under the variable name PHASES so the card/modal machinery
+    below is reused unchanged.)
+   ════════════════════════════════════════════════════════════════ */
+var PHASES = [
+{
+  id: "routing", color: "blue", num: 1, layer: "Routing",
+  title: "File & folder routing",
+  tagline: "A file is a route — but the App Router routes folders, not files.",
+  pills: ["pages/x.tsx", "app/x/page.tsx", "conventions"],
+  sections: [
+    { h: "Pages Router", p: "Routing is flat and file-based: " + term("pages-router", "pages/about.tsx") + " becomes <code>/about</code>, <code>pages/blog/[slug].tsx</code> becomes a dynamic route. A handful of special files — " + term("app-file", "_app.tsx") + ", " + term("document-file", "_document.tsx") + ", <code>404.tsx</code> — cover the cross-cutting concerns." },
+    { h: "App Router", p: "Routing is folder-based, and each " + term("segment") + " is a small toolkit of conventional files: " + term("page-file", "page.tsx") + " for the UI, " + term("layout-file", "layout.tsx") + " for shared shell, " + term("loading-file", "loading.tsx") + ", " + term("error-file", "error.tsx") + ", " + term("not-found-file", "not-found.tsx") + ", and " + term("route-handler", "route.ts") + " for endpoints. Advanced shapes like " + term("parallel-routes", "parallel routes") + " fall out of the same folder grammar." },
+    { h: "Why it changed", p: "The flat file model had nowhere to hang per-route behavior. Promoting the folder to a first-class unit gives every level its own loading state, error boundary, and layout — the structural prerequisite for " + term("nested-layouts", "nested layouts") + " and " + term("partial-rendering", "partial rendering") + "." }
+  ]
+},
+{
+  id: "rendering", color: "purple", num: 2, layer: "Rendering model",
+  title: "The rendering model",
+  tagline: "Client-first with the server bolted on — vs server-first with the client opt-in.",
+  pills: ["RSC by default", "0 KB JS", "'use client'"],
+  sections: [
+    { h: "Pages Router", p: "Every component is effectively a " + term("client-component", "Client Component") + ": the server renders HTML for the first paint, then ships the <em>entire</em> tree to the browser and " + term("hydration", "hydrates") + " all of it. The server is a rendering step bolted onto a fundamentally client-side app." },
+    { h: "App Router", p: "Components are " + term("rsc", "Server Components") + " by default — they run on the server, can " + term("colocation", "fetch their own data") + ", and ship <strong>zero JavaScript</strong>. You opt specific pieces into the browser with " + term("use-client", "'use client'") + ", producing an " + term("island-architecture", "islands") + " layout where only the interactive bits hydrate." },
+    { h: "Why it matters", p: "This is the headline difference and the source of most others. Moving the default to the server is what enables less " + term("first-load-js", "shipped JS") + ", server-side " + term("colocation", "data colocation") + ", and " + term("streaming") + " — but it also introduces a real server/client boundary you now have to reason about." }
+  ]
+},
+{
+  id: "data", color: "teal", num: 3, layer: "Data fetching",
+  title: "Data fetching",
+  tagline: "Magic page-level exports — vs awaiting data right inside a component.",
+  pills: ["get*Props", "async components", "fetch"],
+  sections: [
+    { h: "Pages Router", p: "Data is fetched by special page-level exports: " + term("getserversideprops", "getServerSideProps") + " (per request), " + term("getstaticprops", "getStaticProps") + " (build time), with " + term("getstaticpaths", "getStaticPaths") + " for dynamic params. Only the <em>page</em> can use them, so the result gets prop-drilled down the tree." },
+    { h: "App Router", p: "Any " + term("server-component", "Server Component") + " can be <code>async</code> and simply <code>await</code> its data — a database call, an ORM, or <code>fetch</code> — right where it's used. No special export, no prop-drilling. " + term("generatestaticparams", "generateStaticParams") + " supplies the build-time list for static dynamic routes." },
+    { h: "Why it changed", p: "Page-level fetching couples the <em>whole page</em> to its slowest query and forces nested data onto the client, creating " + term("waterfall", "waterfalls") + ". " + term("colocation", "Colocating") + " fetches in components lets independent requests run in parallel on the server and keeps secrets off the wire." }
+  ]
+},
+{
+  id: "layouts", color: "amber", num: 4, layer: "Shared UI",
+  title: "Layouts & shared UI",
+  tagline: "A re-running getLayout hack — vs a real layout tree that persists.",
+  pills: ["layout.tsx", "persistent", "nested"],
+  sections: [
+    { h: "Pages Router", p: "There were no native nested layouts. Global shell lived in " + term("app-file", "_app.tsx") + "; anything more granular used the community " + term("getlayout", "getLayout pattern") + ", which re-ran on every navigation — re-mounting your sidebar, losing its scroll position and state each time." },
+    { h: "App Router", p: term("layout-file", "layout.tsx") + " files compose into a real tree. A layout wraps its " + term("segment") + " and all children, and crucially it <strong>persists</strong> across navigation between siblings — its state and DOM survive. Navigating only re-renders the segment that changed (" + term("partial-rendering", "partial rendering") + ")." },
+    { h: "Why it matters", p: "Persistent layouts are why an App Router sidebar keeps its scroll and a media player keeps playing as you move between pages. It also means the framework can render and " + term("prefetch") + " each level independently, rather than treating every navigation as a full page swap." }
+  ]
+},
+{
+  id: "streaming", color: "orange", num: 5, layer: "Loading",
+  title: "Loading & streaming",
+  tagline: "Blank until the data resolves — vs a shell now, data as it arrives.",
+  pills: ["loading.tsx", "Suspense", "stream"],
+  sections: [
+    { h: "Pages Router", p: "Rendering is all-or-nothing. With " + term("getserversideprops", "getServerSideProps") + ", the server holds the response until every query finishes, so the user waits on a blank screen for the slowest one. Loading skeletons had to be hand-built and usually meant fetching on the client instead." },
+    { h: "App Router", p: "Built on React 18 " + term("streaming") + ". Drop a " + term("loading-file", "loading.tsx") + " (or wrap a slow part in " + term("suspense", "Suspense") + ") and Next.js sends a static shell immediately, then " + term("streaming", "streams") + " each dynamic hole in as its data resolves. " + term("ppr", "Partial Prerendering") + " takes this to its conclusion: one route, static shell plus streamed dynamic content." },
+    { h: "Why it matters", p: "Perceived speed: " + term("ttfb", "first byte") + " arrives fast and the page paints progressively, instead of one long wait gated by the slowest query. The slow widget no longer holds the whole page hostage." }
+  ]
+},
+{
+  id: "waterfalls", color: "rose", num: 6, layer: "Data flow",
+  title: "The waterfall problem",
+  tagline: "Sequential client fetches — vs parallel fetches on the server.",
+  pills: ["serial vs parallel", "colocation"],
+  sections: [
+    { h: "Pages Router", p: "Because only the page could fetch, nested data tended to fetch on the client: a component mounts, runs a <code>useEffect</code>, fetches, renders a child, which mounts and fetches again — a " + term("waterfall", "request waterfall") + " where each round-trip waits on the last." },
+    { h: "App Router", p: "With server-side " + term("colocation", "colocation") + ", each " + term("server-component", "Server Component") + " awaits its own data on the server. Independent fetches that don't depend on each other run <strong>in parallel</strong>; React renders them together. " + term("request-memoization", "Request memoization") + " also de-dupes identical fetches across the tree automatically." },
+    { h: "The catch", p: "Server Components don't make waterfalls impossible — <code>await</code>-ing one fetch and then another in the same component is still sequential. The model just makes the parallel path the natural one, and keeps the round-trips on the fast server-to-data link instead of the browser-to-server one." }
+  ]
+},
+{
+  id: "bundle", color: "green", num: 7, layer: "Client JS",
+  title: "Client JavaScript shipped",
+  tagline: "Hydrate the whole tree — vs hydrate only the islands.",
+  pills: ["First Load JS", "0 KB RSC", "islands"],
+  sections: [
+    { h: "Pages Router", p: "Interactive or not, the whole page tree ships to the browser and " + term("hydration", "hydrates") + ". A page that's 95% static content still pays to download and re-execute all of it, inflating " + term("first-load-js", "First Load JS") + "." },
+    { h: "App Router", p: term("rsc", "Server Components") + " ship <strong>no JavaScript</strong> — the browser gets their rendered output via the " + term("rsc-payload", "RSC payload") + ", not their code. Only " + term("use-client", "'use client'") + " islands download and hydrate, via " + term("selective-hydration", "selective hydration") + ". A content page can hand the browser almost nothing." },
+    { h: "The lever", p: "The win is proportional to how much of your UI is non-interactive. Push " + term("use-client", "'use client'") + " as far down the tree as possible — a button doesn't make its whole page a Client Component, but a careless directive near the root can drag the entire subtree client-side." }
+  ]
+},
+{
+  id: "mutations", color: "blue", num: 8, layer: "Mutations",
+  title: "Mutations & forms",
+  tagline: "Hand-rolled API routes — vs calling a server function directly.",
+  pills: ["Server Actions", "'use server'", "no API route"],
+  sections: [
+    { h: "Pages Router", p: "To change data you wrote an " + term("api-routes", "API route") + " under <code>pages/api</code>, then <code>fetch</code>-ed it from the client with your own loading/error handling and revalidation. Lots of boilerplate for the common case of 'submit this form.'" },
+    { h: "App Router", p: term("server-action", "Server Actions") + " let you write an <code>async</code> function marked " + term("use-server", "'use server'") + " and call it directly — even as a form's <code>action</code>. Next.js generates the secure RPC boundary, so there's no endpoint to wire up, and the action can revalidate cached data when it's done." },
+    { h: "Why it matters", p: "The mutation lives next to the UI that triggers it, runs on the server with full access to your data layer, and degrades gracefully. It collapses the 'route + client fetch + state' trio into a single function." }
+  ]
+},
+{
+  id: "caching", color: "purple", num: 9, layer: "Caching",
+  title: "The caching model",
+  tagline: "Mostly explicit — vs powerful, layered, and once-confusing.",
+  pills: ["4 caches", "v15 defaults", "'use cache'"],
+  sections: [
+    { h: "Pages Router", p: "Caching was comparatively simple and explicit: static pages from " + term("getstaticprops", "getStaticProps") + ", revalidation via " + term("isr", "ISR") + ", and your own HTTP cache headers on " + term("api-routes", "API routes") + ". Few surprises, but also fewer built-in wins." },
+    { h: "App Router", p: "Four cooperating layers: " + term("request-memoization", "request memoization") + ", the " + term("data-cache", "Data Cache") + ", the " + term("full-route-cache", "Full Route Cache") + ", and the client " + term("router-cache", "Router Cache") + ". Together they make a lot fast by default — but the early <em>defaults</em> were the App Router's most-criticized rough edge." },
+    { h: "The course-correction", p: "Confusing implicit caching led to real bugs (stale data, accidental caching). In <strong>v15</strong>, Next.js flipped <code>fetch</code>, GET " + term("route-handler", "Route Handlers") + ", and client navigations to <strong>uncached by default</strong>. v16's " + term("use-cache", "'use cache'") + " moves further toward caching you opt into <em>explicitly</em> rather than inherit." }
+  ]
+},
+{
+  id: "errors", color: "teal", num: 10, layer: "Errors",
+  title: "Errors & not-found",
+  tagline: "One global error page — vs a boundary at every segment.",
+  pills: ["error.tsx", "per-segment", "not-found"],
+  sections: [
+    { h: "Pages Router", p: "Error handling was coarse: a single app-wide " + term("document-file", "_error.tsx") + " and one global <code>404</code> page. A failure in one widget could take down the whole route." },
+    { h: "App Router", p: "Each " + term("segment") + " can own an " + term("error-file", "error.tsx") + " boundary and a " + term("not-found-file", "not-found.tsx") + ". An error in one part of the page renders <em>its</em> fallback while the surrounding layout and siblings stay alive and interactive." },
+    { h: "Why it matters", p: "Granular boundaries mean a flaky recommendations panel doesn't blank the whole dashboard. It pairs naturally with " + term("streaming") + ": each streamed chunk has its own loading <em>and</em> error states." }
+  ]
+},
+{
+  id: "interop", color: "slate", num: 11, layer: "Migration",
+  title: "Coexistence & migration",
+  tagline: "Not a hard cutover — both routers run in the same app.",
+  pills: ["incremental", "route by route", "maintenance mode"],
+  sections: [
+    { h: "They coexist", p: term("interop", "app/ and pages/ resolve side by side") + " in one project. There's no flag day: you can add the App Router to an existing Pages Router app and move routes across one at a time." },
+    { h: "Status in 2026", p: "The " + term("app-router", "App Router") + " is the default and where new features land first; the " + term("pages-router", "Pages Router") + " is in <strong>maintenance mode</strong> — supported and stable, but not gaining new capabilities. New projects are steered to <code>app/</code>." },
+    { h: "Practical advice", p: "For a healthy existing app, migrate when a route is already being touched or would benefit from " + term("rsc", "Server Components") + ", " + term("streaming") + ", or " + term("nested-layouts", "nested layouts") + " — not for its own sake. The mental-model shift and " + term("caching", "caching") + " learning curve are the real costs to budget for." }
+  ]
+}
+];
+
+/* ════════════════════════════════════════════════════════════════
+   ENDPOINTS — the shared / lane-header diagram nodes.
+   ════════════════════════════════════════════════════════════════ */
+var ENDPOINTS = {
+  request: {
+    id: "request", color: "green", num: 0, layer: "Input",
+    title: "The incoming request",
+    tagline: "One URL, about to be handled two very different ways.",
+    pills: ["GET /blog/hello", "shared entry"],
+    sections: [
+      { h: "Same start, different paths", p: "A browser asks for <code>/blog/hello</code>. Both routers begin by matching that URL to code on disk — but what happens next is where the architectures part ways: the " + term("pages-router", "Pages Router") + " will render and ship a whole client tree, while the " + term("app-router", "App Router") + " will render " + term("rsc", "Server Components") + " and stream a payload." },
+      { h: "Follow each lane", p: "The left column is the Pages Router lifecycle; the right is the App Router's. Click any step to open its full comparison." }
+    ]
+  },
+  "pages-flow": {
+    id: "pages-flow", color: "amber", num: 0, layer: "Pages Router · overview",
+    title: "Pages Router lifecycle",
+    tagline: "Match a file, fetch at the page, render the tree, ship it all, hydrate it all.",
+    pills: ["since 2016", "client-first", "maintenance mode"],
+    sections: [
+      { h: "How it works", p: "The URL maps to a single file in " + term("pages-router", "pages/") + ". The page's " + term("getserversideprops", "get*Props") + " export runs on the server to gather data, the full React tree renders to HTML, and then the <strong>entire</strong> tree is shipped to the browser and " + term("hydration", "hydrated") + "." },
+      { h: "What it was built for", p: "It made React " + term("ssr", "server rendering") + " and " + term("ssg", "static generation") + " genuinely easy in 2016, with file-based routing and a clean hybrid static/dynamic story. For years it was the simplest way to ship a fast React site." },
+      { h: "Where it hit ceilings", p: "Page-level data fetching, no persistent " + term("nested-layouts", "nested layouts") + ", whole-tree " + term("hydration", "hydration") + ", and all-or-nothing rendering — the exact constraints the " + term("app-router", "App Router") + " was designed to remove." }
+    ]
+  },
+  "app-flow": {
+    id: "app-flow", color: "blue", num: 0, layer: "App Router · overview",
+    title: "App Router lifecycle",
+    tagline: "Match segments, render Server Components, stream the payload, hydrate islands.",
+    pills: ["default since v13", "server-first", "RSC"],
+    sections: [
+      { h: "How it works", p: "The URL maps to a tree of " + term("segment", "segments") + " (" + term("layout-file", "layout") + " then " + term("page-file", "page") + "). " + term("rsc", "Server Components") + " render on the server — " + term("colocation", "awaiting their own data") + " in parallel — and the server " + term("streaming", "streams") + " HTML plus an " + term("rsc-payload", "RSC payload") + ". Only " + term("use-client", "'use client'") + " islands ship JS and " + term("hydration", "hydrate") + "." },
+      { h: "What it was built for", p: "To move the default execution environment back to the server: less " + term("first-load-js", "client JS") + ", server-side data " + term("colocation", "colocation") + ", persistent " + term("nested-layouts", "layouts") + ", and " + term("streaming") + " with " + term("suspense", "Suspense") + " — capabilities the old model structurally couldn't offer." },
+      { h: "What it costs", p: "A real server/client boundary to reason about, a multi-layer " + term("caching", "caching model") + " (whose defaults needed correcting in v15), and a steeper mental model. Power in exchange for complexity." }
+    ]
+  }
+};
+
+/* ════════════════════════════════════════════════════════════════
+   IN-MODAL INTERACTIVE VISUALS
+   ════════════════════════════════════════════════════════════════ */
+var MVIS_TIMERS = [];
+function mvTimer(id) { MVIS_TIMERS.push(id); return id; }
+function mvClearTimers() { MVIS_TIMERS.forEach(function (id) { clearInterval(id); clearTimeout(id); }); MVIS_TIMERS = []; }
+
+function mvBox(cap, readId, inner) {
+  var d = document.createElement("div");
+  d.className = "mvis";
+  d.innerHTML =
+    '<div class="mvis-cap"><span>' + cap + '</span>' +
+    (readId ? '<span class="mvis-read" id="' + readId + '"></span>' : "") + "</div>" + inner;
+  return d;
+}
+
+var VISUALS = {
+
+  /* ── RENDERING: server vs client component → what ships ── */
+  "rendering": function () {
+    var d = mvBox("Flip the directive — watch the browser's share", "rd_read",
+      '<label class="mvis-switch" id="rd_sw" style="margin-bottom:14px;">' +
+        '<span class="mvis-track"><span class="mvis-knob"></span></span>' +
+        '<span id="rd_swl"></span>' +
+      '</label>' +
+      '<div class="mvis-zones">' +
+        '<div class="mvis-zone"><h6>Where it runs</h6><div id="rd_run"></div><div class="mvis-codeline" id="rd_code" style="margin-top:8px;"></div></div>' +
+        '<div class="mvis-zone"><h6>Shipped to browser</h6><div id="rd_ship"></div></div>' +
+      '</div>' +
+      '<div class="mvis-sub" id="rd_note"></div>');
+    var client = false;
+    function paint() {
+      d.querySelector("#rd_sw").classList.toggle("is-on", client);
+      d.querySelector("#rd_swl").textContent = client ? "with 'use client'" : "default (Server Component)";
+      d.querySelector("#rd_read").textContent = client ? "CLIENT" : "SERVER";
+      d.querySelector("#rd_run").innerHTML = client
+        ? '<span class="run-pill client">Server (prerender) + Browser</span>'
+        : '<span class="run-pill server">Server only</span>';
+      d.querySelector("#rd_code").innerHTML = client
+        ? '<span class="hl">"use client"</span> · useState ok'
+        : 'async ok · await db.query() ok';
+      d.querySelector("#rd_ship").innerHTML = client
+        ? '<div class="mvis-chip exposed">component JS bundle</div><div style="font-size:10.5px;color:var(--text-3);margin-top:6px;">downloads + hydrates</div>'
+        : '<div class="mvis-chip safe">rendered output only</div><div style="font-size:10.5px;color:var(--text-3);margin-top:6px;">0 KB JS for this component</div>';
+      d.querySelector("#rd_note").innerHTML = client
+        ? "A Client Component can hold <strong>state and handlers</strong>, but its code ships and hydrates. Push it as deep in the tree as possible."
+        : "A Server Component renders on the server and sends <strong>no JavaScript</strong> — this is the App Router default and its biggest performance lever.";
+    }
+    d.querySelector("#rd_sw").addEventListener("click", function () { client = !client; paint(); });
+    paint();
+    return d;
+  },
+
+  /* ── DATA: get*Props vs async Server Component ── */
+  "data": function () {
+    var d = mvBox("Same data, two places to fetch it", "dt_read",
+      '<label class="mvis-switch" id="dt_sw" style="margin-bottom:14px;">' +
+        '<span class="mvis-track"><span class="mvis-knob"></span></span>' +
+        '<span id="dt_swl"></span>' +
+      '</label>' +
+      '<div class="mvis-code" id="dt_code"></div>' +
+      '<div class="mvis-stats">' +
+        '<div class="mvis-stat accent"><span class="lbl">runs on</span><span class="val" id="dt_run"></span></div>' +
+        '<div class="mvis-stat"><span class="lbl">scope</span><span class="val" id="dt_scope"></span></div>' +
+        '<div class="mvis-stat"><span class="lbl">client JS</span><span class="val" id="dt_js"></span></div>' +
+      '</div>' +
+      '<div class="mvis-sub" id="dt_note"></div>');
+    var app = false;
+    function paint() {
+      d.querySelector("#dt_sw").classList.toggle("is-on", app);
+      d.querySelector("#dt_swl").textContent = app ? "App Router · async component" : "Pages Router · getServerSideProps";
+      d.querySelector("#dt_read").textContent = app ? "COLOCATED" : "PAGE-LEVEL";
+      d.querySelector("#dt_code").innerHTML = app
+        ? '<span class="c">// any component, right where data is used</span>\n<span class="k">async function</span> <span class="f">Posts</span>() {\n  <span class="k">const</span> posts = <span class="k">await</span> <span class="f">db</span>.<span class="f">posts</span>();\n  <span class="k">return</span> &lt;<span class="f">List</span> items={posts} /&gt;;\n}'
+        : '<span class="c">// only the page export can do this</span>\n<span class="k">export async function</span> <span class="f">getServerSideProps</span>() {\n  <span class="k">const</span> posts = <span class="k">await</span> <span class="f">db</span>.<span class="f">posts</span>();\n  <span class="k">return</span> { props: { posts } };\n}';
+      d.querySelector("#dt_run").textContent = "server";
+      d.querySelector("#dt_scope").textContent = app ? "any component" : "page only";
+      d.querySelector("#dt_js").innerHTML = '<span style="color:var(--green);">0 KB</span>';
+      d.querySelector("#dt_note").innerHTML = app
+        ? "Fetching lives in the component that needs it. Independent fetches run <strong>in parallel</strong>, and nothing is prop-drilled."
+        : "Only the page can fetch, so nested data gets prop-drilled — or pushed to the client, which invites a <strong>waterfall</strong>.";
+    }
+    d.querySelector("#dt_sw").addEventListener("click", function () { app = !app; paint(); });
+    paint();
+    return d;
+  },
+
+  /* ── LAYOUTS: navigate between siblings, see what re-renders ── */
+  "layouts": function () {
+    var d = mvBox("Navigate to a sibling — what survives?", "ly_read",
+      '<label class="mvis-switch" id="ly_sw" style="margin-bottom:14px;">' +
+        '<span class="mvis-track"><span class="mvis-knob"></span></span>' +
+        '<span id="ly_swl"></span>' +
+      '</label>' +
+      '<div class="mvis-tree">' +
+        '<div class="mvis-tnode" id="ly_root"><svg class="ti" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>RootLayout<span class="tbadge" id="ly_root_b">idle</span></div>' +
+        '<div class="mvis-tnode depth1" id="ly_dash"><svg class="ti" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>DashboardLayout<span class="tbadge" id="ly_dash_b">idle</span></div>' +
+        '<div class="mvis-tnode depth2" id="ly_page"><svg class="ti" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>page (settings)<span class="tbadge" id="ly_page_b">idle</span></div>' +
+      '</div>' +
+      '<button class="mvis-btn is-go" id="ly_go" style="margin-top:14px;">Navigate /dashboard → /dashboard/settings</button>' +
+      '<div class="mvis-sub" id="ly_note" style="margin-top:12px;"></div>');
+    var app = true;
+    var ids = ["ly_root", "ly_dash", "ly_page"];
+    function reset() { ids.forEach(function (i) { var n = d.querySelector("#" + i); n.classList.remove("flash", "persist"); d.querySelector("#" + i + "_b").textContent = "idle"; }); }
+    function paint() {
+      d.querySelector("#ly_sw").classList.toggle("is-on", app);
+      d.querySelector("#ly_swl").textContent = app ? "App Router (persistent layouts)" : "Pages Router (getLayout)";
+      d.querySelector("#ly_read").textContent = app ? "PARTIAL" : "FULL REMOUNT";
+      reset();
+      d.querySelector("#ly_note").innerHTML = app
+        ? "App Router: navigating a sibling re-renders only the changed page. Layouts above it <strong>persist</strong> — state and scroll intact."
+        : "Pages Router: the getLayout shell re-runs on every navigation, so the whole tree effectively <strong>remounts</strong>.";
+    }
+    function go() {
+      reset();
+      if (app) {
+        d.querySelector("#ly_root").classList.add("persist"); d.querySelector("#ly_root_b").textContent = "kept";
+        d.querySelector("#ly_dash").classList.add("persist"); d.querySelector("#ly_dash_b").textContent = "kept";
+        mvTimer(setTimeout(function () { d.querySelector("#ly_page").classList.add("flash"); d.querySelector("#ly_page_b").textContent = "re-rendered"; }, 60));
+      } else {
+        ids.forEach(function (i, k) {
+          mvTimer(setTimeout(function () { var n = d.querySelector("#" + i); n.classList.add("flash"); d.querySelector("#" + i + "_b").textContent = "remounted"; }, k * 90));
+        });
+      }
+    }
+    d.querySelector("#ly_sw").addEventListener("click", function () { app = !app; paint(); });
+    d.querySelector("#ly_go").addEventListener("click", go);
+    paint();
+    return d;
+  },
+
+  /* ── STREAMING: blank-wait vs shell-then-fill ── */
+  "streaming": function () {
+    var d = mvBox("When does the user see something?", "st_read",
+      '<label class="mvis-switch" id="st_sw" style="margin-bottom:14px;">' +
+        '<span class="mvis-track"><span class="mvis-knob"></span></span>' +
+        '<span id="st_swl"></span>' +
+      '</label>' +
+      '<div class="mvis-lane">' +
+        '<div><h5>Shell / nav</h5><div class="mvis-dot" id="st_dot1" style="left:6px;"></div></div>' +
+        '<div><h5>Slow widget</h5><div class="mvis-dot" id="st_dot2" style="left:6px;"></div></div>' +
+      '</div>' +
+      '<div class="mvis-stats">' +
+        '<div class="mvis-stat accent"><span class="lbl">first paint</span><span class="val" id="st_fp"></span></div>' +
+        '<div class="mvis-stat"><span class="lbl">full content</span><span class="val" id="st_full"></span></div>' +
+      '</div>' +
+      '<div class="mvis-sub" id="st_note"></div>');
+    var stream = true;
+    function paint() {
+      d.querySelector("#st_sw").classList.toggle("is-on", stream);
+      d.querySelector("#st_swl").textContent = stream ? "App Router (streaming + Suspense)" : "Pages Router (blocking SSR)";
+      d.querySelector("#st_read").textContent = stream ? "PROGRESSIVE" : "ALL-OR-NOTHING";
+      var dot1 = d.querySelector("#st_dot1"), dot2 = d.querySelector("#st_dot2");
+      if (stream) {
+        dot1.style.left = "8%"; dot2.style.left = "calc(100% - 20px)";
+        d.querySelector("#st_fp").innerHTML = '<span style="color:var(--green);">~instant</span>';
+        d.querySelector("#st_full").textContent = "when data resolves";
+        d.querySelector("#st_note").innerHTML = "The shell streams immediately; the slow widget fills its <strong>Suspense</strong> hole when ready. The page is usable the whole time.";
+      } else {
+        dot1.style.left = "calc(100% - 20px)"; dot2.style.left = "calc(100% - 20px)";
+        d.querySelector("#st_fp").innerHTML = '<span style="color:var(--rose);">blocked</span>';
+        d.querySelector("#st_full").textContent = "all at once, at the end";
+        d.querySelector("#st_note").innerHTML = "getServerSideProps holds the whole response until the <strong>slowest</strong> query finishes — blank screen until then.";
+      }
+    }
+    d.querySelector("#st_sw").addEventListener("click", function () { stream = !stream; paint(); });
+    paint();
+    return d;
+  },
+
+  /* ── WATERFALLS: serial vs parallel fetch bars ── */
+  "waterfalls": function () {
+    function bar(label, id) {
+      return '<div class="mvis-bar-row"><span class="mvis-bk">' + label + '</span>' +
+        '<div class="mvis-track2"><div class="mvis-fill" id="' + id + '" style="width:0;"></div></div>' +
+        '<span class="mvis-bv" id="' + id + 'v">300ms</span></div>';
+    }
+    var d = mvBox("Three independent fetches", "wf_read",
+      '<label class="mvis-switch" id="wf_sw" style="margin-bottom:14px;">' +
+        '<span class="mvis-track"><span class="mvis-knob"></span></span>' +
+        '<span id="wf_swl"></span>' +
+      '</label>' +
+      bar("user", "wf_a") + bar("posts", "wf_b") + bar("comments", "wf_c") +
+      '<div class="mvis-stats"><div class="mvis-stat accent"><span class="lbl">total time</span><span class="val" id="wf_total"></span></div>' +
+      '<div class="mvis-stat"><span class="lbl">shape</span><span class="val" id="wf_shape"></span></div></div>' +
+      '<div class="mvis-sub" id="wf_note"></div>');
+    var parallel = true;
+    function paint() {
+      d.querySelector("#wf_sw").classList.toggle("is-on", parallel);
+      d.querySelector("#wf_swl").textContent = parallel ? "App Router (parallel on server)" : "Pages Router (serial on client)";
+      d.querySelector("#wf_read").textContent = parallel ? "300ms" : "900ms";
+      var a = d.querySelector("#wf_a"), b = d.querySelector("#wf_b"), c = d.querySelector("#wf_c");
+      if (parallel) {
+        a.style.width = "33%"; a.style.marginLeft = "0";
+        b.style.width = "33%"; b.style.marginLeft = "0";
+        c.style.width = "33%"; c.style.marginLeft = "0";
+        d.querySelector("#wf_total").innerHTML = '<span style="color:var(--green);">300ms</span>';
+        d.querySelector("#wf_shape").textContent = "overlapping";
+        d.querySelector("#wf_note").innerHTML = "On the server, independent fetches start together. Total time is the <strong>slowest</strong> one, not the sum.";
+      } else {
+        a.style.width = "33%"; a.style.marginLeft = "0";
+        b.style.width = "33%"; b.style.marginLeft = "33%";
+        c.style.width = "33%"; c.style.marginLeft = "66%";
+        d.querySelector("#wf_total").innerHTML = '<span style="color:var(--rose);">900ms</span>';
+        d.querySelector("#wf_shape").textContent = "stair-step";
+        d.querySelector("#wf_note").innerHTML = "Client fetches that depend on render order run one after another — a <strong>waterfall</strong> that sums up.";
+      }
+    }
+    d.querySelector("#wf_sw").addEventListener("click", function () { parallel = !parallel; paint(); });
+    paint();
+    return d;
+  },
+
+  /* ── BUNDLE: % interactive → First Load JS ── */
+  "bundle": function () {
+    var d = mvBox("How much of the page is actually interactive?", "bd_read",
+      '<input type="range" min="0" max="100" value="25" class="mvis-slider" id="bd_slider">' +
+      '<div class="mvis-sub" id="bd_pct" style="margin:2px 0 14px;"></div>' +
+      '<div class="mvis-bar-row"><span class="mvis-bk">Pages</span><div class="mvis-track2"><div class="mvis-fill" id="bd_pages" style="background:var(--amber);"></div></div><span class="mvis-bv" id="bd_pagesv"></span></div>' +
+      '<div class="mvis-bar-row"><span class="mvis-bk">App</span><div class="mvis-track2"><div class="mvis-fill" id="bd_app" style="background:var(--blue);"></div></div><span class="mvis-bv" id="bd_appv"></span></div>' +
+      '<div class="mvis-sub" id="bd_note"></div>');
+    var FULL = 240; // illustrative KB for a fully-hydrated tree
+    function paint(pct) {
+      d.querySelector("#bd_pct").innerHTML = "<strong>" + pct + "%</strong> of the UI needs interactivity";
+      d.querySelector("#bd_read").textContent = pct + "% INTERACTIVE";
+      // Pages ships the whole tree regardless
+      d.querySelector("#bd_pages").style.width = "100%";
+      d.querySelector("#bd_pagesv").textContent = FULL + " KB";
+      // App ships ~baseline + the interactive fraction
+      var appKb = Math.round(40 + (FULL - 40) * (pct / 100));
+      d.querySelector("#bd_app").style.width = Math.round((appKb / FULL) * 100) + "%";
+      d.querySelector("#bd_appv").innerHTML = '<span style="color:var(--blue);">' + appKb + " KB</span>";
+      var saved = FULL - appKb;
+      d.querySelector("#bd_note").innerHTML = pct >= 95
+        ? "When almost everything is interactive, the gap narrows — the App Router's win scales with how <strong>static</strong> your UI is."
+        : "The Pages Router hydrates the whole tree no matter what. The App Router ships only the islands — about <strong>" + saved + " KB saved</strong> here.";
+    }
+    d.querySelector("#bd_slider").addEventListener("input", function (e) { paint(parseInt(e.target.value, 10)); });
+    paint(25);
+    return d;
+  }
+};
+
+/* ── additional visuals: one per remaining dimension + each lifecycle node ── */
+
+/* ROUTING — URL → matched file(s); Pages single file vs App segment chain */
+VISUALS["routing"] = function () {
+  var ROUTES = [
+    { url: "/",            pages: "pages/index.tsx",        app: ["app/layout.tsx", "app/page.tsx"] },
+    { url: "/blog",        pages: "pages/blog/index.tsx",   app: ["app/layout.tsx", "app/blog/layout.tsx", "app/blog/page.tsx"] },
+    { url: "/blog/hello",  pages: "pages/blog/[slug].tsx",  app: ["app/layout.tsx", "app/blog/layout.tsx", "app/blog/[slug]/page.tsx"] }
+  ];
+  var d = mvBox("Pick a URL — see what each router matches", "rou_read",
+    '<div class="mvis-pills" id="rou_urls"></div>' +
+    '<div class="mvis-cmp" style="margin-top:14px;">' +
+      '<div><div class="ph"><span>Pages Router</span><span class="mvis-badge muted">1 file</span></div>' +
+        '<div id="rou_pages" style="font-family:Geist Mono,monospace;font-size:12px;color:var(--text);"></div></div>' +
+      '<div><div class="ph"><span>App Router</span><span class="mvis-badge ok" id="rou_appcount"></span></div>' +
+        '<div id="rou_app" style="font-family:Geist Mono,monospace;font-size:12px;line-height:1.85;"></div></div>' +
+    '</div>' +
+    '<div class="mvis-sub" id="rou_note"></div>');
+  var pills = "";
+  for (var i = 0; i < ROUTES.length; i++) pills += '<button class="mvis-pill' + (i === 0 ? " is-hot" : "") + '" data-i="' + i + '" type="button">' + ROUTES[i].url + "</button>";
+  d.querySelector("#rou_urls").innerHTML = pills;
+  function paint(i) {
+    var r = ROUTES[i];
+    var pl = d.querySelectorAll("#rou_urls .mvis-pill");
+    for (var k = 0; k < pl.length; k++) pl[k].classList.toggle("is-hot", k === i);
+    d.querySelector("#rou_read").textContent = r.url;
+    d.querySelector("#rou_pages").innerHTML = '<span style="color:var(--mv);">' + r.pages + "</span>";
+    var chain = "";
+    for (var j = 0; j < r.app.length; j++) {
+      var leaf = j === r.app.length - 1;
+      chain += '<div style="' + (j > 0 ? "padding-left:" + (j * 12) + "px;" : "") + "color:" + (leaf ? "var(--mv)" : "var(--text-2)") + ';">' + (j > 0 ? "&#9492; " : "") + r.app[j] + "</div>";
+    }
+    d.querySelector("#rou_app").innerHTML = chain;
+    d.querySelector("#rou_appcount").textContent = r.app.length + " files";
+    d.querySelector("#rou_note").innerHTML = "The Pages Router maps a URL to <strong>one file</strong>. The App Router composes a <strong>chain of segments</strong> — each <code>layout.tsx</code> wraps the level below it and persists across navigations inside it.";
+  }
+  d.querySelector("#rou_urls").addEventListener("click", function (e) {
+    var b = e.target.closest(".mvis-pill");
+    if (b) paint(parseInt(b.getAttribute("data-i"), 10));
+  });
+  paint(0);
+  return d;
+};
+
+/* MUTATIONS — Server Action vs API-route round trip, stepped */
+VISUALS["mutations"] = function () {
+  var d = mvBox("Submit a form — trace the round trip", "mut_read",
+    '<div class="mvis-cmp">' +
+      '<div><div class="ph"><span>Pages Router</span></div><div class="mvis-list" id="mut_pg"></div></div>' +
+      '<div><div class="ph"><span>App Router</span></div><div class="mvis-list" id="mut_ap"></div></div>' +
+    '</div>' +
+    '<button class="mvis-btn is-go" id="mut_run" style="margin-top:14px;" type="button">&#9654; Submit</button>' +
+    '<div class="mvis-sub" id="mut_note">Both send data to the server — but watch how many moving parts each needs.</div>');
+  var PG = ["onSubmit handler", "fetch('/api/update')", "await JSON response", "manually refetch data", "setState / router.replace"];
+  var AP = ["call Server Action", "'use server' runs on server", "revalidatePath() — UI refreshes"];
+  function rows(items) {
+    var s = "";
+    for (var i = 0; i < items.length; i++) s += '<div class="mvis-item"><span style="display:flex;align-items:center;gap:10px;"><span class="mvis-status off">' + (i + 1) + "</span><span>" + items[i] + "</span></span></div>";
+    return s;
+  }
+  d.querySelector("#mut_pg").innerHTML = rows(PG);
+  d.querySelector("#mut_ap").innerHTML = rows(AP);
+  function light(list, i, done) {
+    if (i >= list.length) { if (done) done(); return; }
+    var it = list[i], st = it.querySelector(".mvis-status");
+    it.classList.add("is-kept"); st.className = "mvis-status on"; st.innerHTML = "&#10003;";
+    mvTimer(setTimeout(function () { light(list, i + 1, done); }, 430));
+  }
+  d.querySelector("#mut_run").addEventListener("click", function () {
+    mvClearTimers();
+    var pg = d.querySelectorAll("#mut_pg .mvis-item"), ap = d.querySelectorAll("#mut_ap .mvis-item");
+    var all = [].concat([].slice.call(pg), [].slice.call(ap));
+    for (var z = 0; z < all.length; z++) { all[z].classList.remove("is-kept"); var s = all[z].querySelector(".mvis-status"); s.className = "mvis-status off"; s.textContent = String(z < pg.length ? z + 1 : z - pg.length + 1); }
+    d.querySelector("#mut_read").textContent = "running…";
+    light(ap, 0);
+    light(pg, 0, function () {
+      d.querySelector("#mut_read").textContent = "done";
+      d.querySelector("#mut_note").innerHTML = "The Pages Router round-trips through an <strong>API route you wrote</strong>, then you re-sync client state by hand. A <code>Server Action</code> runs on the server directly and <code>revalidatePath</code> refreshes the affected data — no separate endpoint, no manual refetch.";
+    });
+  });
+  return d;
+};
+
+/* CACHING — the four cache layers; v14 vs v15 defaults */
+VISUALS["caching"] = function () {
+  var d = mvBox("Where does a repeat request stop?", "cac_read",
+    '<label class="mvis-switch" id="cac_sw" style="margin-bottom:14px;"><span class="mvis-track"><span class="mvis-knob"></span></span><span id="cac_swl"></span></label>' +
+    '<div class="mvis-list" id="cac_layers"></div>' +
+    '<div class="mvis-sub" id="cac_note"></div>');
+  var LAYERS = ["Request Memoization", "Data Cache", "Full Route Cache", "Router Cache"];
+  var v15 = false;
+  function paint() {
+    d.querySelector("#cac_sw").classList.toggle("is-on", v15);
+    d.querySelector("#cac_swl").textContent = v15 ? "v15+ defaults (caching is opt-in)" : "v14 defaults (cached by default)";
+    var html = "";
+    for (var i = 0; i < LAYERS.length; i++) {
+      var hit = v15 ? (i === 0) : (i <= 2);
+      html += '<div class="mvis-item' + (hit ? " is-kept" : "") + '"><span style="display:flex;align-items:center;gap:10px;"><span class="mvis-status ' + (hit ? "on" : "off") + '">' + (hit ? "&#10003;" : "&#215;") + "</span><span>" + LAYERS[i] + "</span></span><span class=\"mvis-tag\">" + (hit ? "HIT" : "MISS") + "</span></div>";
+    }
+    d.querySelector("#cac_layers").innerHTML = html;
+    d.querySelector("#cac_read").textContent = v15 ? "mostly MISS" : "served from cache";
+    d.querySelector("#cac_note").innerHTML = v15
+      ? "Since <strong>v15</strong>, <code>fetch</code>, GET Route Handlers and client navigations are <strong>uncached by default</strong> — too many people were surprised by stale data. You opt back in with <code>'use cache'</code> or route config."
+      : "In <strong>v14</strong> the App Router cached aggressively by default: a repeat request could be answered without ever touching your data source — powerful, but a frequent source of confusion.";
+  }
+  d.querySelector("#cac_sw").addEventListener("click", function () { v15 = !v15; paint(); });
+  paint();
+  return d;
+};
+
+/* ERRORS — boundary scope; throw in a segment, see what survives */
+VISUALS["errors"] = function () {
+  var d = mvBox("Throw an error in the sidebar", "err_read",
+    '<label class="mvis-switch" id="err_sw" style="margin-bottom:14px;"><span class="mvis-track"><span class="mvis-knob"></span></span><span id="err_swl"></span></label>' +
+    '<div style="border:1px solid var(--border);border-radius:11px;padding:12px;background:var(--surface-2);">' +
+      '<div id="err_nav" style="padding:8px 10px;border-radius:8px;background:var(--surface-3);font-size:12px;color:var(--text-2);margin-bottom:10px;transition:opacity 0.3s;">&#9638; Navbar (in root layout)</div>' +
+      '<div class="mvis-zones">' +
+        '<div class="mvis-zone" id="err_side"><h6>Sidebar</h6><div id="err_sidebody" style="font-size:12.5px;color:var(--text);">links&hellip;</div></div>' +
+        '<div class="mvis-zone" id="err_main"><h6>Article</h6><div id="err_mainbody" style="font-size:12.5px;color:var(--text);transition:opacity 0.3s;">content&hellip;</div></div>' +
+      '</div>' +
+    '</div>' +
+    '<button class="mvis-btn is-go" id="err_throw" style="margin-top:14px;" type="button">&#9889; Throw in sidebar</button>' +
+    '<div class="mvis-sub" id="err_note"></div>');
+  var app = true;
+  function reset() {
+    d.querySelector("#err_nav").style.opacity = "1";
+    var side = d.querySelector("#err_side"), main = d.querySelector("#err_main");
+    side.style.borderColor = ""; side.style.background = "";
+    d.querySelector("#err_sidebody").innerHTML = "links&hellip;";
+    main.style.opacity = "1"; d.querySelector("#err_mainbody").innerHTML = "content&hellip;";
+    d.querySelector("#err_read").textContent = "healthy";
+  }
+  function paintMode() {
+    d.querySelector("#err_sw").classList.toggle("is-on", app);
+    d.querySelector("#err_swl").textContent = app ? "App Router (error.tsx per segment)" : "Pages Router (one _error page)";
+    reset();
+    d.querySelector("#err_note").innerHTML = app
+      ? "The App Router lets each segment own an <code>error.tsx</code>. A throw is caught at its boundary — the layout, navbar and sibling segments stay interactive."
+      : "The Pages Router has a single top-level error page. A throw anywhere unmounts the <strong>whole tree</strong> and replaces it.";
+  }
+  d.querySelector("#err_sw").addEventListener("click", function () { app = !app; paintMode(); });
+  d.querySelector("#err_throw").addEventListener("click", function () {
+    var side = d.querySelector("#err_side"), main = d.querySelector("#err_main");
+    side.style.borderColor = "var(--rose)";
+    side.style.background = "color-mix(in srgb,var(--rose) 10%, var(--surface-2))";
+    if (app) {
+      d.querySelector("#err_sidebody").innerHTML = '<span style="color:var(--rose);">&#9888; error.tsx caught it</span>';
+      main.style.opacity = "1"; d.querySelector("#err_mainbody").innerHTML = 'content&hellip; <span style="color:var(--mv);">(alive)</span>';
+      d.querySelector("#err_nav").style.opacity = "1";
+      d.querySelector("#err_read").textContent = "contained";
+    } else {
+      d.querySelector("#err_nav").style.opacity = "0.25";
+      main.style.opacity = "0.25";
+      d.querySelector("#err_sidebody").innerHTML = '<span style="color:var(--rose);">&#9888;</span>';
+      d.querySelector("#err_mainbody").innerHTML = '<span style="color:var(--text-3);">unmounted</span>';
+      d.querySelector("#err_read").textContent = "whole page lost";
+    }
+  });
+  paintMode();
+  return d;
+};
+
+/* INTEROP — incremental migration; both routers coexist */
+VISUALS["interop"] = function () {
+  var TOTAL = 12;
+  var d = mvBox("Migrate routes one at a time", "int_read",
+    '<input type="range" min="0" max="12" value="3" class="mvis-slider" id="int_sl">' +
+    '<div class="mvis-sub" id="int_pct" style="margin:2px 0 14px;"></div>' +
+    '<div class="mvis-bar-row"><span class="mvis-bk">pages/</span><div class="mvis-track2"><div class="mvis-fill" id="int_pg" style="background:var(--amber);"></div></div><span class="mvis-bv" id="int_pgv"></span></div>' +
+    '<div class="mvis-bar-row"><span class="mvis-bk">app/</span><div class="mvis-track2"><div class="mvis-fill" id="int_ap" style="background:var(--blue);"></div></div><span class="mvis-bv" id="int_apv"></span></div>' +
+    '<div class="mvis-banner good" id="int_ban" style="margin-top:14px;"></div>');
+  function paint(n) {
+    var appPct = Math.round(n / TOTAL * 100), pgPct = 100 - appPct;
+    d.querySelector("#int_pg").style.width = pgPct + "%";
+    d.querySelector("#int_ap").style.width = appPct + "%";
+    d.querySelector("#int_pgv").textContent = (TOTAL - n) + " routes";
+    d.querySelector("#int_apv").innerHTML = '<span style="color:var(--blue);">' + n + " routes</span>";
+    d.querySelector("#int_read").textContent = appPct + "% on App";
+    d.querySelector("#int_pct").innerHTML = "<strong>" + n + "</strong> of " + TOTAL + " routes moved to the App Router";
+    d.querySelector("#int_ban").innerHTML = "<span>Both routers serve traffic from the <strong>same app</strong> &mdash; " +
+      (n === 0 ? "nothing migrated yet" : (n === TOTAL ? "migration complete" : "migrating incrementally, no big-bang rewrite")) + ".</span>";
+  }
+  d.querySelector("#int_sl").addEventListener("input", function (e) { paint(parseInt(e.target.value, 10)); });
+  paint(3);
+  return d;
+};
+
+/* REQUEST — one URL, two pipelines */
+VISUALS["request"] = function () {
+  var d = mvBox("One URL, two pipelines", "req_read",
+    '<div class="mvis-codeline">GET /blog/hello &middot; Accept: text/html</div>' +
+    '<div class="mvis-cmp" style="margin-top:14px;">' +
+      '<div><div class="ph"><span>Pages Router</span><span class="mvis-badge muted">client-first</span></div><div style="font-size:12.5px;color:var(--text-2);line-height:1.6;">match file &rarr; run <code>get*Props</code> &rarr; render &rarr; <strong>ship whole tree</strong></div></div>' +
+      '<div><div class="ph"><span>App Router</span><span class="mvis-badge ok">server-first</span></div><div style="font-size:12.5px;color:var(--text-2);line-height:1.6;">match segments &rarr; render <code>RSC</code> &rarr; <strong>stream payload</strong></div></div>' +
+    '</div>' +
+    '<div class="mvis-sub">Same entry point &mdash; the divergence is everything after the match. Open the two lifecycle nodes to follow each in full.</div>');
+  d.querySelector("#req_read").textContent = "GET /blog/hello";
+  return d;
+};
+
+/* LIFECYCLE — shared stepped player for the two overview nodes */
+function mvLifecycle(steps, readDone, note) {
+  var d = mvBox("Play the lifecycle", "lc_read",
+    '<div class="mvis-list" id="lc_list"></div>' +
+    '<button class="mvis-btn is-go" id="lc_play" style="margin-top:14px;" type="button">&#9654; Play</button>' +
+    '<div class="mvis-sub" id="lc_note">' + note + "</div>");
+  var s = "";
+  for (var i = 0; i < steps.length; i++) s += '<div class="mvis-item"><span style="display:flex;align-items:center;gap:10px;"><span class="mvis-status off">' + (i + 1) + "</span><span>" + steps[i] + "</span></span></div>";
+  d.querySelector("#lc_list").innerHTML = s;
+  d.querySelector("#lc_play").addEventListener("click", function () {
+    mvClearTimers();
+    var its = d.querySelectorAll("#lc_list .mvis-item");
+    for (var z = 0; z < its.length; z++) { its[z].classList.remove("is-kept"); var st = its[z].querySelector(".mvis-status"); st.className = "mvis-status off"; st.textContent = String(z + 1); }
+    d.querySelector("#lc_read").textContent = "running…";
+    (function step(i) {
+      if (i >= its.length) { d.querySelector("#lc_read").textContent = readDone; return; }
+      var it = its[i], st = it.querySelector(".mvis-status");
+      it.classList.add("is-kept"); st.className = "mvis-status on"; st.innerHTML = "&#10003;";
+      mvTimer(setTimeout(function () { step(i + 1); }, 480));
+    })(0);
+  });
+  return d;
+}
+VISUALS["pages-flow"] = function () {
+  return mvLifecycle(
+    ["Match URL &rarr; pages/blog/[slug].tsx", "Run get*Props on the server", "Render the full React tree &rarr; HTML", "Ship HTML + the entire JS bundle", "Hydrate the whole tree in the browser"],
+    "fully hydrated",
+    "Every run ends the same way: the <strong>whole page</strong> becomes interactive &mdash; even the parts that never change.");
+};
+VISUALS["app-flow"] = function () {
+  return mvLifecycle(
+    ["Match segments &rarr; layout + page", "Render Server Components (data in parallel)", "Stream HTML + the RSC payload", "Hydrate only 'use client' islands"],
+    "islands only",
+    "Static parts arrive as HTML and stay HTML. Only the interactive <strong>islands</strong> ship and hydrate JavaScript.");
+};
+
+/* ════════════════════════════════════════════════════════════════
+   CODE-TERM DECORATION
+   ════════════════════════════════════════════════════════════════ */
+function decorateCodeTerms(root) {
+  var codes = root.querySelectorAll("code");
+  for (var i = 0; i < codes.length; i++) {
+    var c = codes[i];
+    if (c.closest(".term")) continue;
+    if (c.classList.contains("is-term")) continue;
+    var slug = CODE_TERMS[c.textContent.trim()];
+    if (slug && TERMS[slug]) {
+      c.classList.add("is-term");
+      c.setAttribute("data-term", slug);
+    }
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ICONS + CARDS
+   ════════════════════════════════════════════════════════════════ */
+var ARROW_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
+
+var PHASE_ICONS = {
+  init:       '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  routing:    '<path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 0 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/>',
+  rendering:  '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="2" x2="9" y2="4"/><line x1="15" y1="2" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="22"/><line x1="15" y1="20" x2="15" y2="22"/><line x1="20" y1="9" x2="22" y2="9"/><line x1="20" y1="15" x2="22" y2="15"/><line x1="2" y1="9" x2="4" y2="9"/><line x1="2" y1="15" x2="4" y2="15"/>',
+  data:       '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
+  layouts:    '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>',
+  streaming:  '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+  waterfalls: '<line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+  bundle:     '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+  mutations:  '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  caching:    '<line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/>',
+  errors:     '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  interop:    '<polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/>',
+  request:    '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+  "pages-flow": '<path d="M15.5 2H8.6c-.4 0-.8.2-1.1.5-.3.3-.5.7-.5 1.1v12.8c0 .4.2.8.5 1.1.3.3.7.5 1.1.5h9.8c.4 0 .8-.2 1.1-.5.3-.3.5-.7.5-1.1V6.5L15.5 2z"/><path d="M15 2v5h5"/><line x1="10" y1="12" x2="16" y2="12"/><line x1="10" y1="16" x2="14" y2="16"/>',
+  "app-flow": '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>'
+};
+function phaseIcon(id, size) {
+  size = size || 18;
+  var paths = PHASE_ICONS[id] || PHASE_ICONS.init;
+  return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + paths + '</svg>';
+}
+
+function renderCards() {
+  var host = document.getElementById("cards");
+  if (!host) return;
+  var html = "";
+  for (var i = 0; i < PHASES.length; i++) {
+    var p = PHASES[i];
+    var pills = "";
+    for (var j = 0; j < p.pills.length; j++) {
+      pills += '<span class="card-pill">' + p.pills[j] + "</span>";
+    }
+    var nn = (p.num < 10 ? "0" : "") + p.num;
+    html +=
+      '<button class="card ' + p.color + '" data-phase="' + p.id + '" type="button">' +
+        '<div class="card-meta-top">' +
+          '<span class="card-layer">' + p.layer + "</span>" +
+          '<span class="card-num"><strong>' + nn + '</strong><span class="sep">/</span>' + PHASES.length + "</span>" +
+        "</div>" +
+        '<div class="card-title-row">' +
+          '<span class="card-icon">' + phaseIcon(p.id, 17) + '</span>' +
+          "<h3>" + p.title + "</h3>" +
+        "</div>" +
+        '<p class="card-tagline">' + p.tagline + "</p>" +
+        '<div class="card-foot">' +
+          '<div class="card-meta">' + pills + "</div>" +
+          '<span class="card-cta">Open ' + ARROW_SVG + "</span>" +
+        "</div>" +
+      "</button>";
+  }
+  host.innerHTML = html;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   MODAL
+   ════════════════════════════════════════════════════════════════ */
+var modalEl = document.getElementById("modal");
+var backdropEl = document.getElementById("backdrop");
+var panelEl = document.getElementById("modalPanel");
+var headerEl = document.getElementById("modalHeader");
+var bodyEl = document.getElementById("modalBody");
+var closeBtn = document.getElementById("modalClose");
+var lastFocused = null;
+var COLORS = ["blue", "purple", "teal", "slate", "amber", "orange", "rose", "green"];
+
+function phaseById(id) {
+  for (var i = 0; i < PHASES.length; i++) if (PHASES[i].id === id) return PHASES[i];
+  if (ENDPOINTS[id]) return ENDPOINTS[id];
+  return null;
+}
+
+function mountVisual(p) {
+  var factory = VISUALS[p.id];
+  if (!factory) return;
+  var vis;
+  try { vis = factory(); } catch (e) { console.error("[visual]", p.id, e); return; }
+  if (!vis) return;
+  vis.style.setProperty("--mv", "var(--" + p.color + ")");
+  var first = bodyEl.querySelector("section");
+  if (first) first.insertAdjacentElement("afterend", vis);
+  else bodyEl.insertAdjacentElement("afterbegin", vis);
+  decorateCodeTerms(vis);
+}
+
+function openModal(id) {
+  var p = phaseById(id);
+  if (!p) return;
+  lastFocused = document.activeElement;
+
+  for (var i = 0; i < COLORS.length; i++) panelEl.classList.remove(COLORS[i]);
+  panelEl.classList.add(p.color);
+
+  var idx = PHASES.indexOf(p);
+  var eyebrow;
+  if (idx === -1) {
+    eyebrow = p.layer;                                   // endpoint / overview node
+  } else {
+    var nn = (p.num < 10 ? "0" : "") + p.num;
+    eyebrow = p.layer + " · " + nn + " of " + PHASES.length;
+  }
+
+  headerEl.innerHTML =
+    '<div class="modal-head-row">' +
+      '<span class="modal-icon">' + phaseIcon(p.id, 22) + '</span>' +
+      '<div class="modal-head-text">' +
+        '<span class="modal-eyebrow">' + eyebrow + "</span>" +
+        "<h2>" + p.title + "</h2>" +
+      "</div>" +
+    "</div>" +
+    '<p class="modal-tag">' + p.tagline + "</p>";
+
+  var bodyHtml = "";
+  for (var s = 0; s < p.sections.length; s++) {
+    bodyHtml += "<section><h3>" + p.sections[s].h + "</h3>" + p.sections[s].p + "</section>";
+  }
+  bodyEl.innerHTML = bodyHtml;
+
+  decorateCodeTerms(bodyEl);
+  mountVisual(p);
+
+  backdropEl.classList.add("is-open");
+  modalEl.classList.add("is-open");
+  modalEl.setAttribute("aria-hidden", "false");
+  document.body.style.overflow = "hidden";
+  bodyEl.scrollTop = 0;
+  closeBtn.focus();
+}
+
+function closeModal() {
+  dismissTerm();
+  mvClearTimers();
+  backdropEl.classList.remove("is-open");
+  modalEl.classList.remove("is-open");
+  modalEl.setAttribute("aria-hidden", "true");
+  document.body.style.overflow = "";
+  if (lastFocused && lastFocused.focus) lastFocused.focus();
+}
+
+/* ════════════════════════════════════════════════════════════════
+   TERM POPOVER
+   ════════════════════════════════════════════════════════════════ */
+var popEl = document.getElementById("termPopover");
+var popTitle = document.getElementById("popTitle");
+var popBody = document.getElementById("popBody");
+var litEl = null;
+
+function lightTerm(btn) {
+  var slug = btn.getAttribute("data-term");
+  var t = TERMS[slug];
+  if (!t) return;
+  if (litEl && litEl !== btn) litEl.classList.remove("is-lit");
+  litEl = btn;
+  btn.classList.add("is-lit");
+  popTitle.textContent = t.title;
+  popBody.innerHTML = t.body;
+  popEl.style.visibility = "hidden";
+  popEl.classList.add("is-open");
+  var pw = popEl.offsetWidth, ph = popEl.offsetHeight;
+  popEl.style.visibility = "";
+  positionPopover(btn, pw, ph);
+  decorateCodeTerms(popEl);
+}
+
+function positionPopover(btn, pw, ph) {
+  var r = btn.getBoundingClientRect();
+  var pad = 12, gap = 10;
+  var left = r.left + r.width / 2 - pw / 2;
+  left = Math.max(pad, Math.min(left, window.innerWidth - pw - pad));
+  var top = r.bottom + gap;
+  if (top + ph > window.innerHeight - pad && r.top - gap - ph > pad) {
+    top = r.top - gap - ph;
+  }
+  top = Math.max(pad, Math.min(top, window.innerHeight - ph - pad));
+  popEl.style.left = left + "px";
+  popEl.style.top = top + "px";
+}
+
+function repositionLit() {
+  if (!litEl) return;
+  positionPopover(litEl, popEl.offsetWidth, popEl.offsetHeight);
+}
+
+function dismissTerm() {
+  popEl.classList.remove("is-open");
+  if (litEl) litEl.classList.remove("is-lit");
+  litEl = null;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   DATA-FETCHING EVOLUTION WIDGET — client JS collapses era by era
+   ════════════════════════════════════════════════════════════════ */
+var XFORM = [
+  {
+    n: "01", title: "getInitialProps", bytes: 92, max: 92,
+    label: "Pages Router · 2016 — the original data method",
+    delta: "92 KB client JS — runs on server AND client",
+    code:
+'<span class="c-fn">Page</span>.getInitialProps = <span class="c-kw">async</span> (ctx) => {\n' +
+'  <span class="c-kw">const</span> res = <span class="c-kw">await</span> <span class="c-fn">fetch</span>(<span class="c-str">\'https://api/posts\'</span>);\n' +
+'  <span class="c-kw">return</span> { posts: <span class="c-kw">await</span> res.<span class="c-fn">json</span>() };\n' +
+'};\n' +
+'<span class="c-com">// isomorphic: the fetch + page both ship to the browser</span>'
+  },
+  {
+    n: "02", title: "getServerSideProps", bytes: 70, max: 92,
+    label: "Pages Router · 2020 (v9.3) — server-only data",
+    delta: "−22 KB — data fn never enters the browser bundle",
+    code:
+'<span class="c-kw">export async function</span> <span class="c-fn">getServerSideProps</span>() {\n' +
+'  <span class="c-kw">const</span> res = <span class="c-kw">await</span> <span class="c-fn">fetch</span>(<span class="c-str">\'https://api/posts\'</span>);\n' +
+'  <span class="c-kw">return</span> { props: { posts: <span class="c-kw">await</span> res.<span class="c-fn">json</span>() } };\n' +
+'}\n' +
+'<span class="c-com">// data fn stripped out — but the whole page still hydrates</span>'
+  },
+  {
+    n: "03", title: "Server Component", bytes: 24, max: 92,
+    label: "App Router · 2023 — async components on the server",
+    delta: "−46 KB — this component ships zero JS",
+    code:
+'<span class="c-kw">export default async function</span> <span class="c-fn">Page</span>() {\n' +
+'  <span class="c-kw">const</span> res = <span class="c-kw">await</span> <span class="c-fn">fetch</span>(<span class="c-str">\'https://api/posts\'</span>);\n' +
+'  <span class="c-kw">const</span> posts = <span class="c-kw">await</span> res.<span class="c-fn">json</span>();\n' +
+'  <span class="c-kw">return</span> &lt;<span class="c-fn">PostList</span> posts={posts} /&gt;;\n' +
+'}\n' +
+'<span class="c-com">// no props plumbing · render stays on the server</span>'
+  },
+  {
+    n: "04", title: "Streamed + cached", bytes: 16, max: 92,
+    label: "App Router · 2025 (v16) — cached work, streamed shell",
+    delta: "−8 KB — only interactive islands ship JS",
+    code:
+'<span class="c-str">\'use cache\'</span>\n' +
+'<span class="c-kw">export default async function</span> <span class="c-fn">Page</span>() {\n' +
+'  <span class="c-kw">const</span> posts = <span class="c-kw">await</span> <span class="c-fn">getPosts</span>();  <span class="c-com">// memoized</span>\n' +
+'  <span class="c-kw">return</span> &lt;<span class="c-fn">Suspense</span>&gt;&lt;<span class="c-fn">PostList</span> posts={posts} /&gt;&lt;/<span class="c-fn">Suspense</span>&gt;;\n' +
+'}'
+  }
+];
+
+var xLabel = document.getElementById("xformLabel");
+var xDelta = document.getElementById("xformDelta");
+var xBar = document.getElementById("xformBar");
+var xBytes = document.getElementById("xformBytes");
+var xCode = document.getElementById("xformCode");
+var xSteps = document.getElementById("xformSteps");
+var xActive = 0;
+
+function renderXformSteps() {
+  if (!xSteps) return;
+  var html = "";
+  for (var i = 0; i < XFORM.length; i++) {
+    var s = XFORM[i];
+    html +=
+      '<button class="xform-step' + (i === xActive ? " is-active" : "") + '" data-step="' + i + '" type="button">' +
+        '<div class="s-n">' + s.n + "</div>" +
+        '<div class="s-t">' + s.title + "</div>" +
+        '<div class="s-d">' + s.bytes + " KB</div>" +
+      "</button>";
+  }
+  xSteps.innerHTML = html;
+}
+
+function showXform(i) {
+  xActive = i;
+  var s = XFORM[i];
+  xLabel.innerHTML = s.label;
+  xDelta.textContent = s.delta;
+  xCode.innerHTML = s.code;
+  xBytes.textContent = s.bytes + " KB";
+  var pct = Math.round((s.bytes / s.max) * 100);
+  xBar.style.width = pct + "%";
+  var btns = xSteps.querySelectorAll(".xform-step");
+  for (var k = 0; k < btns.length; k++) btns[k].classList.toggle("is-active", k === i);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   THEME + NAV
+   ════════════════════════════════════════════════════════════════ */
+var themeBtn = document.getElementById("themeToggle");
+function applyTheme(t) {
+  document.documentElement.setAttribute("data-theme", t);
+  try { localStorage.setItem("nba-theme", t); } catch (e) {}
+}
+function initTheme() {
+  var t = "dark";
+  try { t = localStorage.getItem("nba-theme") || "dark"; } catch (e) {}
+  applyTheme(t);
+}
+
+var navEl = document.getElementById("nav");
+var lastScroll = 0;
+function onScrollNav() {
+  var y = window.pageYOffset || document.documentElement.scrollTop;
+  if (navEl) {
+    if (y > lastScroll && y > 200) navEl.classList.add("nav-hidden");
+    else navEl.classList.remove("nav-hidden");
+  }
+  lastScroll = y;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   WIRING + BOOT
+   ════════════════════════════════════════════════════════════════ */
+function wire() {
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest(".term, .dgm-term, code.is-term");
+    if (t) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (litEl === t) { dismissTerm(); }
+      else { lightTerm(t); }
+      return;
+    }
+    if (litEl && !popEl.contains(e.target)) dismissTerm();
+  }, true);
+
+  document.addEventListener("click", function (e) {
+    if (e.target.closest(".term, .dgm-term, code.is-term")) return;
+    var card = e.target.closest(".card[data-phase]");
+    if (card) { openModal(card.getAttribute("data-phase")); return; }
+    var node = e.target.closest(".dgm-node[data-phase]");
+    if (node) { openModal(node.getAttribute("data-phase")); return; }
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if ((e.key === "Enter" || e.key === " ")) {
+      var node = e.target.closest && e.target.closest(".dgm-node[data-phase]");
+      if (node) { e.preventDefault(); openModal(node.getAttribute("data-phase")); }
+    }
+  });
+
+  if (closeBtn) closeBtn.addEventListener("click", closeModal);
+  if (backdropEl) backdropEl.addEventListener("click", closeModal);
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
+      if (litEl) { dismissTerm(); return; }
+      if (modalEl.classList.contains("is-open")) closeModal();
+    }
+  });
+
+  modalEl.addEventListener("keydown", function (e) {
+    if (e.key !== "Tab" || !modalEl.classList.contains("is-open")) return;
+    var f = modalEl.querySelectorAll('button, [href], [tabindex]:not([tabindex="-1"])');
+    if (!f.length) return;
+    var first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+
+  if (xSteps) {
+    xSteps.addEventListener("click", function (e) {
+      var b = e.target.closest(".xform-step");
+      if (b) showXform(parseInt(b.getAttribute("data-step"), 10));
+    });
+  }
+
+  function toggleTheme() {
+    var cur = document.documentElement.getAttribute("data-theme") || "dark";
+    applyTheme(cur === "dark" ? "light" : "dark");
+  }
+  if (themeBtn) themeBtn.addEventListener("click", toggleTheme);
+  var modalThemeBtn = document.getElementById("modalTheme");
+  if (modalThemeBtn) modalThemeBtn.addEventListener("click", toggleTheme);
+
+  window.addEventListener("scroll", function () {
+    repositionLit();
+    onScrollNav();
+  }, { passive: true });
+  window.addEventListener("resize", repositionLit);
+}
+
+/* ── boot ── */
+initTheme();
+renderCards();
+renderXformSteps();
+showXform(0);
+decorateCodeTerms(document);
+wire();
+
+</script>
+</body>
+</html>

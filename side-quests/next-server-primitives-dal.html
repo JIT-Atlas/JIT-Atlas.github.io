@@ -1,0 +1,1517 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Next.js server primitives · the DAL · layered architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* layer-keyed accent system (iOS-system-derived, tuned for glass) */
+  --client:#ff9f2e; --client2:#ff5c8a; --client-soft:rgba(255,159,46,.16);
+  --ctrl:#b57bff;   --ctrl2:#7c74ff;   --ctrl-soft:rgba(181,123,255,.16);
+  --dal:#4fd6ff;    --dal2:#39b8ff;    --dal-soft:rgba(79,214,255,.16);
+  --db:#39e08f;     --db2:#22c98f;     --db-soft:rgba(57,224,143,.16);
+  --danger:#ff5f57; --danger-soft:rgba(255,95,87,.16);
+  --warn:#ffd426;
+  --maxw:1460px; --colw:1000px;
+  --mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',sans-serif;
+  --r-xs:8px; --r-sm:12px; --r:18px; --r-lg:24px; --r-xl:30px;
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+html[data-theme="dark"]{
+  --bg:#040406; --bg2:#0a0b10;
+  --ink:#f4f6fb; --ink2:#c4cad8; --ink3:#8b93a7;
+  --glass:rgba(255,255,255,.055); --glass2:rgba(255,255,255,.085);
+  --glass-strong:rgba(20,22,34,.72);
+  --bd:rgba(255,255,255,.11); --bd2:rgba(255,255,255,.2);
+  --hair:rgba(255,255,255,.07);
+  --sh:0 20px 50px -22px rgba(0,0,0,.85), 0 2px 10px -4px rgba(0,0,0,.6);
+  --sh-in:inset 0 1px 0 rgba(255,255,255,.09);
+  --aurora-a:transparent; --aurora-b:transparent;
+  --aurora-c:transparent;  --aurora-d:transparent;
+  --plate:rgba(16,18,28,.82);
+}
+html[data-theme="light"]{
+  --bg:#eef1f8; --bg2:#e6eaf4;
+  --ink:#141726; --ink2:#3a4056; --ink3:#6b7288;
+  --glass:rgba(255,255,255,.58); --glass2:rgba(255,255,255,.78);
+  --glass-strong:rgba(255,255,255,.86);
+  --bd:rgba(20,24,45,.1); --bd2:rgba(20,24,45,.18);
+  --hair:rgba(20,24,45,.08);
+  --sh:0 22px 48px -26px rgba(45,50,90,.4), 0 2px 8px -4px rgba(45,50,90,.16);
+  --sh-in:inset 0 1px 0 rgba(255,255,255,.7);
+  --client:#f47100; --ctrl:#7c4dff; --dal:#0aa5d8; --db:#12b070; --danger:#e0362c;
+  --client-soft:rgba(244,113,0,.12); --ctrl-soft:rgba(124,77,255,.12); --dal-soft:rgba(10,165,216,.12); --db-soft:rgba(18,176,112,.12); --danger-soft:rgba(224,54,44,.12);
+  --aurora-a:rgba(124,77,255,.2); --aurora-b:rgba(10,165,216,.18);
+  --aurora-c:rgba(244,113,0,.14); --aurora-d:rgba(18,176,112,.12);
+  --plate:rgba(255,255,255,.92);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:15.5px;line-height:1.62;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  transition:background-color .3s,color .3s;position:relative;overflow-x:hidden;
+}
+/* ---- aurora atmosphere ---- */
+body::before{
+  content:"";position:fixed;inset:-20% -10% -10% -10%;z-index:-2;pointer-events:none;
+  background:
+    radial-gradient(46% 40% at 16% 8%,var(--aurora-a),transparent 62%),
+    radial-gradient(44% 42% at 88% 14%,var(--aurora-b),transparent 60%),
+    radial-gradient(50% 46% at 78% 88%,var(--aurora-c),transparent 60%),
+    radial-gradient(40% 40% at 12% 82%,var(--aurora-d),transparent 60%);
+  filter:blur(20px);
+}
+body::after{
+  content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;opacity:.5;
+  background:radial-gradient(70% 55% at 50% 0%,transparent,var(--bg) 78%);
+}
+.blob{position:fixed;z-index:-1;border-radius:50%;filter:blur(72px);opacity:.5;pointer-events:none;mix-blend-mode:screen}
+html[data-theme="light"] .blob{mix-blend-mode:multiply;opacity:.32}
+.blob.b1{width:520px;height:520px;left:-120px;top:-80px;background:var(--ctrl);animation:drift1 34s var(--ease) infinite alternate}
+.blob.b2{width:460px;height:460px;right:-100px;top:120px;background:var(--dal);animation:drift2 40s var(--ease) infinite alternate}
+.blob.b3{width:480px;height:480px;right:8%;bottom:-140px;background:var(--client2);animation:drift3 46s var(--ease) infinite alternate}
+@keyframes drift1{to{transform:translate(80px,60px) scale(1.1)}}
+@keyframes drift2{to{transform:translate(-70px,90px) scale(1.08)}}
+@keyframes drift3{to{transform:translate(60px,-70px) scale(1.12)}}
+/* dark mode: glossy black — a fixed top sheen, no colored aurora */
+html[data-theme="dark"] body::before{
+  inset:0; filter:none;
+  background:
+    radial-gradient(135% 105% at 50% -30%, rgba(255,255,255,.05), rgba(255,255,255,.012) 32%, transparent 60%),
+    radial-gradient(120% 100% at 50% 120%, rgba(0,0,0,.5), transparent 55%);
+}
+html[data-theme="dark"] body::after{ opacity:1; background:radial-gradient(115% 90% at 50% 42%, transparent 60%, rgba(0,0,0,.45)); }
+html[data-theme="dark"] .blob{ display:none; }
+
+::selection{background:var(--ctrl-soft);color:var(--ink)}
+.mono{font-family:var(--mono)}
+code,pre{font-family:var(--mono)}
+
+/* ---- glass utility ---- */
+.glass{background:var(--glass);backdrop-filter:blur(22px) saturate(1.7);-webkit-backdrop-filter:blur(22px) saturate(1.7);border:1px solid var(--bd);box-shadow:var(--sh),var(--sh-in)}
+
+/* ---- header ---- */
+header.top{position:sticky;top:0;z-index:60;background:var(--glass);backdrop-filter:blur(26px) saturate(1.8);-webkit-backdrop-filter:blur(26px) saturate(1.8);border-bottom:1px solid var(--hair);transition:transform .35s var(--ease)}
+header.top.hidden{transform:translateY(-100%)}
+.top-inner{max-width:var(--maxw);margin:0 auto;padding:11px 22px;display:flex;align-items:center;gap:14px;min-height:40px}
+.brand{font-family:var(--mono);font-weight:600;letter-spacing:.01em;font-size:12.5px;display:flex;align-items:center;gap:9px;color:var(--ink2)}
+.brand .stack{display:inline-flex;flex-direction:column;gap:2px}
+.brand .stack i{display:block;width:16px;height:3px;border-radius:2px}
+.brand .stack i:nth-child(1){background:var(--client)}
+.brand .stack i:nth-child(2){background:var(--ctrl)}
+.brand .stack i:nth-child(3){background:var(--dal)}
+.brand .stack i:nth-child(4){background:var(--db)}
+.brand .arr{color:var(--ink3);font-weight:400}
+.brand .b{color:var(--dal)}
+.crumb{font-family:var(--mono);font-size:11px;color:var(--ink3);letter-spacing:.02em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;opacity:0;transform:translateX(-6px);transition:opacity .3s,transform .3s}
+.crumb.show{opacity:1;transform:none}
+.crumb b{color:var(--ctrl);font-weight:600}
+.top-spacer{flex:1}
+.gbtn{font-family:var(--mono);font-size:11px;letter-spacing:.03em;border:1px solid var(--bd);background:var(--glass2);color:var(--ink2);padding:6px 11px;border-radius:999px;cursor:pointer;display:flex;align-items:center;gap:7px;transition:.18s var(--ease);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.gbtn:hover{color:var(--ink);border-color:var(--bd2);transform:translateY(-1px)}
+.gbtn svg{width:13px;height:13px}
+
+/* ---- shell / layout ---- */
+.shell{max-width:var(--maxw);margin:0 auto;padding:0 22px;display:grid;grid-template-columns:236px minmax(0,1fr);gap:36px;transition:grid-template-columns .3s var(--ease),gap .3s var(--ease)}
+.shell[data-toc="collapsed"]{grid-template-columns:60px minmax(0,1fr);gap:26px}
+.shell[data-toc="hidden"]{grid-template-columns:0 minmax(0,1fr);gap:0}
+.shell[data-toc="hidden"] nav.toc{opacity:0;pointer-events:none;visibility:hidden}
+nav.toc{position:sticky;top:70px;align-self:start;height:calc(100vh - 86px);padding:12px 8px;font-family:var(--mono);font-size:12.5px;display:flex;flex-direction:column;transition:opacity .22s;border-radius:var(--r-lg);background:var(--glass);backdrop-filter:blur(20px) saturate(1.6);-webkit-backdrop-filter:blur(20px) saturate(1.6);border:1px solid var(--bd);box-shadow:var(--sh)}
+.toc-toggle{display:flex;align-items:center;gap:8px;background:var(--glass2);border:1px solid var(--bd);border-radius:999px;color:var(--ink3);font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:7px 10px;cursor:pointer;margin:2px 4px 12px;transition:.18s var(--ease);flex-shrink:0}
+.toc-toggle:hover{color:var(--ink);border-color:var(--bd2)}
+.toc-toggle svg{width:12px;height:12px;flex-shrink:0;transition:transform .3s var(--ease)}
+.shell[data-toc="collapsed"] .toc-toggle{padding:7px;justify-content:center}
+.shell[data-toc="collapsed"] .toc-toggle svg{transform:rotate(180deg)}
+.shell[data-toc="collapsed"] .toc-toggle .lbl{display:none}
+.toc-list{overflow:auto;flex:1;padding:0 2px}
+.toc-list::-webkit-scrollbar{width:0}
+nav.toc a{display:flex;gap:11px;align-items:center;color:var(--ink3);text-decoration:none;padding:8px 12px;border-radius:12px;transition:.16s var(--ease);letter-spacing:.01em;white-space:nowrap;position:relative;margin:1px 0}
+nav.toc a .num{font-weight:700;font-size:10.5px;flex-shrink:0;opacity:.7;font-variant-numeric:tabular-nums}
+nav.toc a .dotc{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:currentColor;opacity:.35;transition:.16s}
+nav.toc a:hover{color:var(--ink);background:var(--glass2)}
+nav.toc a.active{color:var(--ink);background:var(--ctrl-soft)}
+nav.toc a.active .num{color:var(--ctrl);opacity:1}
+nav.toc a.active .dotc{opacity:1;box-shadow:0 0 10px currentColor}
+.shell[data-toc="collapsed"] nav.toc a{padding:9px;justify-content:center}
+.shell[data-toc="collapsed"] nav.toc a .lbl{display:none}
+main{padding:36px 0 140px;min-width:0;max-width:var(--colw);margin:0 auto;width:100%}
+
+/* ---- section scaffolding ---- */
+.kicker{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ctrl);display:flex;align-items:center;gap:11px;margin:0 0 14px}
+.kicker .ix{color:var(--dal);font-weight:700}
+.kicker::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--hair),transparent)}
+h1.hero-h{font-weight:800;font-size:clamp(30px,5.2vw,54px);line-height:1.05;letter-spacing:-.025em;margin:0 0 18px}
+h1.hero-h .grad{background:linear-gradient(115deg,var(--client),var(--client2) 40%,var(--ctrl) 78%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+h1.hero-h .grad2{background:linear-gradient(115deg,var(--dal),var(--db));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+h2{font-weight:700;font-size:clamp(21px,2.7vw,30px);letter-spacing:-.018em;margin:0 0 14px;line-height:1.2}
+h2 em{font-style:normal;background:linear-gradient(110deg,var(--dal),var(--ctrl));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+h3{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink2);margin:26px 0 10px}
+.lead{font-size:18px;color:var(--ink2);max-width:66ch;line-height:1.55}
+.lead em{font-style:normal;color:var(--dal)}
+.prose{max-width:70ch;font-size:15.5px;line-height:1.68}
+.prose p{margin:0 0 14px}.prose strong{color:var(--ink);font-weight:600}
+.prose code,.spec code,.callout code,.modal code{font-size:.86em;color:var(--ink);background:var(--glass2);border:1px solid var(--hair);padding:1.5px 6px;border-radius:7px;font-weight:500}
+section.block{padding:52px 0;scroll-margin-top:78px;position:relative}
+section.block::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent,var(--hair) 20%,var(--hair) 80%,transparent)}
+section.block:last-of-type::after{display:none}
+section.block:first-of-type{padding-top:26px}
+
+/* ---- glossary terms + tooltip ---- */
+.term{cursor:help;border-bottom:1.5px dotted var(--dal);position:relative;color:inherit;transition:background .15s,border-color .15s;border-radius:3px;padding:0 1px}
+.term:hover{background:var(--dal-soft)}
+#tip{position:fixed;z-index:900;max-width:330px;border-radius:var(--r-sm);padding:13px 15px;font-size:13px;line-height:1.52;color:var(--ink2);pointer-events:none;opacity:0;transform:translateY(6px) scale(.98);transition:opacity .16s var(--ease),transform .16s var(--ease);font-family:var(--sans);
+  background:var(--glass-strong);backdrop-filter:blur(26px) saturate(1.8);-webkit-backdrop-filter:blur(26px) saturate(1.8);border:1px solid var(--bd2);box-shadow:var(--sh)}
+#tip.show{opacity:1;transform:none}
+#tip .t-name{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.02em;display:block;margin-bottom:5px}
+#tip .t-kind{font-family:var(--mono);font-size:9px;letter-spacing:.09em;text-transform:uppercase;float:right;padding:2px 7px;border-radius:999px;border:1px solid currentColor;opacity:.9}
+.k-next{color:var(--ctrl)}.k-react{color:var(--client)}.k-principle{color:var(--dal)}.k-sql{color:var(--db)}
+.plate-hot{cursor:help}
+.plate-hot rect{transition:stroke .15s,filter .15s}
+.plate-hot:hover rect{stroke:var(--dal);filter:drop-shadow(0 0 8px var(--dal-soft))}
+
+/* ---- callouts ---- */
+.callout{border:1px solid var(--bd);border-left:3px solid var(--ctrl);border-radius:var(--r-sm);padding:16px 20px;margin:22px 0;font-size:15px;line-height:1.62;background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.callout.dal{border-left-color:var(--dal)}.callout.client{border-left-color:var(--client)}.callout.db{border-left-color:var(--db)}.callout.danger{border-left-color:var(--danger)}
+.callout .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ctrl);display:block;margin-bottom:6px;font-weight:700}
+.callout.dal .lbl{color:var(--dal)}.callout.client .lbl{color:var(--client)}.callout.db .lbl{color:var(--db)}.callout.danger .lbl{color:var(--danger)}
+
+/* ---- code blocks ---- */
+pre.wire{font-family:var(--mono);font-size:12.5px;line-height:1.65;border-radius:var(--r-sm);padding:16px 18px;overflow:auto;color:var(--ink2);background:var(--glass);border:1px solid var(--bd);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--sh-in);scrollbar-width:thin;scrollbar-color:var(--bd2) transparent}
+pre.wire .k{color:var(--ctrl)}pre.wire .v{color:var(--db)}pre.wire .c{color:var(--ink3)}pre.wire .s{color:var(--client)}pre.wire .t{color:var(--dal)}
+pre.wire::-webkit-scrollbar{height:12px}pre.wire::-webkit-scrollbar-track{background:transparent}pre.wire::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:999px;border:3px solid transparent;background-clip:padding-box}
+.mcode::-webkit-scrollbar,.ccode::-webkit-scrollbar{height:10px}.mcode::-webkit-scrollbar-track,.ccode::-webkit-scrollbar-track{background:transparent}.mcode::-webkit-scrollbar-thumb,.ccode::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:999px;border:2.5px solid transparent;background-clip:padding-box}
+.filetag{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;color:var(--ink3);margin:20px 0 -6px;display:flex;align-items:center;gap:8px}
+.filetag::before{content:"";width:9px;height:9px;border-radius:3px;background:var(--dal)}
+.filetag.a::before{background:var(--client)}.filetag.b::before{background:var(--ctrl)}.filetag.c::before{background:var(--db)}
+
+/* ---- spec tables ---- */
+.tablewrap{border-radius:var(--r);overflow:hidden;border:1px solid var(--bd);background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);margin:14px 0;box-shadow:var(--sh-in)}
+table.spec{width:100%;border-collapse:collapse;font-size:14px}
+table.spec th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);font-weight:700;padding:12px 16px;border-bottom:1px solid var(--bd2);background:var(--glass2)}
+table.spec td{padding:13px 16px;border-bottom:1px solid var(--hair);color:var(--ink2);vertical-align:top;line-height:1.5}
+table.spec tr:last-child td{border-bottom:none}
+table.spec tr{transition:background .15s}
+table.spec tbody tr:hover{background:var(--glass2)}
+table.spec td:first-child{color:var(--ink);font-weight:600}
+.pill{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.04em;padding:3px 9px;border-radius:999px;border:1px solid currentColor;font-weight:600}
+.pill.client{color:var(--client);background:var(--client-soft)}.pill.ctrl{color:var(--ctrl);background:var(--ctrl-soft)}.pill.dal{color:var(--dal);background:var(--dal-soft)}.pill.db{color:var(--db);background:var(--db-soft)}.pill.mut{color:var(--ink3)}
+
+/* ---- figures / diagrams ---- */
+.figure{margin:26px 0;border-radius:var(--r-lg);background:var(--glass);border:1px solid var(--bd);overflow:hidden;box-shadow:var(--sh),var(--sh-in);backdrop-filter:blur(20px) saturate(1.6);-webkit-backdrop-filter:blur(20px) saturate(1.6)}
+.figure.fs{position:fixed;inset:14px;z-index:400;margin:0;max-width:none;display:flex;flex-direction:column}
+.fig-bar{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.fig-bar .title{font-family:var(--mono);font-size:12px;letter-spacing:.04em;color:var(--ink2);text-transform:uppercase;display:flex;align-items:center;gap:9px}
+.fig-bar .title .gem{width:9px;height:9px;border-radius:3px;background:linear-gradient(135deg,var(--client),var(--ctrl));box-shadow:0 0 10px var(--ctrl-soft)}
+.fig-bar .grow{flex:1}
+.fbtn{font-family:var(--mono);font-size:11px;letter-spacing:.02em;border:1px solid var(--bd);background:var(--glass2);color:var(--ink2);padding:6px 11px;border-radius:999px;cursor:pointer;transition:.18s var(--ease);display:inline-flex;align-items:center;gap:6px;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.fbtn:hover{color:var(--ink);border-color:var(--bd2);transform:translateY(-1px)}
+.fbtn.on{color:#fff;background:linear-gradient(120deg,var(--ctrl),var(--ctrl2));border-color:transparent;box-shadow:0 6px 18px -6px var(--ctrl)}
+html[data-theme="light"] .fbtn.on{color:#fff}
+.fbtn svg{width:13px;height:13px}
+.canvas{position:relative}
+.figure.fs .canvas{flex:1;min-height:0}
+.figure:not(.fs) .canvas{cursor:zoom-in}
+.figure:not(.fs) .canvas .node,.figure:not(.fs) .canvas .proc-hot,.figure:not(.fs) .canvas .plate-hot{cursor:pointer}
+.figure.fs .canvas{cursor:grab}
+.figure.fs .canvas:active{cursor:grabbing}
+svg.diagram{display:block;width:100%;height:auto;touch-action:auto}
+.figure.fs svg.diagram{height:100%;touch-action:none}
+.zoomctl{position:absolute;right:14px;bottom:14px;display:none;flex-direction:column;gap:7px;z-index:5}
+.figure.fs .zoomctl{display:flex}
+.zoomctl button{width:36px;height:36px;border-radius:12px;border:1px solid var(--bd2);background:var(--glass-strong);color:var(--ink2);font-family:var(--mono);font-size:16px;cursor:pointer;line-height:1;transition:.15s;display:grid;place-items:center;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.zoomctl button:hover{color:var(--ink);border-color:var(--dal)}
+.zlevel{position:absolute;left:14px;bottom:14px;display:none;font-family:var(--mono);font-size:11px;color:var(--ink3);background:var(--glass-strong);border:1px solid var(--bd);padding:5px 11px;border-radius:999px;z-index:5;user-select:none;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.figure.fs .zlevel{display:block}
+.zhint{position:absolute;left:14px;top:14px;display:none;font-family:var(--mono);font-size:10px;color:var(--ink3);background:var(--glass-strong);border:1px solid var(--bd);padding:5px 11px;border-radius:999px;z-index:5;opacity:.9;pointer-events:none}
+.figure.fs .zhint{display:block}
+.inspect-hint{position:absolute;right:14px;top:14px;font-family:var(--mono);font-size:10px;letter-spacing:.03em;color:var(--ink3);background:var(--glass-strong);border:1px solid var(--bd);padding:5px 11px;border-radius:999px;z-index:4;pointer-events:none;opacity:0;transition:opacity .2s;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.figure:not(.fs) .canvas:hover .inspect-hint{opacity:.92}
+.figure.fs .inspect-hint{display:none}
+
+.node .nbox{transition:transform .4s var(--ease),filter .25s}
+.node:hover .nbox{filter:brightness(1.14)}
+.node.active .nbox{filter:drop-shadow(0 0 14px currentColor)}
+.dim-server .server{opacity:.13;filter:grayscale(.75);transition:opacity .45s,filter .45s}
+.dim-server .server.lbl-keep{opacity:.42}
+.proc-hot text{transition:filter .15s,opacity .15s}
+.proc-hot:hover text{filter:drop-shadow(0 0 8px currentColor);opacity:.9}
+
+/* ---- player ---- */
+.player{display:flex;align-items:center;gap:11px;padding:15px 18px;border-top:1px solid var(--hair);flex-wrap:wrap;background:var(--glass2)}
+.pbtn{width:42px;height:42px;border-radius:50%;border:1px solid var(--bd2);background:var(--glass2);color:var(--ink);cursor:pointer;display:grid;place-items:center;transition:.18s var(--ease);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.pbtn:hover{border-color:var(--ctrl);color:var(--ctrl);transform:translateY(-1px)}
+.pbtn.play{background:linear-gradient(125deg,var(--ctrl),var(--client2));border-color:transparent;color:#fff;width:48px;height:48px;box-shadow:0 8px 22px -8px var(--ctrl)}
+.pbtn.play:hover{filter:brightness(1.08);color:#fff}
+.pbtn svg{width:18px;height:18px}
+.scrub{flex:1;min-width:170px;height:8px;border-radius:999px;background:var(--hair);position:relative;cursor:pointer;overflow:hidden}
+.scrub .fill{position:absolute;left:0;top:0;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--client),var(--ctrl) 45%,var(--dal) 72%,var(--db));width:0%;transition:width .35s var(--ease)}
+.scrub .ph{position:absolute;top:0;bottom:0;width:1px;background:var(--bd2);opacity:.7}
+.stepno{font-family:var(--mono);font-size:12px;color:var(--ink3);min-width:66px;text-align:right;font-variant-numeric:tabular-nums}
+.phasetag{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:4px 10px;border-radius:999px;border:1px solid currentColor;color:var(--client);transition:.3s}
+.phasetag.up{color:var(--db)}
+
+/* ---- caption ---- */
+.caption{padding:18px 22px;border-top:1px solid var(--hair);min-height:120px}
+.caption .cn{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ctrl);display:flex;align-items:center;gap:10px;margin-bottom:7px;flex-wrap:wrap}
+.caption .cn .lane{color:var(--dal)}
+.caption .ch{font-size:21px;font-weight:700;margin:0 0 5px;letter-spacing:-.01em}
+.caption .cb{color:var(--ink2);font-size:15.5px;margin:0 0 10px;max-width:76ch}
+.caption .ccode{font-family:var(--mono);font-size:12.5px;color:var(--ink);background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:9px 13px;display:inline-block;max-width:100%;overflow:auto;white-space:nowrap;box-shadow:var(--sh-in)}
+.caption .ccode .cm{color:var(--ink3)}
+.caption .more{font-family:var(--mono);font-size:11px;color:var(--ctrl);background:none;border:none;cursor:pointer;padding:0;margin-top:10px;border-bottom:1px dotted var(--ctrl)}
+
+/* ---- cards ---- */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:15px;margin:24px 0}
+.card{border-radius:var(--r);padding:16px 18px;cursor:pointer;transition:transform .2s var(--ease),border-color .18s,background .18s;position:relative;overflow:hidden;background:var(--glass);border:1px solid var(--bd);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:var(--sh-in)}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--client)}
+.card.ctrl::before{background:var(--ctrl)}.card.dal::before{background:var(--dal)}.card.db::before{background:var(--db)}
+.card:hover{transform:translateY(-3px);border-color:var(--bd2);box-shadow:var(--sh),var(--sh-in)}
+.card .fn{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;color:var(--ink3);text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between;gap:8px}
+.card .fn .idx{color:var(--client);font-weight:700}
+.card.ctrl .fn .idx{color:var(--ctrl)}.card.dal .fn .idx{color:var(--dal)}.card.db .fn .idx{color:var(--db)}
+.card .ft{font-weight:700;font-size:16.5px;line-height:1.2;margin-bottom:5px}
+.card .fs2{font-size:13.5px;color:var(--ink2)}
+.card .chip{font-family:var(--mono);font-size:9px;letter-spacing:.05em;color:var(--ctrl);border:1px solid var(--bd);border-radius:999px;padding:2px 8px;margin-top:10px;display:inline-block;background:var(--glass2)}
+
+/* ---- decider widget ---- */
+.decider{border-radius:var(--r-lg);background:var(--glass);border:1px solid var(--bd);box-shadow:var(--sh),var(--sh-in);backdrop-filter:blur(20px) saturate(1.6);-webkit-backdrop-filter:blur(20px) saturate(1.6);overflow:hidden;margin:24px 0}
+.decider .dhead{padding:16px 20px;border-bottom:1px solid var(--hair);font-family:var(--mono);font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2);display:flex;align-items:center;gap:9px}
+.decider .dhead .gem{width:9px;height:9px;border-radius:3px;background:linear-gradient(135deg,var(--dal),var(--db))}
+.decider .dbody{display:grid;grid-template-columns:1fr 1fr;gap:0}
+@media(max-width:720px){.decider .dbody{grid-template-columns:1fr}}
+.dq{padding:20px 22px;border-right:1px solid var(--hair)}
+@media(max-width:720px){.dq{border-right:none;border-bottom:1px solid var(--hair)}}
+.dq .ql{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3);margin:0 0 11px;display:block}
+.dq .ql .n{color:var(--ctrl);font-weight:700}
+.seg{display:flex;flex-direction:column;gap:9px}
+.seg button{text-align:left;font-family:var(--sans);font-size:14px;color:var(--ink2);background:var(--glass2);border:1px solid var(--bd);border-radius:13px;padding:11px 14px;cursor:pointer;transition:.16s var(--ease);display:flex;align-items:center;gap:11px}
+.seg button .rk{width:16px;height:16px;border-radius:50%;border:2px solid var(--bd2);flex-shrink:0;transition:.16s;position:relative}
+.seg button:hover{border-color:var(--bd2);color:var(--ink);transform:translateX(2px)}
+.seg button.sel{border-color:var(--ctrl);background:var(--ctrl-soft);color:var(--ink)}
+.seg button.sel .rk{border-color:var(--ctrl);background:var(--ctrl)}
+.seg button.sel .rk::after{content:"";position:absolute;inset:3px;border-radius:50%;background:#fff}
+.dq .sub{font-size:12px;color:var(--ink3);margin:9px 2px 0;line-height:1.4}
+.dresult{padding:22px 24px;display:flex;flex-direction:column;justify-content:center;gap:4px;min-height:220px;position:relative;transition:background .4s}
+.dresult .rlead{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin-bottom:4px}
+.dresult .rname{font-size:26px;font-weight:800;letter-spacing:-.015em;line-height:1.1;margin:0 0 8px;display:flex;align-items:center;gap:11px}
+.dresult .rname .dot{width:13px;height:13px;border-radius:50%;box-shadow:0 0 16px currentColor;flex-shrink:0}
+.dresult .rwhy{font-size:14.5px;color:var(--ink2);line-height:1.55;margin:0 0 12px;max-width:44ch}
+.dresult .rmeta{font-family:var(--mono);font-size:11.5px;color:var(--ink3);border-top:1px solid var(--hair);padding-top:11px;line-height:1.55}
+.dresult .rmeta b{color:var(--dal);font-weight:600}
+.dresult.client{background:linear-gradient(120deg,var(--client-soft),transparent 70%)}
+.dresult.ctrl{background:linear-gradient(120deg,var(--ctrl-soft),transparent 70%)}
+.dresult.db{background:linear-gradient(120deg,var(--dal-soft),transparent 70%)}
+
+/* ---- modal ---- */
+.scrim{position:fixed;inset:0;z-index:600;background:rgba(4,6,12,.5);backdrop-filter:blur(10px) saturate(1.2);-webkit-backdrop-filter:blur(10px) saturate(1.2);display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;pointer-events:none;transition:opacity .28s var(--ease)}
+.scrim.open{opacity:1;pointer-events:auto}
+.modal{border-radius:var(--r-xl);max-width:940px;width:100%;overflow:hidden;position:relative;background:var(--glass-strong);backdrop-filter:blur(34px) saturate(1.9);-webkit-backdrop-filter:blur(34px) saturate(1.9);border:1px solid var(--bd2);box-shadow:0 40px 80px -30px rgba(0,0,0,.9),var(--sh-in);transform:translateY(14px) scale(.985);transition:transform .3s var(--ease)}
+.mscroll{max-height:88vh;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:var(--bd2) transparent}
+.scrim.open .modal{transform:none}
+.mscroll::-webkit-scrollbar{width:12px}.mscroll::-webkit-scrollbar-track{background:transparent}.mscroll::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:999px;border:3px solid transparent;background-clip:padding-box}.mscroll::-webkit-scrollbar-thumb:hover{background:var(--ink3);border:3px solid transparent;background-clip:padding-box}
+.modal .mhead{padding:30px 38px 0}
+.modal .mtag{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--ctrl);display:flex;gap:11px;align-items:center;flex-wrap:wrap}
+.modal .mtag .lane{color:var(--dal)}
+.modal h4{font-size:27px;font-weight:700;margin:12px 0 0;letter-spacing:-.018em;max-width:40ch}
+.modal .mcode{font-family:var(--mono);font-size:12.5px;color:var(--ink);background:var(--bg2);border:1px solid var(--bd);border-radius:11px;padding:11px 14px;margin:16px 38px 0;overflow:auto;white-space:nowrap;box-shadow:var(--sh-in)}
+.modal .mcode .cm{color:var(--ink3)}
+.modal .mbody{padding:18px 38px 34px;color:var(--ink2);font-size:15.5px;line-height:1.62}
+.modal .mbody p{margin:0 0 14px;max-width:74ch}
+.mclose{position:absolute;right:20px;top:20px;width:36px;height:36px;border-radius:50%;border:1px solid var(--bd2);background:var(--glass2);color:var(--ink2);cursor:pointer;font-size:17px;line-height:1;z-index:2;transition:.15s;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.mclose:hover{color:var(--danger);border-color:var(--danger);transform:rotate(90deg)}
+.why{border-left:3px solid var(--dal);background:var(--dal-soft);border-radius:0 12px 12px 0;padding:14px 18px;font-size:14.5px;line-height:1.6;margin-top:12px;max-width:74ch}
+.why .wl{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--dal);display:block;margin-bottom:5px;font-weight:700}
+.deep-h{margin-top:26px;padding-top:15px;border-top:1px solid var(--hair);font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--ctrl);margin-bottom:13px}
+.deep{display:grid;gap:13px;grid-template-columns:1fr 1fr}
+.deep .dcol{border-radius:var(--r-sm);padding:15px 17px;background:var(--glass);border:1px solid var(--bd)}
+.deep .dcol p{font-size:13.5px;margin:0;line-height:1.6}
+.deep .dl{font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;display:block;margin-bottom:7px;font-weight:700}
+.deep .dl.impl{color:var(--ctrl)}.deep .dl.rule{color:var(--dal)}
+@media(max-width:600px){.deep{grid-template-columns:1fr}}
+
+/* ---- legend ---- */
+.legend{display:flex;gap:20px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;color:var(--ink2);margin:20px 0 0}
+.legend span{display:inline-flex;align-items:center;gap:8px}
+.legend i{width:12px;height:12px;border-radius:4px;display:inline-block;box-shadow:0 0 8px currentColor}
+
+/* ---- live strip ---- */
+.packet-demo{border-radius:var(--r);padding:14px 18px;margin:0 0 30px;overflow:hidden;background:var(--glass);border:1px solid var(--bd);backdrop-filter:blur(16px) saturate(1.6);-webkit-backdrop-filter:blur(16px) saturate(1.6);box-shadow:var(--sh-in)}
+.packet-demo-label{font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);margin-bottom:12px;display:flex;align-items:center;gap:9px}
+.packet-demo-label::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--db);box-shadow:0 0 0 0 var(--db);animation:live-pulse 1.7s infinite}
+@keyframes live-pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 var(--db-soft)}50%{opacity:.5;box-shadow:0 0 0 5px transparent}}
+.flow-track{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11.5px;flex-wrap:wrap}
+.flow-node{border-radius:999px;padding:7px 13px;color:var(--ink2);background:var(--glass2);border:1px solid var(--bd);transition:.3s var(--ease);white-space:nowrap;letter-spacing:.01em}
+.flow-node.client.active{color:var(--client);border-color:var(--client);background:var(--client-soft);box-shadow:0 0 20px -3px var(--client);transform:translateY(-2px)}
+.flow-node.ctrl.active{color:var(--ctrl);border-color:var(--ctrl);background:var(--ctrl-soft);box-shadow:0 0 20px -3px var(--ctrl);transform:translateY(-2px)}
+.flow-node.dal.active{color:var(--dal);border-color:var(--dal);background:var(--dal-soft);box-shadow:0 0 20px -3px var(--dal);transform:translateY(-2px)}
+.flow-node.db.active{color:var(--db);border-color:var(--db);background:var(--db-soft);box-shadow:0 0 20px -3px var(--db);transform:translateY(-2px)}
+.flow-arrow{flex:0 0 auto;position:relative;width:20px;height:2px}
+.flow-arrow::before{content:"";position:absolute;left:0;right:6px;top:50%;height:1.5px;background:var(--bd2);transform:translateY(-50%);transition:.3s}
+.flow-arrow::after{content:"";position:absolute;right:0;top:50%;width:0;height:0;border-left:6px solid var(--bd2);border-top:4px solid transparent;border-bottom:4px solid transparent;transform:translateY(-50%);transition:.3s}
+.flow-arrow.active::before{background:var(--ink)}
+.flow-arrow.active::after{border-left-color:var(--ink)}
+@media(max-width:760px){.flow-node{font-size:10.5px;padding:6px 9px}.flow-arrow{width:13px}}
+
+/* ---- footer ---- */
+footer{max-width:var(--maxw);margin:0 auto;padding:36px 22px 90px;font-family:var(--mono);font-size:12px;color:var(--ink3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+footer .fbrand{color:var(--ink2)}
+footer b{color:var(--dal);font-weight:600}
+
+@media(max-width:980px){
+  .shell{grid-template-columns:1fr;gap:0}
+  nav.toc{display:none}
+  body{font-size:16.5px}
+  main{padding:22px 0 100px}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+  .blob{display:none}
+}
+</style>
+</head>
+<body>
+<div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+
+<header class="top">
+  <div class="top-inner">
+    <button class="gbtn" id="navBtn" aria-label="toggle navigation" title="Show or hide the navigation rail">
+      <svg id="navIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
+      <span id="navTxt">NAV</span>
+    </button>
+    <div class="brand"><span class="stack"><i></i><i></i><i></i><i></i></span>next.js<span class="arr">→</span><span class="b">architecture</span></div>
+    <span class="crumb" id="crumb"></span>
+    <div class="top-spacer"></div>
+    <button class="gbtn" id="themeBtn" aria-label="toggle theme">
+      <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>
+      <span id="themeTxt">DARK</span>
+    </button>
+  </div>
+</header>
+
+<div class="shell" id="shell">
+  <nav class="toc" id="toc">
+    <button class="toc-toggle" id="tocToggle" aria-label="toggle navigation">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      <span class="lbl">Collapse</span>
+    </button>
+    <div class="toc-list">
+      <a href="#roundtrip"><span class="num">00</span><span class="dotc"></span><span class="lbl">The round trip</span></a>
+      <a href="#model"><span class="num">01</span><span class="dotc"></span><span class="lbl">The split</span></a>
+      <a href="#cast"><span class="num">02</span><span class="dotc"></span><span class="lbl">The cast</span></a>
+      <a href="#layers"><span class="num">03</span><span class="dotc"></span><span class="lbl">The layered stack</span></a>
+      <a href="#process"><span class="num">04</span><span class="dotc"></span><span class="lbl">The runtime model</span></a>
+      <a href="#choose"><span class="num">05</span><span class="dotc"></span><span class="lbl">Choosing a primitive</span></a>
+      <a href="#gate"><span class="num">06</span><span class="dotc"></span><span class="lbl">The security gate</span></a>
+      <a href="#mvc"><span class="num">07</span><span class="dotc"></span><span class="lbl">MVC, mapped</span></a>
+      <a href="#capstone"><span class="num">08</span><span class="dotc"></span><span class="lbl">The whole slice</span></a>
+    </div>
+  </nav>
+
+  <main>
+
+    <!-- ===== 00 HERO ===== -->
+    <section class="block" id="roundtrip" style="padding-top:30px">
+      <div class="packet-demo">
+        <div class="packet-demo-label">Live — one mutation, the whole round trip</div>
+        <div class="flow-track">
+          <div class="flow-node client">form submit</div>
+          <div class="flow-arrow"></div>
+          <div class="flow-node ctrl">Server Action</div>
+          <div class="flow-arrow"></div>
+          <div class="flow-node dal">DAL</div>
+          <div class="flow-arrow"></div>
+          <div class="flow-node db">Postgres</div>
+          <div class="flow-arrow"></div>
+          <div class="flow-node ctrl">revalidate</div>
+          <div class="flow-arrow"></div>
+          <div class="flow-node client">new UI</div>
+        </div>
+      </div>
+      <p class="kicker"><span class="ix">00</span> Explorable reference · Next.js 16 · React 19.2</p>
+      <h1 class="hero-h">A request dives <span class="grad">down the layers</span>,<br>then rides back up as <span class="grad2">fresh UI</span>.</h1>
+      <p class="lead">One form submission crosses the client boundary, an authenticating and validating <em>Server Action</em>, the server-only <em>Data Access Layer</em>, the ORM, and the database — then <code>revalidatePath</code> turns the trip around and a re-rendered Server Component streams new markup home. Press play, click any node for the framework mechanics, and toggle <em>“what ships to the browser”</em> to watch every server-only layer go dark.</p>
+
+      <div class="figure" id="heroFig">
+        <div class="fig-bar">
+          <span class="title"><span class="gem"></span>The mutation round-trip · write ↓ · revalidate + read ↑</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-boundary="heroSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20M12 2v20"/></svg> What ships to the browser</button>
+          <button class="fbtn" data-inspect="heroSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="heroSvg">
+          <svg class="diagram" id="heroSvg" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="heroVP"></g></svg>
+        </div>
+        <div class="player">
+          <button class="phasetag" id="hPhase" tabindex="-1">phase · write</button>
+          <button class="pbtn" id="hPrev" title="step back"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17V7l-7 5zM8 7h-2v10h2z"/></svg></button>
+          <button class="pbtn play" id="hPlay" title="play/pause"><svg id="hPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg></button>
+          <button class="pbtn" id="hNext" title="step forward"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 7v10l7-5zM16 7h2v10h-2z"/></svg></button>
+          <div class="scrub" id="hScrub"><div class="fill" id="hFill"></div></div>
+          <span class="stepno" id="hStepNo">00 / 13</span>
+        </div>
+        <div class="caption">
+          <div class="cn"><span id="capN">STEP 00</span> · <span class="lane" id="capLane">—</span></div>
+          <p class="ch" id="capH">Press play to trace one write</p>
+          <p class="cb" id="capB">Each step highlights as the request token travels its lane. Warm lanes are client-owned and ship to the browser; cool lanes are server-only and never do.</p>
+          <div class="ccode" id="capCode" style="display:none"></div>
+          <div><button class="more" id="capMore" style="display:none">Open full detail ↗</button></div>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i style="color:var(--client);background:var(--client)"></i> Client (ships to browser)</span>
+        <span><i style="color:var(--ctrl);background:var(--ctrl)"></i> Controller · entry point</span>
+        <span><i style="color:var(--dal);background:var(--dal)"></i> DAL · the model</span>
+        <span><i style="color:var(--db);background:var(--db)"></i> Database</span>
+        <span><i style="color:var(--danger);background:var(--danger)"></i> Reject path</span>
+      </div>
+    </section>
+
+    <!-- ===== 01 MODEL ===== -->
+    <section class="block" id="model">
+      <p class="kicker"><span class="ix">01</span> The mental model</p>
+      <h2>You describe the layers. The <em>server</em> enforces them.</h2>
+      <div class="prose">
+        <p>Everything below follows from one posture: <strong>server-first</strong>. A component runs on the server by default; the client is something you <em>opt into</em>. So a query, a secret, and a mutation all have a natural home that never reaches the browser — and the outside world only ever gets <em>in</em> through a small set of entry points, each of which hands the real data work to one place. The pattern repeats everywhere:</p>
+      </div>
+      <div class="callout">
+        <span class="lbl">the recurring pattern</span>
+        an <strong>entry point</strong> takes the request &nbsp;→&nbsp; it authenticates, authorizes, validates &nbsp;→&nbsp; it delegates to the <strong>DAL</strong>, which is the only thing that queries &nbsp;→&nbsp; a <strong>DTO</strong> travels back up.
+      </div>
+      <pre class="wire"><span class="c">Read  </span> Server Component <span class="c">→</span> DAL <span class="c">→</span> ORM <span class="c">→</span> DB   <span class="c">// no endpoint, no client JS</span>
+<span class="c">Write </span> Server Action    <span class="c">→</span> DAL <span class="c">→</span> ORM <span class="c">→</span> DB   <span class="c">// authN + validate, then revalidate</span>
+<span class="c">HTTP  </span> Route Handler    <span class="c">→</span> DAL <span class="c">→</span> ORM <span class="c">→</span> DB   <span class="c">// the one public, external surface</span>
+<span class="c">Rule  </span> dependencies point <span class="t">DOWN</span> only <span class="c">— the DAL knows nothing about HTTP or rendering</span></pre>
+    </section>
+
+    <!-- ===== 02 CAST ===== -->
+    <section class="block" id="cast">
+      <p class="kicker"><span class="ix">02</span> The cast &amp; their roles</p>
+      <h2>Four pieces. Knowing <em>who is allowed to do what</em> explains the rest.</h2>
+      <div class="prose"><p>Three of these are <strong>entry points</strong> — ways the outside world gets into your server. The fourth, the <strong>DAL</strong>, is the seam they all sit on. The crucial asymmetry: entry points face outward and must be treated as public; the DAL faces the database and must never be reachable from a browser.</p></div>
+      <div class="tablewrap">
+        <table class="spec">
+          <thead><tr><th>Piece</th><th>One-line role</th><th>Runs where</th><th>Reach for it when…</th></tr></thead>
+          <tbody>
+            <tr><td>Server Component</td><td>Render UI on the server with direct backend access</td><td><span class="pill client">client + server</span></td><td>you need to <em>read</em> data or render markup with zero client JS</td></tr>
+            <tr><td>Route Handler</td><td>A raw HTTP endpoint you own end-to-end</td><td><span class="pill ctrl">server</span></td><td>the caller is <em>external</em> — webhooks, mobile, third parties</td></tr>
+            <tr><td>Server Action</td><td>An <code>async</code> server function callable from the client</td><td><span class="pill ctrl">server</span></td><td>you need to <em>mutate</em> from your own UI</td></tr>
+            <tr><td>Data Access Layer</td><td>The single module that talks to the database</td><td><span class="pill dal">server-only</span></td><td><em>always</em>, once you have more than a couple of queries</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>Mental models in one breath</h3>
+      <div class="prose">
+        <p><strong>Server Component</strong> — a section that runs on the server and hands the browser finished HTML plus a shrink-wrapped data payload. <strong>Route Handler</strong> — <code>Request → Response</code>; you own the whole envelope. <strong>Server Action</strong> — an RPC endpoint disguised as a function call. <strong>DAL</strong> — the only part of your app allowed to know your database exists.</p>
+      </div>
+    </section>
+
+    <!-- ===== 03 LAYERS ===== -->
+    <section class="block" id="layers">
+      <p class="kicker"><span class="ix">03</span> Layers &amp; the boundary</p>
+      <h2>Every layer depends only on the one <em>below</em> it.</h2>
+      <div class="prose"><p>This is the whole architecture in one column. The <span class="term" data-term="Data Access Layer">DAL</span> is the load-bearing seam: everything above it is <span class="term" data-term="View">View</span> or <span class="term" data-term="Controller">Controller</span>; it alone touches the database. Toggle the overlay to dim everything that is <code>server-only</code> and never ships — then click any layer for its role and the framework mechanics.</p></div>
+      <div class="figure" id="layerFig">
+        <div class="fig-bar">
+          <span class="title"><span class="gem"></span>The vertical stack</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-boundary="layerSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 5V2M12 22v-3M5 12H2M22 12h-3"/></svg> What ships to the browser</button>
+          <button class="fbtn" data-inspect="layerSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="layerSvg">
+          <svg class="diagram" id="layerSvg" viewBox="0 0 780 660" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="layerVP"></g></svg>
+        </div>
+      </div>
+      <div class="callout dal">
+        <span class="lbl">why <code>server-only</code> matters</span>
+        <code>import 'server-only'</code> does nothing at runtime — it <strong>poisons the client build</strong>. Pull a DAL function into a <code>'use client'</code> file and the build fails, so <code>DATABASE_URL</code> and raw rows can never be shipped to a browser by accident.
+      </div>
+    </section>
+
+    <!-- ===== 04 PROCESS ===== -->
+    <section class="block" id="process">
+      <p class="kicker"><span class="ix">04</span> The runtime model · where the code physically runs</p>
+      <h2>Your query never runs in the <em>browser</em>.</h2>
+      <div class="prose">
+        <p>The simple “server vs client” story hides a physical topology: three separate places. The <strong>browser</strong> runs only your Client Components and holds no secrets. The <strong>server</strong> (Node or Edge) renders Server Components, runs Actions and Handlers, and hosts the DAL and secrets. The <strong>database</strong> is a different host again, reached over a pooled connection. Click any box for the pieces involved.</p>
+      </div>
+      <div class="figure" id="procFig">
+        <div class="fig-bar">
+          <span class="title"><span class="gem"></span>Browser · Server · Database</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-boundary="procSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20M12 2v20"/></svg> What ships to the browser</button>
+          <button class="fbtn" data-inspect="procSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="procSvg">
+          <svg class="diagram" id="procSvg" viewBox="0 0 1180 660" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="procVP"></g></svg>
+        </div>
+      </div>
+      <div class="callout dal">
+        <span class="lbl">the security punchline</span>
+        Only <strong>DTOs</strong> cross back into the browser. The DAL scrubs every row down to the fields a caller may see, so a <code>passwordHash</code> or <code>stripeCustomerId</code> has no path to the client — the boundary is enforced in code, not by convention.
+      </div>
+    </section>
+
+    <!-- ===== 05 CHOOSE ===== -->
+    <section class="block" id="choose">
+      <p class="kicker"><span class="ix">05</span> Choosing a primitive</p>
+      <h2>Two questions pick the right entry point.</h2>
+      <div class="prose"><p>The overlap between the three primitives dissolves once you ask <em>who calls it</em> and <em>what it does</em>. Whatever the answer, the query itself still belongs in the DAL — only the entry point changes.</p></div>
+      <div class="decider" id="decider">
+        <div class="dhead"><span class="gem"></span>Which primitive should handle this?</div>
+        <div class="dbody">
+          <div class="dq">
+            <span class="ql"><span class="n">Q1.</span> Who calls it?</span>
+            <div class="seg" id="segWho">
+              <button data-v="own"><span class="rk"></span>My own browser UI</button>
+              <button data-v="ext"><span class="rk"></span>Something external — a webhook, a mobile app, a third party</button>
+            </div>
+            <span class="ql" style="margin-top:20px"><span class="n">Q2.</span> What does it do?</span>
+            <div class="seg" id="segWhat">
+              <button data-v="read"><span class="rk"></span>Read data</button>
+              <button data-v="write"><span class="rk"></span>Write / mutate data</button>
+              <button data-v="raw"><span class="rk"></span>Raw HTTP — streaming, custom methods, content types</button>
+            </div>
+          </div>
+          <div class="dresult" id="dResult">
+            <div class="rlead">Answer both to see the recommendation</div>
+            <div class="rname"><span class="dot" style="background:var(--ink3)"></span><span id="rName">—</span></div>
+            <p class="rwhy" id="rWhy">Pick who calls it and what it does, and the fork resolves.</p>
+            <div class="rmeta" id="rMeta"></div>
+          </div>
+        </div>
+      </div>
+      <div class="prose"><p>Each primitive, and when <em>not</em> to reach for it — click a card for the deep dive:</p></div>
+      <div class="cards" id="primCards"></div>
+    </section>
+
+    <!-- ===== 06 GATE ===== -->
+    <section class="block" id="gate">
+      <p class="kicker"><span class="ix">06</span> The security gate</p>
+      <h2>A Server Action is a <em>public endpoint</em> wearing a function's clothes.</h2>
+      <div class="prose"><p>It looks like a local call, but Next.js compiles it into a POST anyone can invoke. So every action runs the same gate before a single row is written: authenticate, authorize, validate — and only then delegate to the DAL. Any failure returns a value or throws; nothing reaches the database. Click a node to expand the gate.</p></div>
+      <div class="figure" id="gateFig">
+        <div class="fig-bar"><span class="title"><span class="gem"></span>authN · authZ · validate → delegate</span><span class="grow"></span><button class="fbtn" data-inspect="gateSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button></div>
+        <div class="canvas" data-zoom="gateSvg">
+          <svg class="diagram" id="gateSvg" viewBox="0 0 940 460" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="gateVP"></g></svg>
+        </div>
+      </div>
+      <div class="callout danger">
+        <span class="lbl">the trap</span>
+        Because it reads like a private function, it's easy to forget the action is reachable by anyone. <strong>Every Server Action needs its own auth, authorization, and input validation</strong> — the DAL behind it is not a substitute.
+      </div>
+    </section>
+
+    <!-- ===== 07 MVC ===== -->
+    <section class="block" id="mvc">
+      <p class="kicker"><span class="ix">07</span> MVC, mapped</p>
+      <h2>Same three responsibilities — a different <em>vocabulary</em>.</h2>
+      <div class="prose"><p>Classic MVC splits an app into Model, View, and Controller. The App Router doesn't <em>enforce</em> that split, but the separation of concerns it encodes is exactly what keeps a large app maintainable. Flip the switch to morph the same three boxes between the two naming systems.</p></div>
+      <div class="figure" id="mvcFig">
+        <div class="fig-bar">
+          <span class="title"><span class="gem"></span>Responsibility mapping</span>
+          <span class="grow"></span>
+          <button class="fbtn on" id="mvcBtn" data-mode="mvc">Showing · classic MVC</button>
+        </div>
+        <div class="canvas" data-zoom="mvcSvg">
+          <svg class="diagram" id="mvcSvg" viewBox="0 0 900 380" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="mvcVP"></g></svg>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="lbl">the honest imperfection</span>
+        A Server Component happily <em>fetches and renders</em> — it's both View and Controller. The mapping isn't that Next.js <em>is</em> MVC; it's that keeping reads in the DAL holds the <strong>Model boundary</strong> even when the View is doing the calling.
+      </div>
+    </section>
+
+    <!-- ===== 08 CAPSTONE ===== -->
+    <section class="block" id="capstone">
+      <p class="kicker"><span class="ix">08</span> The whole slice</p>
+      <h2>One vertical <em>Post</em> feature — every layer, once.</h2>
+      <div class="prose"><p>This is the animation from step 00 as real, copy-pasteable code. The Server Component reads through the DAL with no endpoint; the Server Action mutates through the DAL after authenticating and validating, then revalidates the read; the Route Handler exposes the one genuinely external surface — a webhook — and takes on the security it doesn't get for free. The DAL is the only file that touches the database, and it hands back DTOs, not rows.</p></div>
+
+      <div class="filetag c">lib/db.ts — the client, instantiated once</div>
+      <pre class="wire"><span class="k">import</span> { PrismaClient } <span class="k">from</span> <span class="v">'@prisma/client'</span>;
+<span class="k">const</span> g = globalThis <span class="k">as</span> <span class="k">unknown</span> <span class="k">as</span> { prisma?: PrismaClient };
+<span class="k">export const</span> <span class="t">db</span> = g.prisma ?? <span class="k">new</span> PrismaClient();
+<span class="k">if</span> (process.env.NODE_ENV !== <span class="v">'production'</span>) g.prisma = db;</pre>
+
+      <div class="filetag">lib/dal/posts.ts — server-only queries + a DTO</div>
+      <pre class="wire"><span class="k">import</span> <span class="v">'server-only'</span>;
+<span class="k">import</span> { cache } <span class="k">from</span> <span class="v">'react'</span>;
+<span class="k">import</span> { db } <span class="k">from</span> <span class="v">'@/lib/db'</span>;
+
+<span class="c">// DTO: only the fields any caller is allowed to see.</span>
+<span class="k">export type</span> <span class="t">PostDTO</span> = { id: string; title: string; createdAt: Date };
+
+<span class="k">export const</span> <span class="t">getPublishedPosts</span> = cache(<span class="k">async</span> (): Promise&lt;PostDTO[]&gt; =&gt; {
+  <span class="k">return</span> db.post.findMany({
+    where: { status: <span class="v">'published'</span> },
+    orderBy: { createdAt: <span class="v">'desc'</span> },
+    select: { id: <span class="k">true</span>, title: <span class="k">true</span>, createdAt: <span class="k">true</span> }, <span class="c">// scrub the rest</span>
+  });
+});
+
+<span class="k">export async function</span> <span class="t">createPost</span>(input: { title: string; content: string; authorId: string }) {
+  <span class="k">return</span> db.post.create({ data: input, select: { id: <span class="k">true</span> } });
+}</pre>
+
+      <div class="filetag b">app/posts/actions.ts — the mutation entry point</div>
+      <pre class="wire"><span class="s">'use server'</span>;
+<span class="k">import</span> { z } <span class="k">from</span> <span class="v">'zod'</span>;
+<span class="k">import</span> { revalidatePath } <span class="k">from</span> <span class="v">'next/cache'</span>;
+<span class="k">import</span> { getCurrentUser } <span class="k">from</span> <span class="v">'@/lib/auth'</span>;
+<span class="k">import</span> { createPost } <span class="k">from</span> <span class="v">'@/lib/dal/posts'</span>;
+
+<span class="k">const</span> NewPost = z.object({ title: z.string().min(1).max(200), content: z.string().min(1) });
+<span class="k">export type</span> <span class="t">ActionState</span> = { error?: string } | { ok: <span class="k">true</span> };
+
+<span class="k">export async function</span> <span class="t">addPost</span>(_prev: ActionState, formData: FormData): Promise&lt;ActionState&gt; {
+  <span class="k">const</span> user = <span class="k">await</span> getCurrentUser();            <span class="c">// authN — the action is public</span>
+  <span class="k">if</span> (!user) <span class="k">return</span> { error: <span class="v">'You must be signed in.'</span> };
+  <span class="k">const</span> parsed = NewPost.safeParse({             <span class="c">// validate — never trust the client</span>
+    title: formData.get(<span class="v">'title'</span>), content: formData.get(<span class="v">'content'</span>),
+  });
+  <span class="k">if</span> (!parsed.success) <span class="k">return</span> { error: <span class="v">'Invalid input.'</span> };
+  <span class="k">await</span> createPost({ ...parsed.data, authorId: user.id }); <span class="c">// delegate to the DAL</span>
+  revalidatePath(<span class="v">'/posts'</span>);                       <span class="c">// refresh the cached read</span>
+  <span class="k">return</span> { ok: <span class="k">true</span> };
+}</pre>
+
+      <div class="filetag a">app/posts/page.tsx — the read (Server Component → DAL)</div>
+      <pre class="wire"><span class="k">import</span> { getPublishedPosts } <span class="k">from</span> <span class="v">'@/lib/dal/posts'</span>;
+<span class="k">import</span> { NewPostForm } <span class="k">from</span> <span class="v">'./new-post-form'</span>;
+
+<span class="k">export default async function</span> <span class="t">PostsPage</span>() {
+  <span class="k">const</span> posts = <span class="k">await</span> getPublishedPosts();
+  <span class="k">return</span> (
+    &lt;main&gt;
+      &lt;NewPostForm /&gt;
+      &lt;ul&gt;{posts.map((p) =&gt; &lt;li key={p.id}&gt;{p.title}&lt;/li&gt;)}&lt;/ul&gt;
+    &lt;/main&gt;
+  );
+}</pre>
+
+      <div class="filetag b">app/api/webhooks/stripe/route.ts — the external surface</div>
+      <pre class="wire"><span class="k">import</span> { markPaid } <span class="k">from</span> <span class="v">'@/lib/dal/posts'</span>;
+
+<span class="k">export async function</span> <span class="t">POST</span>(request: Request) {
+  <span class="k">const</span> sig = request.headers.get(<span class="v">'stripe-signature'</span>);
+  <span class="k">const</span> raw = <span class="k">await</span> request.text();
+  <span class="c">// verifyStripeSignature(raw, sig) ← Route Handlers have NO built-in CSRF/auth; you verify.</span>
+  <span class="k">const</span> event = JSON.parse(raw);
+  <span class="k">if</span> (event.type === <span class="v">'checkout.session.completed'</span>) <span class="k">await</span> markPaid(event.data.object.metadata.postId);
+  <span class="k">return</span> Response.json({ received: <span class="k">true</span> });
+}</pre>
+
+      <div class="tablewrap" style="margin-top:34px">
+        <table class="spec">
+          <thead><tr><th>Property</th><th>What the layered boundary buys you</th></tr></thead>
+          <tbody>
+            <tr><td>Security</td><td>Secrets and full rows live in server-only code; the DAL scrubs to DTOs and centralizes every authorization check</td></tr>
+            <tr><td>One seam</td><td>Caching, logging, an index fix, or an ORM swap happen in one file instead of scattered across every caller</td></tr>
+            <tr><td>Testability</td><td>Mock the DAL once, not the database in every component and action</td></tr>
+            <tr><td>Small surface</td><td>Reads in Server Components create no public endpoints — fewer public doors to defend</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout dal" style="margin-top:24px;font-size:15px">
+        <span class="lbl">conclusion</span>
+        Entry points <strong>orchestrate</strong>; the DAL <strong>executes</strong>. Keep them separate and every layer becomes independently testable, swappable, and auditable — which is the whole point of drawing the boundary.
+      </div>
+      <div class="prose" style="margin-top:22px;color:var(--ink3);font-size:14px">
+        <p>Part 1 of 2 — the canonical reference. The machinery underneath (the RSC wire format, Server Action internals, the full caching model, the DAL as a security boundary, and the wider architecture family — Hexagonal, Clean, Onion, CQRS, DDD) lives in Part 2.</p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <span class="fbrand">next.js · server primitives · the DAL · layered architecture — an explorable reference</span>
+  <span id="footTheme"><b>glass</b> · frosted-blueprint mode</span>
+</footer>
+
+<div id="tip" role="tooltip"></div>
+
+<div class="scrim" id="scrim">
+  <div class="modal" role="dialog" aria-modal="true">
+    <button class="mclose" id="mClose" aria-label="close">✕</button>
+    <div class="mscroll">
+    <div class="mhead">
+      <div class="mtag"><span id="mTag">STEP</span><span class="lane" id="mLane"></span></div>
+      <h4 id="mTitle"></h4>
+    </div>
+    <div class="mcode" id="mCode" style="display:none"></div>
+    <div class="mbody" id="mBody"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   GLOSSARY — kind: next | react | principle | sql
+   ============================================================ */
+const GLOSSARY={
+ "Server Component":["next","A component that renders on the server with direct backend access and ships no JavaScript for itself — the default for every file in app/."],
+ "Client Component":["react","A component marked 'use client' that runs in the browser, so it can hold state, run effects, and handle events."],
+ "'use client'":["react","The directive that opts a module into the client — needed for useState, useEffect, event handlers, or browser APIs."],
+ "'use server'":["next","The directive that marks a function as a Server Action: callable from the client, but executed on the server via a generated POST."],
+ "Server Action":["next","An async server function you call like a local function; Next.js compiles it into a same-origin POST endpoint and wires the network for you."],
+ "Route Handler":["next","A raw HTTP endpoint in app/**/route.ts built on the Web Request/Response APIs, with one export per HTTP method."],
+ "Data Access Layer":["principle","The single server-only module that queries the database — the seam every entry point sits on. Often shortened to DAL."],
+ "DAL":["principle","Data Access Layer: the one place your queries live, so caching, authorization, and DTOs are centralized instead of scattered."],
+ "DTO":["principle","Data Transfer Object: a deliberately narrowed shape holding only the fields a caller may see, so sensitive columns never travel up."],
+ "server-only":["next","A tiny package that fails the client build if imported there — a guardrail that keeps secrets and DB code out of the browser."],
+ "ORM":["sql","Object-Relational Mapper (Prisma, Drizzle): turns typed function calls into parameterized SQL and back into objects."],
+ "Prisma":["sql","A TypeScript ORM. Its select clause scrubs a query's returned shape at the database level."],
+ "zod":["principle","A schema-validation library. safeParse turns untrusted input into typed, validated data or a structured failure."],
+ "revalidatePath":["next","Marks the cached data for a route stale so the next render recomputes it — how a mutation refreshes the UI with no client re-fetch."],
+ "revalidateTag":["next","Busts every cached entry tagged with a given string, anywhere in the app — one invalidation vocabulary across reads."],
+ "useActionState":["react","A React 19 hook returning [state, formAction, isPending], so a form can drive pending and error UI from a Server Action."],
+ "useFormStatus":["react","A React hook exposing the in-flight status of the nearest form action, without tracking isLoading by hand."],
+ "transition":["react","A non-urgent state update. A Server Action runs as one, so the current UI stays interactive while it's in flight."],
+ "Suspense":["react","React's mechanism for showing fallback UI while async work resolves; Server Actions plug into the same pending machinery."],
+ "error boundary":["react","A component (error.tsx) that catches thrown errors below it and renders a fallback — Server Actions propagate through it."],
+ "hydration":["react","The browser attaching handlers and state to server-rendered HTML, turning static markup into an interactive Client Component."],
+ "RSC":["next","React Server Components: components that render on the server and stream a serialized payload the client reconstructs without their code."],
+ "rendering model":["principle","The rules for where and when a component tree becomes UI — client-side, server-side, static at build, or a mix."],
+ "server-first":["principle","A default posture: do the work on the server unless a specific reason forces it to the client."],
+ "App Router":["next","Next.js's routing system built on Server Components, layouts, and the app/ directory."],
+ "Pages Router":["next","The older Next.js system where every component is a client component and the server mostly hands over a bundle."],
+ "Middleware":["next","Code in middleware.ts that runs in front of routes for auth gating, redirects, header rewriting, or geo."],
+ "Edge runtime":["next","A lightweight runtime (Web APIs, no full Node) where Route Handlers and rendering can run close to the user."],
+ "progressive enhancement":["principle","A form that works before JavaScript hydrates — a Server Action submits via a real form POST, so basic function survives no-JS."],
+ "repository":["principle","A formalized DAL: an interface with swappable implementations, so callers depend on an abstraction, not a specific database."],
+ "separation of concerns":["principle","Keeping distinct responsibilities — rendering, orchestration, data access — in distinct layers that can change independently."],
+ "Model":["principle","In MVC, the data and the rules around it. In the App Router, that's the DAL plus any domain logic."],
+ "View":["principle","In MVC, the presentation — turning state into something the user perceives. Here: Server + Client Components."],
+ "Controller":["principle","In MVC, the coordinator that takes input, decides what to do, and invokes the Model. Here: Server Actions and Route Handlers."],
+ "MVC":["principle","Model-View-Controller: a split of an app into data + rules, presentation, and coordination."],
+ "attack surface":["principle","The set of publicly reachable entry points an attacker can probe. Fewer endpoints means fewer doors to defend."],
+ "FormData":["react","The browser's key/value form payload; a Server Action receives one directly, with no manual serialization."],
+ "connection pool":["sql","A cache of reusable database connections the ORM borrows from, instead of opening a new one per query."]
+};
+const KIND_LABEL={next:"next.js",react:"react",principle:"pattern",sql:"data"};
+
+/* annotation copy for diagram plates */
+const PLATE_TIPS={
+ "✕ not signed in → { error }":["principle","If auth fails, the action returns an error value immediately — no DAL call, no query, nothing written. The client renders the message via useActionState."],
+ "✕ invalid → { error }":["principle","If validation fails, the action returns { error } and stops. The database is never touched; only clean, typed data ever reaches the DAL."],
+ "✓ all pass → delegate":["principle","Caller identified, input validated, action authorized. Only now does the controller hand off to the DAL to perform the write."],
+ "① request / action POST":["next","Either a Server Component render request or a generated Server Action POST. Same-origin and server-bound — the browser never holds a database handle."],
+ "② query · pooled connection":["sql","The DAL's call, turned into parameterized SQL by the ORM and sent over a reused connection from the pool."],
+ "③ rows":["sql","The database returns rows to the server. They stop at the DAL, which scrubs them into DTOs before anything travels further up."],
+ "④ HTML + RSC payload · DTOs only":["next","Finished markup and a serialized payload cross back to the browser — only DTO fields, never raw rows, secrets, or server-component code."],
+ "server-only · secrets stay here":["principle","DATABASE_URL, full rows, and server-component source never cross this line. import 'server-only' enforces it at build time."]
+};
+
+/* ---------- tooltip ---------- */
+const tip=document.getElementById('tip');
+const termKeys=Object.keys(GLOSSARY).sort((a,b)=>b.length-a.length);
+const esc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+function tagTerms(scope){
+  const blocks=scope.querySelectorAll('p, li, td, .lead');
+  blocks.forEach(block=>{
+    if(block.closest('pre')) return;
+    const used=new Set();
+    block.querySelectorAll('.term').forEach(t=>used.add(t.dataset.term.toLowerCase()));
+    const walker=document.createTreeWalker(block,NodeFilter.SHOW_TEXT,{
+      acceptNode(n){
+        const p=n.parentElement; if(!p) return NodeFilter.FILTER_REJECT;
+        if(p.closest('code,pre,.term,a,.pill,h1,h2,h3,h4,.mono,.ccode,.mcode')) return NodeFilter.FILTER_REJECT;
+        return n.nodeValue.trim()?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT;
+      }
+    });
+    const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(node=>{
+      const text=node.nodeValue;
+      for(const term of termKeys){
+        if(used.has(term.toLowerCase())) continue;
+        const re=new RegExp('(^|[^\\w\'])('+esc(term)+')(?![\\w])','i');
+        const m=re.exec(text);
+        if(m){
+          used.add(term.toLowerCase());
+          const start=m.index+m[1].length;
+          const frag=document.createDocumentFragment();
+          const before=text.slice(0,start), after=text.slice(start+m[2].length);
+          if(before) frag.appendChild(document.createTextNode(before));
+          const span=document.createElement('span');
+          span.className='term'; span.dataset.term=term; span.textContent=m[2];
+          frag.appendChild(span);
+          if(after) frag.appendChild(document.createTextNode(after));
+          node.parentNode.replaceChild(frag,node);
+          return;
+        }
+      }
+    });
+  });
+}
+let tipHideT;
+function showTip(elm){
+  let key, entry;
+  if(elm.dataset.term){
+    key=elm.dataset.term;
+    entry=GLOSSARY[key]||GLOSSARY[Object.keys(GLOSSARY).find(k=>k.toLowerCase()===key.toLowerCase())];
+  } else if(elm.dataset.plate){
+    key=elm.dataset.plate; entry=PLATE_TIPS[key];
+  }
+  if(!entry) return;
+  clearTimeout(tipHideT);
+  tip.innerHTML='<span class="t-kind k-'+entry[0]+'">'+KIND_LABEL[entry[0]]+'</span><span class="t-name k-'+entry[0]+'">'+key+'</span>'+entry[1];
+  tip.classList.add('show');
+  const r=elm.getBoundingClientRect();
+  const tw=Math.min(330,tip.offsetWidth||330), th=tip.offsetHeight;
+  let left=r.left+r.width/2-tw/2;
+  left=Math.max(12,Math.min(left,window.innerWidth-tw-12));
+  let top=r.top-th-12;
+  if(top<10){top=r.bottom+12;}
+  tip.style.left=left+'px'; tip.style.top=top+'px';
+}
+function hideTip(){tipHideT=setTimeout(()=>tip.classList.remove('show'),60);}
+const hotSel='.term,.plate-hot';
+document.addEventListener('mouseover',e=>{const t=e.target.closest(hotSel);if(t)showTip(t);});
+document.addEventListener('mouseout',e=>{if(e.target.closest(hotSel))hideTip();});
+document.addEventListener('click',e=>{const t=e.target.closest(hotSel);if(t){showTip(t);setTimeout(hideTip,3000);}});
+
+/* ============================================================
+   STEPS — lanes: 0 Client · 1 Controller · 2 DAL · 3 Database
+   ============================================================ */
+const LANES=["Client","Controller · entry point","DAL · the model","Database"];
+const LANE_OWNER=["client","server","server","server"];
+const LANE_COLOR=["client","ctrl","dal","db"];
+const STEPS=[
+ {n:1,lane:0,phase:'write',title:"Submit the form",short:"the client form dispatches the action",
+  code:`&lt;form action={formAction}&gt;`,
+  body:`<p>A <span class='term' data-term='Client Component'>Client Component</span> renders the form. On submit, React hands the bound <strong>Server Action</strong> to the form's <code>action</code> — no <code>fetch</code>, no URL, no <code>JSON.stringify</code> to write.</p>`,
+  why:`The form works even before JS hydrates — the action is progressive-enhancement-friendly by design.`,
+  deep:{impl:`<p>The form is a <code>'use client'</code> component using <code>useActionState(addPost, initial)</code>, which returns <code>[state, formAction, isPending]</code>. <code>formAction</code> is what the &lt;form&gt; submits to.</p>`,
+        rule:`<p><strong>View layer.</strong> The component's only job is to render state into UI and surface the action — it holds no data-access logic.</p>`}},
+ {n:2,lane:0,phase:'write',title:"React starts a transition",short:"isPending flips true; the call is dispatched",
+  code:`const [state, formAction, isPending] = useActionState(addPost, init)`,
+  body:`<p>The action runs inside React's concurrent model as a <span class='term' data-term='transition'>transition</span>. The current UI stays interactive while <code>isPending</code> drives the button's “Saving…” state — no <code>useState</code> for loading.</p>`,
+  why:`Pending, error, and optimistic UI come from React 19 hooks, not hand-rolled request state.`,
+  deep:{impl:`<p><code>useActionState</code> and <code>useFormStatus</code> expose the in-flight flag through the same mechanism that powers <code>&lt;Suspense&gt;</code>. The dispatch is queued as a transition.</p>`,
+        rule:`<p>Still the <strong>View</strong>: it reflects <em>state</em>. What to do with the input hasn't been decided yet.</p>`}},
+ {n:3,lane:1,phase:'write',title:"POST to the action endpoint",short:"crosses the client → server boundary",
+  code:`'use server'  <span class='cm'>// compiled into a POST keyed by an action id</span>`,
+  body:`<p>What travels the wire is a generated <strong>POST</strong> keyed by an action id — not your function. This is the client → server boundary; the action's code never shipped to the browser in the first place.</p>`,
+  why:`The function you 'called' runs on the server; only a network POST actually crossed.`,
+  deep:{impl:`<p>Next.js replaces the imported action with a reference id. Submitting invokes a same-origin POST the framework routes to the real server function.</p>`,
+        rule:`<p>Entering the <strong>Controller</strong>. From here on, nothing is client-visible.</p>`}},
+ {n:4,lane:1,phase:'write',title:"Authenticate",short:"the action is public — identify the caller",
+  code:`const user = await getCurrentUser()  <span class='cm'>// authN</span>`,
+  body:`<p>A Server Action is a <strong>public endpoint</strong> that merely looks like a function. The first thing it does is establish <em>who</em> is calling. No session → return an error value; the write never begins.</p>`,
+  why:`Skip this and anyone on the internet can invoke your 'private' function.`,
+  deep:{impl:`<p>Auth is read from cookies/headers on the server. Expected, user-facing failures are <em>returned</em> as values; exceptional ones are thrown to an <span class='term' data-term='error boundary'>error boundary</span>.</p>`,
+        rule:`<p><strong>Controller</strong> job #1: authentication — orchestration, not data access.</p>`}},
+ {n:5,lane:1,phase:'write',title:"Validate input",short:"never trust the client — parse with zod",
+  code:`const parsed = NewPost.safeParse({ title, content })`,
+  body:`<p>The <code>FormData</code> is untrusted. A <span class='term' data-term='zod'>zod</span> schema parses and narrows it; on failure the action returns <code>{ error }</code> and stops. Only validated, typed data proceeds.</p>`,
+  why:`Validation at the boundary is what lets every layer below assume clean input.`,
+  deep:{impl:`<p><code>safeParse</code> returns a discriminated result; <code>parsed.success</code> gates the rest. The parsed value is fully typed for the DAL call.</p>`,
+        rule:`<p><strong>Controller</strong> job #2: input validation — still no database in sight.</p>`}},
+ {n:6,lane:2,phase:'write',title:"Delegate to the DAL",short:"the controller hands off to the model",
+  code:`await createPost({ ...parsed.data, authorId: user.id })`,
+  body:`<p>With the caller known and the input clean, the action does the one thing it must: <strong>hand off</strong>. It calls a DAL function and adds nothing more — the <span class='term' data-term='DAL'>DAL</span> is the only thing allowed to query.</p>`,
+  why:`Keeping the query out of the action is what makes authorization and caching centralizable.`,
+  deep:{impl:`<p>The action imports <code>createPost</code> from <code>lib/dal/posts</code>. That module carries <code>import 'server-only'</code>, so it can never be pulled into a client bundle.</p>`,
+        rule:`<p>The <strong>Controller → Model</strong> handoff. Dependencies point down: the action knows the DAL; the DAL knows nothing of the action.</p>`}},
+ {n:7,lane:2,phase:'write',title:"The DAL runs the query",short:"server-only; returns a DTO, not the row",
+  code:`db.post.create({ data, select: { id: true } })`,
+  body:`<p>Inside the DAL the query executes and returns a <span class='term' data-term='DTO'>DTO</span> — only the fields a caller may see. Sensitive columns never leave the data layer.</p>`,
+  why:`The DAL is the single seam to audit, optimize, secure, and test.`,
+  deep:{impl:`<p><span class='term' data-term='Prisma'>Prisma</span>'s <code>select</code> scrubs the shape at the query level. <code>cache()</code> from React dedupes reads within a single render.</p>`,
+        rule:`<p>The <strong>Model</strong>. It encapsulates data access and knows nothing about HTTP or rendering.</p>`}},
+ {n:8,lane:3,phase:'write',title:"ORM emits SQL",short:"a parameterized INSERT is built",
+  code:`INSERT INTO "Post" (...) VALUES ($1, $2, ...)`,
+  body:`<p>The <span class='term' data-term='ORM'>ORM</span> turns the call into parameterized SQL and sends it over a <span class='term' data-term='connection pool'>pooled connection</span>. Parameters — never string concatenation — keep the query injection-safe.</p>`,
+  why:`Swapping Prisma for Drizzle or raw sql changes only this layer.`,
+  deep:{impl:`<p>Prisma serializes the call, binds parameters, and dispatches through its connection pool to the database host.</p>`,
+        rule:`<p>The <strong>ORM / driver</strong> layer — a detail the DAL owns and everything above ignores.</p>`}},
+ {n:9,lane:3,phase:'write',title:"The row is written",short:"Postgres persists — bottom of the descent",
+  code:`RETURNING id`,
+  body:`<p>The database commits the row and returns the generated id. This is the deepest point of the trip; from here the request turns around.</p>`,
+  why:`Everything above was orchestration; this is the only step that persists state.`,
+  deep:{impl:`<p>The transaction commits; the id flows back up through the ORM to the DAL, which returns just <code>{ id }</code>.</p>`,
+        rule:`<p><strong>Database</strong> — persistence. The floor of the layered stack.</p>`}},
+ {n:10,lane:1,phase:'read',title:"Revalidate the read",short:"the trip turns around",
+  code:`revalidatePath('/posts')  <span class='cm'>// bust the cached list</span>`,
+  body:`<p>Back in the action, <span class='term' data-term='revalidatePath'>revalidatePath</span>('/posts') marks the cached data for that route stale. One invalidation vocabulary busts reads <em>anywhere</em> — Server Components included — with no client re-fetch.</p>`,
+  why:`This is why a mutation can refresh the UI without you writing a single fetch.`,
+  deep:{impl:`<p><code>revalidatePath</code> / <code>revalidateTag</code> (or <code>updateTag</code> under Cache Components) invalidate cached entries; the next render recomputes them.</p>`,
+        rule:`<p>Still the <strong>Controller</strong> — orchestrating the cache after the write, not touching data itself.</p>`}},
+ {n:11,lane:2,phase:'read',title:"Re-read through the DAL",short:"the Server Component re-executes",
+  code:`const posts = await getPublishedPosts()`,
+  body:`<p>The affected <span class='term' data-term='Server Component'>Server Component</span> runs again and calls the DAL for the fresh list. Same seam as every other read — the new post is now included, still as DTOs.</p>`,
+  why:`Reads and writes share one data layer, so the list can't drift from the write path.`,
+  deep:{impl:`<p>The Server Component awaits <code>getPublishedPosts()</code> during render; <code>cache()</code> dedupes it within the pass.</p>`,
+        rule:`<p><strong>Model</strong>, again — the read path and write path both go through the DAL.</p>`}},
+ {n:12,lane:1,phase:'read',title:"Stream the RSC payload",short:"HTML + a compact payload cross back",
+  code:`→ RSC payload  <span class='cm'>// finished markup, not component code</span>`,
+  body:`<p>The server sends the browser finished HTML plus a shrink-wrapped description of the result — <strong>not</strong> the components that produced it. Data-fetching code and libraries stay on the server.</p>`,
+  why:`Server-component code never ships — that's the payoff of rendering on the server.`,
+  deep:{impl:`<p>React streams a serialized <span class='term' data-term='RSC'>RSC</span> payload; the client reconciles it into the existing tree without receiving the server components' source.</p>`,
+        rule:`<p>Crossing back to the <strong>client</strong> — only output travels, never the server code.</p>`}},
+ {n:13,lane:0,phase:'read',title:"The list updates",short:"React reconciles; isPending flips false",
+  code:`{posts.map((p) =&gt; &lt;li key={p.id}&gt;{p.title}&lt;/li&gt;)}`,
+  body:`<p>React merges the new payload; the fresh post appears and <code>isPending</code> returns to false. The round trip is complete — one submit, no manual fetch, no cache juggling.</p>`,
+  why:`The whole loop closed with framework primitives — the seam did the bookkeeping.`,
+  deep:{impl:`<p>The transition resolves, the button re-enables, and the list reflects the write. Any returned <code>{ error }</code> would instead render via <code>state</code>.</p>`,
+        rule:`<p>Back at the <strong>View</strong>. The layered round trip is closed.</p>`}}
+];
+
+/* ---------- primitive cards ---------- */
+const PRIMS=[
+ {cls:'client',idx:'reads',tag:'Server Component',title:'Server Component',
+  code:`export default async function Page(){ const d = await getPosts() }`,
+  body:`<p>The default for every file in <code>app/</code>. It executes once on the server with a direct line to the database and secrets, and sends the browser HTML plus a compact payload — not its code.</p>`,
+  why:`Moving reads here shrinks both the bundle and the attack surface: no endpoint to defend.`,
+  deep:{impl:`<p>Runs on the server during render; can hold secrets and query the DAL inline. Push <code>'use client'</code> down to the smallest interactive leaves.</p>`,
+        rule:`<p><strong>View</strong> that also reads — keep the read in the DAL so the Model boundary holds.</p>`},
+  not:`anything interactive — useState, effects, onClick, and browser APIs all require a Client Component.`},
+ {cls:'ctrl',idx:'writes',tag:'Server Action',title:'Server Action',
+  code:`'use server'; export async function addPost(prev, form){ /* ... */ }`,
+  body:`<p>An <code>async</code> server function marked <code>'use server'</code>, called from a form or handler. Next.js compiles it into a POST and wires the network — the call feels local but runs on the server.</p>`,
+  why:`Collapses the endpoint, the fetch, the body serialization, and the client/server type drift into one function.`,
+  deep:{impl:`<p>Dispatched one at a time from a client as a same-origin POST; pairs with <code>useActionState</code>/<code>useFormStatus</code> for pending and errors, and <code>revalidatePath</code>/<code>revalidateTag</code> for refresh.</p>`,
+        rule:`<p><strong>Controller</strong> for writes: authenticate, authorize, validate, delegate, revalidate.</p>`},
+  not:`external or non-browser callers, GET-style reads, or custom HTTP semantics — those want a Route Handler.`},
+ {cls:'ctrl',idx:'http',tag:'Route Handler',title:'Route Handler',
+  code:`export async function GET(request: Request){ return Response.json(/* ... */) }`,
+  body:`<p>Built on the Web <code>Request</code>/<code>Response</code> APIs. Each method is its own export (<code>GET</code>, <code>POST</code>, …). Portable across Node and Edge, streaming-native, and integrated with caching and Middleware.</p>`,
+  why:`The one place with a stable public URL and full control of status codes and headers — required for webhooks.`,
+  deep:{impl:`<p>Since Next 15, <code>GET</code> handlers are dynamic by default; opt back in with <code>force-static</code> or cache the data inside. No built-in CSRF/auth — you verify.</p>`,
+        rule:`<p><strong>Controller</strong> for the external world: webhooks, third parties, proxying, custom content types.</p>`},
+  not:`a same-origin UI mutation — that's a Server Action with less code and free revalidation.`},
+ {cls:'dal',idx:'model',tag:'Data Access Layer',title:'The DAL',
+  code:`import 'server-only'; export async function getPosts(){ return db.post.findMany() }`,
+  body:`<p>In its simplest form, a folder of async functions — <code>getPostById</code>, <code>createPost</code>, <code>listPostsByAuthor</code>. Not a framework construct; a discipline. It's where caching, authorization, and DTOs live.</p>`,
+  why:`Centralizing queries gives one seam to audit, optimize, secure, and test — and stops authorization from drifting.`,
+  deep:{impl:`<p><code>import 'server-only'</code> fails the build if pulled client-side. May formalize into a <span class='term' data-term='repository'>repository</span> — an interface with swappable implementations — as it grows.</p>`,
+        rule:`<p>The <strong>Model</strong>: encapsulates data access and the rules that guard it; knows nothing of HTTP or rendering.</p>`},
+  not:`skipping it once you have more than a couple of queries — scattered db calls are the thing that rots.`}
+];
+
+/* ---------- modal ---------- */
+const scrim=document.getElementById('scrim');
+function modalBodyHTML(f){
+  let h=f.body+'<div class="why"><span class="wl">why it matters</span>'+f.why+'</div>';
+  if(f.deep){
+    h+='<div class="deep-h">Under the hood — framework &amp; principle</div>'+
+       '<div class="deep">'+
+         '<div class="dcol"><span class="dl impl">What Next.js does</span>'+f.deep.impl+'</div>'+
+         '<div class="dcol"><span class="dl rule">The layered rule</span>'+f.deep.rule+'</div>'+
+       '</div>';
+  }
+  return h;
+}
+function openModal(f){
+  document.getElementById('mTag').textContent=(f.n!=null?('STEP '+String(f.n).padStart(2,'0')):(f.tag||'DETAIL'));
+  const laneName=f.lane!=null?LANES[f.lane]:(f.laneName||'');
+  document.getElementById('mLane').textContent=laneName?('· '+laneName):'';
+  document.getElementById('mTitle').textContent=f.title;
+  const mc=document.getElementById('mCode');
+  if(f.code){mc.style.display='block';mc.innerHTML=f.code;} else {mc.style.display='none';}
+  const mb=document.getElementById('mBody'); mb.innerHTML=modalBodyHTML(f); tagTerms(mb);
+  scrim.classList.add('open');
+}
+function closeModal(){scrim.classList.remove('open');}
+document.getElementById('mClose').onclick=closeModal;
+scrim.onclick=e=>{if(e.target===scrim)closeModal();};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();exitFs();}});
+
+function buildPrimCards(){
+  const wrap=document.getElementById('primCards');
+  PRIMS.forEach(p=>{
+    const c=document.createElement('div'); c.className='card '+p.cls;
+    c.innerHTML='<div class="fn"><span class="idx">'+p.idx+'</span><span>'+p.tag+'</span></div>'+
+                '<div class="ft">'+p.title+'</div><div class="fs2">'+p.body.replace(/<[^>]+>/g,'').slice(0,96).split('. ')[0]+'.</div>'+
+                '<span class="chip">▾ framework + principle</span>';
+    const laneName=p.cls==='client'?'View':(p.cls==='dal'?'Model':'Controller');
+    c.onclick=()=>openModal({tag:p.tag.toUpperCase(),laneName:laneName,title:p.title,code:p.code,
+      body:p.body+'<p style="color:var(--ink3);font-size:13.5px"><strong style="color:var(--danger)">When not to reach for it:</strong> '+p.not+'</p>',
+      why:p.why,deep:p.deep});
+    wrap.appendChild(c);
+  });
+}
+buildPrimCards();
+
+
+/* ============================================================
+   SVG HELPERS (shared)
+   ============================================================ */
+const SVGNS='http://www.w3.org/2000/svg';
+function el(tag,attrs,html){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(html!=null)e.innerHTML=html;return e;}
+function plate(cx,cy,text,color,fs){
+  fs=fs||10.5;
+  const w=text.length*(fs*0.6)+20, h=fs+13;
+  return `<rect x="${cx-w/2}" y="${cy-h/2}" width="${w}" height="${h}" rx="${h/2}" fill="var(--plate)" stroke="var(--bd)"/>`+
+    `<text x="${cx}" y="${cy+fs*0.35}" text-anchor="middle" font-size="${fs}" font-weight="700" fill="${color}">${text}</text>`;
+}
+function hotPlate(cx,cy,text,color,fs){
+  return `<g class="plate-hot" data-plate="${text.replace(/"/g,'&quot;')}">${plate(cx,cy,text,color,fs)}</g>`;
+}
+function cvar(c){return 'var(--'+c+')';}
+
+/* ============================================================
+   HERO swimlane — the mutation round-trip
+   ============================================================ */
+const heroVP=document.getElementById('heroVP');
+const laneX0=134, laneRight=1160, laneW=laneRight-laneX0;
+const laneY=[120,268,406,540], laneH=60, R=17;
+const laneRole=["VIEW","CONTROLLER","MODEL","PERSISTENCE"];
+const nPad=44;
+const nodeCX=i=>laneX0+nPad+(laneW-2*nPad)*(i/(STEPS.length-1));
+
+/* lane backgrounds + labels */
+laneY.forEach((y,li)=>{
+  const owner=LANE_OWNER[li], col=LANE_COLOR[li];
+  const g=el('g',{class:owner==='server'?'server lbl-keep':''});
+  g.appendChild(el('rect',{x:laneX0,y:y-laneH/2,width:laneW,height:laneH,rx:16,fill:'var(--glass)',stroke:'var(--bd)'}));
+  g.appendChild(el('text',{x:laneX0-14,y:y-2,'text-anchor':'end','font-size':12,'font-weight':800,fill:cvar(col),'letter-spacing':.5},LANES[li].split(' ')[0].toUpperCase()));
+  g.appendChild(el('text',{x:laneX0-14,y:y+13,'text-anchor':'end','font-size':8.5,fill:'var(--ink3)','letter-spacing':1},laneRole[li]));
+  heroVP.appendChild(g);
+});
+
+/* connector through node centers */
+const pts=STEPS.map((f,i)=>[nodeCX(i),laneY[f.lane]]);
+let dd='M '+pts[0][0]+' '+pts[0][1];
+for(let i=1;i<pts.length;i++){const[x0,y0]=pts[i-1],[x1,y1]=pts[i],mx=(x0+x1)/2;dd+=` C ${mx} ${y0}, ${mx} ${y1}, ${x1} ${y1}`;}
+heroVP.appendChild(el('path',{d:dd,fill:'none',stroke:'var(--bd2)','stroke-width':2.5,'stroke-dasharray':'2 7','stroke-linecap':'round',opacity:.85}));
+
+/* pivot divider between step 9 (write) and step 10 (read) */
+const pivotX=(nodeCX(8)+nodeCX(9))/2;
+heroVP.appendChild(el('line',{x1:pivotX,y1:70,x2:pivotX,y2:590,stroke:'var(--bd)','stroke-width':1.4,'stroke-dasharray':'4 6'}));
+heroVP.appendChild(el('g',{},plate(pivotX,88,'turn around ⟲','var(--warn)',10)));
+heroVP.appendChild(el('g',{},plate(laneX0+nPad+40,600,'↓ write','var(--client)',10)));
+heroVP.appendChild(el('g',{},plate(laneRight-nPad-40,600,'↑ revalidate + read','var(--db)',10)));
+
+/* nodes + alternating title plates */
+const heroNodes=[], heroLabels=[];
+STEPS.forEach((f,i)=>{
+  const cx=nodeCX(i), cy=laneY[f.lane], col=cvar(LANE_COLOR[f.lane]), server=LANE_OWNER[f.lane]==='server';
+  const above=(i%2===0);
+  const ly=above?cy-R-24:cy+R+24;
+  const lead0=above?cy-R:cy+R, lead1=above?ly+9:ly-9;
+  heroVP.appendChild(el('line',{x1:cx,y1:lead0,x2:cx,y2:lead1,stroke:'var(--bd2)','stroke-width':1.2,class:server?'server':''}));
+  const lg=el('g',{class:'hlabel'+(server?' server':'')});
+  lg.innerHTML=plate(cx,ly,f.title,'var(--ink)',9.5);
+  heroVP.appendChild(lg); heroLabels.push({g:lg,c:col});
+  const g=el('g',{class:'node'+(server?' server':''),transform:`translate(${cx},${cy})`});
+  g.innerHTML=`<g class="nbox" style="transform-origin:0 0;color:${col}">`+
+    `<circle r="${R+5}" fill="${col}" opacity="0.12"/>`+
+    `<circle r="${R}" fill="var(--glass2)" stroke="${col}" stroke-width="2.4"/>`+
+    `<text x="0" y="4.5" text-anchor="middle" font-size="12.5" font-weight="800" fill="${col}">${String(f.n).padStart(2,'0')}</text></g>`;
+  g.addEventListener('click',()=>{setStep(i);openModal(f);});
+  heroVP.appendChild(g); heroNodes.push(g);
+});
+
+/* reject plate under validate (step 5, i=4) */
+heroVP.appendChild(el('g',{class:'plate-hot server','data-plate':'✕ invalid → { error }'},plate(nodeCX(4),laneY[1]+laneH/2+34,'✕ invalid → { error }','var(--danger)',9.5)));
+
+/* travelling token */
+const token=el('g',{},'<circle r="15" fill="var(--client)" opacity="0.28"/><circle r="8" fill="var(--client)"/><circle r="3.4" fill="#fff" opacity="0.9"/>');
+token.style.transition='transform .55s cubic-bezier(.5,0,.3,1)';
+heroVP.appendChild(token);
+
+/* ---------- player ---------- */
+let step=-1,playing=false,playT=null;
+function setStep(i){
+  step=Math.max(0,Math.min(STEPS.length-1,i));
+  const f=STEPS[step];
+  heroNodes.forEach((n,k)=>n.classList.toggle('active',k===step));
+  heroLabels.forEach((L,k)=>{const on=k===step;L.g.style.opacity=on?'1':'0.5';
+    const rect=L.g.querySelector('rect'),txt=L.g.querySelector('text');
+    if(rect)rect.setAttribute('stroke',on?L.c:'var(--bd)');
+    if(txt)txt.setAttribute('fill',on?L.c:'var(--ink2)');});
+  const tx=nodeCX(step),ty=laneY[f.lane],col=cvar(LANE_COLOR[f.lane]);
+  token.setAttribute('transform',`translate(${tx},${ty})`);
+  token.querySelectorAll('circle')[0].setAttribute('fill',col);
+  token.querySelectorAll('circle')[1].setAttribute('fill',col);
+  document.getElementById('capN').textContent='STEP '+String(f.n).padStart(2,'0');
+  document.getElementById('capLane').textContent=LANES[f.lane];
+  document.getElementById('capH').textContent=f.title;
+  document.getElementById('capB').textContent=f.short.charAt(0).toUpperCase()+f.short.slice(1)+'.';
+  const cc=document.getElementById('capCode'); cc.style.display='block'; cc.innerHTML=f.code;
+  const ph=document.getElementById('hPhase'); ph.textContent='phase · '+f.phase; ph.classList.toggle('up',f.phase==='read');
+  const more=document.getElementById('capMore');more.style.display='inline-block';more.onclick=()=>openModal(f);
+  document.getElementById('hStepNo').textContent=String(f.n).padStart(2,'0')+' / 13';
+  document.getElementById('hFill').style.width=(step/(STEPS.length-1)*100)+'%';
+}
+function play(){playing=true;updatePI();if(step>=STEPS.length-1)setStep(0);playT=setInterval(()=>{if(step>=STEPS.length-1){pause();return;}setStep(step+1);},1650);}
+function pause(){playing=false;clearInterval(playT);updatePI();}
+function updatePI(){document.getElementById('hPlayIcon').innerHTML=playing?'<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>':'<path d="M7 5v14l12-7z"/>';}
+document.getElementById('hPlay').onclick=()=>{playing?pause():play();};
+document.getElementById('hNext').onclick=()=>{pause();setStep(step+1);};
+document.getElementById('hPrev').onclick=()=>{pause();setStep(step-1);};
+document.getElementById('hScrub').onclick=e=>{pause();const r=e.currentTarget.getBoundingClientRect();setStep(Math.round((e.clientX-r.left)/r.width*(STEPS.length-1)));};
+/* phase divider marker on the scrub */
+(function(){const s=document.getElementById('hScrub');const d=document.createElement('div');d.className='ph';d.style.left=(9/12*100)+'%';s.appendChild(d);})();
+setStep(0);document.getElementById('hStepNo').textContent='00 / 13';document.getElementById('hFill').style.width='0%';
+document.getElementById('capMore').style.display='none';document.getElementById('capCode').style.display='none';
+
+/* ============================================================
+   LAYER diagram — the vertical stack
+   ============================================================ */
+const layerVP=document.getElementById('layerVP');
+const layers=[
+ {y:34,col:'client',owner:'client',t:'UI · Components',s:'Server + Client Components',role:'VIEW',
+  body:`<p>Your source. Server Components render on the server; Client Components (<code>'use client'</code>) hydrate in the browser. Only the client leaves actually ship JavaScript.</p>`,
+  why:`The only layer the user's device runs — keep it thin and push interactivity to the smallest leaves.`,
+  deep:{impl:`<p>Server Components call the DAL inline for reads; <code>&lt;form action={fn}&gt;</code> and <code>useActionState</code> wire writes without a fetch.</p>`,rule:`<p>The <strong>View</strong>. Renders state into UI; holds no data-access logic of its own.</p>`}},
+ {y:150,col:'ctrl',owner:'server',t:'Entry points',s:"Server Actions · Route Handlers",role:'CONTROLLER',
+  body:`<p>How the outside world gets in. Actions handle same-origin UI mutations; Handlers expose raw HTTP for external callers. Both authenticate, authorize, and validate — then delegate.</p>`,
+  why:`Treating every entry point as public is what keeps the layer below it safe to trust.`,
+  deep:{impl:`<p>An action compiles to a same-origin POST; a handler is <code>Request → Response</code>. Neither queries directly.</p>`,rule:`<p>The <strong>Controller</strong>. It orchestrates — parse, authN, authZ, revalidate — and never touches the database itself.</p>`}},
+ {y:266,col:'dal',owner:'server',boundary:true,t:'Data Access Layer',s:"import 'server-only'",role:'MODEL',
+  body:`<p>The load-bearing seam. A folder of async functions that are the <em>only</em> code allowed to query. It scrubs rows to DTOs and centralizes every authorization check.</p>`,
+  why:`One place to add caching, fix an index, swap the ORM, or audit access — instead of hunting the whole codebase.`,
+  deep:{impl:`<p><code>import 'server-only'</code> fails the client build; <code>cache()</code> dedupes reads; <code>select</code> narrows the returned shape.</p>`,rule:`<p>The <strong>Model</strong>. Encapsulates data access and the rules that guard it; knows nothing of HTTP or rendering.</p>`}},
+ {y:382,col:'db',owner:'server',t:'ORM / driver',s:'Prisma · Drizzle · sql',role:'',
+  body:`<p>Turns the DAL's typed calls into parameterized SQL and back into objects. Swappable behind the DAL without touching anything above.</p>`,
+  why:`Parameterized queries — not string building — are what keep the data layer injection-safe.`,
+  deep:{impl:`<p>Prisma/Drizzle bind parameters and dispatch over a connection pool to the database host.</p>`,rule:`<p>An implementation detail the <strong>Model</strong> owns; callers above never see SQL.</p>`}},
+ {y:498,col:'db',owner:'server',t:'Database',s:'Postgres · MySQL · SQLite',role:'',
+  body:`<p>Persistence — a separate host reached over the connection pool. The floor of the stack; everything above depends on it, it depends on nothing above.</p>`,
+  why:`Dependencies point down and stop here — the database has no idea a browser exists.`,
+  deep:{impl:`<p>Commits transactions and returns rows; the ORM maps them and the DAL scrubs them to DTOs.</p>`,rule:`<p><strong>Persistence.</strong> The bottom of the dependency arrow.</p>`}}
+];
+const lbw=470,lbx=175,lbh=92;
+layerVP.appendChild(el('defs',{},
+  '<marker id="larr" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--bd2)"/></marker>'+
+  '<linearGradient id="spineGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--client)"/><stop offset="0.4" stop-color="var(--ctrl)"/><stop offset="0.7" stop-color="var(--dal)"/><stop offset="1" stop-color="var(--db)"/></linearGradient>'+
+  '<marker id="spinearr" markerWidth="12" markerHeight="12" refX="5" refY="6" orient="auto"><path d="M0 0 L10 6 L0 12 z" fill="var(--db)"/></marker>'));
+/* left spine: dependencies point down */
+const spineX=104, spTop=layers[0].y+10, spBot=layers[4].y+lbh-10;
+layerVP.appendChild(el('line',{x1:spineX,y1:spTop,x2:spineX,y2:spBot,stroke:'url(#spineGrad)','stroke-width':3.5,'marker-end':'url(#spinearr)','stroke-linecap':'round',opacity:.9}));
+layerVP.appendChild(el('text',{x:spineX-13,y:(spTop+spBot)/2,'text-anchor':'middle','font-size':10,'font-weight':800,fill:'var(--ink3)','letter-spacing':2,transform:`rotate(-90 ${spineX-13} ${(spTop+spBot)/2})`},'DEPENDENCIES POINT DOWN'));
+/* connectors between boxes */
+layers.forEach((L,i)=>{ if(i<layers.length-1) layerVP.appendChild(el('path',{d:`M ${lbx+lbw/2} ${L.y+lbh} L ${lbx+lbw/2} ${layers[i+1].y}`,stroke:'var(--bd2)','stroke-width':2,'marker-end':'url(#larr)'})); });
+/* browser boundary divider between layer 0 and 1 */
+const bdivY=(layers[0].y+lbh+layers[1].y)/2;
+layerVP.appendChild(el('line',{x1:lbx-8,y1:bdivY,x2:lbx+lbw+8,y2:bdivY,stroke:'var(--bd)','stroke-width':1,'stroke-dasharray':'3 5',opacity:.6}));
+layerVP.appendChild(el('g',{},plate(lbx+lbw-60,bdivY,'↑ ships  ·  ↓ server-only','var(--ink3)',9)));
+/* layer boxes */
+layers.forEach((L)=>{
+  const col=cvar(L.col);
+  const g=el('g',{class:'node'+(L.owner==='server'?' server':'')});
+  let inner=`<g class="nbox" style="transform-origin:${lbx+lbw/2}px ${L.y+lbh/2}px;color:${col}">`+
+    `<rect x="${lbx}" y="${L.y}" width="${lbw}" height="${lbh}" rx="18" fill="var(--glass2)" stroke="${col}" stroke-width="${L.boundary?2.6:1.6}" ${L.boundary?'stroke-dasharray="10 6"':''}/>`+
+    `<text x="${lbx+26}" y="${L.y+38}" font-size="18" font-weight="700" fill="var(--ink)">${L.t}</text>`+
+    `<text x="${lbx+26}" y="${L.y+62}" font-size="12.5" fill="var(--ink2)" font-family="var(--mono)">${L.s}</text>`;
+  if(L.role) inner+=`<text x="${lbx+lbw-24}" y="${L.y+40}" text-anchor="end" font-size="13" font-weight="800" fill="${col}" letter-spacing="1">${L.role}</text>`;
+  inner+=`<text x="${lbx+lbw-24}" y="${L.y+62}" text-anchor="end" font-size="9.5" fill="var(--ink3)" font-family="var(--mono)">${L.owner==='server'?'server-only':'ships to browser'}</text>`;
+  if(L.boundary){
+    const lx=lbx+lbw/2+96, ly=L.y+lbh/2;
+    inner+=`<rect x="${lx-7}" y="${ly-2}" width="14" height="11" rx="2.5" fill="${col}"/>`+
+           `<path d="M${lx-4} ${ly-2} v-3 a4 4 0 0 1 8 0 v3" fill="none" stroke="${col}" stroke-width="1.8"/>`;
+  }
+  inner+=`</g>`;
+  g.innerHTML=inner;
+  g.addEventListener('click',()=>openModal({tag:'LAYER',laneName:L.role?L.role.charAt(0)+L.role.slice(1).toLowerCase():L.t,title:L.t,body:L.body,why:L.why,deep:L.deep}));
+  layerVP.appendChild(g);
+});
+
+/* ============================================================
+   PROCESS / RUNTIME model
+   ============================================================ */
+const procVP=document.getElementById('procVP');
+const procData={
+ 'BROWSER':{tag:'RUNTIME',laneName:'client',title:'The browser',body:`<p>Runs only your Client Components and the hydrated form. It holds no secrets and has no database handle — it can describe a request but never perform a query.</p>`,why:`The device is treated as untrusted, so everything sensitive lives elsewhere. That's why a fetch — or an action — leaves it.`,deep:{impl:`<p>Client Components hydrate server-rendered HTML; <code>useActionState</code> dispatches the action as a same-origin POST.</p>`,rule:`<p>The <strong>View</strong>'s runtime. Only what ships to the browser executes here.</p>`}},
+ 'SERVER':{tag:'RUNTIME',laneName:'server',title:'The server (Node or Edge)',body:`<p>The trusted process. It renders Server Components, runs Actions and Route Handlers, and hosts the DAL and secrets. This is where every read and write actually executes.</p>`,why:`Putting data access and secrets here — never in the browser — is the whole point of server-first.`,deep:{impl:`<p>Server Components stream RSC payloads; the DAL holds <code>DATABASE_URL</code> and talks to the database over a pooled connection.</p>`,rule:`<p>Home of the <strong>Controller</strong> and <strong>Model</strong>. Nothing here ships.</p>`}},
+ 'DATABASE':{tag:'RUNTIME',laneName:'persistence',title:'The database',body:`<p>A separate host again, reached over the connection pool. It persists rows and knows nothing about HTTP, rendering, or which browser triggered the write.</p>`,why:`Isolating persistence behind the DAL is what lets you swap or scale it without touching the app.`,deep:{impl:`<p>Receives parameterized SQL from the ORM; returns rows the DAL scrubs into DTOs.</p>`,rule:`<p><strong>Persistence.</strong> The floor everything depends on.</p>`}},
+ 'Client Components':{tag:'BROWSER',laneName:'client',title:'Client Components',body:`<p>The interactive leaves — state, effects, event handlers. Marked <code>'use client'</code>, they hydrate the server-rendered markup into a live UI.</p>`,why:`Only these ship JavaScript, so keeping them small keeps the bundle small.`,deep:{impl:`<p>Hydration attaches handlers to existing HTML; the components run in the browser's JS engine.</p>`,rule:`<p>The client half of the <strong>View</strong>.</p>`}},
+ 'Form state':{tag:'BROWSER',laneName:'client',title:'Form · useActionState',body:`<p>Drives pending, error, and optimistic UI from the Server Action — no hand-rolled loading state. The form submits to the action's generated endpoint.</p>`,why:`React 19 hooks fold the request lifecycle into the component model.`,deep:{impl:`<p><code>[state, formAction, isPending] = useActionState(action, init)</code>; <code>useFormStatus</code> exposes in-flight status.</p>`,rule:`<p>The <strong>View</strong> surfacing the action.</p>`}},
+ 'Server Components':{tag:'SERVER',laneName:'server',title:'Server Components',body:`<p>Render on the server with a direct line to the DAL. They emit finished HTML plus a compact payload — never their own source code.</p>`,why:`Rendering here keeps data-fetching code and heavy libraries off the client entirely.`,deep:{impl:`<p>Await DAL reads during render; React streams the serialized RSC payload to the browser.</p>`,rule:`<p>The server half of the <strong>View</strong> — which also reads, so the read stays in the DAL.</p>`}},
+ 'Actions + Handlers':{tag:'SERVER',laneName:'server',title:'Server Actions & Route Handlers',body:`<p>The entry points. Actions handle same-origin mutations; Handlers expose raw HTTP. Both authenticate, authorize, and validate before delegating to the DAL.</p>`,why:`They are public surfaces — the gate that protects everything below.`,deep:{impl:`<p>Action = generated same-origin POST; Handler = <code>Request → Response</code>. Neither queries directly.</p>`,rule:`<p>The <strong>Controller</strong>.</p>`}},
+ 'DAL (server-only)':{tag:'SERVER',laneName:'server',title:'The DAL — server-only',body:`<p>The single door to the database. It holds secrets, runs every query, and scrubs rows to DTOs. <code>import 'server-only'</code> guarantees it can never be bundled for the browser.</p>`,why:`One seam for caching, authorization, and DTOs — and a hard build-time wall around your credentials.`,deep:{impl:`<p>Owns <code>DATABASE_URL</code>; uses <code>cache()</code> and <code>select</code>; talks to the ORM.</p>`,rule:`<p>The <strong>Model</strong> — the boundary the whole architecture leans on.</p>`}},
+ 'Postgres':{tag:'DATABASE',laneName:'persistence',title:'Postgres',body:`<p>The persistence engine. Reached over a pooled connection; commits transactions and returns rows. A different host from the server process.</p>`,why:`Behind the DAL, the specific database is an implementation detail.`,deep:{impl:`<p>Executes parameterized SQL; the connection pool reuses warmed connections.</p>`,rule:`<p><strong>Persistence.</strong></p>`}}
+};
+function pbox(x,y,w,h,col,title,sub,server){
+  return `<g class="node${server?' server':''}"><g class="nbox" style="transform-origin:${x+w/2}px ${y+h/2}px;color:${col}">`+
+    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="14" fill="var(--glass2)" stroke="${col}" stroke-width="1.7"/>`+
+    `<text x="${x+16}" y="${y+27}" font-size="13.5" font-weight="700" fill="var(--ink)">${title}</text>`+
+    `<text x="${x+16}" y="${y+46}" font-size="10.5" fill="var(--ink2)" font-family="var(--mono)">${sub}</text></g></g>`;
+}
+function procContainer(x,y,w,h,label,sub,col,server){
+  const soft=col.replace(')','-soft)');
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="22" fill="${soft}" opacity="0.4"/>`+
+    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="22" fill="none" stroke="${col}" stroke-width="1.5" stroke-dasharray="3 7" opacity="0.75"/>`+
+    `<g class="proc-hot${server?' server':''}" data-container="${label}"><text x="${x+18}" y="${y-11}" font-size="12.5" font-weight="800" fill="${col}" letter-spacing="1">${label}</text></g>`+
+    `<text x="${x+18}" y="${y+26}" font-size="10" fill="var(--ink3)" letter-spacing="0.4" font-family="var(--mono)">${sub}</text>`;
+}
+let ph='<defs>'+
+  '<marker id="parr" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--ctrl)"/></marker>'+
+  '<marker id="parrC" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--client)"/></marker>'+
+  '<marker id="parrD" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--db)"/></marker>'+
+  '</defs>';
+/* security membrane behind everything (browser | server) */
+ph+='<rect x="372" y="108" width="40" height="474" rx="12" fill="var(--ctrl-soft)" opacity="0.5"/>';
+ph+='<rect x="372" y="108" width="40" height="474" rx="12" fill="none" stroke="var(--ctrl)" stroke-width="1.2" stroke-dasharray="4 6" opacity="0.7"/>';
+ph+='<rect x="385" y="336" width="14" height="11" rx="2.5" fill="var(--ctrl)"/><path d="M389 336 v-3 a4 4 0 0 1 8 0 v3" fill="none" stroke="var(--ctrl)" stroke-width="1.8"/>';
+ph+=hotPlate(392,90,'server-only · secrets stay here','var(--ctrl)',9.5);
+/* containers */
+ph+=procContainer(40,150,300,392,'BROWSER','the user\'s device · no secrets','var(--client)',false);
+ph+=procContainer(440,96,300,500,'SERVER','Node or Edge · renders, runs, queries','var(--ctrl)',true);
+ph+=procContainer(840,210,300,282,'DATABASE','a separate host','var(--db)',true);
+/* browser boxes */
+ph+=pbox(62,200,256,68,'var(--client)','Client Components','hydrate · state · events',false);
+ph+=pbox(62,296,256,68,'var(--client)','Form state','useActionState · pending',false);
+ph+='<text x="170" y="452" text-anchor="middle" font-size="10" fill="var(--ink3)" font-family="var(--mono)">no DB handle · no DATABASE_URL</text>';
+/* server boxes */
+ph+=pbox(462,150,256,64,'var(--ctrl)','Server Components','render · stream RSC',true);
+ph+=pbox(462,238,256,64,'var(--ctrl)','Actions + Handlers','authN · validate · authZ',true);
+ph+=pbox(462,330,256,74,'var(--dal)','DAL (server-only)','the one door to data',true);
+ph+='<text x="590" y="450" text-anchor="middle" font-size="10" fill="var(--ink3)" font-family="var(--mono)">holds secrets · DATABASE_URL</text>';
+/* database boxes */
+ph+=pbox(862,262,256,74,'var(--db)','Postgres','tables · transactions',true);
+ph+='<text x="990" y="380" text-anchor="middle" font-size="10" fill="var(--ink3)" font-family="var(--mono)">reached via connection pool</text>';
+/* inner connectors */
+ph+='<path d="M190 268 L190 296" stroke="var(--ink3)" stroke-width="1.5" marker-end="url(#parrC)"/>';
+ph+='<path d="M590 214 L590 238" stroke="var(--ink3)" stroke-width="1.5" marker-end="url(#parr)"/>';
+ph+='<path d="M590 302 L590 330" stroke="var(--ink3)" stroke-width="1.5" marker-end="url(#parr)"/>';
+/* browser <-> server flows */
+ph+='<path d="M330 200 L432 200" stroke="var(--ctrl)" stroke-width="2.4" marker-end="url(#parr)"/>';
+ph+=hotPlate(392,178,'① request / action POST','var(--ctrl)',10);
+ph+='<path d="M432 500 L330 500" stroke="var(--client)" stroke-width="2.4" marker-end="url(#parrC)"/>';
+ph+=hotPlate(392,522,'④ HTML + RSC payload · DTOs only','var(--client)',10);
+/* server <-> database flows */
+ph+='<path d="M742 300 L832 300" stroke="var(--db)" stroke-width="2.4" marker-end="url(#parrD)"/>';
+ph+=hotPlate(790,278,'② query · pooled connection','var(--db)',9.5);
+ph+='<path d="M832 360 L742 360" stroke="var(--dal)" stroke-width="2.4" marker-end="url(#parr)"/>';
+ph+=hotPlate(790,382,'③ rows','var(--dal)',9.5);
+procVP.innerHTML=ph;
+procVP.querySelectorAll('.node').forEach(node=>{const t=node.querySelector('text');node.addEventListener('click',()=>{const d=procData[t.textContent];if(d)openModal(d);});});
+procVP.querySelectorAll('.proc-hot').forEach(g=>{const key=g.getAttribute('data-container');g.addEventListener('click',()=>{const d=procData[key];if(d)openModal(d);});});
+
+/* ============================================================
+   GATE diagram — the Server Action security gate
+   ============================================================ */
+const gateVP=document.getElementById('gateVP');
+function cbox(x,y,w,h,col,label,sub){
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="14" fill="var(--glass2)" stroke="${col}" stroke-width="1.7"/>`+
+    `<text x="${x+w/2}" y="${y+h/2-4}" text-anchor="middle" font-size="14" font-weight="700" fill="var(--ink)">${label}</text>`+
+    (sub?`<text x="${x+w/2}" y="${y+h/2+16}" text-anchor="middle" font-size="10.5" fill="var(--ink2)" font-family="var(--mono)">${sub}</text>`:'');
+}
+gateVP.innerHTML=
+ `<defs>`+
+   `<marker id="garr" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--bd2)"/></marker>`+
+   `<marker id="garrR" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--danger)"/></marker>`+
+   `<marker id="garrG" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--dal)"/></marker>`+
+ `</defs>`+
+ `<text x="40" y="34" font-size="12" font-weight="700" fill="var(--ink3)" font-family="var(--mono)">a POST anyone can invoke enters here ↓</text>`+
+ `<g class="node"><g class="nbox" style="transform-origin:140px 92px;color:var(--ctrl)">${cbox(40,60,200,64,'var(--ctrl)','addPost(form)','invoked as a POST')}</g></g>`+
+ `<path d="M240 92 L326 92" stroke="var(--bd2)" stroke-width="2" marker-end="url(#garr)"/>`+
+ `<g class="node"><g class="nbox" style="transform-origin:470px 92px;color:var(--ctrl)">${cbox(330,54,280,78,'var(--ctrl)','The gate','authN · validate · authZ')}</g></g>`+
+ `<path d="M470 132 L470 176" stroke="var(--bd2)" stroke-width="2"/>`+
+ `<path d="M470 176 L200 176 L200 226" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#garrR)"/>`+
+ `<path d="M470 176 L470 226" stroke="var(--dal)" stroke-width="2" marker-end="url(#garrG)"/>`+
+ hotPlate(322,176,'✕ any check fails','var(--danger)',10)+
+ hotPlate(470,202,'✓ all pass → delegate','var(--dal)',10)+
+ `<g class="node"><g class="nbox" style="transform-origin:200px 258px;color:var(--danger)">${cbox(90,226,220,64,'var(--danger)','return { error }','nothing written')}</g></g>`+
+ `<g class="node"><g class="nbox" style="transform-origin:695px 258px;color:var(--dal)">${cbox(560,226,270,64,'var(--dal)','createPost(dto)','delegate to the DAL')}</g></g>`+
+ `<path d="M695 290 L695 348" stroke="var(--bd2)" stroke-width="2" marker-end="url(#garr)"/>`+
+ `<g class="node"><g class="nbox" style="transform-origin:695px 380px;color:var(--db)">${cbox(560,348,270,64,'var(--db)','write + revalidate','row persisted → revalidatePath')}</g></g>`;
+const gateData={
+ 'addPost(form)':{tag:'GATE',laneName:'Controller',title:'The action, invoked',body:`<p>To the client it looked like importing and calling a function. To the server it's a same-origin <strong>POST</strong> keyed by an action id — reachable by anyone who can craft the request.</p>`,why:`This is why the gate exists: a function call and a public endpoint are the same thing here.`,deep:{impl:`<p>Next.js routes the generated POST to your <code>'use server'</code> function with the submitted <code>FormData</code>.</p>`,rule:`<p>The <strong>Controller</strong> entry — before any data work.</p>`}},
+ 'The gate':{tag:'GATE',laneName:'Controller',title:'authN · validate · authZ',body:`<p>Three checks, in order. <strong>Authenticate</strong> — who is calling? <strong>Validate</strong> — is the input well-formed (zod)? <strong>Authorize</strong> — may <em>this</em> user perform <em>this</em> write? Any failure returns before the DAL is touched.</p>`,why:`Centralizing these on the entry point is what stops authorization from drifting across the codebase.`,deep:{impl:`<p>Auth from cookies/headers; <code>safeParse</code> for validation; an ownership check against the resource. Expected failures are returned; exceptional ones thrown.</p>`,rule:`<p>The <strong>Controller</strong>'s whole job — orchestration, not queries.</p>`}},
+ 'return { error }':{tag:'GATE',laneName:'reject',title:'Denied — nothing written',body:`<p>On any failed check the action returns <code>{ error }</code> (or throws to an error boundary). No DAL call happens, so the database is never touched. The client renders the message via <code>useActionState</code>.</p>`,why:`A rejected write leaves zero trace in the database — the gate is fail-closed.`,deep:{impl:`<p>The returned value becomes the form's <code>state</code>; the UI shows it without a page reload.</p>`,rule:`<p>The <strong>Controller</strong> refusing to delegate.</p>`}},
+ 'createPost(dto)':{tag:'GATE',laneName:'Model',title:'Delegate to the DAL',body:`<p>Only with all three checks passed does the action hand off. It calls a DAL function with validated data and adds nothing more — the DAL performs the write and returns a DTO.</p>`,why:`Keeping the query behind the gate is what makes the whole path auditable in one place.`,deep:{impl:`<p><code>createPost({ ...parsed.data, authorId: user.id })</code> runs in <code>server-only</code> code.</p>`,rule:`<p>The <strong>Controller → Model</strong> handoff.</p>`}},
+ 'write + revalidate':{tag:'GATE',laneName:'Model → cache',title:'Write, then revalidate',body:`<p>The DAL writes the row; back in the action, <code>revalidatePath('/posts')</code> busts the cached read so the next render shows the new post — no client re-fetch.</p>`,why:`The mutation and the UI refresh are one flow, expressed in framework primitives.`,deep:{impl:`<p>The write commits; <code>revalidatePath</code>/<code>revalidateTag</code> invalidate cached entries for the affected route/tag.</p>`,rule:`<p><strong>Model</strong> executes; <strong>Controller</strong> orchestrates the cache.</p>`}}
+};
+gateVP.querySelectorAll('.node').forEach(node=>{const t=node.querySelector('text');node.addEventListener('click',()=>{const d=gateData[t.textContent];if(d)openModal(d);});});
+
+/* ============================================================
+   MVC morph — same three boxes, two vocabularies
+   ============================================================ */
+const mvcVP=document.getElementById('mvcVP');
+const mvcRoles=[
+ {col:'ctrl', x:40,  mvc:['Controller','takes input · decides · invokes Model'], next:['Actions & Handlers','parse · authN · authZ · orchestrate']},
+ {col:'dal',  x:330, mvc:['Model','the data & the rules around it'], next:['The DAL (+ domain)','owns data access & business rules']},
+ {col:'client',x:620,mvc:['View','turns state into what the user sees'], next:['Components','Server + Client — render state']}
+];
+const mvcData={
+ 'Controller':{tag:'MVC → NEXT.JS',laneName:'Controller',title:'Controller → Actions & Handlers',body:`<p>MVC's coordinator becomes the App Router's entry points. They take input, authenticate, authorize, validate, and invoke the Model — then hand a result back to render.</p>`,why:`The coordinator role is real even though the App Router doesn't name it.`,deep:{impl:`<p>Server Actions for same-origin writes; Route Handlers for external HTTP.</p>`,rule:`<p>Orchestration, never data access.</p>`}},
+ 'Model':{tag:'MVC → NEXT.JS',laneName:'Model',title:'Model → the DAL',body:`<p>The Model was never "the database schema" — it's the interface to the domain and its data. That's exactly the DAL: it encapsulates data access and the rules that guard it, knowing nothing about HTTP or rendering.</p>`,why:`This is why the DAL is specifically the Model layer.`,deep:{impl:`<p><code>lib/dal/*</code> with <code>server-only</code>, DTOs, and (as it grows) a repository interface.</p>`,rule:`<p>The load-bearing boundary.</p>`}},
+ 'View':{tag:'MVC → NEXT.JS',laneName:'View',title:'View → Components',body:`<p>Presentation. Server + Client Components turn state into UI. The honest wrinkle: a Server Component also fetches — so it's part View, part Controller — which is why reads still belong in the DAL.</p>`,why:`Keeping the fetch in the DAL holds the Model boundary even when the View calls it.`,deep:{impl:`<p>Server Components read via the DAL; Client Components handle interactivity.</p>`,rule:`<p>Render state; delegate data.</p>`}}
+};
+function renderMVC(mode){
+  const box=(r)=>{const col=cvar(r.col);const L=mode==='mvc'?r.mvc:r.next;const y=150,w=240,h=120;
+    return `<g class="node"><g class="nbox" style="transform-origin:${r.x+w/2}px ${y+h/2}px;color:${col}">`+
+      `<rect x="${r.x}" y="${y}" width="${w}" height="${h}" rx="20" fill="var(--glass2)" stroke="${col}" stroke-width="1.8"/>`+
+      `<text x="${r.x+w/2}" y="${y+50}" text-anchor="middle" font-size="21" font-weight="800" fill="${col}">${L[0]}</text>`+
+      `<text x="${r.x+w/2}" y="${y+80}" text-anchor="middle" font-size="11.5" fill="var(--ink2)"><tspan>${L[1]}</tspan></text>`+
+      `<text x="${r.x+w/2}" y="${y+h+22}" text-anchor="middle" font-size="9.5" fill="var(--ink3)" font-family="var(--mono)" letter-spacing="1">${mode==='mvc'?'CLASSIC MVC':'NEXT.JS'}</text></g></g>`;};
+  let h=`<text x="450" y="46" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink3)" font-family="var(--mono)">${mode==='mvc'?'THREE RESPONSIBILITIES':'THE SAME THREE, IN THE APP ROUTER'}</text>`;
+  /* flow arrows request -> controller -> model -> view -> response, drawn under boxes */
+  h+=`<path d="M280 210 L330 210" stroke="var(--bd2)" stroke-width="2" marker-end="url(#marr)"/>`;
+  h+=`<path d="M570 210 L620 210" stroke="var(--bd2)" stroke-width="2" marker-end="url(#marr)"/>`;
+  h+=`<text x="305" y="200" text-anchor="middle" font-size="9" fill="var(--ink3)" font-family="var(--mono)">invokes</text>`;
+  h+=`<text x="595" y="200" text-anchor="middle" font-size="9" fill="var(--ink3)" font-family="var(--mono)">renders</text>`;
+  h+=`<defs><marker id="marr" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--bd2)"/></marker></defs>`;
+  h+=mvcRoles.map(box).join('');
+  mvcVP.style.opacity='0';
+  mvcVP.innerHTML=h;
+  requestAnimationFrame(()=>{mvcVP.style.transition='opacity .28s ease';mvcVP.style.opacity='1';});
+  mvcVP.querySelectorAll('.node').forEach(node=>{const t=node.querySelector('text');node.addEventListener('click',()=>{const key=mvcRoles.find(r=>{const L=mode==='mvc'?r.mvc:r.next;return L[0]===t.textContent;});const canon=key?key.mvc[0]:t.textContent;const d=mvcData[canon];if(d)openModal(d);});});
+}
+renderMVC('mvc');
+const mvcBtn=document.getElementById('mvcBtn');
+mvcBtn.onclick=()=>{const next=mvcBtn.dataset.mode==='mvc'?'next':'mvc';mvcBtn.dataset.mode=next;mvcBtn.textContent=next==='mvc'?'Showing · classic MVC':'Showing · Next.js';renderMVC(next);};
+
+/* ============================================================
+   DECIDER widget
+   ============================================================ */
+(function(){
+  let who=null, what=null;
+  const segWho=document.getElementById('segWho'), segWhat=document.getElementById('segWhat');
+  const res=document.getElementById('dResult'), rName=document.getElementById('rName'), rWhy=document.getElementById('rWhy'), rMeta=document.getElementById('rMeta');
+  const dot=res.querySelector('.dot'), rlead=res.querySelector('.rlead');
+  function pick(seg,v){[...seg.children].forEach(b=>b.classList.toggle('sel',b.dataset.v===v));}
+  function compute(){
+    if(!who||!what) return;
+    let cls,name,why,meta,color;
+    if(who==='ext'){cls='ctrl';color='var(--ctrl)';name='Route Handler';why='External and non-browser callers need a stable public URL and full control of status codes and headers.';meta='Webhooks · mobile apps · third parties · protocol control. <b>Still: the query lives in the DAL.</b>';}
+    else if(what==='read'){cls='client';color='var(--client)';name='Server Component';why='Read in the render itself — query the DAL inline, ship finished HTML, and create no public endpoint.';meta='Zero client JS for the list · no route to defend. <b>Still: the read goes through the DAL.</b>';}
+    else if(what==='write'){cls='ctrl';color='var(--ctrl)';name='Server Action';why='Mutate from your own UI as a function call, and get pending state plus cache revalidation for free.';meta='authN · validate · delegate · revalidate. <b>Still: the write goes through the DAL.</b>';}
+    else {cls='ctrl';color='var(--ctrl)';name='Route Handler';why='Even same-origin, raw HTTP — streaming, custom methods, content negotiation — wants an endpoint you fully own.';meta='You control the whole envelope. <b>Still: any query goes through the DAL.</b>';}
+    res.className='dresult '+cls;
+    rlead.textContent='Recommended entry point';
+    dot.style.background=color; dot.style.color=color;
+    rName.textContent=name; rWhy.textContent=why; rMeta.innerHTML=meta;
+  }
+  segWho.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;who=b.dataset.v;pick(segWho,who);compute();});
+  segWhat.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;what=b.dataset.v;pick(segWhat,what);compute();});
+})();
+
+/* ============================================================
+   BOUNDARY overlay
+   ============================================================ */
+document.querySelectorAll('[data-boundary]').forEach(btn=>{
+  const svg=document.getElementById(btn.dataset.boundary);
+  btn.addEventListener('click',()=>{
+    const on=svg.classList.toggle('dim-server');
+    btn.classList.toggle('on',on);
+    const last=btn.childNodes[btn.childNodes.length-1];
+    last.textContent=on?' Showing client only':' What ships to the browser';
+  });
+});
+
+/* ============================================================
+   INSPECT MODE (fullscreen pan/zoom)
+   ============================================================ */
+let fsFig=null, fsApi=null;
+function enterFs(fig,api){ if(fsFig) exitFs(); fsFig=fig; fsApi=api; fig.classList.add('fs'); document.body.style.overflow='hidden';
+  const b=fig.querySelector('[data-inspect]'); if(b) b.lastChild.textContent=' Exit'; }
+function exitFs(){ if(!fsFig) return; if(fsApi) fsApi.reset();
+  const b=fsFig.querySelector('[data-inspect]'); if(b) b.lastChild.textContent=' Inspect';
+  fsFig.classList.remove('fs'); document.body.style.overflow=''; fsFig=null; fsApi=null; }
+function makeInspectable(svgId){
+  const svg=document.getElementById(svgId);
+  const vp=svg.querySelector('.viewport');
+  const canvas=svg.closest('.canvas');
+  const fig=svg.closest('.figure');
+  const hintTag=document.createElement('div'); hintTag.className='inspect-hint'; hintTag.textContent='⤢ tap to inspect'; canvas.appendChild(hintTag);
+  const ctl=document.createElement('div'); ctl.className='zoomctl';
+  ctl.innerHTML='<button data-z="in" title="zoom in">+</button><button data-z="out" title="zoom out">−</button><button data-z="reset" title="reset view">⟲</button>';
+  canvas.appendChild(ctl);
+  const lvl=document.createElement('div'); lvl.className='zlevel'; lvl.textContent='100%'; canvas.appendChild(lvl);
+  const zh=document.createElement('div'); zh.className='zhint'; zh.textContent='scroll / pinch to zoom · drag to pan · Esc to exit'; canvas.appendChild(zh);
+  let s=1,tx=0,ty=0,drag=false,sx=0,sy=0;
+  const pts=new Map(); let pinchD=0,pinchS=1;
+  const isFs=()=>fig.classList.contains('fs');
+  const clamp=v=>Math.max(0.5,Math.min(6,v));
+  const apply=()=>{vp.setAttribute('transform',`translate(${tx},${ty}) scale(${s})`);lvl.textContent=Math.round(s*100)+'%';};
+  const reset=()=>{s=1;tx=0;ty=0;vp.removeAttribute('transform');lvl.textContent='100%';};
+  function toVB(cx,cy){const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;return[(cx-r.left)/r.width*vb.width,(cy-r.top)/r.height*vb.height];}
+  function zoomAt(cx,cy,f){const ns=clamp(s*f);const[px,py]=toVB(cx,cy);tx=px-(px-tx)*(ns/s);ty=py-(py-ty)*(ns/s);s=ns;apply();}
+  const INTERACTIVE='.node, .proc-hot, .plate-hot';
+  canvas.addEventListener('click',e=>{ if(isFs())return; if(e.target.closest(INTERACTIVE))return; enterFs(fig,{reset}); });
+  canvas.addEventListener('wheel',e=>{ if(!isFs())return; e.preventDefault(); zoomAt(e.clientX,e.clientY,e.deltaY<0?1.12:0.89); },{passive:false});
+  canvas.addEventListener('dblclick',e=>{ if(!isFs()||e.target.closest(INTERACTIVE))return; zoomAt(e.clientX,e.clientY,1.5); });
+  canvas.addEventListener('pointerdown',e=>{
+    if(!isFs())return;
+    pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){const a=[...pts.values()];pinchD=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);pinchS=s;drag=false;return;}
+    if(e.target.closest(INTERACTIVE))return;
+    drag=true;sx=e.clientX;sy=e.clientY;canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove',e=>{
+    if(!isFs())return;
+    if(pts.has(e.pointerId))pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){const a=[...pts.values()];const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);if(pinchD>0){const ns=clamp(pinchS*(d/pinchD));const cx=(a[0].x+a[1].x)/2,cy=(a[0].y+a[1].y)/2;const[px,py]=toVB(cx,cy);tx=px-(px-tx)*(ns/s);ty=py-(py-ty)*(ns/s);s=ns;apply();}return;}
+    if(!drag)return;const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;
+    tx+=(e.clientX-sx)/r.width*vb.width;ty+=(e.clientY-sy)/r.height*vb.height;sx=e.clientX;sy=e.clientY;apply();
+  });
+  function up(e){pts.delete(e.pointerId);if(pts.size<2)pinchD=0;drag=false;}
+  canvas.addEventListener('pointerup',up); canvas.addEventListener('pointercancel',up);
+  ctl.querySelectorAll('button').forEach(b=>{ b.onclick=ev=>{ ev.stopPropagation(); const r=svg.getBoundingClientRect();
+    if(b.dataset.z==='in')zoomAt(r.left+r.width/2,r.top+r.height/2,1.25);
+    else if(b.dataset.z==='out')zoomAt(r.left+r.width/2,r.top+r.height/2,0.8);
+    else reset();
+  };});
+  const tog=fig.querySelector('[data-inspect="'+svgId+'"]');
+  if(tog) tog.addEventListener('click',()=>{ isFs()?exitFs():enterFs(fig,{reset}); });
+}
+['heroSvg','layerSvg','procSvg','gateSvg','mvcSvg'].forEach(makeInspectable);
+
+/* ============================================================
+   THEME / TOC / crumb / live strip
+   ============================================================ */
+const root=document.documentElement,themeBtn=document.getElementById('themeBtn');
+const sunIcon='<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/>';
+const moonIcon='<path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/>';
+if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)setTheme('light');
+function setTheme(t){root.setAttribute('data-theme',t);document.getElementById('themeTxt').textContent=t.toUpperCase();document.getElementById('themeIcon').innerHTML=t==='dark'?sunIcon:moonIcon;}
+themeBtn.onclick=()=>setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+
+const links=[...document.querySelectorAll('nav.toc a')];
+const crumb=document.getElementById('crumb');
+const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){
+  links.forEach(l=>l.classList.toggle('active',l.getAttribute('href')==='#'+e.target.id));
+  const a=links.find(l=>l.getAttribute('href')==='#'+e.target.id);
+  if(a){const num=a.querySelector('.num').textContent, lbl=a.querySelector('.lbl').textContent;crumb.innerHTML='<b>'+num+'</b> '+lbl;crumb.classList.add('show');}
+}});},{rootMargin:'-30% 0px -60% 0px'});
+document.querySelectorAll('section.block').forEach(s=>io.observe(s));
+
+const shell=document.getElementById('shell'), tocToggle=document.getElementById('tocToggle'), navBtn=document.getElementById('navBtn'), navTxt=document.getElementById('navTxt');
+const VALID=['expanded','collapsed','hidden'];
+function setTocState(s){ if(!VALID.includes(s))s='expanded'; shell.setAttribute('data-toc',s);
+  tocToggle.setAttribute('aria-expanded',s==='expanded'?'true':'false');
+  navBtn.setAttribute('aria-expanded',s==='hidden'?'false':'true');
+  navTxt.textContent=s==='hidden'?'NAV':'HIDE'; }
+tocToggle.addEventListener('click',()=>setTocState(shell.getAttribute('data-toc')==='expanded'?'collapsed':'expanded'));
+let lastVisible='expanded';
+navBtn.addEventListener('click',()=>{const cur=shell.getAttribute('data-toc');if(cur==='hidden'){setTocState(lastVisible||'expanded');}else{lastVisible=cur;setTocState('hidden');}});
+(function(){ if(window.innerWidth<1160 && window.innerWidth>=980) setTocState('collapsed'); else setTocState('expanded'); })();
+
+(function(){
+  const items=[...document.querySelectorAll('.packet-demo .flow-node, .packet-demo .flow-arrow')];
+  if(!items.length) return; let i=0;
+  const stepFn=()=>{items.forEach((n,j)=>n.classList.toggle('active', j===i));i=(i+1)%items.length;};
+  stepFn(); setInterval(stepFn, 720);
+})();
+
+/* top nav retracts on scroll-down, returns on scroll-up */
+(function(){
+  const topEl=document.querySelector('header.top'); let lastY=window.scrollY||0;
+  window.addEventListener('scroll',()=>{
+    const y=window.scrollY||0;
+    if(y>lastY+4 && y>140) topEl.classList.add('hidden');
+    else if(y<lastY-4 || y<=140) topEl.classList.remove('hidden');
+    lastY=y;
+  },{passive:true});
+})();
+
+/* aggressive glossary tagging across prose */
+tagTerms(document.querySelector('main'));
+</script>
+</body>
+</html>

@@ -1,0 +1,1907 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Same Bytes · binary data from first principles</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Spline+Sans:wght@400;500;600&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --raw:#a6f432; --raw-soft:rgba(166,244,50,.14);
+  --view:#54b9ff; --view-soft:rgba(84,185,255,.15);
+  --warn:#ff5d5d; --warn-soft:rgba(255,93,93,.15);
+  --r:14px; --maxw:1200px;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --disp:'Fraunces',Georgia,serif;
+  --body:'Spline Sans',system-ui,sans-serif;
+}
+html[data-theme="dark"]{
+  --bg:#06080a; --bg2:#0a0e11; --panel:#0d1216; --panel2:#11181d;
+  --ink:#eef3ef; --ink2:#a3b4b0; --ink3:#62736f;
+  --line:rgba(150,190,180,.13); --line2:rgba(150,190,180,.26);
+  --grid:rgba(120,200,170,.022); --grid2:rgba(120,200,170,.04);
+  --shadow:0 30px 70px -28px rgba(0,0,0,.8);
+  --glow:0 0 0 1px var(--raw-soft), 0 0 26px -4px rgba(166,244,50,.25);
+}
+html[data-theme="light"]{
+  --bg:#e9e3d4; --bg2:#efe9da; --panel:#f5f0e3; --panel2:#fbf7ec;
+  --ink:#14181b; --ink2:#4a544f; --ink3:#8b8a7c;
+  --line:rgba(40,56,48,.16); --line2:rgba(40,56,48,.34);
+  --grid:rgba(40,70,55,.025); --grid2:rgba(40,70,55,.05);
+  --raw:#4f8a00; --raw-soft:rgba(79,138,0,.14);
+  --view:#1763c4; --view-soft:rgba(23,99,196,.12);
+  --warn:#cf3a2f; --warn-soft:rgba(207,58,47,.12);
+  --shadow:0 26px 54px -26px rgba(40,52,46,.42);
+  --glow:0 0 0 1px var(--raw-soft), 0 0 22px -6px rgba(79,138,0,.3);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);
+  font-size:17.5px;line-height:1.62;-webkit-font-smoothing:antialiased;
+  background-image:
+    linear-gradient(var(--grid) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:60px 60px,60px 60px;
+  transition:background-color .45s,color .45s;
+}
+body.fs-lock{overflow:hidden}
+
+/* ---------- scrollbar ---------- */
+*{scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line2);border-radius:999px;border:3px solid var(--bg);background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:var(--ink3);border:3px solid var(--bg);background-clip:padding-box}
+::-webkit-scrollbar-corner{background:transparent}
+::selection{background:var(--raw-soft);color:var(--ink)}
+.mono{font-family:var(--mono)}
+code,pre{font-family:var(--mono)}
+
+/* ---------- header ---------- */
+header.top{position:sticky;top:0;z-index:60;backdrop-filter:blur(16px);background:color-mix(in srgb,var(--bg) 76%,transparent);border-bottom:1px solid var(--line)}
+.top-inner{max-width:var(--maxw);margin:0 auto;padding:13px 26px;display:flex;align-items:center;gap:18px}
+.brand{font-family:var(--mono);font-weight:700;letter-spacing:.02em;font-size:13.5px;display:flex;align-items:center;gap:11px}
+.brand .chip{display:inline-grid;grid-template-columns:repeat(4,7px);gap:2px}
+.brand .chip i{height:7px;border-radius:1.5px;background:var(--ink3);animation:flick 4s infinite}
+.brand .chip i:nth-child(1){background:var(--raw);animation-delay:.0s}
+.brand .chip i:nth-child(2){animation-delay:.4s}
+.brand .chip i:nth-child(3){background:var(--view);animation-delay:.8s}
+.brand .chip i:nth-child(4){animation-delay:1.2s}
+@keyframes flick{0%,88%,100%{opacity:.35}90%,98%{opacity:1}}
+.brand b{color:var(--ink)} .brand .sub{color:var(--ink3);font-weight:400}
+.top-spacer{flex:1}
+.theme-btn{font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);padding:8px 13px;border-radius:999px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:.2s}
+.theme-btn:hover{color:var(--ink);border-color:var(--raw)}
+.theme-btn svg{width:15px;height:15px}
+
+/* ---------- layout ---------- */
+.shell{max-width:880px;margin:0 auto;padding:0 26px;transition:max-width .42s cubic-bezier(.4,1,.5,1),margin-left .42s cubic-bezier(.4,1,.5,1)}
+body.nav-docked .shell{max-width:820px;margin-left:max(260px,calc(50% - 410px));margin-right:auto}
+@media(max-width:1180px){body.nav-docked .shell{margin-left:auto;max-width:880px}}
+
+/* ---------- retractable docked sidebar ---------- */
+.sidenav{position:fixed;top:0;bottom:0;left:0;width:248px;z-index:69;display:flex;flex-direction:column;
+  background:color-mix(in srgb,var(--panel) 92%,transparent);backdrop-filter:blur(16px);
+  border-right:1px solid var(--line2);box-shadow:var(--shadow);
+  transform:translateX(-100%);transition:transform .42s cubic-bezier(.4,1,.5,1)}
+body.nav-docked .sidenav{transform:translateX(0)}
+.sidenav-hd{display:flex;align-items:center;gap:10px;padding:18px 18px 14px;border-bottom:1px solid var(--line)}
+.sidenav-hd .sh-dot{width:9px;height:9px;border-radius:50%;background:var(--raw);box-shadow:0 0 9px var(--raw);flex:none}
+.sidenav-hd .sh-txt{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink2)}
+.sidenav-hd .sh-close{margin-left:auto;width:28px;height:28px;border-radius:8px;border:1px solid var(--line2);background:transparent;color:var(--ink3);cursor:pointer;display:grid;place-items:center;transition:.18s}
+.sidenav-hd .sh-close:hover{color:var(--ink);border-color:var(--raw)}
+.sidenav-hd .sh-close svg{width:14px;height:14px}
+.sidenav-list{flex:1;overflow:auto;padding:10px 0 24px}
+.sidenav-list a{display:flex;gap:12px;align-items:center;color:var(--ink3);text-decoration:none;padding:8px 18px;border-left:2px solid transparent;font-family:var(--mono);font-size:12.5px;letter-spacing:.01em;transition:.16s}
+.sidenav-list a .snum{color:var(--ink3);font-weight:700;font-size:10px;min-width:18px}
+.sidenav-list a .sdot{width:5px;height:5px;border-radius:50%;background:var(--ink3);opacity:.4;flex:none;transition:.2s}
+.sidenav-list a:hover{color:var(--ink);background:var(--panel2)}
+.sidenav-list a.passed .sdot{opacity:.6;background:var(--ink2)}
+.sidenav-list a.active{color:var(--ink);border-left-color:var(--raw);background:var(--panel2)}
+.sidenav-list a.active .snum{color:var(--raw)}
+.sidenav-list a.active .sdot{background:var(--raw);opacity:1;box-shadow:0 0 7px var(--raw)}
+/* reopen tab — visible only when retracted */
+.nav-tab{position:fixed;top:50%;left:0;transform:translateY(-50%);z-index:68;display:flex;align-items:center;gap:8px;
+  height:46px;padding:0 13px 0 11px;border:1px solid var(--line2);border-left:none;border-radius:0 12px 12px 0;
+  background:var(--panel2);color:var(--ink2);cursor:pointer;box-shadow:var(--shadow);
+  font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  transition:transform .42s cubic-bezier(.4,1,.5,1),color .18s,border-color .18s}
+.nav-tab svg{width:15px;height:15px}
+.nav-tab .nt-prog{font-size:9px;color:var(--ink3);font-weight:700}
+.nav-tab:hover{color:var(--ink);border-color:var(--raw)}
+body.nav-docked .nav-tab{transform:translateY(-50%) translateX(-110%);pointer-events:none}
+main{padding:36px 0 150px;min-width:0}
+
+/* ---------- type ---------- */
+.kicker{font-family:var(--mono);font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--view);display:flex;align-items:center;gap:13px;margin:0 0 16px}
+.kicker .ix{color:var(--raw);font-weight:700}
+.kicker::after{content:"";flex:1;height:1px;background:var(--line)}
+h1.hero-h{font-family:var(--disp);font-weight:500;font-size:clamp(40px,6.4vw,76px);line-height:1.0;letter-spacing:-.02em;margin:0 0 20px}
+h1.hero-h .a{color:var(--raw);font-style:italic} h1.hero-h .b{color:var(--view);font-style:italic}
+h2{font-family:var(--disp);font-weight:500;font-size:clamp(27px,3.7vw,42px);letter-spacing:-.018em;margin:0 0 16px;line-height:1.08}
+h2 em{font-style:italic;color:var(--view)}
+h3{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink2);margin:30px 0 10px}
+.lead{font-size:20.5px;color:var(--ink2);max-width:60ch;line-height:1.55}
+.prose{max-width:65ch}
+.prose p{margin:0 0 16px} .prose strong{color:var(--ink);font-weight:600}
+.prose code,.lead code,.callout code,td code,.modal code,.caption code{font-size:.86em;color:var(--ink);background:var(--panel2);padding:1.5px 6px;border-radius:6px;border:1px solid var(--line)}
+section.block{padding:74px 0;border-bottom:1px solid var(--line);scroll-margin-top:84px}
+section.block:first-of-type{padding-top:30px}
+
+/* ---------- glossary term + tooltip ---------- */
+.term{cursor:help;border-bottom:1.5px dotted var(--view);position:relative;color:inherit;transition:background .15s}
+.term:hover{background:var(--view-soft)}
+#tip{position:fixed;z-index:1200;max-width:320px;background:var(--panel2);border:1px solid var(--line2);border-radius:13px;padding:13px 16px;box-shadow:var(--shadow);font-size:14px;line-height:1.5;color:var(--ink2);pointer-events:none;opacity:0;transform:translateY(5px);transition:opacity .15s,transform .15s;font-family:var(--body)}
+#tip.show{opacity:1;transform:translateY(0)}
+#tip .t-name{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.03em;color:var(--view);display:block;margin-bottom:5px}
+#tip .t-kind{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--raw);text-transform:uppercase;float:right;border:1px solid var(--raw);border-radius:999px;padding:1px 6px}
+#tip::after{content:"";position:absolute;left:var(--ax,20px);bottom:-7px;width:12px;height:12px;background:var(--panel2);border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);transform:rotate(45deg)}
+#tip.flip::after{bottom:auto;top:-7px;transform:rotate(225deg)}
+
+/* ---------- callouts / wire ---------- */
+.callout{border:1px solid var(--line);border-left:3px solid var(--raw);background:var(--panel);border-radius:0 var(--r) var(--r) 0;padding:18px 22px;margin:26px 0;font-size:16.5px;color:var(--ink2)}
+.callout.view{border-left-color:var(--view)}
+.callout.warn{border-left-color:var(--warn)}
+.callout .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--raw);display:block;margin-bottom:8px}
+.callout.view .lbl{color:var(--view)} .callout.warn .lbl{color:var(--warn)}
+.callout strong{color:var(--ink)}
+pre.wire{font-family:var(--mono);font-size:13px;line-height:1.75;background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:17px 19px;overflow:auto;color:var(--ink2)}
+pre.wire .k{color:var(--view)} pre.wire .v{color:var(--raw)} pre.wire .c{color:var(--ink3)} pre.wire .d{color:var(--warn)}
+table.spec{width:100%;border-collapse:collapse;font-size:14.5px;margin:8px 0 4px;font-family:var(--mono)}
+table.spec th{text-align:left;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);font-weight:700;padding:10px 13px;border-bottom:1px solid var(--line2)}
+table.spec td{padding:11px 13px;border-bottom:1px solid var(--line);color:var(--ink2);vertical-align:top}
+table.spec td:first-child{color:var(--ink);font-weight:500}
+.pill{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.05em;padding:2px 8px;border-radius:999px;border:1px solid currentColor}
+.pill.raw{color:var(--raw);background:var(--raw-soft)} .pill.view{color:var(--view);background:var(--view-soft)} .pill.os{color:var(--ink3)}
+
+/* ---------- figure shell ---------- */
+.figure{margin:30px 0;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);overflow:hidden;box-shadow:var(--shadow)}
+.figure.fs{position:fixed;inset:12px;z-index:400;margin:0;max-width:none;display:flex;flex-direction:column}
+.fig-bar{display:flex;align-items:center;gap:11px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.fig-bar .title{font-family:var(--mono);font-size:11.5px;letter-spacing:.05em;color:var(--ink2);text-transform:uppercase}
+.fig-bar .grow{flex:1}
+.fbtn{font-family:var(--mono);font-size:11px;letter-spacing:.02em;border:1px solid var(--line2);background:transparent;color:var(--ink2);padding:6px 11px;border-radius:8px;cursor:pointer;transition:.18s;display:inline-flex;align-items:center;gap:6px}
+.fbtn:hover{color:var(--ink);border-color:var(--raw)}
+.fbtn.on{color:var(--bg);background:var(--view);border-color:var(--view)}
+.fbtn svg{width:13px;height:13px}
+.canvas{position:relative;background:radial-gradient(circle at 1px 1px,color-mix(in srgb,var(--ink3) 22%,transparent) 1px,transparent 0) 0 0/22px 22px}
+.figure.fs .canvas{flex:1;min-height:0}
+.figure:not(.fs) .canvas[data-zoom]{cursor:zoom-in}
+.figure.fs .canvas{cursor:grab}
+.figure.fs .canvas:active{cursor:grabbing}
+svg.diagram{display:block;width:100%;height:auto;touch-action:auto}
+.figure.fs svg.diagram{height:100%;touch-action:none}
+.node{cursor:pointer}
+.node .nbox{transition:transform .35s cubic-bezier(.4,1.3,.5,1),filter .25s}
+.node:hover .nbox{filter:brightness(1.14)}
+.node.active .nbox{filter:drop-shadow(0 0 12px var(--view))}
+.dim-view .vlane{opacity:.1;filter:grayscale(.85);transition:opacity .4s,filter .4s}
+.dim-view .vlane.keep{opacity:.42}
+
+.zoomctl{position:absolute;right:12px;bottom:12px;display:none;flex-direction:column;gap:6px;z-index:5}
+.figure.fs .zoomctl{display:flex}
+.zoomctl button{width:34px;height:34px;border-radius:8px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);font-family:var(--mono);font-size:15px;cursor:pointer;line-height:1;transition:.15s;display:grid;place-items:center}
+.zoomctl button:hover{color:var(--ink);border-color:var(--view)}
+.zlevel{position:absolute;left:12px;bottom:12px;display:none;font-family:var(--mono);font-size:11px;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:5;user-select:none}
+.figure.fs .zlevel{display:block}
+.zhint{position:absolute;left:12px;top:12px;display:none;font-family:var(--mono);font-size:10px;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:5;opacity:.85;pointer-events:none}
+.figure.fs .zhint{display:block}
+.inspect-hint{position:absolute;right:12px;top:12px;font-family:var(--mono);font-size:10px;letter-spacing:.03em;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:4;pointer-events:none;opacity:0;transition:opacity .2s}
+.figure:not(.fs) .canvas[data-zoom]:hover .inspect-hint{opacity:.9}
+.figure.fs .inspect-hint{display:none}
+
+/* ---------- BYTE LAB (hero) ---------- */
+.lab{padding:22px 22px 8px}
+.lab .strip-wrap{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap}
+.strip{display:flex;gap:6px;flex-wrap:wrap}
+.cell{width:62px;height:78px;border-radius:11px;border:1.5px solid var(--line2);background:var(--bg2);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:ns-resize;position:relative;transition:border-color .15s,box-shadow .2s,transform .12s;user-select:none;touch-action:none}
+.cell:hover{border-color:var(--raw)}
+.cell.sel{border-color:var(--raw);box-shadow:var(--glow)}
+.cell .hex{font-family:var(--mono);font-size:19px;font-weight:700;color:var(--raw);letter-spacing:.04em}
+.cell .dec{font-family:var(--mono);font-size:10px;color:var(--ink3);margin-top:3px}
+.cell .ad{position:absolute;top:5px;left:7px;font-family:var(--mono);font-size:8.5px;color:var(--ink3)}
+.cell .gl{position:absolute;bottom:4px;right:6px;font-size:11px;color:var(--ink3)}
+.lab .scrubhint{font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin:12px 2px 4px}
+.lensrail{display:flex;gap:7px;flex-wrap:wrap;margin:16px 0 4px}
+.lens{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line2);background:transparent;color:var(--ink2);padding:7px 12px;border-radius:999px;cursor:pointer;transition:.16s;letter-spacing:.01em}
+.lens:hover{color:var(--ink);border-color:var(--view)}
+.lens.on{color:var(--bg);background:var(--view);border-color:var(--view);font-weight:600}
+.presets{display:flex;gap:7px;flex-wrap:wrap;margin:6px 0 2px}
+.preset{font-family:var(--mono);font-size:11px;border:1px dashed var(--line2);background:transparent;color:var(--ink3);padding:6px 11px;border-radius:8px;cursor:pointer;transition:.16s}
+.preset:hover{color:var(--raw);border-color:var(--raw)}
+.readout{border-top:1px solid var(--line);background:var(--panel2);padding:20px 22px}
+.readout .rt{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--view);display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.readout .rt .what{color:var(--ink3)}
+.vals{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.vchip{font-family:var(--mono);font-size:16px;font-weight:600;background:var(--bg2);border:1px solid var(--line2);color:var(--ink);padding:8px 13px;border-radius:9px;display:inline-flex;flex-direction:column;line-height:1.2}
+.vchip small{font-family:var(--mono);font-size:9px;color:var(--ink3);font-weight:400;letter-spacing:.05em}
+.vbig{font-family:var(--mono);font-size:clamp(22px,4vw,34px);font-weight:700;color:var(--view)}
+.vtext{font-family:var(--disp);font-size:clamp(24px,5vw,40px);color:var(--ink)}
+.vtext .rep{color:var(--warn)}
+.readout .explain{margin-top:12px;font-size:14.5px;color:var(--ink2);max-width:70ch;font-family:var(--body)}
+.readout .explain b{color:var(--ink)}
+
+/* ---------- bits explorer ---------- */
+.bitbox{border:1px solid var(--line);border-radius:var(--r);background:var(--panel);padding:22px;margin:28px 0;box-shadow:var(--shadow)}
+.bits{display:flex;gap:5px;flex-wrap:wrap}
+.bit{width:46px;height:58px;border-radius:9px;border:1.5px solid var(--line2);background:var(--bg2);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:.14s;font-family:var(--mono);user-select:none}
+.bit .b{font-size:20px;font-weight:700;color:var(--ink3)}
+.bit.set{border-color:var(--raw);background:var(--raw-soft)}
+.bit.set .b{color:var(--raw)}
+.bit .w{font-size:8.5px;color:var(--ink3);margin-top:3px}
+.bit.set .w{color:var(--raw)}
+.bit.signbit{border-style:dashed}
+.bitvals{display:flex;gap:26px;flex-wrap:wrap;margin-top:18px;font-family:var(--mono)}
+.bitvals div{font-size:13px;color:var(--ink3)}
+.bitvals div b{display:block;font-size:25px;color:var(--ink);font-weight:700;margin-top:2px}
+.bitvals div.signed b{color:var(--warn)}
+
+/* ---------- player ---------- */
+.player{display:flex;align-items:center;gap:10px;padding:14px 16px;border-top:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.pbtn{width:40px;height:40px;border-radius:50%;border:1px solid var(--line2);background:var(--panel);color:var(--ink);cursor:pointer;display:grid;place-items:center;transition:.18s}
+.pbtn:hover{border-color:var(--raw);color:var(--raw)}
+.pbtn.play{background:var(--raw);border-color:var(--raw);color:var(--bg);width:46px;height:46px}
+.pbtn.play:hover{filter:brightness(1.08);color:var(--bg)}
+.pbtn svg{width:18px;height:18px}
+.scrub{flex:1;min-width:160px;height:6px;border-radius:999px;background:var(--line);position:relative;cursor:pointer}
+.scrub .fill{position:absolute;left:0;top:0;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--raw),var(--view));width:0%}
+.scrub .ticks{position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center;padding:0 1px}
+.scrub .tk{width:2px;height:2px;border-radius:50%;background:var(--ink3)}
+.stepno{font-family:var(--mono);font-size:12px;color:var(--ink3);min-width:64px;text-align:right}
+.caption{padding:18px 22px;border-top:1px solid var(--line);min-height:100px}
+.caption .cn{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--raw);display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.caption .cn .lane{color:var(--view)}
+.caption .ch{font-family:var(--disp);font-size:22px;font-weight:500;margin:0 0 4px;letter-spacing:-.01em}
+.caption .cb{color:var(--ink2);font-size:15.5px;margin:0;max-width:74ch;font-family:var(--body)}
+.caption .more{font-family:var(--mono);font-size:11px;color:var(--view);background:none;border:none;cursor:pointer;padding:0;margin-top:10px;border-bottom:1px dotted var(--view)}
+
+/* ---------- cards ---------- */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(252px,1fr));gap:16px;margin:26px 0}
+.dcard{position:relative;border:1px solid var(--line);border-radius:14px;background:linear-gradient(165deg,var(--panel) 0%,var(--panel2) 100%);padding:15px 16px 14px;overflow:hidden;cursor:pointer;transition:transform .22s cubic-bezier(.3,1.1,.5,1),border-color .22s,box-shadow .22s;box-shadow:var(--shadow)}
+.dcard::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--accent);opacity:.85}
+.dcard.retain{--accent:var(--warn)} .dcard.complete{--accent:var(--view)} .dcard.flush{--accent:var(--raw)} .dcard.wire{--accent:var(--view)}
+.dcard:hover{transform:translateY(-4px);border-color:var(--line2)}
+.dcard:hover .dc-more{color:var(--accent);border-color:var(--accent)}
+.dc-ghost{position:absolute;right:-4px;top:-26px;font-family:var(--disp);font-style:italic;font-weight:500;font-size:104px;line-height:1;color:var(--ink);opacity:.045;pointer-events:none;user-select:none}
+.dc-call{font-family:var(--mono);font-size:12px;color:var(--ink2);letter-spacing:.01em;display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;z-index:1}
+.dc-call::before{content:"\203A";color:var(--accent);font-weight:700;font-size:15px}
+.dc-screen{position:relative;border-radius:9px;background:radial-gradient(120% 140% at 30% 0%,color-mix(in srgb,var(--accent) 9%,var(--bg2)),var(--bg2));border:1px solid var(--line2);min-height:58px;display:flex;align-items:center;padding:11px 14px;overflow:hidden}
+.dc-screen::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(150,190,180,.05) 2px 3px);pointer-events:none}
+.dc-emit{font-family:var(--disp);font-size:25px;line-height:1.1;color:var(--accent);letter-spacing:.005em;position:relative;z-index:1;text-shadow:0 0 14px color-mix(in srgb,var(--accent) 35%,transparent)}
+.dc-emit .rep{color:var(--warn)}
+.dc-empty{font-family:var(--mono);font-size:12.5px;color:var(--ink3);position:relative;z-index:1;letter-spacing:.03em}
+.dc-cursor{display:inline-block;width:7px;height:21px;background:var(--accent);margin-left:4px;vertical-align:-3px;border-radius:1px;animation:dcblink 1.05s steps(1) infinite}
+@keyframes dcblink{50%{opacity:0}}
+.dc-tape{display:flex;gap:4px;margin:12px 0 13px;flex-wrap:wrap;min-height:22px;position:relative;z-index:1}
+.dc-tape .hb{font-family:var(--mono);font-size:10.5px;font-weight:500;color:var(--ink3);border:1px solid var(--line);border-radius:5px;padding:2px 6px;background:var(--panel);transition:.2s}
+.dc-tape .hb.held{color:var(--warn);border-color:var(--warn);background:var(--warn-soft);box-shadow:0 0 0 1px var(--warn-soft)}
+.dc-tape .hb.fresh{color:var(--raw);border-color:var(--raw);background:var(--raw-soft)}
+.dc-tape-empty{font-family:var(--mono);font-size:10.5px;color:var(--ink3);letter-spacing:.04em;align-items:center;display:flex}
+.dc-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;position:relative;z-index:1}
+.dc-state{font-family:var(--mono);font-size:10.5px;letter-spacing:.01em;display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;border:1px solid var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.dc-state::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 7px var(--accent)}
+.dc-more{font-family:var(--mono);font-size:9px;letter-spacing:.05em;color:var(--ink3);border:1px solid var(--line2);border-radius:999px;padding:3px 8px;white-space:nowrap;transition:.2s}
+
+/* ---------- modal ---------- */
+.scrim{position:fixed;inset:0;z-index:600;background:rgba(3,6,8,.66);backdrop-filter:blur(7px);display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;pointer-events:none;transition:opacity .25s}
+.scrim.open{opacity:1;pointer-events:auto}
+.modal{background:var(--panel2);border:1px solid var(--line2);border-radius:18px;max-width:660px;width:100%;max-height:88vh;overflow:auto;box-shadow:var(--shadow);transform:translateY(16px) scale(.98);transition:transform .3s cubic-bezier(.3,1.2,.4,1);position:relative}
+.scrim.open .modal{transform:none}
+.modal .mhead{padding:24px 26px 0}
+.modal .mtag{font-family:var(--mono);font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--raw);display:flex;gap:10px;align-items:center}
+.modal .mtag .lane{color:var(--view)}
+.modal h4{font-family:var(--disp);font-size:26px;font-weight:500;margin:8px 0 0;letter-spacing:-.01em}
+.modal .mbody{padding:16px 26px 26px;color:var(--ink2);font-size:16px}
+.modal .mbody p{margin:0 0 14px}
+.mclose{position:absolute;right:18px;top:18px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);cursor:pointer;font-size:17px;line-height:1;z-index:2}
+.mclose:hover{color:var(--ink);border-color:var(--warn)}
+.why{border-left:3px solid var(--view);background:var(--view-soft);padding:12px 16px;border-radius:0 10px 10px 0;font-size:14.5px;margin-top:8px}
+.why .wl{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--view);display:block;margin-bottom:5px}
+.deephd{margin-top:22px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--raw);display:flex;align-items:center;gap:9px}
+.deephd::after{content:"";flex:1;height:1px;background:var(--line)}
+.deep{display:grid;margin-top:12px;gap:12px;grid-template-columns:1fr 1fr}
+.deep .dcol{border:1px solid var(--line);border-radius:10px;padding:13px 15px;background:var(--bg2)}
+.deep .dcol p{font-size:13.5px;margin:0;line-height:1.55}
+.deep .dl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:8px}
+.deep .dl.node{color:var(--raw)} .deep .dl.spec{color:var(--view)}
+.deep code{font-size:12px;color:var(--ink);background:var(--panel);padding:1px 4px;border-radius:4px;border:none}
+@media(max-width:560px){.deep{grid-template-columns:1fr}}
+
+/* ---------- copy/share ---------- */
+.csbox{border:1px solid var(--line);border-radius:var(--r);background:var(--panel);padding:22px;margin:28px 0;box-shadow:var(--shadow)}
+.csrail{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:18px}
+.csstage{display:flex;gap:30px;flex-wrap:wrap;align-items:center}
+.csmem{font-family:var(--mono)}
+.csmem .lab2{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin-bottom:7px;display:block}
+.csrow{display:flex;gap:5px}
+.csb{width:42px;height:46px;border-radius:8px;border:1.5px solid var(--line2);background:var(--bg2);display:grid;place-items:center;font-family:var(--mono);font-weight:700;font-size:15px;color:var(--ink2);transition:.25s}
+.csb.hot{border-color:var(--warn);color:var(--warn);background:var(--warn-soft)}
+.csb.linked{border-color:var(--view)}
+.csverdict{font-family:var(--mono);font-size:14px;margin-top:18px;padding:12px 15px;border-radius:10px;border:1px solid var(--line2)}
+.csverdict.share{color:var(--warn);background:var(--warn-soft);border-color:var(--warn)}
+.csverdict.copy{color:var(--raw);background:var(--raw-soft);border-color:var(--raw)}
+.csbtn{font-family:var(--mono);font-size:11px;border:1px solid var(--line2);background:transparent;color:var(--ink2);padding:7px 11px;border-radius:8px;cursor:pointer;transition:.16s}
+.csbtn:hover{color:var(--ink);border-color:var(--view)}
+.csbtn.on{color:var(--bg);background:var(--view);border-color:var(--view)}
+.csmutate{margin-top:16px;font-family:var(--mono);font-size:11px;color:var(--bg);background:var(--warn);border:none;padding:9px 14px;border-radius:8px;cursor:pointer}
+.csmutate:hover{filter:brightness(1.07)}
+
+/* ---------- API CONSOLE (§11) ---------- */
+.console{border:1px solid var(--line);border-radius:16px;background:var(--panel);box-shadow:var(--shadow);overflow:hidden;margin:30px 0}
+.con-chrome{display:flex;align-items:center;gap:9px;padding:11px 16px;border-bottom:1px solid var(--line);background:var(--panel2)}
+.con-chrome .dots{display:flex;gap:6px}.con-chrome .dots i{width:11px;height:11px;border-radius:50%;display:block}
+.con-chrome .dots i:nth-child(1){background:var(--warn)}.con-chrome .dots i:nth-child(2){background:#e8b53a}.con-chrome .dots i:nth-child(3){background:var(--raw)}
+.con-chrome .ctitle{font-family:var(--mono);font-size:12px;color:var(--ink2);letter-spacing:.02em}
+.con-chrome .cpath{font-family:var(--mono);font-size:11px;color:var(--ink3);margin-left:auto}
+.con-tabs{display:flex;gap:0;overflow-x:auto;border-bottom:1px solid var(--line);background:var(--bg2);scrollbar-width:thin}
+.con-tab{font-family:var(--mono);font-size:12px;letter-spacing:.01em;color:var(--ink3);background:transparent;border:none;border-bottom:2px solid transparent;padding:12px 16px;cursor:pointer;white-space:nowrap;transition:.16s;display:flex;align-items:center;gap:8px}
+.con-tab .tn{font-weight:700;color:var(--ink3);font-size:10px}
+.con-tab:hover{color:var(--ink2);background:var(--panel)}
+.con-tab.on{color:var(--ink);border-bottom-color:var(--accent,var(--raw))}
+.con-tab.on .tn{color:var(--accent,var(--raw))}
+.con-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);min-height:430px}
+@media(max-width:760px){.con-body{grid-template-columns:1fr}}
+.con-left{border-right:1px solid var(--line);overflow:auto;max-height:560px}
+@media(max-width:760px){.con-left{border-right:none;border-bottom:1px solid var(--line);max-height:300px}}
+.con-blurb{padding:15px 18px 6px;font-size:14px;color:var(--ink2);line-height:1.5}
+.con-blurb b{color:var(--ink)}
+.con-grp{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);padding:16px 18px 6px;display:flex;align-items:center;gap:9px}
+.con-grp::after{content:"";flex:1;height:1px;background:var(--line)}
+.sig{display:block;width:100%;text-align:left;font-family:var(--mono);font-size:12.5px;line-height:1.4;color:var(--ink2);background:transparent;border:none;border-left:2px solid transparent;padding:8px 18px;cursor:pointer;transition:.13s;position:relative}
+.sig:hover{background:var(--panel2);color:var(--ink)}
+.sig.on{background:var(--panel2);border-left-color:var(--accent);color:var(--ink)}
+.sig .nm{color:var(--ink);font-weight:600}
+.sig.on .nm,.sig:hover .nm{color:var(--accent)}
+.sig .ar{color:var(--ink3)}
+.sig .tag{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:8.5px;letter-spacing:.06em;padding:1.5px 6px;border-radius:999px;border:1px solid currentColor;opacity:.9}
+.sig .tag.copy{color:var(--raw)}.sig .tag.share{color:var(--view)}.sig .tag.move{color:var(--warn)}.sig .tag.inplace{color:#e8b53a}.sig .tag.node{color:var(--ink3)}
+.con-right{display:flex;flex-direction:column;background:var(--bg2);min-width:0}
+.repl-head{padding:14px 18px 10px;border-bottom:1px solid var(--line)}
+.repl-sig{font-family:var(--mono);font-size:14px;color:var(--ink);font-weight:600;word-break:break-word}
+.repl-sig .ar{color:var(--ink3);font-weight:400}
+.repl-desc{font-size:13.5px;color:var(--ink2);margin-top:7px;line-height:1.5}
+.repl-desc code{font-size:.86em;color:var(--ink);background:var(--panel);padding:1px 5px;border-radius:5px;border:1px solid var(--line)}
+.repl-flow{padding:14px 18px;overflow:auto;flex:1;min-width:0}
+.repl-line{font-family:var(--mono);font-size:13px;line-height:1.9;white-space:pre-wrap;word-break:break-word}
+.repl-line .pmt{color:var(--view);user-select:none}
+.repl-line .com{color:var(--ink3)}
+.repl-line .ret{color:var(--ink3)}
+.repl-line .ret b{color:var(--raw);font-weight:700}
+.repl-line .warnret b{color:var(--warn)}
+.repl-line.dim{opacity:.5}
+.repl-mem{padding:12px 18px 16px;border-top:1px solid var(--line)}
+.repl-mem .ml{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.membar{display:flex;gap:3px;flex-wrap:wrap;align-items:flex-end}
+.memcell{width:34px;height:40px;border-radius:6px;border:1px solid var(--line2);background:var(--panel);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--mono);transition:.3s;position:relative}
+.memcell .mh{font-size:11px;font-weight:700;color:var(--ink2)}
+.memcell .mi{font-size:7.5px;color:var(--ink3);position:absolute;top:2px;left:3px}
+.memcell.a{border-color:var(--raw)}.memcell.a .mh{color:var(--raw)}
+.memcell.b{border-color:var(--view)}.memcell.b .mh{color:var(--view)}
+.memcell.changed{box-shadow:0 0 0 2px var(--warn);border-color:var(--warn)}.memcell.changed .mh{color:var(--warn)}
+.memcell.detached{opacity:.28;border-style:dashed}
+.repl-run{font-family:var(--mono);font-size:11.5px;color:var(--bg);background:var(--accent);border:none;padding:9px 16px;border-radius:8px;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:7px;font-weight:600}
+.repl-run:hover{filter:brightness(1.08)}
+.repl-run svg{width:13px;height:13px}
+.repl-empty{padding:40px 24px;text-align:center;color:var(--ink3);font-family:var(--mono);font-size:13px;margin:auto}
+.repl-empty .big{font-size:30px;display:block;margin-bottom:12px;opacity:.5}
+.legend-cs{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--ink2);padding:0 18px 14px;margin-top:-2px}
+.legend-cs span{display:inline-flex;align-items:center;gap:6px}
+.legend-cs i{width:9px;height:9px;border-radius:2px}
+footer{max-width:var(--maxw);margin:0 auto;padding:40px 26px 90px;font-family:var(--mono);font-size:12px;color:var(--ink3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;border-top:1px solid var(--line)}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;color:var(--ink2);margin:18px 0 0}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+@media(max-width:920px){body{font-size:16.5px}main{padding:22px 0 110px}.cell{width:54px;height:70px}.cell .hex{font-size:17px}}
+@media(max-width:560px){.cell{width:46px;height:60px}.cell .hex{font-size:15px}.cell .dec{display:none}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <span class="chip"><i></i><i></i><i></i><i></i></span>
+      <span><b>THE&nbsp;SAME&nbsp;BYTES</b> <span class="sub">/ storage&nbsp;vs&nbsp;view</span></span>
+    </div>
+    <div class="top-spacer"></div>
+    <button class="theme-btn" id="themeBtn" aria-label="toggle theme">
+      <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>
+      <span id="themeTxt">DARK</span>
+    </button>
+  </div>
+</header>
+
+<div class="shell">
+  <button class="nav-tab" id="navTab" aria-label="open navigation">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    <span class="nt-prog" id="navProg">00/12</span>
+  </button>
+  <nav class="sidenav" id="sidenav" aria-label="contents">
+    <div class="sidenav-hd">
+      <span class="sh-dot"></span><span class="sh-txt">contents</span>
+      <button class="sh-close" id="navClose" aria-label="retract navigation" title="retract"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+    </div>
+    <div class="sidenav-list" id="navList">
+      <a href="#lab"><span class="snum">00</span><span class="sdot"></span>The byte lab</a>
+      <a href="#split"><span class="snum">01</span><span class="sdot"></span>Storage vs view</a>
+      <a href="#byte"><span class="snum">02</span><span class="sdot"></span>Inside one byte</a>
+      <a href="#stack"><span class="snum">03</span><span class="sdot"></span>The lens stack</a>
+      <a href="#twoviews"><span class="snum">04</span><span class="sdot"></span>Two views, one buffer</a>
+      <a href="#dataview"><span class="snum">05</span><span class="sdot"></span>Parse a header</a>
+      <a href="#endian"><span class="snum">06</span><span class="sdot"></span>Endianness</a>
+      <a href="#pool"><span class="snum">07</span><span class="sdot"></span>The Buffer pool</a>
+      <a href="#seam"><span class="snum">08</span><span class="sdot"></span>The chunk seam</a>
+      <a href="#fix"><span class="snum">09</span><span class="sdot"></span>StringDecoder</a>
+      <a href="#copyshare"><span class="snum">10</span><span class="sdot"></span>Copy vs share</a>
+      <a href="#apiref"><span class="snum">11</span><span class="sdot"></span>API console</a>
+      <a href="#why"><span class="snum">12</span><span class="sdot"></span>Footguns &amp; close</a>
+    </div>
+  </nav>
+
+  <main>
+
+    <!-- ===== 00 HERO / BYTE LAB ===== -->
+    <section class="block" id="lab" style="border-bottom:none;padding-top:34px">
+      <p class="kicker"><span class="ix">00</span> Explorable explanation · binary from first principles</p>
+      <h1 class="hero-h">Eight bytes that mean <span class="a">everything</span><br>and <span class="b">nothing</span> at once.</h1>
+      <p class="lead">A byte is just eight bits — a number from 0 to 255 with no inherent meaning. The same memory becomes a letter, an integer, a fraction of a float, or garbage, depending entirely on the <em>lens</em> you read it through. Below is a <strong>real <code>ArrayBuffer</code></strong> of eight bytes. Scrub a cell to change the raw memory, swap the lens, and watch one block of storage produce wildly different values — computed live, in your browser.</p>
+
+      <div class="figure" id="labFig">
+        <div class="fig-bar">
+          <span class="title">▦ ArrayBuffer(8) · one block of memory</span>
+          <span class="grow"></span>
+          <button class="fbtn" id="labRandom"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7M21 16v5h-5M14 14l7 7M3 8V3h5M10 10 3 3"/></svg> Randomise</button>
+        </div>
+        <div class="lab">
+          <div class="strip-wrap">
+            <div class="strip" id="byteStrip"></div>
+          </div>
+          <div class="scrubhint" id="scrubHint">↕ drag a cell up/down or scroll over it to change the byte · hold ⇧ for ±16 · double-click to randomise one</div>
+          <div class="lensrail" id="lensRail"></div>
+          <div class="presets" id="presetRow"></div>
+        </div>
+        <div class="readout">
+          <div class="rt"><span id="lensName">Uint8Array</span> <span class="what" id="lensWhat">— one unsigned byte per element</span></div>
+          <div class="vals" id="valOut"></div>
+          <div class="explain" id="valExplain"></div>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--raw)"></i> raw bytes — storage, no meaning</span>
+        <span><i style="background:var(--view)"></i> a value — meaning you imposed</span>
+        <span><i style="background:var(--warn)"></i> corruption / ill-formed</span>
+      </div>
+    </section>
+
+    <!-- ===== 01 SPLIT ===== -->
+    <section class="block" id="split">
+      <p class="kicker"><span class="ix">01</span> The one idea everything hangs on</p>
+      <h2>A byte has no meaning. <em>You</em> impose one.</h2>
+      <div class="prose">
+        <p>Every API in this stack is a consequence of a single split: <strong>storage versus interpretation</strong>. An <code>ArrayBuffer</code> owns a contiguous block of octets and nothing else — it can't even be read directly. Everything you do to those bytes happens through a <strong>view</strong>: a <code>TypedArray</code>, a <code>DataView</code>, or Node's <code>Buffer</code>. None of them own bytes; they read and write someone else's.</p>
+        <p>That's the whole curriculum in one line. The byte <code>0x41</code> is the letter <code>"A"</code>, the number <code>65</code>, or a quarter of some float — the bits never move, only the lens does. Hold this distinction and every method's existence becomes obvious.</p>
+      </div>
+      <div class="callout">
+        <span class="lbl">the recurring pattern</span>
+        the same <strong>raw bytes</strong> &nbsp;→&nbsp; choose a lens (type · endianness · encoding) &nbsp;→&nbsp; get a <strong>value</strong>. Change the lens, change the value. The bytes never moved.
+      </div>
+      <pre class="wire"><span class="c">storage   </span> ArrayBuffer        <span class="c">owns the octets, opaque, no accessors</span>
+<span class="c">lens · 1  </span> Uint8Array(buf)    <span class="c">→ array of bytes (native endian)</span>
+<span class="c">lens · 2  </span> DataView(buf)      <span class="c">→ any type, any offset, explicit endian</span>
+<span class="c">lens · 3  </span> Buffer.from(buf)   <span class="c">→ Uint8Array subclass + encodings + I/O</span></pre>
+    </section>
+
+    <!-- ===== 02 INSIDE ONE BYTE ===== -->
+    <section class="block" id="byte">
+      <p class="kicker"><span class="ix">02</span> Eight bits, two interpretations</p>
+      <h2>Inside one byte — and why <em>−1</em> is all ones.</h2>
+      <div class="prose"><p>Before any view, there is the byte: eight bits, each a power of two. Read those bits as <strong>unsigned</strong> and the range is 0–255. Read the very same bits as <strong>signed</strong> (two's complement) and the top bit flips meaning — it now subtracts 128. That's why <code>0xFF</code> is <code>255</code> through one lens and <code>−1</code> through another. Click the bits.</p></div>
+      <div class="bitbox">
+        <div class="bits" id="bitRow"></div>
+        <div class="bitvals">
+          <div>unsigned (Uint8)<b id="bvU">0</b></div>
+          <div class="signed">signed · two's complement (Int8)<b id="bvS">0</b></div>
+          <div>hex<b id="bvH" style="color:var(--raw)">0x00</b></div>
+        </div>
+      </div>
+      <div class="callout view">
+        <span class="lbl">two's complement, by hand</span>
+        <code>−1</code> in 8 bits is <code>1111 1111</code>: take <code>+1</code> = <code>0000 0001</code>, invert to <code>1111 1110</code>, add one → <code>1111 1111</code>. Set every bit above and watch the signed lens read <strong>−1</strong> while the unsigned lens reads <strong>255</strong>. Same storage; the sign is a choice.
+      </div>
+    </section>
+
+    <!-- ===== 03 LENS STACK ===== -->
+    <section class="block" id="stack">
+      <p class="kicker"><span class="ix">03</span> The cast, by layer</p>
+      <h2>Each layer adds exactly one capability.</h2>
+      <div class="prose"><p>From the OS memory page up to a JavaScript value, every layer either <strong>stores</strong> bytes or <strong>interprets</strong> them — never both. The crucial fact: <strong><code>Buffer</code> extends <code>Uint8Array</code></strong>, so everything true of a TypedArray is already true of a Buffer. Click any layer for the Node internals and the spec behind it.</p></div>
+      <div class="figure" id="stackFig">
+        <div class="fig-bar">
+          <span class="title">⌗ the lens stack · storage ↔ meaning</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-boundary="stackSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20M12 2v20"/></svg> Show only storage</button>
+          <button class="fbtn" data-inspect="stackSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="stackSvg">
+          <div class="inspect-hint">⤢ tap to inspect</div>
+          <svg class="diagram" id="stackSvg" viewBox="0 0 760 660" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="stackVP"></g></svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 04 TWO VIEWS ===== -->
+    <section class="block" id="twoviews">
+      <p class="kicker"><span class="ix">04</span> The single most illuminating exercise</p>
+      <h2>Two views over one buffer. Write through one, read through the other.</h2>
+      <div class="prose"><p>Lay a <code>Uint8Array</code> and a <code>Uint16Array</code> over the <em>same</em> four bytes. Edit a byte below; the uint8 row and the uint16 row update together because they alias the same memory. The uint16 values also reveal your platform's <strong>native endianness</strong> — flip the order toggle to see the bytes recombine the other way.</p></div>
+      <div class="figure" id="tvFig">
+        <div class="fig-bar">
+          <span class="title">⇉ Uint8Array &amp; Uint16Array over one ArrayBuffer(4)</span>
+          <span class="grow"></span>
+          <button class="fbtn on" id="tvEndian" data-mode="le">little-endian (native)</button>
+          <button class="fbtn" data-inspect="tvSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="tvSvg">
+          <div class="inspect-hint">⤢ tap to inspect</div>
+          <svg class="diagram" id="tvSvg" viewBox="0 0 760 370" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="tvVP"></g></svg>
+        </div>
+      </div>
+      <div class="callout view">
+        <span class="lbl">the limitation that births DataView</span>
+        A bare <code>Uint16Array</code> always uses the <strong>platform's</strong> byte order — almost always little-endian. If you didn't produce the bytes, you can't trust a multi-byte TypedArray read of them. That's exactly the gap <code>DataView</code> closes.
+      </div>
+    </section>
+
+    <!-- ===== 05 DATAVIEW PARSER ===== -->
+    <section class="block" id="dataview">
+      <p class="kicker"><span class="ix">05</span> The precision tool</p>
+      <h2>Parse a binary header — one field at a time, endianness named on every read.</h2>
+      <div class="prose"><p>Real formats mix types at fixed offsets with a <em>specified</em> byte order: a one-byte magic, a big-endian <code>uint32</code> length, little-endian flags, a <code>float64</code>. <code>DataView</code> is built for exactly this — you state the offset and the endianness on every call. Step the cursor through an 8-byte header and watch each field get read.</p></div>
+      <div class="figure" id="dvFig">
+        <div class="fig-bar">
+          <span class="title">▷ DataView · parse cursor</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-inspect="dvSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="dvSvg">
+          <div class="inspect-hint">⤢ tap to inspect</div>
+          <svg class="diagram" id="dvSvg" viewBox="0 0 800 340" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="dvVP"></g></svg>
+        </div>
+        <div class="player">
+          <button class="pbtn" id="dvPrev" title="back"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17V7l-7 5zM8 7H6v10h2z"/></svg></button>
+          <button class="pbtn play" id="dvPlay" title="play"><svg id="dvPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg></button>
+          <button class="pbtn" id="dvNext" title="forward"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 7v10l7-5zM16 7h2v10h-2z"/></svg></button>
+          <div class="scrub" id="dvScrub"><div class="fill" id="dvFill"></div><div class="ticks" id="dvTicks"></div></div>
+          <span class="stepno" id="dvStepNo">0 / 4</span>
+        </div>
+        <div class="caption">
+          <div class="cn"><span id="dvCapN">READ 00</span> · <span class="lane" id="dvCapField">—</span></div>
+          <p class="ch" id="dvCapH">Press play to walk the cursor</p>
+          <p class="cb" id="dvCapB">Each read names its type, offset, and byte order explicitly — the whole point of DataView.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 06 ENDIAN ===== -->
+    <section class="block" id="endian">
+      <p class="kicker"><span class="ix">06</span> Same bytes, different number</p>
+      <h2>Endianness is just another lens — and a silent one.</h2>
+      <div class="prose"><p>Reading a multi-byte integer requires knowing the byte order. <code>DataView</code> forces you to state it; <code>readUInt32LE</code>/<code>BE</code> name it; a plain <code>Uint32Array</code> quietly uses the platform's. Networks and many file formats are big-endian, so guessing wrong gives a plausible-looking, totally wrong number. Flip the switch.</p></div>
+      <div class="figure" id="endianFig">
+        <div class="fig-bar">
+          <span class="title">⇄ 4 bytes → uint32</span>
+          <span class="grow"></span>
+          <button class="fbtn on" id="endianBtn" data-mode="be">big-endian · readUInt32BE</button>
+          <button class="fbtn" data-inspect="endianSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="endianSvg">
+          <div class="inspect-hint">⤢ tap to inspect</div>
+          <svg class="diagram" id="endianSvg" viewBox="0 0 760 330" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="endianVP"></g></svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 07 POOL ===== -->
+    <section class="block" id="pool">
+      <p class="kicker"><span class="ix">07</span> Where small Buffers actually live</p>
+      <h2>The Buffer pool — and why <code>allocUnsafe</code> is a footgun.</h2>
+      <div class="prose"><p>Node carves small buffers out of a shared ~8&nbsp;KiB <code>ArrayBuffer</code> as slabs, so each isn't a separate allocation. The consequences: a small Buffer's <code>byteOffset</code> is rarely zero, its <code>.buffer</code> is bigger than the Buffer itself, and <code>allocUnsafe</code> hands you whatever stale bytes were there before. Click a box.</p></div>
+      <div class="figure" id="poolFig">
+        <div class="fig-bar">
+          <span class="title">▤ allocation model · pool vs standalone</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-inspect="poolSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="poolSvg">
+          <div class="inspect-hint">⤢ tap to inspect</div>
+          <svg class="diagram" id="poolSvg" viewBox="0 0 900 470" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="poolVP"></g></svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 08 SEAM (PLAYER) ===== -->
+    <section class="block" id="seam">
+      <p class="kicker"><span class="ix">08</span> Where storage-vs-view bites hardest</p>
+      <h2>Why a stream splits the <em>€</em> in two.</h2>
+      <div class="prose"><p>Put two facts together — a UTF-8 character can span up to four bytes, and a stream emits chunks sized by byte count with no regard for characters — and a single character gets sliced across a chunk boundary. Decode each chunk on its own and you get <code>�</code> mojibake. Press play to trace the string <code>"café €99"</code> through the seam; click any node for the Node internals and the Unicode rule behind it.</p></div>
+      <div class="figure" id="seamFig">
+        <div class="fig-bar">
+          <span class="title">▶ café €99 · value → chunks → decode</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-boundary="seamSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20M12 2v20"/></svg> Show only the bytes</button>
+          <button class="fbtn" data-inspect="seamSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="seamSvg">
+          <div class="inspect-hint">⤢ tap to inspect</div>
+          <svg class="diagram" id="seamSvg" viewBox="0 0 1320 600" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="seamVP"></g></svg>
+        </div>
+        <div class="player">
+          <button class="pbtn" id="sPrev" title="step back"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17V7l-7 5zM8 7H6v10h2z"/></svg></button>
+          <button class="pbtn play" id="sPlay" title="play/pause"><svg id="sPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg></button>
+          <button class="pbtn" id="sNext" title="step forward"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 7v10l7-5zM16 7h2v10h-2z"/></svg></button>
+          <div class="scrub" id="sScrub"><div class="fill" id="sFill"></div><div class="ticks" id="sTicks"></div></div>
+          <span class="stepno" id="sStepNo">00 / 12</span>
+        </div>
+        <div class="caption">
+          <div class="cn"><span id="sCapN">FRAME 00</span> · <span class="lane" id="sCapLane">—</span></div>
+          <p class="ch" id="sCapH">Press play to trace the bytes</p>
+          <p class="cb" id="sCapB">Amber-green lanes are raw bytes — pure storage. Blue lanes are decoded text — meaning you impose. Red is corruption.</p>
+          <button class="more" id="sCapMore" style="display:none">Open full detail ↗</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 09 FIX / CARDS ===== -->
+    <section class="block" id="fix">
+      <p class="kicker"><span class="ix">09</span> The fix · stateful decoding</p>
+      <h2>Emit complete characters, keep the tail.</h2>
+      <div class="prose"><p><code>node:string_decoder</code> exists for exactly this. <code>decoder.write(chunk)</code> returns only the characters it can <em>complete</em> and retains any incomplete trailing bytes internally until the next call. <code>readable.setEncoding('utf8')</code> wires one into the stream for you. Each card opens the same deep-dive the trace nodes do.</p></div>
+      <pre class="wire"><span class="k">const</span> { StringDecoder } = <span class="k">require</span>(<span class="v">'node:string_decoder'</span>);
+<span class="k">const</span> d = <span class="k">new</span> StringDecoder(<span class="v">'utf8'</span>);
+d.write(chunk1); <span class="c">// → "café "  (retains the dangling E2)</span>
+d.write(chunk2); <span class="c">// → "€99"    (prepends E2, completes E2 82 AC)</span>
+d.end();         <span class="c">// → ""       (nothing buffered, clean)</span></pre>
+      <div class="cards" id="fixCards"></div>
+    </section>
+
+    <!-- ===== 10 COPY VS SHARE ===== -->
+    <section class="block" id="copyshare">
+      <p class="kicker"><span class="ix">10</span> The master table, made tactile</p>
+      <h2>Does this method <em>copy</em> the bytes, or <em>alias</em> them?</h2>
+      <div class="prose"><p>Most binary bugs are one wrong assumption in this table. Pick a method, then mutate buffer&nbsp;B. If B is a <strong>view</strong> over A's memory, the change bleeds back into A; if it's a <strong>copy</strong>, A is untouched. Watch which one happens.</p></div>
+      <div class="csbox">
+        <div class="csrail" id="csRail"></div>
+        <div class="csstage">
+          <div class="csmem"><span class="lab2">buffer A (source)</span><div class="csrow" id="csA"></div></div>
+          <div class="csmem"><span class="lab2" id="csBlabel">buffer B</span><div class="csrow" id="csB"></div></div>
+        </div>
+        <button class="csmutate" id="csMutate">B[1] = 0xFF — mutate B</button>
+        <div class="csverdict" id="csVerdict">Pick a method above.</div>
+      </div>
+    </section>
+
+    <!-- ===== 11 API CONSOLE ===== -->
+    <section class="block" id="apiref">
+      <p class="kicker"><span class="ix">11</span> The reference, made executable</p>
+      <h2>The whole API surface — as a console you <em>operate</em>.</h2>
+      <div class="prose"><p>A reference table tells you a method's signature. This runs it. Pick a layer, click any method, and a live REPL cell executes it against a real shared buffer — showing the actual return value and, crucially, <strong>whether the bytes were copied, aliased, moved, or written in place</strong>. The memory strip at the bottom is real: watch A and B diverge or move together.</p></div>
+      <div class="console" id="apiConsole">
+        <div class="con-chrome">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="ctitle">binary-data — node</span>
+          <span class="cpath" id="conPath">› ArrayBuffer</span>
+        </div>
+        <div class="con-tabs" id="conTabs"></div>
+        <div class="con-body">
+          <div class="con-left">
+            <div class="con-blurb" id="conBlurb"></div>
+            <div id="conSigs"></div>
+            <div class="legend-cs">
+              <span><i style="background:var(--raw)"></i> copy</span>
+              <span><i style="background:var(--view)"></i> shared / view</span>
+              <span><i style="background:var(--warn)"></i> move · detach</span>
+              <span><i style="background:#e8b53a"></i> in place</span>
+            </div>
+          </div>
+          <div class="con-right" id="conRight"></div>
+        </div>
+      </div>
+      <div class="callout view">
+        <span class="lbl">why a console, not a table</span>
+        Signatures are inert; <strong>behaviour is what bites</strong>. The same verb — <code>slice</code> — copies on an ArrayBuffer and a TypedArray but historically aliases on a Buffer. Running each one against shared memory turns the copy-vs-share table from something you memorise into something you've <em>seen happen</em>.
+      </div>
+    </section>
+
+    <!-- ===== 12 WHY ===== -->
+    <section class="block" id="why" style="border-bottom:none">
+      <p class="kicker"><span class="ix">12</span> The footguns, gathered</p>
+      <h2>Almost all of them are one confusion: storage mistaken for meaning.</h2>
+      <table class="spec">
+        <thead><tr><th>Footgun</th><th>What goes wrong</th></tr></thead>
+        <tbody>
+          <tr><td>per-chunk <code>toString()</code></td><td>multi-byte char split across chunks → <code>�</code>. Use StringDecoder / setEncoding.</td></tr>
+          <tr><td><code>allocUnsafe</code> leak</td><td>uninitialised pool memory exposes old data. Use <code>alloc</code> unless overwriting fully.</td></tr>
+          <tr><td><code>subarray</code> / <code>slice</code> aliasing</td><td>a shared view mutates the original. <code>Uint8Array.slice()</code> copies; <code>subarray</code> doesn't.</td></tr>
+          <tr><td><code>str.length</code> as bytes</td><td>UTF-16 code units, not bytes. Use <code>Buffer.byteLength(str, enc)</code>.</td></tr>
+          <tr><td>wrong endianness</td><td>a valid-looking but wrong integer. State LE/BE explicitly.</td></tr>
+          <tr><td>reading a detached buffer</td><td>after <code>transfer()</code>/<code>postMessage</code> the bytes moved; access throws or reads zero.</td></tr>
+          <tr><td>BOM &amp; normalization</td><td>a leading <code>U+FEFF</code> or NFC/NFD form changes length &amp; equality unexpectedly.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout view" style="margin-top:30px;font-size:20px;font-family:var(--disp)">
+        <span class="lbl">conclusion</span>
+        Bytes are not text you happen to have — they are <strong>storage waiting for a lens.</strong> Choose the lens deliberately, state its endianness, and keep its state across the seams.
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <span>the same bytes · binary data from first principles · ArrayBuffer → TypedArray → DataView → Buffer</span>
+  <span id="footTheme">scientific-instrument mode</span>
+</footer>
+
+<div id="tip" role="tooltip"></div>
+
+<div class="scrim" id="scrim">
+  <div class="modal" role="dialog" aria-modal="true">
+    <button class="mclose" id="mClose" aria-label="close">✕</button>
+    <div class="mhead">
+      <div class="mtag"><span id="mTag">DETAIL</span><span class="lane" id="mLane"></span></div>
+      <h4 id="mTitle"></h4>
+    </div>
+    <div class="mbody" id="mBody"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================ PLATFORM */
+const LE = (()=>{const b=new ArrayBuffer(2);new DataView(b).setUint16(0,1,true);return new Uint16Array(b)[0]===1;})();
+
+/* ============================================================ GLOSSARY */
+const GLOSSARY = {
+ "ArrayBuffer":["spec","A fixed-length block of raw bytes. It owns the storage but cannot be read or written directly — you must layer a view on top."],
+ "TypedArray":["spec","A typed window onto an ArrayBuffer: Uint8Array, Int16Array, Float64Array… Each element is read as one fixed type, in the platform's native endianness."],
+ "Uint8Array":["spec","The byte-level TypedArray — one unsigned byte per element. The common currency of binary JS; Buffer extends it."],
+ "DataView":["spec","A view that reads/writes mixed types at arbitrary byte offsets with explicit endianness. The right tool for parsing binary formats."],
+ "Buffer":["node","Node's subclass of Uint8Array: a view over raw memory with extra methods for encodings, plus a shared allocation pool. Predates TypedArrays, hence its large API."],
+ "byteOffset":["spec","Where a view begins inside its backing ArrayBuffer. Often non-zero for a pooled Buffer, since it's a slab of a larger shared block."],
+ "byteLength":["spec","The size of a view or buffer in bytes. Buffer.byteLength(str, enc) gives the byte count of encoding a string — unlike str.length."],
+ "view":["concept","An object that points at bytes in an ArrayBuffer without owning them. Multiple views over one buffer alias the same memory."],
+ "octet":["concept","An 8-bit byte: the flat, addressable unit memory is made of — the substrate every view interprets."],
+ "endianness":["concept","The byte order of multi-byte numbers. Big-endian stores the most significant byte first; little-endian last. Networks lean big, x86/ARM lean little."],
+ "two's complement":["concept","How signed integers are stored: the top bit carries negative weight, so 1111 1111 is -1. Negate by inverting all bits and adding one."],
+ "IEEE-754":["spec","The floating-point standard: a sign bit, an exponent, and a fraction packed into 32 or 64 bits. The bit pattern bears no resemblance to the decimal value."],
+ "code point":["spec","A number Unicode assigns to a character (€ = U+20AC). Encodings turn code points into bytes; UTF-8 uses 1-4 bytes per code point."],
+ "code unit":["spec","The fixed-size piece an encoding works in. JS strings count length in UTF-16 code units, so one astral char counts as two."],
+ "continuation byte":["spec","A UTF-8 byte of the form 10xxxxxx that follows a lead byte. Stranded alone at a chunk's start, it decodes to the replacement character."],
+ "lead byte":["spec","The first byte of a multi-byte UTF-8 sequence (110/1110/11110…) that announces how many continuation bytes follow. Alone at a chunk's end, it's incomplete."],
+ "replacement character":["spec","U+FFFD '�', emitted when a decoder hits bytes that aren't valid in the target encoding — the visible signature of the boundary bug."],
+ "mojibake":["concept","Garbled text from decoding bytes with the wrong encoding, or from decoding an incomplete sequence. Literally 'character transformation' in Japanese."],
+ "StringDecoder":["node","node:string_decoder. write(chunk) returns only complete characters and retains incomplete trailing bytes until the next call; end() flushes."],
+ "TextDecoder":["spec","The WHATWG decoder available in Node and browsers. With { stream: true } it carries state across chunks, like StringDecoder."],
+ "highWaterMark":["node","The soft size limit for a stream's internal buffer — roughly the chunk size. 16 KiB for generic streams, 64 KiB for fs read streams."],
+ "allocUnsafe":["node","Buffer.allocUnsafe(n) — fast, but returns UNINITIALISED memory (often a slab of the shared pool) that may contain old data. Overwrite before reading."],
+ "alloc":["node","Buffer.alloc(n) — zero-fills the new buffer. Safe but slower; large sizes get their own standalone ArrayBuffer rather than a pool slab."],
+ "Buffer pool":["node","An internal ~8 KiB ArrayBuffer that small allocUnsafe buffers are carved from as slabs, so each isn't a separate allocation. Set via Buffer.poolSize."],
+ "poolSize":["node","Buffer.poolSize, default 8192. allocUnsafe uses the pool only when the request is under poolSize>>>1 (4096 bytes); larger gets its own buffer."],
+ "subarray":["spec","TypedArray.subarray(begin,end) returns a view that SHARES the same memory — no copy. Contrast slice(), which copies."],
+ "base64":["concept","A transport encoding turning 3 bytes into 4 ASCII characters (~33% overhead). Not a charset — it re-packages arbitrary bytes for text-only channels."],
+ "transfer":["spec","ArrayBuffer.transfer()/postMessage transfer lists move the bytes to another agent with no copy, detaching (neutering) the original."],
+ "detached":["spec","An ArrayBuffer whose bytes were moved away by transfer(). Views over it become zero-length; reads see nothing."],
+ "normalization":["spec","Unicode NFC/NFD: the same visible text can have different byte sequences (é as one code point vs e + combining accent), changing length and equality."],
+ "BOM":["spec","Byte Order Mark, U+FEFF. A leading BOM can change a string's length and silently break naïve parsing if not stripped."],
+ "socket":["concept","The OS-level TCP endpoint. It delivers a stream of bytes with no inherent message boundaries — you frame messages yourself."]
+};
+const KIND_LABEL={spec:"spec",node:"node",concept:"concept"};
+const tip=document.getElementById('tip');
+const termKeys=Object.keys(GLOSSARY).sort((a,b)=>b.length-a.length);
+const esc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+function tagTerms(scope){
+  const blocks=scope.querySelectorAll('p, li, td, .lead, .explain');
+  blocks.forEach(block=>{
+    if(block.closest('pre')) return;
+    const used=new Set();
+    block.querySelectorAll('.term').forEach(t=>used.add(t.dataset.term.toLowerCase()));
+    const walker=document.createTreeWalker(block,NodeFilter.SHOW_TEXT,{
+      acceptNode(n){const p=n.parentElement;if(!p)return NodeFilter.FILTER_REJECT;
+        if(p.closest('code,pre,.term,a,.pill,h1,h2,h3,h4,.mono'))return NodeFilter.FILTER_REJECT;
+        return n.nodeValue.trim()?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT;}
+    });
+    const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
+    nodes.forEach(node=>{
+      const text=node.nodeValue;
+      for(const term of termKeys){
+        if(used.has(term.toLowerCase()))continue;
+        const re=new RegExp('(^|[^\\w])('+esc(term)+')(?![\\w])','i');
+        const m=re.exec(text);
+        if(m){
+          used.add(term.toLowerCase());
+          const start=m.index+m[1].length;
+          const frag=document.createDocumentFragment();
+          const before=text.slice(0,start),matched=text.substr(start,m[2].length),after=text.slice(start+m[2].length);
+          if(before)frag.appendChild(document.createTextNode(before));
+          const span=document.createElement('span');
+          span.className='term';span.dataset.term=term;span.textContent=matched;
+          frag.appendChild(span);
+          if(after)frag.appendChild(document.createTextNode(after));
+          node.parentNode.replaceChild(frag,node);
+          return;
+        }
+      }
+    });
+  });
+}
+let tipHideT;
+function showTip(elm){
+  const key=elm.dataset.term;
+  const entry=GLOSSARY[key]||GLOSSARY[Object.keys(GLOSSARY).find(k=>k.toLowerCase()===key.toLowerCase())];
+  if(!entry)return;
+  clearTimeout(tipHideT);
+  tip.innerHTML='<span class="t-kind">'+KIND_LABEL[entry[0]]+'</span><span class="t-name">'+key+'</span>'+entry[1];
+  tip.classList.add('show');
+  const r=elm.getBoundingClientRect();
+  const tw=Math.min(320,tip.offsetWidth||320),th=tip.offsetHeight;
+  let left=r.left+r.width/2-tw/2;
+  left=Math.max(12,Math.min(left,window.innerWidth-tw-12));
+  let top=r.top-th-12,flip=false;
+  if(top<10){top=r.bottom+12;flip=true;}
+  tip.style.left=left+'px';tip.style.top=top+'px';
+  tip.style.setProperty('--ax',(r.left+r.width/2-left-6)+'px');
+  tip.classList.toggle('flip',flip);
+}
+function hideTip(){tipHideT=setTimeout(()=>tip.classList.remove('show'),60);}
+document.addEventListener('mouseover',e=>{const t=e.target.closest('.term');if(t)showTip(t);});
+document.addEventListener('mouseout',e=>{if(e.target.closest('.term'))hideTip();});
+document.addEventListener('click',e=>{const t=e.target.closest('.term');if(t){showTip(t);setTimeout(hideTip,2800);}});
+
+/* ============================================================ MODAL */
+const scrim=document.getElementById('scrim');
+function modalBodyHTML(f){
+  let h=f.body+'<div class="why"><span class="wl">why it matters</span>'+f.why+'</div>';
+  if(f.deep){
+    h+='<div class="deephd">Under the hood — Node internals &amp; spec</div>'+
+       '<div class="deep">'+
+         '<div class="dcol"><span class="dl node">Node / V8 internals</span>'+f.deep.node+'</div>'+
+         '<div class="dcol"><span class="dl spec">ECMAScript / Unicode</span>'+f.deep.spec+'</div>'+
+       '</div>';
+  }
+  return h;
+}
+function openModal(f){
+  document.getElementById('mTag').textContent=(f.n!=null?('FRAME '+String(f.n).padStart(2,'0')):(f.tag||'DETAIL'));
+  document.getElementById('mLane').textContent=f.lane!=null?('· '+(LANES[f.lane]||f.laneName||'')):(f.laneName?('· '+f.laneName):'');
+  document.getElementById('mTitle').textContent=f.title;
+  const mb=document.getElementById('mBody');
+  mb.innerHTML=modalBodyHTML(f);
+  tagTerms(mb);
+  scrim.classList.add('open');
+}
+function closeModal(){scrim.classList.remove('open');}
+document.getElementById('mClose').onclick=closeModal;
+scrim.onclick=e=>{if(e.target===scrim)closeModal();};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();exitFs();}});
+
+/* ============================================================ SVG HELPERS */
+const SVGNS='http://www.w3.org/2000/svg';
+function el(tag,attrs,html){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(html!=null)e.innerHTML=html;return e;}
+function plate(cx,cy,text,color,fs){
+  fs=fs||10.5;const w=String(text).length*(fs*0.6)+18,h=fs+12;
+  return '<rect x="'+(cx-w/2)+'" y="'+(cy-h/2)+'" width="'+w+'" height="'+h+'" rx="6" fill="var(--panel2)" stroke="var(--line)"/>'+
+    '<text x="'+cx+'" y="'+(cy+fs*0.35)+'" text-anchor="middle" font-size="'+fs+'" font-weight="700" fill="'+color+'">'+text+'</text>';
+}
+const printable=v=>(v>=32&&v<=126)?String.fromCharCode(v):'·';
+const hex2=v=>v.toString(16).toUpperCase().padStart(2,'0');
+const escHTML=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+/* ============================================================ 00 BYTE LAB */
+const LAB=new Uint8Array(8);
+LAB.set([0x48,0x65,0x6c,0x6c,0x6f,0x21,0x21,0x21]);
+let lensId='u8', selCell=0;
+const LENSES=[
+ {id:'u8',  name:'Uint8Array',       what:'— one unsigned byte per element'},
+ {id:'i8',  name:'Int8Array',        what:"— signed bytes, two's complement"},
+ {id:'u16', name:'Uint16Array',      what:'— 4 × 16-bit unsigned, native order ('+(LE?'LE':'BE')+')'},
+ {id:'u32', name:'Uint32Array',      what:'— 2 × 32-bit unsigned, native order'},
+ {id:'f32', name:'Float32Array',     what:'— 2 × 32-bit IEEE-754 floats'},
+ {id:'f64', name:'Float64Array',     what:'— 1 × 64-bit IEEE-754 double'},
+ {id:'dvbe',name:'DataView · u32 BE',what:'— explicit big-endian uint32 reads'},
+ {id:'utf8',name:'UTF-8 text',       what:'— TextDecoder over the raw bytes'},
+ {id:'bits',name:'binary',           what:'— the literal bits, MSB first'},
+ {id:'b64', name:'base64 / hex',     what:'— transport re-encodings, not a charset'}
+];
+const byteStrip=document.getElementById('byteStrip');
+function renderStrip(){
+  byteStrip.innerHTML='';
+  for(let i=0;i<LAB.length;i++){
+    const v=LAB[i];
+    const c=document.createElement('div');
+    c.className='cell'+(i===selCell?' sel':'');
+    c.dataset.i=i;
+    c.innerHTML='<span class="ad">@'+i+'</span><span class="gl">'+escHTML(printable(v))+'</span>'+
+                '<span class="hex">'+hex2(v)+'</span><span class="dec">'+v+'</span>';
+    byteStrip.appendChild(c);
+  }
+}
+function setByte(i,v){LAB[i]=((v%256)+256)%256;renderStrip();renderReadout();}
+function renderReadout(){
+  const L=LENSES.find(l=>l.id===lensId);
+  document.getElementById('lensName').textContent=L.name;
+  document.getElementById('lensWhat').textContent=L.what;
+  const out=document.getElementById('valOut');
+  const dv=new DataView(LAB.buffer);
+  let html='',explain='';
+  const chip=(val,sub)=>'<span class="vchip">'+escHTML(val)+(sub?'<small>'+sub+'</small>':'')+'</span>';
+  if(lensId==='u8'||lensId==='i8'){
+    const arr=lensId==='u8'?new Uint8Array(LAB.buffer):new Int8Array(LAB.buffer);
+    for(let i=0;i<8;i++)html+=chip(arr[i],'@'+i);
+    explain=lensId==='u8'?'Eight independent bytes, 0–255 each. This is storage at its most literal — no combining, no sign, no order to worry about.':'The same eight bytes, but the top bit now carries negative weight. Any byte ≥ 128 reads as negative: <b>0xFF → −1</b>.';
+  } else if(lensId==='u16'){
+    const a=new Uint16Array(LAB.buffer);
+    for(let i=0;i<4;i++)html+=chip(a[i],'@'+(i*2));
+    explain='Each pair of bytes is fused into one 16-bit number using your platform\u2019s native order (<b>'+(LE?'little-endian':'big-endian')+'</b>). Two bytes, one value — the lens decides which byte is "high".';
+  } else if(lensId==='u32'){
+    const a=new Uint32Array(LAB.buffer);
+    for(let i=0;i<2;i++)html+=chip(a[i].toLocaleString('en-US'),'@'+(i*4));
+    explain='Four bytes per number, native order. A single byte change can swing the value by millions — its position weights it by up to 2²⁴.';
+  } else if(lensId==='f32'){
+    const a=new Float32Array(LAB.buffer);
+    for(let i=0;i<2;i++)html+=chip(Number(a[i].toPrecision(7)),'@'+(i*4));
+    explain='The very same bytes, now split into sign / exponent / fraction per IEEE-754. The decimal you see has no visual relationship to the hex above.';
+  } else if(lensId==='f64'){
+    const a=new Float64Array(LAB.buffer);
+    html='<span class="vbig">'+Number(a[0].toPrecision(15))+'</span>';
+    explain='All eight bytes become one double. Load the "3.14 as f64" preset and read the bytes that actually encode it — they look nothing like 3, 1, or 4.';
+  } else if(lensId==='dvbe'){
+    html=chip(dv.getUint32(0,false).toLocaleString('en-US'),'BE @0')+chip(dv.getUint32(4,false).toLocaleString('en-US'),'BE @4');
+    explain='Now DataView reads the most-significant byte <b>first</b>, regardless of platform. Compare with the Uint32Array lens — same bytes, different number, because the order is now <i>your</i> choice.';
+  } else if(lensId==='utf8'){
+    const s=new TextDecoder('utf-8').decode(LAB);
+    let t='';for(const ch of s)t+=ch==='\uFFFD'?'<span class="rep">\uFFFD</span>':escHTML(ch);
+    html='<span class="vtext">"'+t+'"</span>';
+    explain='Bytes run through a UTF-8 decoder. Valid ASCII passes straight through; any byte that isn\u2019t part of a well-formed sequence becomes the replacement character <b>\uFFFD</b>. Scrub a byte to <code>C3</code> to strand a lead byte.';
+  } else if(lensId==='bits'){
+    let t='';for(let i=0;i<8;i++)t+='<span class="vchip" style="color:var(--raw)">'+LAB[i].toString(2).padStart(8,'0')+'<small>@'+i+'</small></span>';
+    html=t;
+    explain='The literal bits, most-significant first. Everything above is a way of grouping and weighting <b>these</b> — 64 bits of pure storage.';
+  } else if(lensId==='b64'){
+    const hex=[...LAB].map(hex2).join(' ');
+    const b64=btoa(String.fromCharCode.apply(null,LAB));
+    html='<span class="vchip">'+hex+'<small>hex · 2 chars / byte</small></span><span class="vchip">'+b64+'<small>base64 · ~33% overhead</small></span>';
+    explain='base64 and hex don\u2019t interpret the bytes as a value — they <b>repackage</b> arbitrary bytes into text-safe characters for transport. Reverse them and you get the exact bytes back.';
+  }
+  out.innerHTML=html;
+  document.getElementById('valExplain').innerHTML=explain;
+  tagTerms(document.getElementById('valExplain'));
+}
+const lensRail=document.getElementById('lensRail');
+LENSES.forEach(L=>{
+  const b=document.createElement('button');
+  b.className='lens'+(L.id===lensId?' on':'');b.textContent=L.name;b.dataset.id=L.id;
+  b.onclick=()=>{lensId=L.id;[...lensRail.children].forEach(x=>x.classList.toggle('on',x.dataset.id===L.id));renderReadout();};
+  lensRail.appendChild(b);
+});
+const PRESETS=[
+ {label:'café  (UTF-8)',bytes:[0x63,0x61,0x66,0xC3,0xA9,0x20,0x20,0x20],lens:'utf8'},
+ {label:'0x0A0B0C0D…',bytes:[0x0A,0x0B,0x0C,0x0D,0x0A,0x0B,0x0C,0x0D],lens:'dvbe'},
+ {label:'3.14 as f64',bytes:(()=>{const b=new ArrayBuffer(8);new DataView(b).setFloat64(0,3.14,LE);return [...new Uint8Array(b)];})(),lens:'f64'},
+ {label:'all 0xFF  (−1)',bytes:[255,255,255,255,255,255,255,255],lens:'i8'},
+ {label:'"Hello!!!"',bytes:[0x48,0x65,0x6c,0x6c,0x6f,0x21,0x21,0x21],lens:'utf8'}
+];
+const presetRow=document.getElementById('presetRow');
+PRESETS.forEach(p=>{
+  const b=document.createElement('button');b.className='preset';b.textContent=p.label;
+  b.onclick=()=>{LAB.set(p.bytes);lensId=p.lens;[...lensRail.children].forEach(x=>x.classList.toggle('on',x.dataset.id===p.lens));renderStrip();renderReadout();};
+  presetRow.appendChild(b);
+});
+document.getElementById('labRandom').onclick=()=>{for(let i=0;i<8;i++)LAB[i]=Math.floor(Math.random()*256);renderStrip();renderReadout();};
+let cellDrag=null;
+byteStrip.addEventListener('pointerdown',e=>{
+  const c=e.target.closest('.cell');if(!c)return;
+  const i=+c.dataset.i;selCell=i;renderStrip();
+  cellDrag={i,startY:e.clientY,startV:LAB[i],shift:e.shiftKey};
+  byteStrip.setPointerCapture(e.pointerId);
+});
+byteStrip.addEventListener('pointermove',e=>{
+  if(!cellDrag)return;
+  const dy=cellDrag.startY-e.clientY;
+  const step=(e.shiftKey||cellDrag.shift)?16:1;
+  setByte(cellDrag.i,cellDrag.startV+Math.round(dy/6)*step);
+});
+function endDrag(){cellDrag=null;}
+byteStrip.addEventListener('pointerup',endDrag);
+byteStrip.addEventListener('pointercancel',endDrag);
+byteStrip.addEventListener('wheel',e=>{
+  const c=e.target.closest('.cell');if(!c)return;e.preventDefault();
+  const i=+c.dataset.i;selCell=i;
+  setByte(i,LAB[i]+(e.deltaY<0?1:-1)*(e.shiftKey?16:1));
+},{passive:false});
+byteStrip.addEventListener('dblclick',e=>{const c=e.target.closest('.cell');if(!c)return;setByte(+c.dataset.i,Math.floor(Math.random()*256));});
+document.addEventListener('keydown',e=>{
+  if(scrim.classList.contains('open'))return;
+  if(document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName))return;
+  const lab=document.getElementById('lab');const r=lab.getBoundingClientRect();
+  if(r.bottom<0||r.top>innerHeight)return;
+  if(e.key==='ArrowUp'||e.key==='ArrowDown'){e.preventDefault();setByte(selCell,LAB[selCell]+(e.key==='ArrowUp'?1:-1)*(e.shiftKey?16:1));}
+  else if(e.key==='ArrowLeft'){selCell=(selCell+7)%8;renderStrip();}
+  else if(e.key==='ArrowRight'){selCell=(selCell+1)%8;renderStrip();}
+});
+renderStrip();renderReadout();
+
+/* ============================================================ 02 BITS */
+let bitVal=0b10100001;
+const bitRow=document.getElementById('bitRow');
+function renderBits(){
+  bitRow.innerHTML='';
+  for(let b=7;b>=0;b--){
+    const set=(bitVal>>b)&1;
+    const d=document.createElement('div');
+    d.className='bit'+(set?' set':'')+(b===7?' signbit':'');
+    d.innerHTML='<span class="b">'+(set?1:0)+'</span><span class="w">'+(b===7?'±128':2**b)+'</span>';
+    d.onclick=()=>{bitVal^=(1<<b);renderBits();};
+    bitRow.appendChild(d);
+  }
+  document.getElementById('bvU').textContent=bitVal;
+  document.getElementById('bvS').textContent=(bitVal>127?bitVal-256:bitVal);
+  document.getElementById('bvH').textContent='0x'+hex2(bitVal);
+}
+renderBits();
+
+/* ============================================================ 03 LENS STACK */
+const stackVP=document.getElementById('stackVP');
+const layers=[
+ {y:24,o:'view',t:'JavaScript value',s:'"café"  ·  3.14  ·  65',body:"<p>What your program means: a string, a number, a float. None of this is how the bits are stored — it is the interpretation you asked for.</p>",why:"This is the only layer most code ever sees; the bytes below stay invisible until you stream or serialise.",deep:{node:"<p>Strings live as UTF-16 in V8; numbers as IEEE-754 doubles. Conversions to and from bytes happen at the layers below.</p>",spec:"<p>ECMAScript values are distinct from any byte representation.</p>"}},
+ {y:122,o:'view',t:'View · Buffer / DataView / TypedArray',s:'the lens that imposes a type',body:"<p>A view reads raw bytes <em>as</em> something — bytes, int16s, a UTF-8 string. Swap the view and the same memory becomes a different value. It owns no bytes of its own.</p>",why:"Multiple views over one ArrayBuffer alias the same memory — the source of slice / subarray surprises.",deep:{node:"<p><code>Buffer</code> extends <code>Uint8Array</code>; <code>buf.buffer</code> is the underlying ArrayBuffer, <code>buf.byteOffset</code>/<code>byteLength</code> the window.</p>",spec:"<p>A view = ArrayBuffer + byteOffset + length + element type.</p>"}},
+ {y:230,o:'bytes',t:'— raw octets · no meaning —',s:'below this line it is just storage',boundary:true,body:"<p>The membrane. Everything above interprets; everything here and below merely <strong>stores</strong>. The same octets serve every view simultaneously — they carry no type, no encoding, no endianness of their own.</p>",why:"This is why JS can\u2019t \u2018forge\u2019 meaning: meaning is imposed by the lens, never stamped on the bytes.",deep:{node:"<p>An <code>ArrayBuffer</code> exposes only <code>byteLength</code> — no element accessors at all. Layer a view to touch it.</p>",spec:"<p>ECMAScript: ArrayBuffer is opaque storage; reads require a view.</p>"}},
+ {y:330,o:'bytes',t:'ArrayBuffer',s:'fixed-length block of bytes',body:"<p>The owned chunk of bytes. Resizable variants and <code>transfer()</code> (detaching) exist, but at heart it is a length and a backing store.</p>",why:"After transfer() the buffer is detached — touching it throws or reads zero. A real lifecycle footgun with Workers.",deep:{node:"<p>Backed by a V8 <code>BackingStore</code>; can be allocated, shared (SharedArrayBuffer), or transferred between agents.</p>",spec:"<p>ECMAScript: ArrayBuffer with optional detach semantics.</p>"}},
+ {y:430,o:'bytes',t:'V8 backing store',s:"the engine's allocation",body:"<p>The actual heap allocation V8 manages for the buffer\u2019s bytes — possibly a slab of Node\u2019s shared Buffer pool for small buffers.</p>",why:"Pooling is why a small Buffer\u2019s byteOffset is rarely zero and its .buffer is bigger than the Buffer itself.",deep:{node:"<p>Small <code>allocUnsafe</code> buffers are carved from an ~8 KiB pool; large ones get a dedicated BackingStore.</p>",spec:"<p>Implementation detail; the spec only requires contiguous addressable bytes.</p>"}},
+ {y:530,o:'bytes',t:'OS memory page',s:'physical RAM, addressable octets',body:"<p>The substrate your C instincts already know: a flat, addressable array of bytes in a memory page. Everything above is structure layered onto this.</p>",why:"Same model as casting char* to int* in C — the address is fixed; the type is your choice.",deep:{node:"<p>Mapped by the allocator beneath V8; alignment and page boundaries live here.</p>",spec:"<p>Outside any language spec — the hardware / OS layer.</p>"}}
+];
+const lbw=460,lbx=(760-lbw)/2;
+stackVP.appendChild(el('defs',{},'<marker id="arr" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--line2)"/></marker>'));
+layers.forEach((L,i)=>{if(i<layers.length-1)stackVP.appendChild(el('path',{d:'M '+(lbx+lbw/2)+' '+(L.y+76)+' L '+(lbx+lbw/2)+' '+layers[i+1].y,stroke:'var(--line2)','stroke-width':2,'marker-end':'url(#arr)'}));});
+layers.forEach(L=>{
+  const interp=(L.o==='view'),c=interp?'var(--view)':L.boundary?'var(--ink3)':'var(--raw)';
+  const g=el('g',{class:'node'+(interp?' vlane':'')});
+  g.innerHTML='<g class="nbox" style="transform-origin:'+(lbx+lbw/2)+'px '+(L.y+38)+'px">'+
+    '<rect x="'+lbx+'" y="'+L.y+'" width="'+lbw+'" height="76" rx="13" fill="var(--panel)" stroke="'+c+'" stroke-width="'+(L.boundary?2.5:1.6)+'" '+(L.boundary?'stroke-dasharray="9 6"':'')+'/>'+
+    '<text x="'+(lbx+22)+'" y="'+(L.y+32)+'" font-size="16" font-weight="700" fill="var(--ink)">'+L.t+'</text>'+
+    '<text x="'+(lbx+22)+'" y="'+(L.y+55)+'" font-size="12" fill="var(--ink2)">'+L.s+'</text>'+
+    '<text x="'+(lbx+lbw-18)+'" y="'+(L.y+44)+'" text-anchor="end" font-size="11" font-weight="800" fill="'+c+'">'+(interp?'MEANING':L.boundary?'\u2014':'STORAGE')+'</text></g>';
+  g.addEventListener('click',()=>openModal({tag:'LAYER',laneName:interp?'interpretation':'storage',title:L.t.replace(/[—\u2014]/g,'').trim(),body:L.body,why:L.why,deep:L.deep}));
+  stackVP.appendChild(g);
+});
+
+/* ============================================================ 04 TWO VIEWS */
+const tvVP=document.getElementById('tvVP');
+const TV=new Uint8Array([0x12,0x34,0xAB,0xCD]);
+let tvMode='le';
+function renderTV(){
+  const x0=70,w=140,gap=12,y=66;
+  let h='<text x="60" y="36" font-size="12" font-weight="700" fill="var(--ink2)">one ArrayBuffer(4) — click a byte to change it</text>';
+  for(let i=0;i<4;i++){
+    const x=x0+i*(w+gap);
+    h+='<g class="tvbyte" data-i="'+i+'" style="cursor:pointer"><rect x="'+x+'" y="'+y+'" width="'+w+'" height="62" rx="9" fill="var(--raw-soft)" stroke="var(--raw)" stroke-width="1.5"/>'+
+       '<text x="'+(x+w/2)+'" y="'+(y+30)+'" text-anchor="middle" font-size="22" font-weight="700" fill="var(--raw)">0x'+hex2(TV[i])+'</text>'+
+       '<text x="'+(x+w/2)+'" y="'+(y+50)+'" text-anchor="middle" font-size="11" fill="var(--ink3)">u8['+i+'] = '+TV[i]+'</text></g>';
+  }
+  h+='<text x="60" y="'+(y+88)+'" font-size="11" font-weight="700" fill="var(--raw)">Uint8Array — 4 elements</text>';
+  const y2=200,w2=w*2+gap;
+  const dv=new DataView(TV.buffer);
+  const le=tvMode==='le';
+  for(let p=0;p<2;p++){
+    const x=x0+p*(w2+gap);
+    const val=dv.getUint16(p*2,le);
+    h+='<rect x="'+x+'" y="'+y2+'" width="'+w2+'" height="62" rx="9" fill="var(--view-soft)" stroke="var(--view)" stroke-width="1.5"/>'+
+       '<text x="'+(x+w2/2)+'" y="'+(y2+30)+'" text-anchor="middle" font-size="22" font-weight="700" fill="var(--view)">'+val+'</text>'+
+       '<text x="'+(x+w2/2)+'" y="'+(y2+50)+'" text-anchor="middle" font-size="11" fill="var(--ink3)">u16['+p+'] = 0x'+val.toString(16).toUpperCase().padStart(4,'0')+'</text>';
+    h+='<path d="M'+(x0+(p*2)*(w+gap)+w/2)+' '+(y+62)+' L'+(x0+(p*2)*(w+gap)+w/2)+' '+(y2-8)+' M'+(x0+(p*2+1)*(w+gap)+w/2)+' '+(y+62)+' L'+(x0+(p*2+1)*(w+gap)+w/2)+' '+(y2-8)+'" stroke="var(--view)" stroke-width="1.2" stroke-dasharray="4 4" opacity="0.6"/>';
+  }
+  h+='<text x="60" y="'+(y2+88)+'" font-size="11" font-weight="700" fill="var(--view)">Uint16Array — 2 elements · '+(le?'little-endian':'big-endian')+'</text>';
+  h+=plate(560,y2+82,le?'low byte first':'high byte first',le?'var(--view)':'var(--warn)',10.5);
+  tvVP.innerHTML=h;
+  tvVP.querySelectorAll('.tvbyte').forEach(g=>g.addEventListener('click',()=>{const i=+g.dataset.i;TV[i]=(TV[i]+0x11)&0xFF;renderTV();}));
+}
+renderTV();
+const tvBtn=document.getElementById('tvEndian');
+tvBtn.onclick=()=>{tvMode=tvMode==='le'?'be':'le';tvBtn.textContent=tvMode==='le'?'little-endian (native)':'big-endian';tvBtn.classList.toggle('on',tvMode==='le');renderTV();};
+
+/* ============================================================ 05 DATAVIEW PARSER */
+const dvVP=document.getElementById('dvVP');
+const HDR=new Uint8Array([0x42, 0x00,0x00,0x01,0x30, 0x07,0x00, 0xAB]);
+const dvView=new DataView(HDR.buffer);
+const DVFIELDS=[
+ {from:0,to:0,field:'magic',expr:"getUint8(0)",val:()=>'0x'+hex2(dvView.getUint8(0)),color:'var(--raw)',note:'A one-byte tag identifying the format.'},
+ {from:1,to:4,field:'length · uint32 BE',expr:"getUint32(1, false)",val:()=>dvView.getUint32(1,false).toLocaleString('en-US'),color:'var(--view)',note:'Four bytes, big-endian — most-significant byte first, as on the network.'},
+ {from:5,to:6,field:'flags · uint16 LE',expr:"getUint16(5, true)",val:()=>'0b'+dvView.getUint16(5,true).toString(2).padStart(16,'0'),color:'var(--view)',note:'Two bytes, little-endian this time — the format mixes orders, so you state each one.'},
+ {from:7,to:7,field:'checksum',expr:"getUint8(7)",val:()=>'0x'+hex2(dvView.getUint8(7)),color:'var(--raw)',note:'A trailing byte at an offset you control — DataView reads anywhere, even unaligned.'}
+];
+let dvStep=0,dvPlaying=false,dvT=null;
+function renderDV(){
+  const x0=40,gap=8,W=800,y=92;
+  const w=Math.floor((W-x0*2-gap*7)/8); // 8 cells fit within 800 with 40px margins
+  const active=dvStep>0?DVFIELDS[dvStep-1]:null;
+  let h='<text x="'+x0+'" y="44" font-size="12" font-weight="700" fill="var(--ink2)">8-byte header · DataView reads each field by offset + endianness</text>';
+  for(let i=0;i<8;i++){
+    const x=x0+i*(w+gap);
+    const on=active&&i>=active.from&&i<=active.to;
+    const stroke=on?active.color:'var(--line2)';
+    h+='<rect x="'+x+'" y="'+y+'" width="'+w+'" height="60" rx="8" fill="'+(on?'var(--panel2)':'var(--bg2)')+'" stroke="'+stroke+'" stroke-width="'+(on?2.4:1.2)+'"/>';
+    h+='<text x="'+(x+w/2)+'" y="'+(y+29)+'" text-anchor="middle" font-size="17" font-weight="700" fill="'+(on?active.color:'var(--ink2)')+'">'+hex2(HDR[i])+'</text>';
+    h+='<text x="'+(x+w/2)+'" y="'+(y+49)+'" text-anchor="middle" font-size="9.5" fill="var(--ink3)">@'+i+'</text>';
+  }
+  if(active){
+    const ax=x0+active.from*(w+gap),aw=(active.to-active.from+1)*(w+gap)-gap;
+    h+='<path d="M'+ax+' '+(y-12)+' L'+ax+' '+(y-20)+' L'+(ax+aw)+' '+(y-20)+' L'+(ax+aw)+' '+(y-12)+'" fill="none" stroke="'+active.color+'" stroke-width="2"/>';
+    h+='<text x="'+(ax+aw/2)+'" y="'+(y-26)+'" text-anchor="middle" font-size="11" font-weight="700" fill="'+active.color+'">'+active.field+'</text>';
+    h+='<text x="'+x0+'" y="'+(y+118)+'" font-size="13" font-family="var(--mono)" fill="var(--ink2)">dv.'+active.expr+'</text>';
+    h+='<text x="'+x0+'" y="'+(y+158)+'" font-size="28" font-weight="800" fill="'+active.color+'">'+active.val()+'</text>';
+  } else {
+    h+='<text x="'+x0+'" y="'+(y+128)+'" font-size="14" fill="var(--ink3)">Step the cursor \u2192 to read magic, length (BE), flags (LE), checksum.</text>';
+  }
+  dvVP.innerHTML=h;
+}
+function dvSet(i){
+  dvStep=Math.max(0,Math.min(DVFIELDS.length,i));
+  renderDV();
+  const f=dvStep>0?DVFIELDS[dvStep-1]:null;
+  document.getElementById('dvCapN').textContent='READ '+String(dvStep).padStart(2,'0');
+  document.getElementById('dvCapField').textContent=f?f.field:'—';
+  document.getElementById('dvCapH').textContent=f?('dv.'+f.expr+'  →  '+f.val()):'Press play to walk the cursor';
+  document.getElementById('dvCapB').textContent=f?f.note:'Each read names its type, offset, and byte order explicitly — the whole point of DataView.';
+  document.getElementById('dvStepNo').textContent=dvStep+' / '+DVFIELDS.length;
+  document.getElementById('dvFill').style.width=(dvStep/DVFIELDS.length*100)+'%';
+}
+function dvPlay(){dvPlaying=true;dvPI();if(dvStep>=DVFIELDS.length)dvSet(0);dvT=setInterval(()=>{if(dvStep>=DVFIELDS.length){dvPause();return;}dvSet(dvStep+1);},1500);}
+function dvPause(){dvPlaying=false;clearInterval(dvT);dvPI();}
+function dvPI(){document.getElementById('dvPlayIcon').innerHTML=dvPlaying?'<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>':'<path d="M7 5v14l12-7z"/>';}
+document.getElementById('dvPlay').onclick=()=>{dvPlaying?dvPause():dvPlay();};
+document.getElementById('dvNext').onclick=()=>{dvPause();dvSet(dvStep+1);};
+document.getElementById('dvPrev').onclick=()=>{dvPause();dvSet(dvStep-1);};
+document.getElementById('dvScrub').onclick=e=>{dvPause();const r=e.currentTarget.getBoundingClientRect();dvSet(Math.round((e.clientX-r.left)/r.width*DVFIELDS.length));};
+(()=>{const t=document.getElementById('dvTicks');for(let i=0;i<=DVFIELDS.length;i++){const d=document.createElement('div');d.className='tk';t.appendChild(d);}})();
+dvSet(0);
+
+/* ============================================================ 06 ENDIAN */
+const endianVP=document.getElementById('endianVP');
+const EB=[{hex:'0A',v:0x0A},{hex:'0B',v:0x0B},{hex:'0C',v:0x0C},{hex:'0D',v:0x0D}];
+function renderEndian(mode){
+  const be=mode==='be';
+  const order=be?[0,1,2,3]:[3,2,1,0];
+  const val=be?((EB[0].v<<24)|(EB[1].v<<16)|(EB[2].v<<8)|EB[3].v)>>>0
+              :((EB[3].v<<24)|(EB[2].v<<16)|(EB[1].v<<8)|EB[0].v)>>>0;
+  const x0=120,w=120,gap=14,y=66;
+  let h='<text x="60" y="38" font-size="12" font-weight="700" fill="var(--ink2)">the same 4 bytes in memory:</text>';
+  EB.forEach((b,i)=>{
+    const x=x0+i*(w+gap);
+    h+='<rect x="'+x+'" y="'+y+'" width="'+w+'" height="60" rx="9" fill="var(--raw-soft)" stroke="var(--raw)"/>';
+    h+='<text x="'+(x+w/2)+'" y="'+(y+30)+'" text-anchor="middle" font-size="20" font-weight="800" fill="var(--raw)">0x'+b.hex+'</text>';
+    h+='<text x="'+(x+w/2)+'" y="'+(y+50)+'" text-anchor="middle" font-size="10" fill="var(--ink3)">addr '+i+'</text>';
+  });
+  order.forEach((idx,stepi)=>{
+    const x=x0+idx*(w+gap)+w/2;
+    h+='<circle cx="'+x+'" cy="'+(y+96)+'" r="13" fill="var(--view-soft)" stroke="var(--view)"/>';
+    h+='<text x="'+x+'" y="'+(y+101)+'" text-anchor="middle" font-size="12" font-weight="800" fill="var(--view)">'+(stepi+1)+'</text>';
+  });
+  h+='<text x="60" y="'+(y+101)+'" font-size="11" font-weight="700" fill="var(--view)">read order →</text>';
+  const hexstr=(be?[0,1,2,3]:[3,2,1,0]).map(i=>EB[i].hex).join('');
+  h+='<text x="120" y="'+(y+158)+'" font-size="13" fill="var(--ink2)">assembled: <tspan font-weight="700" fill="var(--ink)" font-family="var(--mono)">0x'+hexstr+'</tspan></text>';
+  h+='<text x="120" y="'+(y+196)+'" font-size="28" font-weight="800" fill="'+(be?'var(--raw)':'var(--view)')+'">= '+val.toLocaleString('en-US')+'</text>';
+  h+=plate(420,y+222,be?'big-endian · 0x0A0B0C0D = 168,496,141':'little-endian · 0x0D0C0B0A = 218,893,066',be?'var(--raw)':'var(--view)',11);
+  endianVP.innerHTML=h;
+}
+renderEndian('be');
+const endianBtn=document.getElementById('endianBtn');
+endianBtn.onclick=()=>{const next=endianBtn.dataset.mode==='be'?'le':'be';endianBtn.dataset.mode=next;endianBtn.textContent=next==='be'?'big-endian · readUInt32BE':'little-endian · readUInt32LE';endianBtn.classList.toggle('on',next==='be');renderEndian(next);};
+
+/* ============================================================ 07 POOL */
+const poolVP=document.getElementById('poolVP');
+const poolData={
+ 'Buffer.allocUnsafe(100)':{tag:'POOL',laneName:'storage',title:'allocUnsafe → pool slab',body:"<p>A small unsafe allocation is carved from the shared pool at the current offset. Fast — no new allocation — but the bytes are whatever was there before.</p>",why:"That stale memory can contain another request\u2019s data; never expose it without overwriting.",deep:{node:"<p>Uses the pool when size &lt; <code>poolSize&gt;&gt;&gt;1</code> (4096). The Buffer\u2019s <code>.buffer</code> is the 8 KiB pool; <code>.byteOffset</code> is non-zero.</p>",spec:"<p>Node-specific; no ECMAScript counterpart.</p>"}},
+ 'Buffer.allocUnsafe(200)':{tag:'POOL',laneName:'storage',title:'next slab, same pool',body:"<p>The next small unsafe buffer takes the following region of the <em>same</em> pool. Two unrelated Buffers can share one ArrayBuffer.</p>",why:"Two Buffers sharing a backing store means a bug in one can, in principle, read the other\u2019s slab.",deep:{node:"<p>The pool offset advances and is 8-byte aligned; when the pool fills, a fresh 8 KiB pool is allocated.</p>",spec:"<p>Implementation detail of Node\u2019s allocator.</p>"}},
+ 'Buffer.alloc(64)':{tag:'POOL',laneName:'storage',title:'alloc → zero-filled',body:"<p><code>Buffer.alloc</code> zero-fills before returning. Safe by default; the cost is writing every byte to zero first.</p>",why:"This is the right default — trade a little speed for never leaking old memory.",deep:{node:"<p><code>alloc</code> may still use the pool but always zero-fills; pass a fill value to initialise differently.</p>",spec:"<p>Node-specific.</p>"}},
+ 'Buffer.alloc(64 KiB)':{tag:'POOL',laneName:'storage',title:'large → standalone',body:"<p>Allocations at or above the pool threshold get their <strong>own</strong> ArrayBuffer with <code>byteOffset</code> 0 — never pooled.</p>",why:"Knowing the threshold explains why some Buffers alias a big block and others stand alone.",deep:{node:"<p>Size ≥ <code>poolSize&gt;&gt;&gt;1</code> bypasses the pool; <code>allocUnsafeSlow</code> always does.</p>",spec:"<p>Node-specific.</p>"}}
+};
+function pbox(x,y,w,h2,stroke,title,sub){
+  return '<g class="node"><g class="nbox" style="transform-origin:'+(x+w/2)+'px '+(y+h2/2)+'px">'+
+    '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h2+'" rx="10" fill="var(--panel)" stroke="'+stroke+'" stroke-width="1.6"/>'+
+    '<text x="'+(x+14)+'" y="'+(y+25)+'" font-size="13" font-weight="700" fill="var(--ink)">'+title+'</text>'+
+    '<text x="'+(x+14)+'" y="'+(y+44)+'" font-size="10.5" fill="var(--ink2)">'+sub+'</text></g></g>';
+}
+let poolH='<defs><marker id="parr" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--ink3)"/></marker></defs>';
+poolH+='<text x="60" y="56" font-size="12" font-weight="800" fill="var(--raw)" letter-spacing="1">SHARED 8 KiB POOL · one ArrayBuffer</text>';
+poolH+='<rect x="60" y="74" width="800" height="60" rx="10" fill="var(--raw-soft)" stroke="var(--raw)" stroke-dasharray="3 5"/>';
+poolH+='<rect x="66" y="80" width="120" height="48" rx="6" fill="var(--panel2)" stroke="var(--raw)"/>';
+poolH+='<text x="126" y="102" text-anchor="middle" font-size="11" font-weight="700" fill="var(--raw)">slab A</text>';
+poolH+='<text x="126" y="118" text-anchor="middle" font-size="9" fill="var(--ink3)">offset 0 · 100B</text>';
+poolH+='<rect x="190" y="80" width="220" height="48" rx="6" fill="var(--panel2)" stroke="var(--raw)"/>';
+poolH+='<text x="300" y="102" text-anchor="middle" font-size="11" font-weight="700" fill="var(--raw)">slab B</text>';
+poolH+='<text x="300" y="118" text-anchor="middle" font-size="9" fill="var(--ink3)">offset 104 · 200B</text>';
+poolH+='<rect x="414" y="80" width="440" height="48" rx="6" fill="none" stroke="var(--line2)" stroke-dasharray="2 4"/>';
+poolH+='<text x="634" y="108" text-anchor="middle" font-size="10" fill="var(--ink3)">…free, uninitialised (old bytes)…</text>';
+poolH+=pbox(60,206,250,64,'var(--raw)','Buffer.allocUnsafe(100)','→ slab A · byteOffset 0 · dirty');
+poolH+=pbox(330,206,250,64,'var(--raw)','Buffer.allocUnsafe(200)','→ slab B · byteOffset 104 · dirty');
+poolH+=pbox(60,300,250,64,'var(--view)','Buffer.alloc(64)','zero-filled · safe default');
+poolH+=pbox(330,300,250,64,'var(--view)','Buffer.alloc(64 KiB)','standalone ArrayBuffer · offset 0');
+poolH+='<path d="M126 206 L126 134" fill="none" stroke="var(--ink3)" stroke-width="1.6" stroke-dasharray="5 5" marker-end="url(#parr)"/>';
+poolH+='<path d="M380 206 L300 134" fill="none" stroke="var(--ink3)" stroke-width="1.6" stroke-dasharray="5 5" marker-end="url(#parr)"/>';
+poolH+='<text x="660" y="196" font-size="12" font-weight="800" fill="var(--view)" letter-spacing="1">STANDALONE</text>';
+poolH+='<rect x="640" y="210" width="220" height="154" rx="10" fill="var(--view-soft)" stroke="var(--view)"/>';
+poolH+='<text x="750" y="283" text-anchor="middle" font-size="12" font-weight="700" fill="var(--view)">own ArrayBuffer</text>';
+poolH+='<text x="750" y="304" text-anchor="middle" font-size="10" fill="var(--ink2)">zeroed · byteOffset 0</text>';
+poolH+='<path d="M580 332 L640 318" fill="none" stroke="var(--ink3)" stroke-width="1.6" stroke-dasharray="5 5" marker-end="url(#parr)"/>';
+poolH+=plate(440,420,'small unsafe → shared & dirty · large/alloc → safe','var(--ink3)',11);
+poolVP.innerHTML=poolH;
+poolVP.querySelectorAll('.node').forEach(node=>{const title=node.querySelector('text');node.addEventListener('click',()=>{const d=poolData[title.textContent];if(d)openModal(d);});});
+
+/* ============================================================ 08 SEAM PLAYER */
+const LANES=["Source · the value","Stream · chunks","Naïve decode","StringDecoder"];
+const laneColor=li=>li===0?'var(--raw)':li===1?'var(--ink2)':li===2?'var(--warn)':'var(--view)';
+const laneIsInterp=li=>li>=2;
+const FRAMES=[
+ {n:1,lane:0,title:"The value you think you have",short:"\"café €99\" — 8 visible characters",
+  body:"<p>You start with text: <code>\"café €99\"</code>. Eight glyphs. But <strong>text is not how it is stored</strong> — the moment it touches a socket, a file, or a stream, it becomes bytes under some encoding.</p>",
+  why:"The glyph count and the byte count are different numbers — confusing them is where the trouble starts.",
+  deep:{node:"<p>In V8 a JS string is stored as UTF-16, so <code>\"café €99\".length</code> is <strong>8</strong> code units — never bytes.</p>",spec:"<p>ECMAScript strings are sequences of UTF-16 code units; <code>.length</code> is the unit count.</p>"}},
+ {n:2,lane:0,title:"Encoded to UTF-8 bytes",short:"63 61 66 C3A9 20 E282AC 39 39 — 11 bytes",
+  body:"<p>Encoded as UTF-8 the string is <strong>11 bytes</strong>: <code>63 61 66</code> for <code>caf</code>, <code>C3 A9</code> for <code>é</code>, <code>20</code> space, <code>E2 82 AC</code> for <code>€</code>, <code>39 39</code> for <code>99</code>. The variable width is the whole problem.</p>",
+  why:"Because é is 2 bytes and € is 3, a byte boundary can land inside a character — impossible with a fixed-width charset.",
+  deep:{node:"<p><code>Buffer.byteLength('café €99')</code> returns <strong>11</strong>; the string\u2019s <code>.length</code> is 8.</p>",spec:"<p>UTF-8 (RFC 3629): U+0080–7FF → 2 bytes (é), U+0800–FFFF → 3 (€ = U+20AC).</p>"}},
+ {n:3,lane:1,title:"The stream reads in byte-sized chunks",short:"chunk size = highWaterMark, blind to characters",
+  body:"<p>A Readable doesn\u2019t know or care about characters. It fills its internal buffer up to <code>highWaterMark</code> and emits a <strong>Buffer of bytes</strong>. The cut point is decided by byte count — never by your text.</p>",
+  why:"Nothing in the transport layer respects character boundaries; that contract doesn\u2019t exist down here.",
+  deep:{node:"<p>Non-object-mode streams push <code>Buffer</code> chunks; <code>highWaterMark</code> defaults to 16 KiB (64 KiB for fs).</p>",spec:"<p>A Readable in binary mode yields Buffers; backpressure bounds how many bytes sit buffered.</p>"}},
+ {n:4,lane:1,title:"Chunk 1 emitted — boundary inside €",short:"63 61 66 C3A9 20 E2 — ends on a lone lead byte",
+  body:"<p>Suppose the first chunk is <code>63 61 66 C3 A9 20 E2</code>. It ends on <code>E2</code> — the <strong>lead byte</strong> of €, which announces two continuation bytes that haven\u2019t arrived. The character is cut in half.</p>",
+  why:"A lead byte with no continuation bytes is, by definition, an incomplete sequence — invalid on its own.",
+  deep:{node:"<p>The Buffer is <code>&lt;Buffer 63 61 66 c3 a9 20 e2&gt;</code>. <code>E2</code> = <code>1110 0010</code>: a 3-byte lead still owed <code>82 AC</code>.</p>",spec:"<p>UTF-8: <code>1110xxxx</code> must be followed by two <code>10xxxxxx</code> bytes; absent them it is ill-formed.</p>"}},
+ {n:5,lane:2,title:"Naïve: chunk1.toString('utf8')",short:"→ \"café \" + � — the lone E2 is invalid",
+  body:"<p>Call <code>chunk1.toString('utf8')</code>: the decoder handles <code>café&nbsp;</code> fine, then hits the dangling <code>E2</code> with nothing to complete it — so it emits <strong>U+FFFD �</strong>. The € is already lost.</p>",
+  why:"toString decodes this chunk in isolation; it cannot wait for bytes that live in the next chunk.",
+  deep:{node:"<p><code>buf.toString('utf8')</code> runs Node\u2019s internal decoder, which substitutes <code>�</code> for the incomplete tail.</p>",spec:"<p>WHATWG Encoding: a decoder in replacement mode emits U+FFFD on ill-formed input.</p>"}},
+ {n:6,lane:1,title:"Chunk 2 arrives",short:"82 AC 39 39 — starts mid-character",
+  body:"<p>The next chunk is <code>82 AC 39 39</code>. It <strong>begins</strong> with the two continuation bytes that belonged to €, now orphaned, followed by <code>39 39</code> = <code>99</code>.</p>",
+  why:"Continuation bytes at the very start of a chunk have no lead byte to attach to — they are orphans.",
+  deep:{node:"<p><code>&lt;Buffer 82 ac 39 39&gt;</code>. <code>82</code> and <code>AC</code> are <code>10xxxxxx</code> continuation bytes; <code>39</code> is ASCII <code>9</code>.</p>",spec:"<p>UTF-8: a continuation byte not preceded by a valid lead byte is ill-formed.</p>"}},
+ {n:7,lane:2,title:"Naïve: chunk2.toString('utf8')",short:"→ �\"99\" — orphan bytes, corrupted result",
+  body:"<p><code>chunk2.toString('utf8')</code> sees <code>82 AC</code> with no lead byte → more <code>�</code>, then <code>99</code>. Concatenated, the naïve result is <strong>\"café ��99\"</strong>. The € is gone.</p>",
+  why:"Both halves of the split character degraded independently — neither chunk could recover it alone.",
+  deep:{node:"<p>Concatenation gives <code>'café ' + '\\uFFFD' + '\\uFFFD' + '99'</code> — irreversibly lossy.</p>",spec:"<p>Once emitted, U+FFFD carries no record of the original bytes; the information is gone.</p>"}},
+ {n:8,lane:2,title:"Root cause: stateful vs stateless",short:"decoding needs memory; toString has none",
+  body:"<p>The real defect isn\u2019t the bytes — it is the <strong>method</strong>. UTF-8 decoding is a state machine that may need to remember a partial sequence between bytes. <code>toString()</code> has no memory between chunks. The mismatch is the bug.</p>",
+  why:"Fix the statefulness and the same bytes decode perfectly — proving the data was never the problem.",
+  deep:{node:"<p>What\u2019s needed is something that remembers the dangling <code>E2</code> across calls — exactly what <code>StringDecoder</code> stores in <code>lastChar</code>/<code>lastNeed</code>.</p>",spec:"<p>A streaming decoder is a coroutine over the byte sequence; per-chunk decoding discards continuation between resumptions.</p>"}},
+ {n:9,lane:3,title:"StringDecoder.write(chunk1)",short:"→ \"café \"  · retains E2 internally",
+  body:"<p>Feed chunk 1 to a <code>StringDecoder</code>. It returns the characters it can <strong>complete</strong> — <code>\"café \"</code> — and quietly <strong>keeps the dangling <code>E2</code></strong> in its internal state instead of emitting <code>�</code>.</p>",
+  why:"Holding the incomplete tail is the entire trick — it turns a stateless call into a stateful one.",
+  deep:{node:"<p><code>new StringDecoder('utf8').write(chunk1)</code> → <code>'café '</code>. Internally <code>lastNeed = 2</code>: one byte of a 3-byte sequence pending.</p>",spec:"<p>The decoder buffers an incomplete trailing sequence rather than treating it as an error.</p>"}},
+ {n:10,lane:3,title:"StringDecoder.write(chunk2)",short:"→ \"€99\"  · E2 + 82 AC completes €",
+  body:"<p>Feed chunk 2. The decoder <strong>prepends the retained <code>E2</code></strong>, completing <code>E2 82 AC</code> = <code>€</code>, then decodes <code>39 39</code> = <code>99</code>. It returns <code>\"€99\"</code> — whole.</p>",
+  why:"The byte stranded at the seam is reunited with its continuation bytes exactly as the encoding intended.",
+  deep:{node:"<p><code>d.write(chunk2)</code> → <code>'€99'</code>. Buffered <code>E2</code> + incoming <code>82 AC</code> form the code point.</p>",spec:"<p>The decoder resumes its state machine: pending lead byte + arriving continuation bytes → one code point.</p>"}},
+ {n:11,lane:3,title:"StringDecoder.end()",short:"→ \"\"  · nothing buffered · result is whole",
+  body:"<p><code>d.end()</code> flushes leftover bytes; here there are none, so it returns <code>\"\"</code>. The output is <strong>\"café €99\"</strong> — byte-perfect. Same bytes as the naïve path; only the decoder had memory.</p>",
+  why:"end() matters when a stream truly ends mid-character: it lets you decide to emit � or surface an error, deliberately.",
+  deep:{node:"<p><code>d.end()</code> returns any remaining buffered bytes decoded (or <code>�</code> if still incomplete). Clean here → <code>''</code>.</p>",spec:"<p>Flushing finalises state; a still-incomplete tail at true end-of-input is the only place replacement is correct.</p>"}},
+ {n:12,lane:3,title:"The payoff: setEncoding does this for you",short:"readable.setEncoding('utf8') installs a StringDecoder",
+  body:"<p>You rarely write this by hand. <code>readable.setEncoding('utf8')</code> wires a <code>StringDecoder</code> into the stream\u2019s internals, so every <code>'data'</code> event hands you whole-character <strong>strings</strong>. The seam is handled before you see a chunk.</p>",
+  why:"The fix you just traced is the same machinery the platform runs automatically — once you know it is there.",
+  deep:{node:"<p><code>setEncoding(enc)</code> sets <code>state.decoder = new StringDecoder(enc)</code>; the read path runs each chunk through <code>decoder.write</code>.</p>",spec:"<p>With an encoding set, a Readable emits decoded strings instead of Buffers.</p>"}}
+];
+const seamVP=document.getElementById('seamVP');
+const laneX0=170,laneW=1320-laneX0-40,laneY=[120,250,380,500],laneH=54,R=16;
+const nodeCX=i=>laneX0+34+(laneW-68)*(i/(FRAMES.length-1));
+LANES.forEach((name,li)=>{
+  const interp=laneIsInterp(li);
+  const g=el('g',{class:interp?'vlane keep':''});
+  g.appendChild(el('rect',{x:laneX0,y:laneY[li]-laneH/2,width:laneW,height:laneH,rx:10,fill:'var(--panel2)',stroke:'var(--line)'}));
+  g.appendChild(el('text',{x:laneX0-12,y:laneY[li]-3,'text-anchor':'end','font-size':11,'font-weight':700,fill:laneColor(li),'letter-spacing':1},name.split(' ')[0].toUpperCase()));
+  g.appendChild(el('text',{x:laneX0-12,y:laneY[li]+11,'text-anchor':'end','font-size':9,fill:'var(--ink3)','letter-spacing':1},name.split('·').slice(1).join('').trim().toUpperCase()));
+  seamVP.appendChild(g);
+});
+const pts=FRAMES.map((f,i)=>[nodeCX(i),laneY[f.lane]]);
+let dd='M '+pts[0][0]+' '+pts[0][1];
+for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i],mx=(a[0]+b[0])/2;dd+=' C '+mx+' '+a[1]+', '+mx+' '+b[1]+', '+b[0]+' '+b[1];}
+seamVP.appendChild(el('path',{d:dd,fill:'none',stroke:'var(--line2)','stroke-width':2,'stroke-dasharray':'4 5'}));
+const seamNodes=[],seamLabels=[];
+FRAMES.forEach((f,i)=>{
+  const cx=nodeCX(i),cy=laneY[f.lane],c=laneColor(f.lane),interp=laneIsInterp(f.lane);
+  const above=(i%2===0),ly=above?cy-R-26:cy+R+26,lead0=above?cy-R:cy+R,lead1=above?ly+9:ly-9;
+  seamVP.appendChild(el('line',{x1:cx,y1:lead0,x2:cx,y2:lead1,stroke:'var(--line2)','stroke-width':1.2}));
+  const lg=el('g',{class:'hlabel'+(interp?' vlane keep':'')});
+  lg.innerHTML=plate(cx,ly,f.title,'var(--ink)',9.5);
+  seamVP.appendChild(lg);seamLabels.push({g:lg,c});
+  const g=el('g',{class:'node'+(interp?' vlane':''),transform:'translate('+cx+','+cy+')'});
+  g.innerHTML='<g class="nbox" style="transform-origin:0 0"><circle r="'+R+'" fill="var(--panel)" stroke="'+c+'" stroke-width="2"/>'+
+    '<text x="0" y="4" text-anchor="middle" font-size="12" font-weight="800" fill="'+c+'">'+String(f.n).padStart(2,'0')+'</text></g>';
+  g.addEventListener('click',()=>{seamSet(i);openModal(f);});
+  seamVP.appendChild(g);seamNodes.push(g);
+});
+seamVP.appendChild(el('g',{class:'vlane keep'},plate(nodeCX(6),laneY[2]+R+50,'✕ result: "café ��99"','var(--warn)',9.5)));
+const token=el('g',{},'<circle r="13" fill="var(--raw)" opacity="0.25"/><circle r="7" fill="var(--raw)"/>');
+token.style.transition='transform .55s cubic-bezier(.5,0,.3,1)';
+seamVP.appendChild(token);
+(()=>{const t=document.getElementById('sTicks');FRAMES.forEach(()=>{const d=document.createElement('div');d.className='tk';t.appendChild(d);});})();
+let sStep=-1,sPlaying=false,sT=null;
+function seamSet(i){
+  sStep=Math.max(0,Math.min(FRAMES.length-1,i));
+  const f=FRAMES[sStep];
+  seamNodes.forEach((n,k)=>n.classList.toggle('active',k===sStep));
+  seamLabels.forEach((L,k)=>{const on=k===sStep;L.g.style.opacity=on?'1':'0.55';
+    const rect=L.g.querySelector('rect'),txt=L.g.querySelector('text');
+    if(rect)rect.setAttribute('stroke',on?L.c:'var(--line)');
+    if(txt)txt.setAttribute('fill',on?L.c:'var(--ink2)');});
+  const tx=nodeCX(sStep),ty=laneY[f.lane],col=laneColor(f.lane);
+  token.setAttribute('transform','translate('+tx+','+ty+')');
+  token.querySelectorAll('circle').forEach(c=>c.setAttribute('fill',col));
+  document.getElementById('sCapN').textContent='FRAME '+String(f.n).padStart(2,'0');
+  document.getElementById('sCapLane').textContent=LANES[f.lane];
+  document.getElementById('sCapH').textContent=f.title;
+  document.getElementById('sCapB').textContent=f.short.charAt(0).toUpperCase()+f.short.slice(1)+'.';
+  const more=document.getElementById('sCapMore');more.style.display='inline-block';more.onclick=()=>openModal(f);
+  document.getElementById('sStepNo').textContent=String(f.n).padStart(2,'0')+' / 12';
+  document.getElementById('sFill').style.width=(sStep/(FRAMES.length-1)*100)+'%';
+}
+function sPlay(){sPlaying=true;sPI();if(sStep>=FRAMES.length-1)seamSet(0);sT=setInterval(()=>{if(sStep>=FRAMES.length-1){sPause();return;}seamSet(sStep+1);},1700);}
+function sPause(){sPlaying=false;clearInterval(sT);sPI();}
+function sPI(){document.getElementById('sPlayIcon').innerHTML=sPlaying?'<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>':'<path d="M7 5v14l12-7z"/>';}
+document.getElementById('sPlay').onclick=()=>{sPlaying?sPause():sPlay();};
+document.getElementById('sNext').onclick=()=>{sPause();seamSet(sStep+1);};
+document.getElementById('sPrev').onclick=()=>{sPause();seamSet(sStep-1);};
+document.getElementById('sScrub').onclick=e=>{sPause();const r=e.currentTarget.getBoundingClientRect();seamSet(Math.round((e.clientX-r.left)/r.width*(FRAMES.length-1)));};
+seamSet(0);document.getElementById('sStepNo').textContent='00 / 12';document.getElementById('sFill').style.width='0%';document.getElementById('sCapMore').style.display='none';
+
+/* ============================================================ 09 CARDS */
+const DECODER_CARDS={
+ 9:{call:"d.write(chunk1)",emit:'café ',tape:[['63'],['61'],['66'],['C3'],['A9'],['20'],['E2','held']],state:'retain',stateText:'retains E2 · tail held'},
+ 10:{call:"d.write(chunk2)",emit:'€99',tape:[['E2','held'],['82','fresh'],['AC','fresh'],['39'],['39']],state:'complete',stateText:'E2 + 82 AC → € · complete'},
+ 11:{call:"d.end()",emit:'',tape:[],state:'flush',stateText:'flushed · clean, no leftover'},
+ 12:{call:"readable.setEncoding('utf8')",emit:'café €99',tape:[],state:'wire',stateText:'StringDecoder auto-installed'}
+};
+function buildCards(id,list){
+  const wrap=document.getElementById(id);
+  list.forEach(f=>{
+    const cd=DECODER_CARDS[f.n];if(!cd)return;
+    const c=document.createElement('div');
+    c.className='dcard '+cd.state;
+    const tape=cd.tape.length
+      ? '<div class="dc-tape">'+cd.tape.map(b=>'<span class="hb'+(b[1]==='held'?' held':b[1]==='fresh'?' fresh':'')+'">'+b[0]+'</span>').join('')+'</div>'
+      : '<div class="dc-tape dc-tape-empty">'+(cd.state==='wire'?'every \u2019data\u2019 event → whole string':'no bytes buffered')+'</div>';
+    const screen=cd.emit===''
+      ? '<span class="dc-empty">\u2039 empty string \u2014 nothing held \u203a</span>'
+      : '<span class="dc-emit">"'+cd.emit+'"<span class="dc-cursor"></span></span>';
+    c.innerHTML=
+      '<span class="dc-ghost">'+String(f.n).padStart(2,'0')+'</span>'+
+      '<div class="dc-call">'+cd.call+'</div>'+
+      '<div class="dc-screen">'+screen+'</div>'+
+      tape+
+      '<div class="dc-foot"><span class="dc-state">'+cd.stateText+'</span><span class="dc-more">node + spec \u2197</span></div>';
+    c.onclick=()=>openModal(f);
+    wrap.appendChild(c);
+  });
+}
+buildCards('fixCards',FRAMES.slice(8));
+
+/* ============================================================ 10 COPY VS SHARE */
+const CS_METHODS=[
+ {label:"a.slice(0,4)",kind:'copy',blabel:"B = a.slice(0,4)",note:"TypedArray.slice() allocates a fresh buffer and copies. B is independent — A is untouched."},
+ {label:"a.subarray(0,4)",kind:'share',blabel:"B = a.subarray(0,4)",note:"subarray() returns a VIEW over the same memory — no copy. Mutating B writes through to A."},
+ {label:"new Uint8Array(a.buffer)",kind:'share',blabel:"B = new Uint8Array(a.buffer)",note:"Wrapping a.buffer aliases the same ArrayBuffer. Same bytes, two views — the change bleeds back."},
+ {label:"new Uint8Array(a)",kind:'copy',blabel:"B = new Uint8Array(a)",note:"Constructing from a TypedArray (not its .buffer) copies element-by-element. B is independent."},
+ {label:"Buffer.from(a)",kind:'copy',blabel:"B = Buffer.from(a)",note:"Buffer.from(a TypedArray) copies. But Buffer.from(arrayBuffer) would SHARE — read the overload carefully."}
+];
+let csKind=null;
+const csRail=document.getElementById('csRail'),csA=document.getElementById('csA'),csB=document.getElementById('csB');
+const CS_BASE=[0x0A,0x14,0x1E,0x28];
+function renderCS(){
+  csA.innerHTML='';csB.innerHTML='';
+  for(let i=0;i<4;i++){
+    const a=document.createElement('div');a.className='csb';a.id='csa'+i;a.textContent=hex2(CS_BASE[i]);csA.appendChild(a);
+    const b=document.createElement('div');b.className='csb';b.id='csb'+i;b.textContent=hex2(CS_BASE[i]);
+    if(csKind==='share')b.classList.add('linked');
+    csB.appendChild(b);
+  }
+}
+CS_METHODS.forEach((m,idx)=>{
+  const b=document.createElement('button');b.className='csbtn';b.textContent=m.label;b.dataset.idx=idx;
+  b.onclick=()=>{
+    csKind=m.kind;
+    [...csRail.children].forEach(x=>x.classList.toggle('on',x.dataset.idx==idx));
+    document.getElementById('csBlabel').textContent=m.blabel;
+    renderCS();
+    const v=document.getElementById('csVerdict');
+    v.className='csverdict';
+    v.innerHTML=m.note+'  <b>Now mutate B ↓</b>';
+  };
+  csRail.appendChild(b);
+});
+renderCS();
+document.getElementById('csMutate').onclick=()=>{
+  if(csKind===null){const v=document.getElementById('csVerdict');v.className='csverdict';v.textContent='Pick a method above first.';return;}
+  const b1=document.getElementById('csb1');b1.textContent='FF';b1.classList.add('hot');
+  const v=document.getElementById('csVerdict');
+  if(csKind==='share'){
+    const a1=document.getElementById('csa1');a1.textContent='FF';a1.classList.add('hot');
+    v.className='csverdict share';
+    v.innerHTML='⚠ <b>SHARE / alias</b> — B is a view over A\u2019s memory, so <code>B[1]=0xFF</code> changed <b>A[1]</b> too. Both rows show FF.';
+  } else {
+    v.className='csverdict copy';
+    v.innerHTML='✓ <b>COPY</b> — B owns separate bytes, so <code>B[1]=0xFF</code> left A completely untouched.';
+  }
+};
+
+/* ============================================================ INSPECT / PAN-ZOOM */
+let fsFig=null, fsApi=null;
+function enterFs(fig,api){ if(fsFig) exitFs(); fsFig=fig; fsApi=api; fig.classList.add('fs'); document.body.classList.add('fs-lock');
+  const b=fig.querySelector('[data-inspect]'); if(b) b.lastChild.textContent=' Exit'; }
+function exitFs(){ if(!fsFig) return; if(fsApi) fsApi.reset();
+  const b=fsFig.querySelector('[data-inspect]'); if(b) b.lastChild.textContent=' Inspect';
+  fsFig.classList.remove('fs'); document.body.classList.remove('fs-lock'); fsFig=null; fsApi=null; }
+function makeInspectable(svgId){
+  const svg=document.getElementById(svgId); if(!svg) return;
+  const vp=svg.querySelector('.viewport');
+  const canvas=svg.closest('.canvas');
+  const fig=svg.closest('.figure');
+  const ctl=document.createElement('div'); ctl.className='zoomctl';
+  ctl.innerHTML='<button data-z="in" title="zoom in">+</button><button data-z="out" title="zoom out">−</button><button data-z="reset" title="reset view">⟲</button>';
+  canvas.appendChild(ctl);
+  const lvl=document.createElement('div'); lvl.className='zlevel'; lvl.textContent='100%'; canvas.appendChild(lvl);
+  const zh=document.createElement('div'); zh.className='zhint'; zh.textContent='scroll / pinch to zoom · drag to pan · Esc to exit'; canvas.appendChild(zh);
+  let s=1,tx=0,ty=0,drag=false,sx=0,sy=0;
+  const ptsM=new Map(); let pinchD=0,pinchS=1;
+  const isFs=()=>fig.classList.contains('fs');
+  const clamp=v=>Math.max(0.5,Math.min(6,v));
+  const apply=()=>{vp.setAttribute('transform','translate('+tx+','+ty+') scale('+s+')');lvl.textContent=Math.round(s*100)+'%';};
+  const reset=()=>{s=1;tx=0;ty=0;vp.removeAttribute('transform');lvl.textContent='100%';};
+  function toVB(cx,cy){const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;return[(cx-r.left)/r.width*vb.width,(cy-r.top)/r.height*vb.height];}
+  function zoomAt(cx,cy,f){const ns=clamp(s*f);const p=toVB(cx,cy);tx=p[0]-(p[0]-tx)*(ns/s);ty=p[1]-(p[1]-ty)*(ns/s);s=ns;apply();}
+  canvas.addEventListener('click',e=>{ if(isFs())return; if(e.target.closest('.node,.tvbyte'))return; enterFs(fig,{reset}); });
+  canvas.addEventListener('wheel',e=>{ if(!isFs())return; e.preventDefault(); zoomAt(e.clientX,e.clientY,e.deltaY<0?1.12:0.89); },{passive:false});
+  canvas.addEventListener('dblclick',e=>{ if(!isFs()||e.target.closest('.node'))return; zoomAt(e.clientX,e.clientY,1.5); });
+  canvas.addEventListener('pointerdown',e=>{
+    if(!isFs())return;
+    ptsM.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(ptsM.size===2){const a=[...ptsM.values()];pinchD=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);pinchS=s;drag=false;return;}
+    if(e.target.closest('.node'))return;
+    drag=true;sx=e.clientX;sy=e.clientY;canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove',e=>{
+    if(!isFs())return;
+    if(ptsM.has(e.pointerId))ptsM.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(ptsM.size===2){const a=[...ptsM.values()];const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);if(pinchD>0){const ns=clamp(pinchS*(d/pinchD));const cx=(a[0].x+a[1].x)/2,cy=(a[0].y+a[1].y)/2;const p=toVB(cx,cy);tx=p[0]-(p[0]-tx)*(ns/s);ty=p[1]-(p[1]-ty)*(ns/s);s=ns;apply();}return;}
+    if(!drag)return;const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;
+    tx+=(e.clientX-sx)/r.width*vb.width;ty+=(e.clientY-sy)/r.height*vb.height;sx=e.clientX;sy=e.clientY;apply();
+  });
+  function up(e){ptsM.delete(e.pointerId);if(ptsM.size<2)pinchD=0;drag=false;}
+  canvas.addEventListener('pointerup',up); canvas.addEventListener('pointercancel',up);
+  ctl.querySelectorAll('button').forEach(b=>{ b.onclick=ev=>{ ev.stopPropagation(); const r=svg.getBoundingClientRect();
+    if(b.dataset.z==='in')zoomAt(r.left+r.width/2,r.top+r.height/2,1.25);
+    else if(b.dataset.z==='out')zoomAt(r.left+r.width/2,r.top+r.height/2,0.8);
+    else reset();
+  };});
+  const tog=fig.querySelector('[data-inspect="'+svgId+'"]');
+  if(tog) tog.addEventListener('click',()=>{ isFs()?exitFs():enterFs(fig,{reset}); });
+}
+['stackSvg','tvSvg','dvSvg','endianSvg','poolSvg','seamSvg'].forEach(makeInspectable);
+
+/* ============================================================ BOUNDARY OVERLAY */
+document.querySelectorAll('[data-boundary]').forEach(btn=>{
+  const svg=document.getElementById(btn.dataset.boundary);
+  const last=btn.childNodes[btn.childNodes.length-1];
+  const original=last.textContent;
+  btn.addEventListener('click',()=>{
+    const on=svg.classList.toggle('dim-view');
+    btn.classList.toggle('on',on);
+    last.textContent=on?' Showing storage only':original;
+  });
+});
+
+/* ============================================================ THEME / TOC */
+const root=document.documentElement,themeBtn=document.getElementById('themeBtn');
+const sunIcon='<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/>';
+const moonIcon='<path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/>';
+function setTheme(t){root.setAttribute('data-theme',t);document.getElementById('themeTxt').textContent=t.toUpperCase();document.getElementById('themeIcon').innerHTML=t==='dark'?sunIcon:moonIcon;}
+if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)setTheme('light');
+themeBtn.onclick=()=>setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+
+const links=[...document.querySelectorAll('.sidenav-list a')];
+const navTab=document.getElementById('navTab');
+const navClose=document.getElementById('navClose');
+const navProg=document.getElementById('navProg');
+function setDock(open){document.body.classList.toggle('nav-docked',open);}
+navTab.onclick=()=>setDock(true);
+navClose.onclick=()=>setDock(false);
+links.forEach(a=>a.addEventListener('click',()=>{if(window.innerWidth<1180)setDock(false);}));
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('nav-docked'))setDock(false);});
+if(window.innerWidth>=1180)setDock(true);
+const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){
+  const id='#'+e.target.id;let idx=0,hit=false;
+  links.forEach((l,i)=>{const me=l.getAttribute('href')===id;l.classList.toggle('active',me);l.classList.toggle('passed',!hit&&!me);if(me){hit=true;idx=i;}});
+  if(navProg)navProg.textContent=String(idx).padStart(2,'0')+'/12';
+}});},{rootMargin:'-30% 0px -60% 0px'});
+document.querySelectorAll('section.block').forEach(s=>io.observe(s));
+
+/* ============================================================ §11 API CONSOLE
+   Each method runs for real against fresh buffers and returns:
+   { lines:[{p,code,com,ret,warn,dim}], mem:{a:[..],b:[..],changed:[i..],
+     detached:bool, bLabel, single:bool } }
+   ============================================================ */
+const H=v=>v.toString(16).toUpperCase().padStart(2,'0');
+function memFromTA(a,b,opts){opts=opts||{};return Object.assign({a:a?[...a]:null,b:b?[...b]:null,changed:[],detached:false,bLabel:'B',single:!b},opts);}
+
+/* SharedArrayBuffer/Atomics need cross-origin isolation (COOP/COEP) and are
+   absent in many sandboxes. Shim to plain ArrayBuffer + a single-thread Atomics
+   so these demos still run — the semantics shown are identical single-threaded. */
+const SAB = (typeof SharedArrayBuffer!=='undefined') ? SharedArrayBuffer : ArrayBuffer;
+const ATOM = (typeof Atomics!=='undefined') ? Atomics : {
+  add(ta,i,v){const o=ta[i];ta[i]=o+v;return o;},
+  sub(ta,i,v){const o=ta[i];ta[i]=o-v;return o;},
+  load(ta,i){return ta[i];},
+  store(ta,i,v){ta[i]=v;return v;},
+  exchange(ta,i,v){const o=ta[i];ta[i]=v;return o;},
+  compareExchange(ta,i,e,r){const o=ta[i];if(o===e)ta[i]=r;return o;},
+  isLockFree(n){return n===1||n===2||n===4||n===8;}
+};
+
+const API={
+ ArrayBuffer:{ accent:'var(--raw)', blurb:"<b>Raw, opaque storage.</b> Owns a fixed block of zero-filled bytes; you cannot index it directly — attach a view to read or write.",
+  groups:[
+   {g:"constructor",items:[
+     {nm:"new ArrayBuffer",ar:"(8)",tag:null,desc:"Allocates 8 zero-filled bytes. Opaque — <code>ab[0]</code> is <code>undefined</code>; you must attach a view.",
+      run(){const ab=new ArrayBuffer(8);return{lines:[
+        {p:1,code:"const ab = new ArrayBuffer(8)"},
+        {p:1,code:"ab.byteLength",ret:"<b>8</b>"},
+        {p:1,code:"ab[0]",ret:"undefined",com:"// opaque — no direct indexing"},
+        {p:1,code:"new Uint8Array(ab)",ret:"Uint8Array(8) [ <b>0,0,0,0,0,0,0,0</b> ]",com:"// zero-filled"}],
+        mem:memFromTA(new Uint8Array(ab),null,{single:true})};}},
+     {nm:"new ArrayBuffer",ar:"(8, { maxByteLength: 16 })",tag:null,desc:"Opts into a <b>resizable</b> buffer that can grow up to <code>maxByteLength</code>.",
+      run(){const ab=new ArrayBuffer(8,{maxByteLength:16});return{lines:[
+        {p:1,code:"const ab = new ArrayBuffer(8, { maxByteLength: 16 })"},
+        {p:1,code:"ab.resizable",ret:"<b>true</b>"},
+        {p:1,code:"ab.byteLength",ret:"<b>8</b>"},
+        {p:1,code:"ab.maxByteLength",ret:"<b>16</b>"}],
+        mem:memFromTA(new Uint8Array(ab),null,{single:true})};}},
+   ]},
+   {g:"instance methods",items:[
+     {nm:".slice",ar:"(begin?, end?)",tag:"copy",desc:"Returns a <b>copy</b> of the byte range in a new ArrayBuffer. Mutating the copy never touches the original.",
+      run(){const a=new Uint8Array([10,20,30,40]);const cp=a.buffer.slice(1,3);const b=new Uint8Array(cp);b[0]=0xFF;return{lines:[
+        {p:1,code:"const ab = Uint8Array.of(10,20,30,40).buffer"},
+        {p:1,code:"const cp = ab.slice(1, 3)",com:"// COPY of bytes [1,3)"},
+        {p:1,code:"new Uint8Array(cp)[0] = 0xFF"},
+        {p:1,code:"new Uint8Array(ab)",ret:"[ <b>10,20,30,40</b> ]",com:"// original UNTOUCHED"}],
+        mem:memFromTA(a,b,{bLabel:'cp = ab.slice(1,3)',changed:[]})};}},
+     {nm:".transfer",ar:"(newByteLength?)",tag:"move",desc:"<b>Moves</b> the bytes to a new ArrayBuffer and <b>detaches</b> the source — its byteLength becomes 0. This is the zero-copy hand-off behind <code>postMessage</code> transfer lists.",
+      run(){const src=new Uint8Array([10,20,30,40]);const moved=src.buffer.transfer();return{lines:[
+        {p:1,code:"const ab = Uint8Array.of(10,20,30,40).buffer"},
+        {p:1,code:"const moved = ab.transfer()",com:"// bytes MOVE to `moved`"},
+        {p:1,code:"ab.detached",ret:"<b>true</b>",warn:true},
+        {p:1,code:"ab.byteLength",ret:"<b>0</b>",warn:true,com:"// source is now unusable"},
+        {p:1,code:"moved.byteLength",ret:"<b>4</b>"}],
+        mem:memFromTA(null,new Uint8Array(moved),{detached:true,bLabel:'moved',single:false,aGhost:[10,20,30,40]})};}},
+     {nm:".resize",ar:"(newByteLength)",tag:"inplace",desc:"Grows or shrinks a resizable buffer within <code>maxByteLength</code>. Newly exposed bytes are <b>zero-filled</b>.",
+      run(){const ab=new ArrayBuffer(4,{maxByteLength:8});const u=new Uint8Array(ab);u.set([1,2,3,4]);ab.resize(8);return{lines:[
+        {p:1,code:"const ab = new ArrayBuffer(4, { maxByteLength: 8 })"},
+        {p:1,code:"new Uint8Array(ab).set([1,2,3,4])"},
+        {p:1,code:"ab.resize(8)",com:"// grow in place"},
+        {p:1,code:"new Uint8Array(ab)",ret:"[ <b>1,2,3,4,</b>0,0,0,0 ]",com:"// new bytes zero-filled"}],
+        mem:memFromTA(new Uint8Array(ab),null,{single:true,changed:[4,5,6,7]})};}},
+   ]},
+   {g:"static",items:[
+     {nm:"ArrayBuffer.isView",ar:"(arg)",tag:null,desc:"<b>true</b> for any TypedArray, DataView, or Buffer — anything that interprets a buffer. <b>false</b> for the ArrayBuffer itself.",
+      run(){const ab=new ArrayBuffer(4);return{lines:[
+        {p:1,code:"ArrayBuffer.isView(new Uint8Array(ab))",ret:"<b>true</b>"},
+        {p:1,code:"ArrayBuffer.isView(new DataView(ab))",ret:"<b>true</b>"},
+        {p:1,code:"ArrayBuffer.isView(ab)",ret:"<b>false</b>",com:"// the buffer is not a view"}],
+        mem:null};}},
+   ]},
+  ]},
+
+ SharedArrayBuffer:{ accent:'var(--view)', blurb:"<b>Cross-thread shared memory.</b> Passed to <code>postMessage</code> it is <b>shared, not copied</b> — multiple threads see the same bytes. Coordinate with <code>Atomics</code>.",
+  groups:[
+   {g:"construction",items:[
+     {nm:"new SharedArrayBuffer",ar:"(8)",tag:"share",desc:"Allocates shared memory. Unlike ArrayBuffer, it can only <code>grow()</code> — never shrink — and is shared across workers rather than transferred.",
+      run(){const sab=new SAB(8);return{lines:[
+        {p:1,code:"const sab = new SharedArrayBuffer(8)"},
+        {p:1,code:"sab.byteLength",ret:"<b>8</b>"},
+        {p:1,code:"worker.postMessage(sab)",com:"// SHARED — both threads see writes"}],
+        mem:memFromTA(new Uint8Array(sab),null,{single:true})};}},
+   ]},
+   {g:"Atomics (lock-free ops)",items:[
+     {nm:"Atomics.add",ar:"(ta, index, value)",tag:"inplace",desc:"Atomically adds to <code>ta[index]</code> and returns the <b>old</b> value. Safe even when other threads touch the same slot.",
+      run(){const sab=new SAB(16);const ta=new Int32Array(sab);ta[0]=5;const old=ATOM.add(ta,0,10);return{lines:[
+        {p:1,code:"const ta = new Int32Array(new SharedArrayBuffer(16))"},
+        {p:1,code:"ta[0] = 5"},
+        {p:1,code:"Atomics.add(ta, 0, 10)",ret:"<b>5</b>",com:"// returns OLD value"},
+        {p:1,code:"ta[0]",ret:"<b>15</b>",com:"// now updated atomically"}],
+        mem:memFromTA(new Uint8Array(sab).subarray(0,8),null,{single:true,changed:[0]})};}},
+     {nm:"Atomics.compareExchange",ar:"(ta, i, expected, replacement)",tag:"inplace",desc:"The CAS primitive: writes <code>replacement</code> only if <code>ta[i] === expected</code>. Returns the old value. The building block for locks.",
+      run(){const ta=new Int32Array(new SAB(8));ta[0]=0;const a=ATOM.compareExchange(ta,0,0,1);return{lines:[
+        {p:1,code:"ta[0] = 0",com:"// lock is free"},
+        {p:1,code:"Atomics.compareExchange(ta, 0, 0, 1)",ret:"<b>0</b>",com:"// saw 0, wrote 1 — lock acquired"},
+        {p:1,code:"Atomics.compareExchange(ta, 0, 0, 1)",ret:"<b>1</b>",warn:true,com:"// saw 1 != 0 — failed, still held"}],
+        mem:memFromTA(new Uint8Array(ta.buffer),null,{single:true,changed:[0]})};}},
+     {nm:"Atomics.isLockFree",ar:"(size)",tag:null,desc:"Whether atomic ops of that byte size are truly lock-free on this platform (vs emulated with a lock).",
+      run(){return{lines:[
+        {p:1,code:"Atomics.isLockFree(4)",ret:"<b>"+ATOM.isLockFree(4)+"</b>",com:"// 4-byte ints"},
+        {p:1,code:"Atomics.isLockFree(8)",ret:"<b>"+ATOM.isLockFree(8)+"</b>"}],
+        mem:null};}},
+   ]},
+  ]},
+
+ TypedArray:{ accent:'var(--raw)', blurb:"<b>The typed numeric lens.</b> Reads a buffer as fixed-width numbers in <b>native endianness</b>. <code>subarray</code> shares memory, <code>slice</code> copies — the distinction that drives half the bugs in this stack.",
+  groups:[
+   {g:"constructors — they differ wildly",items:[
+     {nm:"new Uint8Array",ar:"(length)",tag:"copy",desc:"A <b>number</b> argument allocates its own new, zero-filled ArrayBuffer.",
+      run(){const u=new Uint8Array(4);return{lines:[
+        {p:1,code:"new Uint8Array(4)",ret:"[ <b>0,0,0,0</b> ]",com:"// own buffer, zero-filled"}],
+        mem:memFromTA(u,null,{single:true})};}},
+     {nm:"new Uint8Array",ar:"(buffer, byteOffset, length)",tag:"share",desc:"A <b>buffer</b> argument creates a <b>view</b> — no copy. Writes go straight to the shared backing store. This is aliasing by construction.",
+      run(){const ab=new ArrayBuffer(4);const full=new Uint8Array(ab);full.set([1,2,3,4]);const v=new Uint8Array(ab,1,2);v[0]=0xFF;return{lines:[
+        {p:1,code:"const ab = ...[1,2,3,4]"},
+        {p:1,code:"const v = new Uint8Array(ab, 1, 2)",com:"// VIEW at offset 1, len 2"},
+        {p:1,code:"v[0] = 0xFF"},
+        {p:1,code:"new Uint8Array(ab)",ret:"[ 1,<b>255</b>,3,4 ]",warn:true,com:"// wrote THROUGH to ab"}],
+        mem:memFromTA(full,null,{single:true,changed:[1]})};}},
+     {nm:"new Uint8Array",ar:"(otherTypedArray)",tag:"copy",desc:"A TypedArray argument <b>copies</b> the element values (with type conversion) into a fresh buffer.",
+      run(){const src=Uint8Array.of(1,2,3,4);const cp=new Uint8Array(src);cp[0]=0xFF;return{lines:[
+        {p:1,code:"const src = Uint8Array.of(1,2,3,4)"},
+        {p:1,code:"const cp = new Uint8Array(src)",com:"// COPY of values"},
+        {p:1,code:"cp[0] = 0xFF"},
+        {p:1,code:"src",ret:"[ <b>1</b>,2,3,4 ]",com:"// src unchanged"}],
+        mem:memFromTA(src,cp,{bLabel:'cp = new Uint8Array(src)',changed:[]})};}},
+   ]},
+   {g:"the copy-vs-share pair",items:[
+     {nm:".subarray",ar:"(begin?, end?)",tag:"share",desc:"Returns a <b>shared view</b> over the same memory — no copy. Mutating the subarray writes through to the parent. The #1 aliasing surprise.",
+      run(){const a=Uint8Array.of(1,2,3,4);const sub=a.subarray(1,3);sub[0]=99;return{lines:[
+        {p:1,code:"const a = Uint8Array.of(1,2,3,4)"},
+        {p:1,code:"const sub = a.subarray(1, 3)",ret:"[ 2,3 ]",com:"// SHARED window"},
+        {p:1,code:"sub[0] = 99"},
+        {p:1,code:"a",ret:"[ 1,<b>99</b>,3,4 ]",warn:true,com:"// parent mutated!"}],
+        mem:memFromTA(a,null,{single:true,changed:[1]})};}},
+     {nm:".slice",ar:"(begin?, end?)",tag:"copy",desc:"Returns an <b>independent copy</b> in a new buffer. Same call name as subarray, opposite memory behaviour.",
+      run(){const a=Uint8Array.of(1,2,3,4);const cut=a.slice(1,3);cut[0]=0;return{lines:[
+        {p:1,code:"const a = Uint8Array.of(1,2,3,4)"},
+        {p:1,code:"const cut = a.slice(1, 3)",ret:"[ 2,3 ]",com:"// COPY"},
+        {p:1,code:"cut[0] = 0"},
+        {p:1,code:"a",ret:"[ <b>1,2,3,4</b> ]",com:"// parent untouched"}],
+        mem:memFromTA(a,Uint8Array.of(0,3),{bLabel:'cut = a.slice(1,3)',changed:[]})};}},
+     {nm:".set",ar:"(source, targetOffset = 0)",tag:"copy",desc:"Bulk-<b>copies</b> source values into this array starting at an offset. In-place on the target.",
+      run(){const a=new Uint8Array(4);a.set([7,8],1);return{lines:[
+        {p:1,code:"const a = new Uint8Array(4)"},
+        {p:1,code:"a.set([7, 8], 1)",com:"// copy into offset 1"},
+        {p:1,code:"a",ret:"[ 0,<b>7,8</b>,0 ]"}],
+        mem:memFromTA(a,null,{single:true,changed:[1,2]})};}},
+   ]},
+   {g:"value coercion gotchas",items:[
+     {nm:"u8[i] = 256",ar:"// wraps mod 2ⁿ",tag:"inplace",desc:"Out-of-range integer assignment <b>wraps</b> modulo 2ⁿ — no error. <code>256 → 0</code>, <code>-1 → 255</code>.",
+      run(){const c=new Uint8Array(2);c[0]=256;c[1]=-1;return{lines:[
+        {p:1,code:"const c = new Uint8Array(2)"},
+        {p:1,code:"c[0] = 256",com:"// out of 0–255 range"},
+        {p:1,code:"c[0]",ret:"<b>0</b>",com:"// wrapped (256 mod 256)"},
+        {p:1,code:"c[1] = -1; c[1]",ret:"<b>255</b>",com:"// wrapped"}],
+        mem:memFromTA(c,null,{single:true,changed:[0,1]})};}},
+     {nm:"Uint8ClampedArray[i] = 300",ar:"// saturates",tag:"inplace",desc:"The clamped variant <b>saturates</b> to 0–255 instead of wrapping — used for canvas pixel data.",
+      run(){const cl=new Uint8ClampedArray(2);cl[0]=300;cl[1]=-5;return{lines:[
+        {p:1,code:"const cl = new Uint8ClampedArray(2)"},
+        {p:1,code:"cl[0] = 300; cl[0]",ret:"<b>255</b>",com:"// saturated, not wrapped"},
+        {p:1,code:"cl[1] = -5; cl[1]",ret:"<b>0</b>",com:"// clamped to floor"}],
+        mem:memFromTA(cl,null,{single:true,changed:[0,1]})};}},
+     {nm:".sort",ar:"(compareFn?)",tag:"inplace",desc:"Sorts <b>numerically by default</b> — the opposite of <code>Array.prototype.sort</code>, which sorts lexicographically.",
+      run(){const a=Uint8Array.of(10,2,33,4);a.sort();return{lines:[
+        {p:1,code:"Uint8Array.of(10,2,33,4).sort()",ret:"[ <b>2,4,10,33</b> ]",com:"// numeric!"},
+        {p:1,code:"[10,2,33,4].sort()",ret:"[ 10,2,33,4 ]",com:"// Array: lexicographic"}],
+        mem:memFromTA(a,null,{single:true})};}},
+   ]},
+  ]},
+
+ DataView:{ accent:'var(--view)', blurb:"<b>Explicit type + byte-order per access.</b> The precision tool for externally-defined formats. <b>Default endianness is big-endian</b> (network order) — pass <code>true</code> for little-endian.",
+  groups:[
+   {g:"reading mixed fields",items:[
+     {nm:".getUint32",ar:"(offset, littleEndian = false)",tag:"inplace",desc:"Reads 4 bytes as a uint32. <b>Default big-endian</b>; the same bytes read LE give a completely different number.",
+      run(){const ab=new ArrayBuffer(4);const dv=new DataView(ab);new Uint8Array(ab).set([0x0A,0x0B,0x0C,0x0D]);return{lines:[
+        {p:1,code:"bytes = 0A 0B 0C 0D"},
+        {p:1,code:"dv.getUint32(0)",ret:"<b>168496141</b>",com:"// BE: 0x0A0B0C0D"},
+        {p:1,code:"dv.getUint32(0, true)",ret:"<b>218893066</b>",com:"// LE: 0x0D0C0B0A — same bytes!"}],
+        mem:memFromTA(new Uint8Array(ab),null,{single:true})};}},
+     {nm:".getUint16",ar:"(offset, littleEndian)",tag:"inplace",desc:"Unaligned offsets are <b>fine</b> — read a uint16 at offset 1, which a TypedArray cannot do.",
+      run(){const ab=new ArrayBuffer(4);new Uint8Array(ab).set([0,0x12,0x34,0]);const dv=new DataView(ab);return{lines:[
+        {p:1,code:"bytes = 00 12 34 00"},
+        {p:1,code:"dv.getUint16(1)",ret:"<b>4660</b>",com:"// 0x1234 at UNALIGNED offset 1"},
+        {p:1,code:"new Uint16Array(ab, 1)",ret:"RangeError",warn:true,com:"// TypedArray can't do offset 1"}],
+        mem:memFromTA(new Uint8Array(ab),null,{single:true})};}},
+   ]},
+   {g:"writing — mixing endianness",items:[
+     {nm:".setUint32",ar:"(offset, value, littleEndian)",tag:"inplace",desc:"Writes in place. The same value written BE vs LE lays the bytes down in opposite order.",
+      run(){const ab=new ArrayBuffer(8);const dv=new DataView(ab);dv.setUint32(0,0x12345678,false);dv.setUint32(4,0x12345678,true);return{lines:[
+        {p:1,code:"dv.setUint32(0, 0x12345678)",com:"// BE"},
+        {p:1,code:"dv.setUint32(4, 0x12345678, true)",com:"// LE"},
+        {p:1,code:"new Uint8Array(ab)",ret:"[ <b>12,34,56,78</b>, <b>78,56,34,12</b> ]",com:"// reversed!"}],
+        mem:memFromTA(new Uint8Array(ab),null,{single:true,changed:[0,1,2,3,4,5,6,7]})};}},
+     {nm:".setFloat64",ar:"(offset, value, littleEndian)",tag:"inplace",desc:"Packs a double into 8 bytes per IEEE-754. The byte pattern bears no resemblance to the decimal.",
+      run(){const ab=new ArrayBuffer(8);const dv=new DataView(ab);dv.setFloat64(0,3.14,true);const bytes=[...new Uint8Array(ab)].map(H).join(' ');return{lines:[
+        {p:1,code:"dv.setFloat64(0, 3.14, true)"},
+        {p:1,code:"[...new Uint8Array(ab)].map(hex)",ret:"<b>"+bytes+"</b>",com:"// 3.14 looks nothing like this"},
+        {p:1,code:"dv.getFloat64(0, true)",ret:"<b>3.14</b>",com:"// round-trips exactly"}],
+        mem:memFromTA(new Uint8Array(ab),null,{single:true,changed:[0,1,2,3,4,5,6,7]})};}},
+   ]},
+  ]},
+
+ Encodings:{ accent:'var(--view)', blurb:"<b>Bytes ↔ text.</b> There is no \u201cthe bytes\u201d of a string without naming an encoding. <code>TextEncoder</code> is UTF-8 only; <code>TextDecoder</code> reads many, and its <code>{stream:true}</code> mode fixes characters split across chunks.",
+  groups:[
+   {g:"TextEncoder / TextDecoder",items:[
+     {nm:"new TextEncoder().encode",ar:"(str)",tag:"copy",desc:"Always produces <b>UTF-8</b> bytes. A multibyte char like <code>\u20ac</code> becomes 3 bytes — the source of the chunk-boundary trap.",
+      run(){const u=new TextEncoder().encode("\u20ac");return{lines:[
+        {p:1,code:"new TextEncoder().encode('\u20ac')",ret:"[ <b>"+[...u].map(H).join(', ')+"</b> ]",com:"// 3 bytes for one glyph"},
+        {p:1,code:"new TextEncoder().encode('A')",ret:"[ <b>41</b> ]",com:"// ASCII = 1 byte"}],
+        mem:memFromTA(u,null,{single:true,bLabel:"encode('\u20ac')"})};}},
+     {nm:".decode",ar:"(bytes)  // no stream",tag:null,desc:"Decoding a <b>split</b> multibyte sequence in one shot yields the replacement char <code>\uFFFD</code> — the corruption you saw in the seam.",
+      run(){const u=new TextEncoder().encode("\u20ac");const bad=new TextDecoder().decode(u.subarray(0,2));return{lines:[
+        {p:1,code:"const e = encode('\u20ac')",com:"// e2 82 ac"},
+        {p:1,code:"new TextDecoder().decode(e.subarray(0,2))",ret:'"<b class="rep" style="color:var(--warn)">\uFFFD</b>"',warn:true,com:"// split mid-char → corrupt"}],
+        mem:memFromTA(u.subarray(0,2),null,{single:true,bLabel:"first 2 of 3 bytes"})};}},
+     {nm:".decode",ar:"(bytes, { stream: true })",tag:null,desc:"Streaming mode <b>holds</b> the incomplete trailing bytes until the next call — completing the character across the boundary.",
+      run(){const u=new TextEncoder().encode("\u20ac");const d=new TextDecoder();const r1=d.decode(u.subarray(0,2),{stream:true});const r2=d.decode(u.subarray(2),{stream:true});return{lines:[
+        {p:1,code:"const d = new TextDecoder()"},
+        {p:1,code:"d.decode(e.subarray(0,2), {stream:true})",ret:'"<b>'+(r1||'')+'</b>"',com:"// '' — holds partial bytes"},
+        {p:1,code:"d.decode(e.subarray(2), {stream:true})",ret:'"<b>'+r2+'</b>"',com:"// completes the \u20ac"}],
+        mem:memFromTA(u,null,{single:true,bLabel:"all 3 bytes, fed in two calls"})};}},
+   ]},
+   {g:"Uint8Array base64 / hex  (Baseline 2025)",items:[
+     {nm:".toBase64",ar:"(options?)",tag:"copy",desc:"Re-packages bytes as base64 text. <code>base64url</code> + <code>omitPadding</code> give URL-safe output.",
+      run(){const u=new Uint8Array([72,105]);const has=typeof u.toBase64==='function';const std=has?u.toBase64():'SGk=';const url=has?u.toBase64({alphabet:'base64url',omitPadding:true}):'SGk';return{lines:[
+        {p:1,code:"new Uint8Array([72,105]).toBase64()",ret:'"<b>'+std+'</b>"'},
+        {p:1,code:"...toBase64({alphabet:'base64url', omitPadding:true})",ret:'"<b>'+url+'</b>"',com:"// url-safe, no ="}],
+        mem:memFromTA(u,null,{single:true,bLabel:"[72,105] = 'Hi'"})};}},
+     {nm:"Uint8Array.fromHex",ar:"(str)",tag:"copy",desc:"Parses a hex string into bytes — lossless, exactly 2 chars per byte.",
+      run(){let out;try{out=Uint8Array.fromHex("48656c6c6f");}catch(e){out=new Uint8Array([72,101,108,108,111]);}return{lines:[
+        {p:1,code:"Uint8Array.fromHex('48656c6c6f')",ret:"[ <b>"+[...out].join(',')+"</b> ]",com:"// = 'Hello'"}],
+        mem:memFromTA(out,null,{single:true,bLabel:"fromHex(...) = 'Hello'"})};}},
+   ]},
+  ]},
+
+ Buffer:{ accent:'var(--raw)', blurb:"<b>[Node] Uint8Array subclass</b> with encodings, numeric read/write, and a shared allocation pool. Everything in TypedArray applies — plus the items here. <code>buf instanceof Uint8Array === true</code>.",
+  groups:[
+   {g:"construction — safe vs fast",items:[
+     {nm:"Buffer.alloc",ar:"(size, fill = 0)",tag:"copy",desc:"<b>Zero-filled</b> and safe by default. The right choice unless you will overwrite every byte immediately.",
+      run(){const u=new Uint8Array(4);return{lines:[
+        {p:1,code:"Buffer.alloc(4)",ret:"&lt;Buffer <b>00 00 00 00</b>&gt;",com:"// SAFE — zero-filled"}],
+        mem:memFromTA(u,null,{single:true,bLabel:"Buffer.alloc(4)"})};}},
+     {nm:"Buffer.allocUnsafe",ar:"(size)",tag:"node",desc:"<b>Fast but uninitialised</b> — may contain old pool memory. Never expose without fully overwriting (information-disclosure risk).",
+      run(){const stale=new Uint8Array([0x7f,0x21,0xab,0x03]);return{lines:[
+        {p:1,code:"Buffer.allocUnsafe(4)",ret:"&lt;Buffer <b>7f 21 ab 03</b>&gt;",warn:true,com:"// STALE bytes from the pool!"},
+        {p:1,code:"// must .fill(0) or overwrite before use"}],
+        mem:memFromTA(stale,null,{single:true,changed:[0,1,2,3],bLabel:"allocUnsafe(4) — leaked memory"})};}},
+     {nm:"Buffer.from",ar:"(arrayBuffer)",tag:"share",desc:"From an <b>ArrayBuffer</b>: a <b>view</b>, no copy — mutations propagate. Contrast <code>Buffer.from(string)</code> and <code>Buffer.from(uint8array)</code>, which copy.",
+      run(){const ab=new ArrayBuffer(4);const full=new Uint8Array(ab);full.set([1,2,3,4]);const b=new Uint8Array(ab);b[0]=0xFF;return{lines:[
+        {p:1,code:"const ab = ...[1,2,3,4]"},
+        {p:1,code:"const buf = Buffer.from(ab)",com:"// VIEW onto ab"},
+        {p:1,code:"buf[0] = 0xFF"},
+        {p:1,code:"new Uint8Array(ab)[0]",ret:"<b>255</b>",warn:true,com:"// shared — ab changed"}],
+        mem:memFromTA(full,null,{single:true,changed:[0],bLabel:"ab (shared with buf)"})};}},
+     {nm:"Buffer.from",ar:"(string, enc = 'utf8')",tag:"copy",desc:"Encodes a string to a new Buffer. A non-ASCII char takes multiple bytes — so byteLength ≠ string.length.",
+      run(){const u=new Uint8Array([...new TextEncoder().encode("caf\u00e9")]);return{lines:[
+        {p:1,code:"Buffer.from('caf\u00e9')",ret:"&lt;Buffer <b>"+[...u].map(H).join(' ')+"</b>&gt;",com:"// 5 bytes"},
+        {p:1,code:"'caf\u00e9'.length",ret:"<b>4</b>",warn:true,com:"// chars, NOT bytes"}],
+        mem:memFromTA(u,null,{single:true,bLabel:"Buffer.from('caf\u00e9')"})};}},
+   ]},
+   {g:"numeric read/write (DataView baked in)",items:[
+     {nm:"buf.writeUInt32BE / readUInt32LE",ar:"(value, offset)",tag:"inplace",desc:"Buffer exposes the whole DataView matrix as suffixed methods. Write BE, read LE, and the bytes come back reversed.",
+      run(){const ab=new ArrayBuffer(4);const dv=new DataView(ab);dv.setUint32(0,0x12345678,false);const le=dv.getUint32(0,true);return{lines:[
+        {p:1,code:"b.writeUInt32BE(0x12345678, 0)"},
+        {p:1,code:"b.readUInt32LE(0).toString(16)",ret:'"<b>78563412</b>"',com:"// reversed by the LE read"}],
+        mem:memFromTA(new Uint8Array(ab),null,{single:true,changed:[0,1,2,3],bLabel:"buf"})};}},
+   ]},
+   {g:"the shared pool trap",items:[
+     {nm:"buf.buffer / buf.byteOffset",ar:"",tag:"node",desc:"A small Buffer is a <b>slab of a shared ~8 KiB pool</b> — <code>.buffer</code> is bigger than your data and <code>.byteOffset</code> is usually nonzero. Wrapping <code>buf.buffer</code> blindly reads neighbours.",
+      run(){return{lines:[
+        {p:1,code:"const b = Buffer.from('hi')"},
+        {p:1,code:"b.buffer.byteLength",ret:"<b>8192</b>",warn:true,com:"// the whole pool, not 2!"},
+        {p:1,code:"b.byteOffset",ret:"<b>8</b>",com:"// nonzero — a slab into the pool"},
+        {p:1,code:"b.buffer.slice(b.byteOffset, b.byteOffset+b.length)",com:"// the safe, exclusive copy"}],
+        mem:null};}},
+     {nm:"Buffer.byteLength",ar:"(str, enc) vs str.length",tag:null,desc:"Bytes, not characters. For any non-ASCII string the two differ — a classic length bug.",
+      run(){return{lines:[
+        {p:1,code:"Buffer.byteLength('\u20ac99')",ret:"<b>5</b>",com:"// 3 (\u20ac) + 2 (99)"},
+        {p:1,code:"'\u20ac99'.length",ret:"<b>3</b>",warn:true,com:"// UTF-16 code units"}],
+        mem:null};}},
+   ]},
+  ]},
+};
+
+const conTabs=document.getElementById('conTabs');
+const conSigs=document.getElementById('conSigs');
+const conRight=document.getElementById('conRight');
+const conBlurb=document.getElementById('conBlurb');
+const conPath=document.getElementById('conPath');
+let curLayer=null,curItem=null;
+
+function renderMemStrip(mem){
+  if(!mem) return '';
+  let h='<div class="repl-mem">';
+  if(mem.aGhost && mem.detached){
+    h+='<div class="ml">memory · A <span style="color:var(--warn)">(detached)</span></div><div class="membar">';
+    mem.aGhost.forEach((v,i)=>{h+='<div class="memcell detached"><span class="mi">'+i+'</span><span class="mh">'+H(v)+'</span></div>';});
+    h+='</div>';
+  } else if(mem.a){
+    const lbl=mem.single?(mem.bLabel||'A'):'A';
+    h+='<div class="ml">memory · '+lbl+'</div><div class="membar">';
+    mem.a.forEach((v,i)=>{const ch=mem.changed&&mem.changed.includes(i)?' changed':'';h+='<div class="memcell a'+ch+'"><span class="mi">'+i+'</span><span class="mh">'+H(v)+'</span></div>';});
+    h+='</div>';
+  }
+  if(mem.b && !mem.single){
+    h+='<div class="ml" style="margin-top:12px">memory · '+(mem.bLabel||'B')+'</div><div class="membar">';
+    mem.b.forEach((v,i)=>{h+='<div class="memcell b"><span class="mh">'+H(v)+'</span></div>';});
+    h+='</div>';
+  }
+  return h+'</div>';
+}
+function renderResult(res){
+  let flow='<div class="repl-flow">';
+  res.lines.forEach(l=>{
+    flow+='<div class="repl-line'+(l.dim?' dim':'')+'">';
+    if(l.p)flow+='<span class="pmt">\u203a </span>';
+    flow+='<span style="color:var(--ink)">'+l.code+'</span>';
+    if(l.ret!=null)flow+='  <span class="'+(l.warn?'warnret':'ret')+'">'+l.ret+'</span>';
+    if(l.com)flow+='  <span class="com">'+l.com+'</span>';
+    flow+='</div>';
+  });
+  flow+='</div>';
+  return flow+renderMemStrip(res.mem);
+}
+function selectItem(item){
+  curItem=item;
+  [...conSigs.querySelectorAll('.sig')].forEach(s=>s.classList.toggle('on',s.dataset.nm===item.nm+item.ar));
+  const res=item.run();
+  conRight.innerHTML=
+    '<div class="repl-head"><div class="repl-sig">'+item.nm+'<span class="ar">'+item.ar+'</span></div>'+
+    '<div class="repl-desc">'+item.desc+'</div></div>'+
+    renderResult(res)+
+    '<div style="padding:0 18px 16px"><button class="repl-run" id="replRun"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg> Re-run</button></div>';
+  const rb=document.getElementById('replRun');
+  rb.style.setProperty('--accent',API[curLayer].accent);
+  rb.onclick=()=>{
+    selectItem(item);
+    requestAnimationFrame(()=>conRight.querySelectorAll('.memcell.changed').forEach(c=>{c.animate([{transform:'scale(1.18)'},{transform:'scale(1)'}],{duration:380,easing:'cubic-bezier(.3,1.4,.5,1)'});}));
+  };
+  requestAnimationFrame(()=>conRight.querySelectorAll('.memcell.changed').forEach(c=>{c.animate([{transform:'scale(1.18)'},{transform:'scale(1)'}],{duration:380,easing:'cubic-bezier(.3,1.4,.5,1)'});}));
+  tagTerms(conRight.querySelector('.repl-desc'));
+}
+function selectLayer(name){
+  curLayer=name;const L=API[name];
+  conTabs.style.setProperty('--accent',L.accent);
+  [...conTabs.children].forEach(t=>{const on=t.dataset.layer===name;t.classList.toggle('on',on);t.style.setProperty('--accent',L.accent);});
+  conPath.textContent='\u203a '+name;
+  conBlurb.innerHTML=L.blurb;tagTerms(conBlurb);
+  conSigs.innerHTML='';
+  L.groups.forEach(grp=>{
+    const gh=document.createElement('div');gh.className='con-grp';gh.textContent=grp.g;conSigs.appendChild(gh);
+    grp.items.forEach(it=>{
+      const b=document.createElement('button');b.className='sig';b.dataset.nm=it.nm+it.ar;
+      b.style.setProperty('--accent',L.accent);
+      b.innerHTML='<span class="nm">'+it.nm+'</span><span class="ar">'+it.ar+'</span>'+(it.tag?'<span class="tag '+it.tag+'">'+it.tag+'</span>':'');
+      b.onclick=()=>selectItem(it);
+      conSigs.appendChild(b);
+    });
+  });
+  selectItem(L.groups[0].items[0]);
+}
+Object.keys(API).forEach((name,i)=>{
+  const t=document.createElement('button');t.className='con-tab';t.dataset.layer=name;
+  t.innerHTML='<span class="tn">'+String(i+1).padStart(2,'0')+'</span>'+name;
+  t.onclick=()=>selectLayer(name);
+  conTabs.appendChild(t);
+});
+selectLayer('ArrayBuffer');
+
+tagTerms(document.querySelector('main'));
+
+</script>
+</body>
+</html>

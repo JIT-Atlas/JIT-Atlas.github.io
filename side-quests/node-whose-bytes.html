@@ -1,0 +1,4013 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Whose bytes are these? — one byte, from the socket to the response</title>
+<meta name="description" content="A Buffer exists because the collector moves things and a syscall cannot chase them. Eleven stops on one byte's journey, and at each one: own, borrow, or copy." />
+<style>
+/* ============================================================
+   TOKENS — two independent encoding channels
+   HUE   = who implements it   (app / node / kernel / hw)
+   BAND  = which layer it is   (application / transport / network / link)
+   LIME  = you are here        (never an owner, never decoration)
+   ============================================================ */
+:root,
+[data-theme="dark"] {
+  --bg: #0a0c0f;
+  --grid: rgba(255, 255, 255, 0.028);
+  --surface: #101318;
+  --surface-2: #161a20;
+  --raise: #1d222a;
+  --plate: #12161b;
+  --border: #262c35;
+  --border-2: #333c48;
+  --text: #e7eaf0;
+  --text-2: #a9b1bd;
+  --text-3: #838b98;
+  --text-inv: #0a0c0f;
+
+  --app: #edb44e;
+  --app-tint: #2a2213;
+  --app-ink: #f0c473;
+  --node: #4fc98a;
+  --node-tint: #12271d;
+  --node-ink: #74d6a4;
+  --kernel: #66a9f7;
+  --kernel-tint: #14212f;
+  --kernel-ink: #8dbdf9;
+  --hw: #b28cf8;
+  --hw-tint: #221c33;
+  --hw-ink: #c3a6fa;
+
+  --hi: #d2ea52;
+  --hi-tint: #23290f;
+  --hi-ink: #d2ea52;
+  --on-accent: #0a0c0f;
+
+  --em: #edcf7c;
+  --code: #57d4c6;
+  --code-bg: rgba(87, 212, 198, 0.09);
+  --code-bd: rgba(87, 212, 198, 0.22);
+  --warn: #f2836c;
+
+  --kw: #66a9f7;
+  --str: #4fc98a;
+  --num: #b28cf8;
+  --fn: #edb44e;
+  --prop: #57d4c6;
+  --cm: #838b99;
+
+  --sb-thumb: rgba(131, 139, 152, 0.05);
+  --sb-thumb-hover: rgba(131, 139, 152, 0.32);
+  --sb-thumb-active: rgba(131, 139, 152, 0.44);
+  --shadow: 0 18px 46px -22px rgba(0, 0, 0, 0.9);
+}
+
+[data-theme="light"] {
+  --bg: #f6f7f9;
+  --grid: rgba(15, 20, 30, 0.035);
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --raise: #e5e9ef;
+  --plate: #ffffff;
+  --border: #d8dee6;
+  --border-2: #c2cad6;
+  --text: #12161c;
+  --text-2: #4c5462;
+  --text-3: #62626c;
+  --text-inv: #ffffff;
+
+  --app: #8a5c00;
+  --app-tint: #f7eed8;
+  --app-ink: #744d00;
+  --node: #0d7a52;
+  --node-tint: #dcf1e7;
+  --node-ink: #0a6544;
+  --kernel: #1b5fb5;
+  --kernel-tint: #dde9f9;
+  --kernel-ink: #17509a;
+  --hw: #6337c4;
+  --hw-tint: #e9e2fa;
+  --hw-ink: #542eaa;
+
+  --hi: #5f7a00;
+  --hi-tint: #eaf2cb;
+  --hi-ink: #4d6400;
+  --on-accent: #ffffff;
+
+  --em: #7d5a00;
+  --code: #0e6f77;
+  --code-bg: rgba(14, 111, 119, 0.08);
+  --code-bd: rgba(14, 111, 119, 0.2);
+  --warn: #b23a20;
+
+  --kw: #1b5fb5;
+  --str: #0d7a52;
+  --num: #6337c4;
+  --fn: #8a5c00;
+  --prop: #0e6f77;
+  --cm: #6b7480;
+
+  --sb-thumb: rgba(98, 98, 108, 0.07);
+  --sb-thumb-hover: rgba(98, 98, 108, 0.4);
+  --sb-thumb-active: rgba(98, 98, 108, 0.52);
+  --shadow: 0 18px 46px -26px rgba(20, 26, 38, 0.42);
+}
+
+:root {
+  --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo,
+    Consolas, "Liberation Mono", monospace;
+  --measure: 78ch;
+  --bleed: 0px;
+  --r: 10px;
+  --r-s: 7px;
+  --sb-size: 10px;
+  --sb-inset: 3px;
+}
+
+/* scrollbars — standard properties are primary; webkit is a fallback only */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sb-thumb) transparent;
+}
+.modal:hover,
+.fig-scroll:hover,
+pre:hover,
+.log:hover {
+  scrollbar-color: var(--sb-thumb-hover) transparent;
+}
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar {
+    width: var(--sb-size);
+    height: var(--sb-size);
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--sb-thumb);
+    background-clip: padding-box;
+    border: var(--sb-inset) solid transparent;
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--sb-thumb-hover);
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:active {
+    background: var(--sb-thumb-active);
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-button {
+    display: none;
+  }
+}
+
+/* ============================================================
+   SHELL
+   ============================================================ */
+* {
+  box-sizing: border-box;
+}
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 92px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 96px 96px, 96px 96px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16.5px;
+  line-height: 1.72;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection {
+  background: var(--hi);
+  color: var(--on-accent);
+}
+/* clicking a tabindex'd element focuses it, and the UA then paints its own
+   blue ring. Suppress the ring for pointer focus only — keyboard focus
+   still gets a visible, on-palette one. */
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--hi);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+/* SVG groups do not paint an outline reliably, so give them a stroke */
+svg .hit:focus-visible > rect {
+  stroke: var(--hi);
+  stroke-width: 2.4;
+}
+
+/* ---------- nav ---------- */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 56px;
+  padding: 0 20px;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(14px) saturate(1.3);
+  border-bottom: 1px solid var(--border);
+  transition: top 0.28s ease;
+}
+.nav.away {
+  top: -57px;
+}
+.nav-mark {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 5px;
+  background: var(--hi);
+  color: var(--on-accent);
+  white-space: nowrap;
+}
+.nav-title {
+  font-size: 13px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-sp {
+  flex: 1;
+}
+.nav-legend {
+  display: flex;
+  gap: 12px;
+}
+.nav-legend b {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.nav-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  flex: none;
+}
+.icon-btn:hover {
+  color: var(--text);
+  border-color: var(--border-2);
+}
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+}
+[aria-expanded="false"] svg path {
+  opacity: 0.35;
+}
+[data-theme="dark"] .theme-toggle .sun {
+  display: none;
+}
+[data-theme="light"] .theme-toggle .moon {
+  display: none;
+}
+@media (max-width: 900px) {
+  .nav-legend,
+  .nav-title {
+    display: none;
+  }
+}
+@media (max-width: 1000px) {
+  .rail-btn {
+    display: none;
+  }
+}
+
+/* ---------- page grid ---------- */
+.page {
+  display: grid;
+  /* the rail track always exists — collapsing it to one track drops the
+     content into row 1 and pushes the page a full viewport down */
+  grid-template-columns: 236px minmax(0, 1fr);
+  gap: 0;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 24px;
+  transition: grid-template-columns 0.24s ease;
+  /* everything a figure can NOT have: rail + page padding + main padding */
+  --chrome: 340px;
+}
+.page.solo {
+  grid-template-columns: 0 minmax(0, 1fr);
+  --chrome: 104px;
+}
+.rail {
+  /* EXPLICIT placement, both items. A display:none grid item stops being a
+     grid item at all, so with auto-placement .main slides into cell 1 —
+     the 0px track — and the whole document renders in zero width. Keeping
+     the track count right is not enough; the content has to be pinned. */
+  grid-column: 1;
+  position: sticky;
+  top: 56px;
+  align-self: start;
+  height: calc(100vh - 56px);
+  overflow-y: auto;
+  padding: 26px 20px 60px 0;
+  font-size: 13px;
+}
+.page.solo .rail {
+  display: none;
+}
+.rail-h {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 0 0 10px;
+}
+.rail a {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 6px;
+  padding: 4px 8px 4px 0;
+  color: var(--text-2);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  padding-left: 10px;
+  line-height: 1.4;
+}
+.rail a em {
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.rail a:hover {
+  color: var(--text);
+}
+.rail a.on {
+  color: var(--text);
+  border-left-color: var(--hi);
+}
+.rail a.on em {
+  color: var(--hi-ink);
+}
+/* the content column is centred in whatever space the rail leaves */
+.main {
+  grid-column: 2;
+  padding: 0 28px 120px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.main > * {
+  width: 100%;
+  max-width: var(--measure);
+}
+@media (max-width: 1000px) {
+  .page {
+    grid-template-columns: 0 minmax(0, 1fr);
+    /* no rail and no main padding down here — only the page's own 24px */
+    --chrome: 48px;
+  }
+  .rail {
+    display: none;
+  }
+  .main {
+    padding: 0 0 120px;
+  }
+}
+
+/* ---------- masthead ---------- */
+.mast {
+  padding: 62px 0 30px;
+  max-width: var(--measure);
+}
+.kicker {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--hi-ink);
+  margin: 0 0 16px;
+  font-weight: 600;
+}
+h1 {
+  font-size: clamp(29px, 4vw, 45px);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  font-weight: 700;
+  margin: 0 0 20px;
+}
+h1 span {
+  color: var(--text-3);
+}
+.dek {
+  font-size: 19px;
+  line-height: 1.6;
+  color: var(--text-2);
+  margin: 0 0 26px;
+}
+.mast-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.mast-meta span {
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+}
+
+/* ---------- thesis ---------- */
+.thesis {
+  max-width: var(--measure);
+  margin: 8px 0 46px;
+  padding: 22px 24px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--hi);
+  border-radius: var(--r);
+  background: var(--surface);
+}
+.thesis p {
+  margin: 0 0 10px;
+  font-size: 18px;
+  line-height: 1.62;
+}
+.thesis p:last-child {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 16px;
+}
+
+/* ---------- sections ---------- */
+section {
+  max-width: var(--measure);
+  padding-top: 30px;
+  margin-bottom: 4px;
+}
+.sec-h {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 30px 0 6px;
+}
+.sec-n {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--text-3);
+  padding-top: 5px;
+  flex: none;
+}
+h2 {
+  font-size: 25px;
+  line-height: 1.24;
+  letter-spacing: -0.018em;
+  font-weight: 680;
+  margin: 0;
+}
+h3 {
+  font-size: 16.5px;
+  font-weight: 660;
+  letter-spacing: -0.005em;
+  margin: 30px 0 8px;
+  color: var(--text);
+}
+p {
+  margin: 0 0 16px;
+}
+strong {
+  font-weight: 640;
+  color: var(--em);
+}
+.lead {
+  font-size: 17.5px;
+  color: var(--text-2);
+}
+ul,
+ol {
+  margin: 0 0 16px;
+  padding-left: 20px;
+}
+li {
+  margin-bottom: 6px;
+}
+li::marker {
+  color: var(--text-3);
+}
+hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 44px 0;
+}
+a.x {
+  color: var(--hi-ink);
+  text-decoration-color: color-mix(in srgb, var(--hi) 40%, transparent);
+  text-underline-offset: 3px;
+}
+
+/* ---------- callouts ---------- */
+.note {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-2);
+  border-radius: var(--r-s);
+  background: var(--surface);
+  padding: 16px 18px;
+  margin: 0 0 20px;
+  font-size: 15.5px;
+}
+.note b.nh {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.note.key {
+  border-left-color: var(--hi);
+}
+.note.key b.nh {
+  color: var(--hi-ink);
+}
+.note.trap {
+  border-left-color: var(--warn);
+}
+.note.trap b.nh {
+  color: var(--warn);
+}
+.note p:last-child {
+  margin: 0;
+}
+
+/* ---------- code ---------- */
+code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  color: var(--code);
+  background: var(--code-bg);
+  border: 1px solid var(--code-bd);
+  border-radius: 4px;
+  padding: 0.1em 0.34em;
+}
+.code {
+  border: 1px solid var(--border);
+  border-radius: var(--r-s);
+  background: var(--plate);
+  margin: 0 0 20px;
+  overflow: hidden;
+}
+.code-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.code pre {
+  margin: 0;
+  padding: 14px 18px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.66;
+  color: var(--text);
+  tab-size: 2;
+}
+.code pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+.kw {
+  color: var(--kw);
+}
+.str {
+  color: var(--str);
+}
+.num {
+  color: var(--num);
+}
+.fn {
+  color: var(--fn);
+}
+.prop {
+  color: var(--prop);
+}
+.cm {
+  color: var(--cm);
+}
+
+/* ---------- terms ---------- */
+.term {
+  color: color-mix(in srgb, currentColor 74%, var(--hi));
+  cursor: help;
+}
+.term:hover,
+.term.lit {
+  color: var(--hi-ink);
+  background: var(--hi-tint);
+  border-radius: 3px;
+  padding: 0 3px;
+  margin: 0 -3px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+/* An annotated code chip: a <code> that is also a .term.
+   `code` carries its own padding and border, and `.term:hover` REPLACES
+   padding with `0 3px` — which reflows the line the moment the pointer
+   lands on it. Both states are pinned here so the geometry never moves. */
+code.term {
+  color: var(--code);
+  border-color: color-mix(in srgb, var(--code-bd) 55%, var(--hi));
+  border-bottom-style: dashed;
+  cursor: help;
+}
+code.term:hover,
+code.term.lit {
+  color: var(--hi-ink);
+  background: var(--hi-tint);
+  border-color: var(--hi);
+  border-radius: 4px;
+  /* identical to the `code` rule above — hover must not resize the chip */
+  padding: 0.1em 0.34em;
+  margin: 0;
+}
+/* :focus first, then :focus-visible — only keyboard focus paints a ring */
+.term:focus {
+  outline: none;
+}
+.term:focus-visible {
+  outline: 2px solid var(--hi);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.pop {
+  position: fixed;
+  z-index: 90;
+  width: min(430px, calc(100vw - 26px));
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-s);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+  font-size: 14.5px;
+  line-height: 1.6;
+  display: none;
+}
+.pop.open {
+  display: block;
+}
+.pop h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-family: var(--mono);
+  letter-spacing: 0.06em;
+  color: var(--hi-ink);
+  text-transform: none;
+}
+.pop p {
+  margin: 0 0 8px;
+  color: var(--text-2);
+}
+.pop p:last-child {
+  margin: 0;
+}
+.pop .who {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
+/* ---------- owner chips ---------- */
+.w-app {
+  background: var(--app-tint);
+  color: var(--app-ink);
+}
+.w-node {
+  background: var(--node-tint);
+  color: var(--node-ink);
+}
+.w-kernel {
+  background: var(--kernel-tint);
+  color: var(--kernel-ink);
+}
+.w-hw {
+  background: var(--hw-tint);
+  color: var(--hw-ink);
+}
+
+/* ---------- footer ---------- */
+footer {
+  max-width: var(--measure);
+  margin-top: 70px;
+  padding-top: 26px;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+  color: var(--text-3);
+}
+
+/* ============================================================
+   FIGURES
+   ============================================================ */
+:root {
+  --fbleed: 340px;
+}
+@media (max-width: 1180px) {
+  :root {
+    --fbleed: 0px;
+  }
+}
+
+.fig {
+  /* Bleed evenly on both sides, but never past what the column actually
+     has: between ~1180 and ~1330px the bleed alone overflows the track.
+     Both the width and the offset are computed from the same value. */
+  --figw: min(
+    calc(100% + var(--fbleed)),
+    calc(min(100vw, 1400px) - var(--chrome, 340px))
+  );
+  width: var(--figw);
+  /* the offset is IN the shorthand — a later `margin:` silently reset a
+     separate margin-left, which is what pinned every figure to the left */
+  margin: 26px 0 30px calc((100% - var(--figw)) / 2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--surface);
+  overflow: hidden;
+}
+.fig-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.fig-n {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  font-weight: 600;
+  color: var(--on-accent);
+  background: var(--hi);
+  padding: 3px 7px;
+  border-radius: 4px;
+  flex: none;
+}
+.fig-t {
+  font-size: 13.5px;
+  font-weight: 620;
+  letter-spacing: -0.004em;
+  margin-right: auto;
+}
+.fig-body {
+  padding: 16px;
+}
+.fig-scroll {
+  overflow-x: auto;
+}
+
+/* segmented controls */
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--plate);
+  flex-wrap: wrap;
+}
+.seg button {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--text-3);
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.seg button:hover {
+  color: var(--text);
+  background: var(--raise);
+}
+.seg button.on {
+  background: var(--hi);
+  color: var(--on-accent);
+}
+.seg button.on:hover {
+  background: var(--hi);
+  color: var(--on-accent);
+}
+
+/* stage tabs + transport */
+.steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.steps .tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+.steps .tabs button {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  color: var(--text-3);
+  background: var(--plate);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 4px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.steps .tabs button:hover {
+  color: var(--text);
+  border-color: var(--border-2);
+}
+.steps .tabs button.on {
+  color: var(--hi-ink);
+  border-color: var(--hi);
+  background: var(--hi-tint);
+}
+.nudge {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+.nudge button {
+  width: 30px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--plate);
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+.nudge button:hover {
+  color: var(--text);
+  border-color: var(--border-2);
+}
+.nudge button[disabled] {
+  opacity: 0.36;
+  cursor: default;
+}
+
+/* stage */
+.stage {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--r-s);
+  background: var(--plate);
+  padding: 14px;
+}
+.stage.flat {
+  border: 0;
+  background: none;
+  padding: 0;
+}
+.stage svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* no diagram may outgrow the viewport it is being read in */
+  max-height: 76vh;
+}
+
+/* caption + meters */
+.fig-cap {
+  margin-top: 12px;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+  min-height: 46px;
+}
+.fig-cap b {
+  color: var(--text);
+  font-weight: 620;
+}
+.meters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.meter {
+  border: 1px solid var(--border);
+  border-radius: var(--r-s);
+  background: var(--plate);
+  padding: 7px 11px;
+  min-width: 108px;
+}
+.meter em {
+  display: block;
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 9.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 2px;
+}
+.meter b {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.meter.hot b {
+  color: var(--hi-ink);
+}
+.meter.bad b {
+  color: var(--warn);
+}
+.meter.ok b {
+  color: var(--node-ink);
+}
+
+/* panes */
+.panes {
+  display: grid;
+  gap: 12px;
+}
+.panes.two {
+  grid-template-columns: 1fr 1fr;
+}
+.panes.three {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+.panes.side {
+  grid-template-columns: minmax(0, 1fr) 300px;
+}
+@media (max-width: 860px) {
+  .panes.two,
+  .panes.three,
+  .panes.side {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.pane {
+  border: 1px solid var(--border);
+  border-radius: var(--r-s);
+  background: var(--plate);
+  overflow: hidden;
+}
+.pane-h {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.pane-b {
+  padding: 12px;
+  font-size: 13.5px;
+}
+.pane-b pre {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.62;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* a toggle that lives in a pane header rather than at the top of a figure */
+.pane-h .seg {
+  margin-left: auto;
+  padding: 1px;
+  border-radius: 5px;
+}
+.pane-h .seg button {
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+}
+.pane-b [hidden] {
+  display: none;
+}
+
+/* the request as text: one row per line, byte offset in the gutter, and
+   CR and LF drawn as the two bytes they are rather than as the break they
+   cause. Field tints are the byte grid's own tokens, not new colours. */
+.raw {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.66;
+  white-space: pre;
+  overflow-x: auto;
+}
+.raw i {
+  display: inline-block;
+  width: 34px;
+  color: var(--text-3);
+  font-style: normal;
+  text-align: right;
+  padding-right: 14px;
+  user-select: none;
+}
+.rw {
+  color: var(--text-2);
+  border-radius: 2px;
+}
+.rw .ctl {
+  font-style: normal;
+  opacity: 0.7;
+}
+.rw.f-m {
+  color: var(--app-ink);
+  background: var(--app-tint);
+}
+.rw.f-u {
+  color: var(--node-ink);
+  background: var(--node-tint);
+}
+.rw.f-h {
+  color: var(--kernel-ink);
+  background: var(--kernel-tint);
+}
+.rw.f-b {
+  color: var(--hw-ink);
+  background: var(--hw-tint);
+}
+/* last, so the byte under the current callback wins over its field tint */
+.rw.on {
+  color: var(--hi-ink);
+  background: var(--hi-tint);
+  box-shadow: inset 0 0 0 1px var(--hi);
+}
+
+/* log */
+.log {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  max-height: 152px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-s);
+  background: var(--plate);
+  padding: 9px 12px;
+}
+.log div {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 10px;
+  color: var(--text-2);
+}
+.log div i {
+  font-style: normal;
+  color: var(--text-3);
+}
+.log div.hot {
+  color: var(--text);
+}
+.log div.hot i {
+  color: var(--hi-ink);
+}
+
+/* key/value rows */
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.kv dt {
+  color: var(--text-3);
+  letter-spacing: 0.06em;
+}
+.kv dd {
+  margin: 0;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* byte grid */
+.bytes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1;
+}
+.by {
+  width: 25px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  gap: 1px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-3);
+  position: relative;
+}
+.by u {
+  text-decoration: none;
+  font-size: 9px;
+  color: var(--text-3);
+}
+.by b {
+  font-weight: 600;
+  font-size: 10.5px;
+  color: var(--text-2);
+}
+.by.on {
+  border-color: var(--hi);
+  background: var(--hi-tint);
+}
+.by.on b,
+.by.on u {
+  color: var(--hi-ink);
+}
+.by.cut {
+  border-left: 2px solid var(--warn);
+}
+.by.f-m {
+  background: var(--app-tint);
+  border-color: color-mix(in srgb, var(--app) 40%, transparent);
+}
+.by.f-m b {
+  color: var(--app-ink);
+}
+.by.f-u {
+  background: var(--node-tint);
+  border-color: color-mix(in srgb, var(--node) 40%, transparent);
+}
+.by.f-u b {
+  color: var(--node-ink);
+}
+.by.f-h {
+  background: var(--kernel-tint);
+  border-color: color-mix(in srgb, var(--kernel) 40%, transparent);
+}
+.by.f-h b {
+  color: var(--kernel-ink);
+}
+.by.f-b {
+  background: var(--hw-tint);
+  border-color: color-mix(in srgb, var(--hw) 40%, transparent);
+}
+.by.f-b b {
+  color: var(--hw-ink);
+}
+
+/* tables */
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.tbl th {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 600;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.tbl td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  color: var(--text-2);
+}
+.tbl tr:last-child td {
+  border-bottom: 0;
+}
+.tbl td.who {
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.tbl tbody tr.on td {
+  background: var(--hi-tint);
+  color: var(--text);
+}
+.tbl tbody tr[data-pick] {
+  cursor: pointer;
+}
+.tbl tbody tr[data-pick]:hover td {
+  background: var(--raise);
+}
+.chip {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+/* ---------- SVG vocabulary ---------- */
+svg .plate {
+  fill: var(--surface-2);
+  stroke: var(--border);
+}
+svg .lbl {
+  fill: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+}
+svg .sub {
+  fill: var(--text-2);
+  font-family: var(--sans);
+  font-size: 11.5px;
+}
+svg .mlbl {
+  fill: var(--text-3);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+svg .mono {
+  fill: var(--text-2);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+svg .band {
+  fill: var(--plate);
+  stroke: var(--border);
+  stroke-dasharray: 3 4;
+}
+svg .o-app {
+  fill: var(--app-tint);
+  stroke: var(--app);
+}
+svg .o-node {
+  fill: var(--node-tint);
+  stroke: var(--node);
+}
+svg .o-kernel {
+  fill: var(--kernel-tint);
+  stroke: var(--kernel);
+}
+svg .o-hw {
+  fill: var(--hw-tint);
+  stroke: var(--hw);
+}
+svg .t-app {
+  fill: var(--app-ink);
+}
+svg .t-node {
+  fill: var(--node-ink);
+}
+svg .t-kernel {
+  fill: var(--kernel-ink);
+}
+svg .t-hw {
+  fill: var(--hw-ink);
+}
+svg .lit {
+  stroke: var(--hi);
+  stroke-width: 2;
+}
+svg .dim {
+  opacity: 0.34;
+}
+svg .arr {
+  stroke: var(--text-3);
+  stroke-width: 1.6;
+  fill: none;
+}
+svg .arr.flow {
+  stroke: var(--hi);
+  stroke-dasharray: 7 6;
+  animation: march 0.85s linear infinite;
+}
+@keyframes march {
+  to {
+    stroke-dashoffset: -13;
+  }
+}
+svg .hit {
+  cursor: pointer;
+}
+svg .hit:hover .plate,
+svg .hit:hover rect.o-app,
+svg .hit:hover rect.o-node,
+svg .hit:hover rect.o-kernel,
+svg .hit:hover rect.o-hw {
+  stroke-width: 2;
+}
+svg text {
+  pointer-events: none;
+}
+.svg-flow {
+  pointer-events: none;
+}
+
+/* ============================================================
+   DOC-LOCAL ADDITIONS.
+
+   CHANNEL 1 is re-pointed. The substrate spends hue on who
+   implements a thing; this document spends it on WHERE THE BYTES
+   ARE, because that is the axis the whole subject turns on:
+
+     hw      the device and its ring
+     kernel  kernel memory, unaddressable from here
+     node    the external allocation — outside the collector's reach
+     app     the V8 heap
+
+   CHANNEL 2 is OWNERSHIP, and it needs three states rather than
+   two, which is new:
+
+     .owns      solid — an allocation nothing else looks into
+     .borrows   outlined — a window onto somebody else's bytes
+     .detached  hollow, ruled through — the allocation is gone
+
+   Neither channel is a cell of the ledger, so no channel is spent
+   on sub-structure.
+   ============================================================ */
+svg .owns {
+  stroke-width: 1.6;
+}
+svg .borrows {
+  fill: none;
+  stroke-dasharray: 5 3;
+  stroke-width: 1.6;
+}
+svg .detached {
+  fill: none;
+  stroke-dasharray: 2 3;
+  stroke-width: 1.3;
+  opacity: 0.7;
+}
+svg .arr.copy {
+  stroke: var(--text-2);
+  stroke-width: 1.8;
+}
+svg .arr.borrow {
+  stroke: var(--text-3);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 3;
+}
+svg .arr.hot {
+  stroke: var(--hi);
+}
+svg .rule {
+  stroke: var(--warn);
+  stroke-width: 2;
+}
+svg .dim2 {
+  opacity: 0.28;
+}
+svg .tick {
+  stroke: var(--border-2);
+  stroke-width: 1;
+}
+svg .num {
+  fill: var(--text-3);
+  font-family: var(--mono);
+  font-size: 9.5px;
+}
+
+/* ---------- provenance: three states, not two ---------- */
+.prov {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-2);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.prov::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+.prov.here {
+  color: var(--node-ink);
+  border-color: var(--node);
+  background: var(--node-tint);
+}
+.prov.node {
+  color: var(--app-ink);
+  border-color: var(--app);
+  background: var(--app-tint);
+}
+.prov.model {
+  color: var(--text-3);
+}
+.fig-top .prov {
+  margin-left: auto;
+}
+.provkey {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0 0;
+}
+.provkey p {
+  flex: 1 1 210px;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.provkey p b {
+  display: block;
+  margin-bottom: 3px;
+}
+
+/* ---------- the ledger strip ---------- */
+.ldg {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.ldg-h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.ldg-h b {
+  margin-left: auto;
+  color: var(--hi-ink);
+  font-weight: 600;
+}
+.ldg-s {
+  overflow-x: auto;
+}
+.ldg table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.ldg th {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 600;
+  padding: 7px 11px;
+  border-bottom: 1px solid var(--border);
+}
+.ldg td {
+  padding: 7px 11px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-3);
+  vertical-align: top;
+  line-height: 1.4;
+}
+.ldg tr:last-child td {
+  border-bottom: 0;
+}
+.ldg tr.on td {
+  background: var(--hi-tint);
+  color: var(--text);
+}
+.ldg td.at {
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.vb {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.vb-own {
+  color: var(--node-ink);
+  background: var(--node-tint);
+  border: 1px solid var(--node);
+}
+.vb-borrow {
+  color: var(--text-3);
+  border: 1px dashed var(--border-2);
+}
+.vb-copy {
+  color: var(--app-ink);
+  background: var(--app-tint);
+  border: 1px solid var(--app);
+}
+.vb-none {
+  color: var(--text-3);
+  border: 1px solid transparent;
+}
+.k {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  margin-right: 7px;
+  vertical-align: 1px;
+}
+.k-app {
+  background: var(--app);
+}
+.k-node {
+  background: var(--node);
+}
+.k-kernel {
+  background: var(--kernel);
+}
+.k-hw {
+  background: var(--hw);
+}
+
+/* ---------- run panels ---------- */
+.run {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.run button {
+  font: 600 11px/1 var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: 7px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.run button:hover {
+  color: var(--text);
+  border-color: var(--text-3);
+}
+.run button:focus {
+  outline: none;
+}
+.run button:focus-visible {
+  outline: 2px solid var(--hi);
+  outline-offset: 2px;
+}
+.run button.on {
+  color: var(--on-accent);
+  background: var(--hi);
+  border-color: var(--hi);
+}
+.tally {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+  align-self: center;
+}
+.tally b {
+  color: var(--hi-ink);
+}
+.slider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+.slider input {
+  flex: 1 1 120px;
+  accent-color: var(--hi);
+}
+.slider b {
+  color: var(--hi-ink);
+  min-width: 34px;
+  display: inline-block;
+}
+
+/* ---------- the byte grid ---------- */
+.bg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-bottom: 10px;
+}
+.bgc {
+  border: 1px solid var(--border-2);
+  border-radius: 5px;
+  padding: 5px 0 4px;
+  min-width: 38px;
+  text-align: center;
+  font-family: var(--mono);
+  background: var(--surface-2);
+}
+.bgc u {
+  display: block;
+  font-size: 11px;
+  text-decoration: none;
+  color: var(--text-2);
+}
+.bgc b {
+  display: block;
+  font-size: 9px;
+  color: var(--text-3);
+  font-weight: 500;
+  margin-top: 2px;
+}
+.bgc.on {
+  border-color: var(--hi);
+  background: var(--hi-tint);
+}
+.bgc.on u {
+  color: var(--text);
+}
+.bgc.win {
+  border-color: var(--node);
+  background: var(--node-tint);
+}
+.gl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.glc {
+  border: 1px dashed var(--border-2);
+  border-radius: 5px;
+  padding: 6px 4px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+  background: var(--plate);
+  overflow: hidden;
+}
+.glc i {
+  display: block;
+  font-style: normal;
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-top: 3px;
+}
+.glc.bad {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.glc.span {
+  border-color: var(--node);
+}
+</style>
+</head>
+<body>
+<svg class="defs-host" aria-hidden="true" width="0" height="0" style="position:absolute">
+  <defs>
+    <marker id="bw" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 1L8 5L0 9" fill="none" stroke="var(--text-3)" stroke-width="1.3"/>
+    </marker>
+    <marker id="bwi" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 1L8 5L0 9" fill="none" stroke="var(--hi)" stroke-width="1.5"/>
+    </marker>
+  </defs>
+</svg>
+<nav class="nav">
+  <button class="icon-btn rail-btn" data-rail-toggle type="button"
+    aria-label="show or hide the contents rail" aria-expanded="true">
+    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+  </button>
+  <span class="nav-mark">bytes</span>
+  <span class="nav-title">Whose bytes are these?</span>
+  <span class="nav-sp"></span>
+  <span class="nav-legend">
+    <b><i style="background:var(--app)"></i>the heap</b>
+    <b><i style="background:var(--node)"></i>outside it</b>
+    <b><i style="background:var(--kernel)"></i>the kernel</b>
+    <b><i style="background:var(--hw)"></i>the device</b>
+  </span>
+  <button class="icon-btn theme-toggle" data-theme-toggle type="button" aria-label="switch theme">
+    <svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+    <svg class="moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+  </button>
+</nav>
+
+<div class="page">
+  <aside class="rail" aria-label="contents">
+    <p class="rail-h">contents</p>
+    <a href="#s00"><em>00</em><span>The claim</span></a>
+    <a href="#s01"><em>01</em><span>What the collector cannot chase</span></a>
+    <a href="#s02"><em>02</em><span>Somewhere to put them</span></a>
+    <a href="#s03"><em>03</em><span>A window appears</span></a>
+    <a href="#s04"><em>04</em><span>Own, borrow, copy</span></a>
+    <a href="#s05"><em>05</em><span>What borrowing costs</span></a>
+    <a href="#s06"><em>06</em><span>A reading, not a conversion</span></a>
+    <a href="#s07"><em>07</em><span>What copying costs</span></a>
+    <a href="#s08"><em>08</em><span>Handing it over</span></a>
+    <a href="#s09"><em>09</em><span>Back to the kernel</span></a>
+    <a href="#s10"><em>10</em><span>What is still alive</span></a>
+  </aside>
+
+  <main class="main">
+    <header class="mast">
+      <p class="kicker">Node internals · one byte, end to end</p>
+      <h1>Whose bytes<br /><span>are these?</span></h1>
+      <p class="dek">
+        A single byte, from the socket to the response. Eleven stops, and
+        at every one of them the same question the API never answers:
+        <em>do you own this, did you borrow it, or is it a copy?</em>
+      </p>
+      <p class="mast-meta">
+        <span>11 sections</span><span>10 figures</span><span>11 stops</span
+        ><span data-version="1.0">v1.0</span>
+      </p>
+    </header>
+
+    <div class="thesis">
+      <p>
+        A Buffer exists because <strong>the collector moves things and a
+        syscall cannot chase them</strong>. So the bytes live where the
+        collector will not touch them — and once they do, a Buffer is
+        <strong>three separable things</strong>: an allocation, a window onto
+        it, and a reading of it.
+      </p>
+      <p>
+        Every operation <strong>owns, borrows, or copies</strong> the first
+        two. The third is <strong>a guess that nothing verifies</strong>.
+      </p>
+    </div>
+
+    <!-- ================= 00 ================= -->
+    <section id="s00">
+      <div class="sec-h"><span class="sec-n">§00</span><h2>The claim</h2></div>
+      <p class="lead">
+        Follow one byte. It arrives on a wire, sits in kernel memory, gets
+        copied into an allocation Node made, acquires a JavaScript object,
+        is narrowed, decoded, gathered up with others, handed to something
+        that does not know where it came from, and finally written back out
+        to the kernel it started in.
+      </p>
+      <p>
+        At every one of those stops something either <strong>owns</strong>
+        the bytes — holds an allocation nothing else looks into —
+        <strong>borrows</strong> them, holding a window onto memory somebody
+        else allocated, or <strong>copies</strong> them into new memory that
+        is independent from then on. Three verbs. Every operation in the
+        Buffer API is exactly one of them, and the method names are no guide
+        to which.
+      </p>
+      <p>
+        The clearest evidence for that last sentence:
+        <code data-t="bufslice">buf.slice()</code> returns a window onto the
+        original and writing through it changes the original.
+        <code data-t="uint8array">Uint8Array.prototype.slice()</code> — the
+        same method name, on the class that Buffer extends, called on the
+        same object — returns a copy. One name, two meanings, one
+        inheritance chain.
+      </p>
+      <div class="note key">
+        <b class="nh">the ledger</b>
+        <p>
+          From §04 onward every section carries a strip recording the stops
+          so far: what happened, which verb, who owns the bytes now, and
+          what is still alive because of it. It only ever grows. By §10 it
+          is the whole taxonomy, assembled by travelling rather than read
+          off a table.
+        </p>
+      </div>
+    </section>
+
+    <!-- ================= 01 ================= -->
+    <section id="s01">
+      <div class="sec-h"><span class="sec-n">§01</span><h2>What the collector cannot chase</h2></div>
+      <p>
+        Start before JavaScript exists. A network card writes frames into a
+        ring in memory it was given at boot; the kernel takes them apart and
+        the payload ends up in a socket receive buffer, sized by
+        <code data-t="rmem">tcp_rmem</code>. That memory belongs to the
+        kernel. Your process cannot address it, and no object in your
+        program refers to it. What your process holds instead is a
+        <span class="term" data-t="fd">file descriptor</span> — an integer,
+        and the only thing about that connection that crosses into
+        <span class="term" data-t="userspace">userspace</span> at all.
+      </p>
+      <p>
+        For those bytes to reach JavaScript, something has to
+        <code data-t="readsys">read</code> them into memory your process owns
+        — and the address it hands the kernel has to still be valid when the
+        kernel writes there. That is the constraint the whole subject grows
+        out of. The loop discovers there is something to read during
+        <span class="term" data-t="poll">the poll phase</span>, when
+        <code data-t="epollwait">epoll_wait</code> reports the descriptor
+        ready; the <span class="term" data-t="syscall">system call</span>
+        that follows needs an address to write to.
+      </p>
+      <p>
+        V8's collector <span class="term" data-t="gcmoves">relocates live
+        objects</span> when it compacts the heap. An object's address is not
+        stable across a collection, so a pointer handed to the kernel could
+        be pointing at nothing by the time the kernel uses it. There are only
+        two ways out: pin the object so the collector cannot move it, or put
+        the bytes somewhere the collector does not manage at all. Node takes
+        the second.
+      </p>
+
+      <figure class="fig" data-fig="mover" id="f01">
+        <div class="fig-top">
+          <span class="fig-n">FIG 01</span>
+          <span class="fig-t">Why the bytes are not in the heap</span>
+          <span class="prov model">modelled</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <p>
+        Everything else follows from that one decision. If the bytes are
+        outside the heap, somebody has to allocate and free them explicitly,
+        which is why there is a pool. If they are outside the heap, the heap
+        size limit does not bound them, which is why a process can be three
+        megabytes of heap and a gigabyte of resident memory. And if they are
+        raw bytes rather than a JavaScript value, they carry no type, which
+        is why reading them is a guess.
+      </p>
+      <div class="note">
+        <b class="nh">a name worth being careful with</b>
+        <p>
+          <span class="term" data-t="external">External memory</span> does
+          not mean outside the process. It means outside the region V8's
+          collector manages. It is ordinary memory in the same address
+          space, allocated by C++, and it is reported separately for exactly
+          that reason.
+        </p>
+      </div>
+    </section>
+
+    <!-- ================= 02 ================= -->
+    <section id="s02">
+      <div class="sec-h"><span class="sec-n">§02</span><h2>Somewhere to put them</h2></div>
+      <p class="lead">
+        Before the read can happen, <span class="term" data-t="libuv">libuv</span>
+        asks Node where to put the bytes. Node's answer, for anything small,
+        is not a fresh allocation — it is a slice of a shared 8 KB slab it
+        keeps around and hands out in pieces.
+      </p>
+      <p>
+        This is the first borrow, and it happens before you have written a
+        line of code. A hundred-byte Buffer is a window at some offset into
+        an allocation you did not make, alongside other people's bytes, and
+        the rest of that slab stays alive for as long as your hundred bytes
+        do.
+      </p>
+
+      <figure class="fig" data-fig="slab" id="f02">
+        <div class="fig-top">
+          <span class="fig-n">FIG 02</span>
+          <span class="fig-t">A hundred bytes in an eight-kilobyte slab</span>
+          <span class="prov node">executed in node</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <p>
+        Three allocators, three answers.
+        <code data-t="allocunsafe">Buffer.allocUnsafe</code> takes from the
+        <span class="term" data-t="slab">pool</span> and does not clear what
+        it finds. <code data-t="bufalloc">Buffer.alloc</code> makes its own
+        allocation and zeroes it.
+        <code data-t="allocslow">Buffer.allocUnsafeSlow</code> makes its own
+        and does not. Only the first shares, and it is the one the I/O path
+        uses, because clearing memory you are about to overwrite is waste.
+      </p>
+      <div class="note trap">
+        <b class="nh">why an unsafe allocator exists at all</b>
+        <p>
+          It used to be reachable by accident.
+          <span class="term" data-t="newbuffer">The old constructor</span>
+          branched on its argument's type — a number allocated that many
+          uninitialised bytes, a string encoded it — so a value taken
+          straight from JSON could flip between the two and hand back
+          whatever the pool last held. The constructor is gone and the fast
+          allocator is still here, under a name that says what it is.
+        </p>
+      </div>
+    </section>
+
+    <!-- ================= 03 ================= -->
+    <section id="s03">
+      <div class="sec-h"><span class="sec-n">§03</span><h2>A window appears</h2></div>
+      <p>
+        The read has happened. The bytes are in the slab. Now a JavaScript
+        object appears over them, and it is worth being precise about how
+        many things that involves, because the answer is three and most
+        confusion is treating them as one.
+      </p>
+      <p>
+        An <span class="term" data-t="arraybuffer">ArrayBuffer</span> is a
+        fixed-length region of raw bytes. It has no elements and no type; it
+        cannot be read or written directly. It exists to be pointed at.
+      </p>
+      <p>
+        A <span class="term" data-t="typedarray">typed array</span> points at
+        one. It carries three numbers — which ArrayBuffer, at what
+        <code data-t="byteoffset">byteOffset</code>, for how many elements —
+        and it reads the bytes at that window as elements of one fixed type.
+        A <code data-t="uint8array">Uint8Array</code> reads each byte as a
+        number from 0 to 255. A <code data-t="dataview">DataView</code> is
+        the same idea without a fixed element type: every read states its own
+        width and byte order, which makes
+        <span class="term" data-t="endianness">endianness</span> something
+        you state rather than something you inherit from the machine.
+      </p>
+      <p>
+        A <span class="term" data-t="buffer">Buffer</span> is a
+        <code data-t="uint8array">Uint8Array</code> — actually,
+        genuinely, by inheritance — with extra methods bolted on for
+        encodings and sized reads. That has two consequences that run through
+        the rest of this document. It passes to any API that takes a typed
+        array. And it inherits methods whose meaning it has changed.
+      </p>
+
+      <figure class="fig" data-fig="window" id="f03">
+        <div class="fig-top">
+          <span class="fig-n">FIG 03</span>
+          <span class="fig-t">The window, moved</span>
+          <span class="prov here">executed here</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <p>
+        Two windows onto one allocation are two objects with no knowledge of
+        each other. Neither holds a list of the other's readers, and writing
+        through one is not an event the other can observe — it simply reads
+        different bytes next time it is asked. Aliasing in a Buffer is not a
+        feature with a name. It is the absence of any mechanism that would
+        prevent it.
+      </p>
+    </section>
+
+    <!-- ================= 04 ================= -->
+    <section id="s04">
+      <div class="sec-h"><span class="sec-n">§04</span><h2>Own, borrow, copy</h2></div>
+      <p class="lead">
+        The byte reaches your <code data-t="dataevent">'data'</code>
+        handler as a Buffer, having crossed a
+        <span class="term" data-t="tcpwrap">C++ object</span> and a
+        <span class="term" data-t="netmod">net module</span> that both had
+        the chance to say something about ownership and did not. Everything
+        you can do with it now falls into three verbs, and picking the wrong one is the source of most of
+        what follows.
+      </p>
+      <p>
+        <strong>Owning</strong> means holding an allocation nothing else has
+        a window onto: it is freed when you drop it, and nobody can write
+        into it behind your back. <strong>Borrowing</strong> means holding a
+        window onto somebody else's allocation: free, instant, and it keeps
+        their allocation alive. <strong>Copying</strong> means new bytes,
+        written once, independent from then on: it costs a pass over the
+        memory and buys you isolation.
+      </p>
+      <p>
+        The obvious test for which one you got is to compare
+        <code data-t="arraybuffer">.buffer</code> on both objects, and in
+        Node that test is <em>wrong</em>. Two independent copies taken from
+        the pool share one ArrayBuffer, so the structural check reports
+        borrowing about a copy. The test that holds is behavioural: write
+        through the result and see whether the source moved.
+      </p>
+
+      <figure class="fig" data-fig="verbs" id="f04">
+        <div class="fig-top">
+          <span class="fig-n">FIG 04</span>
+          <span class="fig-t">Ten operations, sorted by what they actually do</span>
+          <span class="prov here">executed here</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <div data-ledger="4"></div>
+
+      <p>
+        The pair worth staring at is
+        <code data-t="bufslice">buf.slice()</code> against
+        <code data-t="uint8array">Uint8Array.prototype.slice()</code>. Buffer
+        overrides the inherited method and reverses its meaning: the
+        superclass copies, the subclass returns a view. Both are reachable on
+        the same object.
+        <code data-t="subarray">subarray</code> is the honest spelling of what
+        Buffer's version does, which is why the other one is discouraged
+        rather than fixed — fixing it would silently change what existing
+        code copies.
+      </p>
+    </section>
+
+    <!-- ================= 05 ================= -->
+    <section id="s05">
+      <div class="sec-h"><span class="sec-n">§05</span><h2>What borrowing costs</h2></div>
+      <p>
+        Borrowing looks free. No allocation, no copy, constant time whatever
+        the size. The bill arrives later and in a different currency: a view
+        keeps its <em>whole</em> ArrayBuffer reachable, however small the
+        window is.
+      </p>
+      <p>
+        Take fifty megabytes off a socket, find the ten bytes you wanted, and
+        keep a <code data-t="subarray">subarray</code> of them. The fifty
+        megabytes cannot be collected. Not the ten bytes' worth — all of it,
+        because the only thing keeping any of it alive is a reference to the
+        allocation, and your view holds one.
+      </p>
+
+      <figure class="fig" data-fig="retain" id="f05">
+        <div class="fig-top">
+          <span class="fig-n">FIG 05</span>
+          <span class="fig-t">Ten bytes holding fifty megabytes</span>
+          <span class="prov node">executed in node</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <div data-ledger="5"></div>
+
+      <p>
+        The fix is to stop borrowing:
+        <code data-t="tostring">buf.toString()</code> if you wanted a string,
+        or a copy of the window if you wanted bytes. Either way the point is
+        to end up holding something whose size matches what you care about.
+        <span class="term" data-t="retention">Retention</span> like this does
+        not show up as a leak in the usual sense — nothing is growing without
+        bound, and every allocation is legitimately reachable. It shows up as
+        a process that is inexplicably large.
+      </p>
+      <div class="note trap">
+        <b class="nh">the pool version of the same bug</b>
+        <p>
+          It is smaller and far more common. Every pooled Buffer holds its
+          8 KB slab open, so a cache of ten thousand small pooled Buffers can
+          hold tens of megabytes rather than the few it accounts for.
+          <code data-t="allocslow">Buffer.allocUnsafeSlow</code> exists for
+          precisely this: anything long-lived should own its allocation
+          rather than borrow a corner of a shared one.
+        </p>
+      </div>
+    </section>
+
+    <!-- ================= 06 ================= -->
+    <section id="s06">
+      <div class="sec-h"><span class="sec-n">§06</span><h2>A reading, not a conversion</h2></div>
+      <p class="lead">
+        The third of the three things a Buffer is. An allocation holds bytes
+        and a window names which of them, but neither says what the bytes
+        <em>mean</em> — and nothing anywhere in the system does.
+      </p>
+      <p>
+        <code data-t="tostring">toString</code> takes an encoding name and
+        produces a string. It is tempting to read that as a conversion, as
+        though the bytes were in one format and are now in another. They are
+        not. The bytes do not change; a rule was applied to decide how many
+        of them make one character and which character that is. Apply a
+        different rule and you get a different string from the same bytes.
+      </p>
+
+      <figure class="fig" data-fig="reading" id="f06">
+        <div class="fig-top">
+          <span class="fig-n">FIG 06</span>
+          <span class="fig-t">One row of bytes, six readings</span>
+          <span class="prov here">executed here</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <div data-ledger="6"></div>
+
+      <p>
+        Nothing validates the guess. Read arbitrary bytes as
+        <code data-t="utf8">utf8</code> and any sequence the rule cannot
+        interpret becomes <span class="term" data-t="replacement">the
+        replacement character</span> — one string, no error, and the original
+        bytes unrecoverable. <code data-t="latin1">latin1</code> is the only
+        reading here that round-trips arbitrary bytes through a string and
+        back unchanged, because it maps each byte to the code point of the
+        same value and never consumes two.
+      </p>
+      <p>
+        The variable-width readings have a second hazard that only appears
+        once bytes arrive in pieces. A character encoded in four bytes can be
+        split across a chunk boundary, and decoding each chunk on its own
+        turns one character into damage on both sides of the seam. The
+        <span class="term" data-t="strdecoder">StringDecoder</span> holds back
+        the trailing bytes of an incomplete character until the next chunk
+        arrives; gathering the chunks first and decoding once also works. The
+        reason the bug survives so long in so many codebases is that on
+        ASCII test data all three strategies agree exactly.
+      </p>
+    </section>
+
+    <!-- ================= 07 ================= -->
+    <section id="s07">
+      <div class="sec-h"><span class="sec-n">§07</span><h2>What copying costs</h2></div>
+      <p>
+        Copying buys isolation, and it is priced per byte. Once, over a whole
+        list, that price is the size of the result and nothing more.
+        <code data-t="bufconcat">Buffer.concat</code> allocates the total,
+        walks the inputs, and is done.
+      </p>
+      <p>
+        The version that appears in real code is the other one: an
+        accumulator, concatenated with each chunk as it arrives. It reads
+        more naturally than gathering into an array, it is correct, and it
+        copies the entire accumulated result every time round the loop. For
+        <em>n</em> chunks that is <em>n</em> squared over two chunk-lengths
+        of copying to produce <em>n</em> chunk-lengths of output.
+      </p>
+
+      <figure class="fig" data-fig="staircase" id="f07">
+        <div class="fig-top">
+          <span class="fig-n">FIG 07</span>
+          <span class="fig-t">The same ten megabytes, gathered two ways</span>
+          <span class="prov node">executed in node</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <div data-ledger="7"></div>
+
+      <p>
+        <code data-t="tostring">toString</code> is a copy too, and one that
+        crosses back into the heap the bytes were kept out of in the first
+        place. It has a ceiling the byte side does not: a string cannot
+        exceed V8's maximum string length, so a Buffer that fits in memory
+        can still fail to become a string. Decoding a large payload is
+        therefore two commitments at once — the copy, and the ceiling.
+      </p>
+    </section>
+
+    <!-- ================= 08 ================= -->
+    <section id="s08">
+      <div class="sec-h"><span class="sec-n">§08</span><h2>Handing it over</h2></div>
+      <p class="lead">
+        Everything so far stayed inside code that understands what a window
+        is. The boundary is where that stops being true, and three different
+        things go wrong there.
+      </p>
+      <p>
+        The first is the <code data-t="arraybuffer">.buffer</code> property.
+        It hands over the whole allocation, not your window — so passing it
+        to anything that takes an ArrayBuffer passes the entire slab,
+        including whatever else is in it. Anything reading it is reading
+        other people's bytes. The
+        <code data-t="byteoffset">byteOffset</code> and length have to travel
+        with it, and most code that reaches for
+        <code data-t="arraybuffer">.buffer</code> does not carry them.
+      </p>
+      <p>
+        The second is <span class="term" data-t="align">alignment</span>. A
+        multi-byte view has to begin at an offset divisible by its element
+        size. Node keeps pool offsets on eight-byte boundaries deliberately,
+        so the pool itself is safe — but a
+        <code data-t="subarray">subarray</code> at an odd offset is not, and
+        a view built over it fails with an error about multiples that
+        mentions nothing about Buffers.
+      </p>
+      <p>
+        The third is what happens when the bytes cross a thread. A
+        <span class="term" data-t="sclone">structured clone</span> copies
+        them, and the copy arrives as a plain
+        <code data-t="uint8array">Uint8Array</code> — the prototype does not
+        survive the crossing, so the encoding methods are gone.
+        <span class="term" data-t="detach">Transferring</span> instead moves
+        the allocation, and leaves the original detached: its byteLength
+        becomes zero and every view onto it reads as empty, including views
+        held by code that never heard about the transfer.
+      </p>
+
+      <figure class="fig" data-fig="handoff" id="f08">
+        <div class="fig-top">
+          <span class="fig-n">FIG 08</span>
+          <span class="fig-t">Three ways the window stops being honoured</span>
+          <span class="prov here">executed here</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <div data-ledger="8"></div>
+
+      <p>
+        Detaching is the one place in JavaScript where ownership becomes
+        directly observable. Every other question in this document has to be
+        answered by writing through something and watching what changed.
+        Here the object simply reports that its bytes are gone, and every
+        window onto them agrees.
+      </p>
+    </section>
+
+    <!-- ================= 09 ================= -->
+    <section id="s09">
+      <div class="sec-h"><span class="sec-n">§09</span><h2>Back to the kernel</h2></div>
+      <p>
+        The byte goes out the way it came in. Writing to a
+        <span class="term" data-t="socket">socket</span> hands the kernel an
+        address and a length, and the kernel copies from there into its own
+        send buffer — which means that between the call and the completion,
+        your bytes are being read by something that is not your program.
+      </p>
+      <p>
+        That is a borrow, in the direction nobody thinks about. For the
+        duration of it the Buffer is not yours to modify: reuse it for the
+        next chunk before the write completes and what goes on the wire is
+        whichever version the kernel happened to read. Nothing enforces this
+        and nothing detects it. The write does not fail; the bytes are just
+        wrong, occasionally, under load.
+      </p>
+
+      <figure class="fig" data-fig="borrowwin" id="f09">
+        <div class="fig-top">
+          <span class="fig-n">FIG 09</span>
+          <span class="fig-t">The window where the bytes are not yours</span>
+          <span class="prov model">modelled</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <div data-ledger="9"></div>
+
+      <p>
+        The callback exists to close that window. It is not a
+        <em>delivered</em> signal and it is not an <em>arrived</em> signal —
+        it says the kernel has finished reading your memory and you may have
+        it back. Which is the same shape as everything else here: an
+        ownership boundary, unmarked in the type system, communicated by
+        convention.
+      </p>
+    </section>
+
+    <!-- ================= 10 ================= -->
+    <section id="s10">
+      <div class="sec-h"><span class="sec-n">§10</span><h2>What is still alive</h2></div>
+      <p class="lead">
+        The byte has been through eleven stops. The reckoning is what is
+        still held, by whom, and whether anything is counting.
+      </p>
+      <p>
+        Something is counting, but not the thing most people watch.
+        <code data-t="external">process.memoryUsage()</code> reports
+        <em>heapUsed</em> for the region the collector manages and
+        <em>external</em> and <em>arrayBuffers</em> for the bytes outside it.
+        The heap size limit — the number
+        <code data-t="external">--max-old-space-size</code> sets — bounds only
+        the first. Buffers are bounded by the machine.
+      </p>
+
+      <figure class="fig" data-fig="numbers" id="f10">
+        <div class="fig-top">
+          <span class="fig-n">FIG 10</span>
+          <span class="fig-t">Four numbers, and which one the limit governs</span>
+          <span class="prov node">executed in node</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <div data-ledger="10"></div>
+
+      <p>
+        Read down the verb column. The bytes were copied exactly twice on the
+        way through — once by the kernel on the way in, once by whatever
+        decoded or gathered them — and borrowed everywhere else. That ratio
+        is what makes Node fast at moving bytes, and it is also the reason
+        that a mistake about which verb applied is so hard to see: most of
+        the time the borrow is right, free, and invisible.
+      </p>
+      <div class="provkey">
+        <p><b>executed here</b> The figure runs in this page, on the same engine Node runs. What it shows is what the code does.</p>
+        <p><b>executed in node</b> The numbers came out of Node 22 during the build and are printed as they arrived. A transcript, not a simulation.</p>
+        <p><b>modelled</b> A drawing of something the page cannot run — the collector compacting, the kernel reading out of your memory. Accurate as far as it is checked, and not a measurement.</p>
+      </div>
+      <p>
+        Two of the ten figures are drawings, and both are drawings of the
+        same thing: a moment when memory is being used by something that is
+        not JavaScript. That is not a coincidence. It is the boundary the
+        whole subject is about, and it is exactly the part a JavaScript
+        engine cannot show you.
+      </p>
+    </section>
+  </main>
+</div>
+
+<script>
+window.TRANSCRIPTS = {
+ "pool": "$ node probes/pool.js\nBuffer.poolSize               8192\npooled when smaller than      4096\n\nallocation                   bytes  offset  allocation   backing\nBuffer.allocUnsafe(100)        100       8        8192   shared\nBuffer.alloc(100)              100       0         100   its own\nBuffer.allocUnsafeSlow(100)    100       0         100   its own\nBuffer.from('hello')             5     112        8192   shared\nBuffer.allocUnsafe(5000)      5000       0        5000   its own",
+ "align": "$ node probes/align.js\nthe pool is aligned on purpose:\n  allocUnsafe(100).byteOffset      : 8  (a multiple of 8: true)\n  Float64Array over it             : ok\n\nyour own slicing is not:\n  buf.subarray(1).byteOffset       : 9  (a multiple of 8: false)\n  Float64Array over that           : start offset of Float64Array should be a multiple of 8",
+ "verbs": "$ node probes/verbs.js\nstarting from Buffer.from('abcdefghij') each time\n\noperation                           .buffer   writes through  verdict\nsrc.subarray(2, 5)                  shared    borrows         borrows\nsrc.slice(2, 5)                     shared    borrows         borrows\nUint8Array.prototype.slice(2, 5)    separate  copies          copies\nBuffer.from(src)                    shared    copies          copies \u2014 .buffer lied\nBuffer.from(src.buffer, off + 2, 3) shared    borrows         borrows\nBuffer.concat([src, src])           shared    copies          copies \u2014 .buffer lied\n\nsrc.byteOffset                      : 144\nBuffer.from(src.buffer, 2, 3) reads : pool bytes 2-4, not src bytes 2-4\n  which belong to                   : whoever allocated before you",
+ "retention": "$ node --expose-gc probes/retention.js\nrun with --expose-gc; arrayBuffers rounded to MB\n\nat rest                       : 0 MB\nafter a 50 MB read            : 50 MB\nholding a 10-byte subarray    : 50 MB   <- the window holds the whole allocation\n  ten.length                  : 10\n  ten.buffer.byteLength       : 52428800\nafter copying those 10 bytes  : 0 MB   <- now it can go\n  copy.length                 : 10\n  copy.buffer.byteLength      : 8192",
+ "readings": "$ node probes/readings.js\none row of eight bytes : 68 69 20 f0 9f 91 8b 21\n\n  utf8    \"hi \ud83d\udc4b!\"                    6 units\n  latin1  \"hi \u00f0\u009f\u0091\u008b!\"                  8 units\n  ascii   \"hi p\\u001f\\u0011\\u000b!\"   8 units\n  hex     \"686920f09f918b21\"          16 units\n  base64  \"aGkg8J+RiyE=\"              12 units\n  utf16le \"\u6968\uf020\u919f\u218b\"                      4 units\n\nthe bytes after all six readings : 68 69 20 f0 9f 91 8b 21\n\ninvalid utf8 ff fe fd  ->  \"\ufffd\ufffd\ufffd\"\n  round trips back to           : ef bf bd ef bf bd ef bf bd\n  latin1 round trips back to    : ff fe fd\n  and nothing warned            : true",
+ "split": "$ node probes/split.js\nthe emoji is four bytes: f0 9f 91 8b\nthe chunk boundary falls after byte 5\n\nper-chunk toString  : \"hi \ufffd\ufffd\ufffd!\"\nStringDecoder       : \"hi \ud83d\udc4b!\"\nconcat then decode  : \"hi \ud83d\udc4b!\"\n\non ascii-only test data all three agree : true",
+ "concat": "$ node probes/concat.js\n10,000 chunks of 1 KB  ->  10 MB of payload\n\nconcat once            :     10 MB copied      11 ms\nconcat per chunk       :  48833 MB copied   14266 ms\nratio                  : 5001x the bytes for the same result\nresult identical       : true",
+ "transfer": "$ node probes/transfer.js\nbefore             : byteLength 8192  detached false\nstructuredClone    : Uint8Array, length 8, source still 8 bytes\nafter transfer     : byteLength 0  detached true\nthe view over it   : length 0, reading it gives \"\"\n\nJSON.stringify(buf): {\"type\":\"Buffer\",\"data\":[97,98,99,100,101,102,\u2026",
+ "memory": "$ node probes/memory.js\n                      heapUsed external arrayBuf     rss   (MB)\nat start                    4       1       0      44\nholding 1.2 GB              3    1201    1200    1245\n\nthe heap limit       : 2047 MB\nheap used against it : 3 MB\nwhat the limit bounds: the heap, and nothing else"
+};
+window.FACTS = {
+ "poolSize": 8192,
+ "poolCutoff": 4096,
+ "unsafeAligned": true,
+ "unsafeBacking": 8192,
+ "allocOffset": 0,
+ "allocBacking": 100,
+ "fromBacking": 8192,
+ "bigBytes": 52428800,
+ "bigMB": 50,
+ "windowBytes": 10,
+ "afterCopyMB": 0,
+ "heapLimitMB": 2047,
+ "heapUsedMB": 3,
+ "externalMB": 1201,
+ "arrayBuffersMB": 1200,
+ "rssMB": 1245
+};
+/* Entries carried from node-and-the-network-stack.html that a
+   notification document still needs. Everything else was network-specific. */
+window.TERMS = Object.assign(window.TERMS || {}, {
+  fd: {
+    t: "file descriptor",
+    who: "kernel",
+    d: "<p>A small non-negative integer that indexes a per-process table. Row <code>n</code> of that table points at a kernel object — a file, a pipe, a socket. The number is meaningless outside the process that holds it.</p>",
+  },
+  socket: {
+    t: "socket",
+    who: "kernel",
+    d: "<p>The kernel object behind a network descriptor: a protocol, a local address, sometimes a remote address, and two buffers. Your process never holds it — it holds a descriptor that refers to it.</p>",
+  },
+  syscall: {
+    t: "system call",
+    who: "kernel",
+    d: "<p>The instruction that transfers control from your process to the kernel. Cheap — a microsecond or two — but the only way to reach anything the kernel owns, and the only place a thread can be put to sleep.</p>",
+  },
+  userspace: {
+    t: "userspace",
+    who: "node",
+    d: "<p>Everything running in your process's own address space: V8, your JavaScript, node's C++, libuv, OpenSSL. It cannot touch a socket except by asking the kernel.</p>",
+  },
+  libuv: {
+    t: "libuv",
+    who: "node",
+    d: "<p>The C library underneath Node that owns the event loop and makes the actual system calls. It also papers over the differences between epoll, kqueue and IOCP so Node's JavaScript does not have to know which one is under it.</p>",
+  },
+  tcpwrap: {
+    t: "TCPWrap",
+    who: "node",
+    d: "<p>The C++ object that a JavaScript <code>net.Server</code> or <code>net.Socket</code> holds. It owns a <code>uv_tcp_t</code>, which owns the descriptor. Three objects in three languages, one socket.</p>",
+  },
+  poll: {
+    t: "the poll phase",
+    who: "node",
+    d: "<p>The phase of the libuv loop where the process actually sleeps. Everything else in a loop iteration is bookkeeping between wakeups.</p>",
+  },
+  epollwait: {
+    t: "epoll_wait(2)",
+    who: "kernel",
+    d: "<p>The call the process sleeps inside. <code>epoll_wait</code> asks the kernel for the registered descriptors that are ready now, and blocks until at least one of them is — or until the timeout libuv computed from its nearest timer runs out.</p><p>This is the poll phase, and it is why an idle Node server costs no CPU at all. Nothing is copied here: what comes back is a list of descriptors, not data. The <code>read()</code> is still ahead.</p>",
+  },
+  readsys: {
+    t: "read(2)",
+    who: "kernel",
+    d: "<p>Copies bytes out of the socket's receive buffer into memory your process owns, and returns how many it moved. <code>read</code> never waits for a message and has no idea what one is: it hands back whatever has arrived, up to the size of the buffer you offered.</p><p>This is the call that decides chunk boundaries. libuv issues it once <code>epoll_wait</code> says the descriptor is readable, and passes the result straight up as a <code>data</code> event.</p>",
+  },
+  dataevent: {
+    t: "the 'data' event",
+    who: "node",
+    d: "<p>Emitted once per <code>read()</code> that returned bytes — not once per message, and not once per <code>write()</code> at the other end. How many you get is decided by segmentation, timing and the size of libuv's read buffer, none of which your program controls.</p><p>Two runs of the same client against the same server can produce different numbers of <code>data</code> events carrying identical bytes. Code that treats one event as one message is not wrong yet, only unlucky yet.</p>",
+  },
+  netmod: {
+    t: "the net module",
+    who: "node",
+    d: "<p>Node's TCP layer, and a thin one: it wraps libuv's stream handles, gives you <code>Server</code> and <code>Socket</code>, and turns readiness into <code>data</code> events. There is no protocol in <code>net</code> and no interpretation of any kind.</p><p>What you get is exactly what the kernel had, split exactly where the kernel split it. Framing — deciding where one message ends — is left entirely to you.</p>",
+  },
+  buffer: {
+    t: "Buffer",
+    who: "node",
+    d: "<p>A fixed-length view of bytes held outside V8's heap — the memory libuv reads into and hands up. Its contents are exactly what <code>read()</code> returned, in exactly the order the kernel had them.</p><p>Nothing in a <code>Buffer</code> is a method, a header or a URL. Those are interpretations that you or a parser impose afterwards; the bytes themselves carry no structure whatsoever.</p>",
+  },
+  rmem: {
+    t: "tcp_rmem / tcp_wmem",
+    who: "kernel",
+    d: "<p><code>tcp_rmem</code> is three numbers — minimum, default, maximum — bounding a TCP socket's receive buffer; <code>tcp_wmem</code> does the same for the send side. A new connection starts at the default and the kernel autotunes between the min and the max as it learns the connection's bandwidth-delay product.</p><p>Your process never allocates this memory, cannot see it, and did not ask for it. <code>setsockopt(SO_RCVBUF)</code> replaces the autotuning with a fixed size, which on a fast link is almost always a downgrade.</p>",
+  },
+});
+
+/* ---------- entries this document adds ---------- */
+Object.assign(window.TERMS, {
+  arraybuffer: { t: "ArrayBuffer", who: "node",
+    d: "<p>A fixed-length region of raw bytes with no interpretation attached. An ArrayBuffer cannot be read or written directly — it exists to be pointed at by views, and every question about aliasing is a question about which views share one.</p>" },
+  typedarray: { t: "TypedArray", who: "node",
+    d: "<p>A view onto an ArrayBuffer that reads it as elements of one fixed type. A TypedArray carries three numbers — which buffer, at what byte offset, for how many elements — and owns none of the bytes it presents.</p>" },
+  uint8array: { t: "Uint8Array", who: "node",
+    d: "<p>The typed array that reads each byte as a number from 0 to 255. Node's Buffer extends it, so every Buffer is a Uint8Array and passes to any API that accepts one — which is where honouring byteOffset stops being optional.</p>" },
+  dataview: { t: "DataView", who: "node",
+    d: "<p>The other view onto an ArrayBuffer: no fixed element type, and every read states its own width and byte order. A DataView makes endianness explicit where a typed array silently uses the platform's.</p>" },
+  byteoffset: { t: "byteOffset", who: "node",
+    d: "<p>Where a view starts inside its ArrayBuffer. A pooled Buffer has a non-zero byteOffset, so anything that takes .buffer and ignores this number is looking at the whole slab rather than at your bytes.</p>" },
+  slab: { t: "the pool", who: "node",
+    d: "<p>An 8 KB allocation Node reuses for small Buffers. Anything under half the pool size is carved out of it, so a hundred-byte Buffer usually reports an 8,192-byte ArrayBuffer, at an offset, holding whatever the previous occupant left.</p>" },
+  allocunsafe: { t: "Buffer.allocUnsafe", who: "node",
+    d: "<p>Allocation without zeroing, taken from the shared pool when it is small enough. Buffer.allocUnsafe is fast because it skips the fill, and the bytes it returns are the previous occupant's until you overwrite them.</p>" },
+  allocslow: { t: "Buffer.allocUnsafeSlow", who: "node",
+    d: "<p>Allocation without zeroing and without the pool. Buffer.allocUnsafeSlow gets its own ArrayBuffer every time, which makes it the right choice for anything long-lived — a pooled Buffer keeps 8 KB alive for as long as it exists.</p>" },
+  bufalloc: { t: "Buffer.alloc", who: "node",
+    d: "<p>The safe allocation: its own ArrayBuffer, zero filled before it is handed back. Buffer.alloc costs a pass over the memory and owes nothing to the pool, which is why it is the default anybody should reach for.</p>" },
+  subarray: { t: "subarray", who: "node",
+    d: "<p>A new view over the same bytes — no copy, no allocation, and writes through it are visible in the original. subarray is the honest name for what Buffer's slice also does, which is why slice is discouraged.</p>" },
+  bufslice: { t: "buf.slice", who: "node",
+    d: "<p>Buffer's own slice, which returns a view rather than a copy — the opposite of what Array and Uint8Array mean by the name. Deprecated in favour of subarray precisely because the name promises a copy it does not make.</p>" },
+  bufconcat: { t: "Buffer.concat", who: "node",
+    d: "<p>Allocates a new Buffer and copies every input into it. Buffer.concat is one copy when called once over a list, and quadratic when called once per chunk in a loop — the second reads more naturally and costs the square.</p>" },
+  tostring: { t: "buf.toString", who: "node",
+    d: "<p>Decodes bytes into a string in the V8 heap, which is always a copy. toString names an encoding, and nothing checks that the bytes were written in the one you named — an invalid sequence becomes replacement characters with no warning.</p>" },
+  utf8: { t: "utf8", who: "app",
+    d: "<p>A variable-width encoding: one byte for ASCII, up to four for everything else. Reading arbitrary bytes as utf8 is lossy — invalid sequences become U+FFFD and cannot be recovered — and a character split across a chunk boundary decodes as damage.</p>" },
+  latin1: { t: "latin1", who: "app",
+    d: "<p>The one-byte-per-character reading, mapping each byte to the code point with the same value. latin1 is the only encoding here that round-trips arbitrary bytes through a string and back unchanged, which is what makes it useful and what makes it a poor guess for text.</p>" },
+  strdecoder: { t: "StringDecoder", who: "node",
+    d: "<p>A decoder that holds back the trailing bytes of an incomplete character until the next chunk arrives. StringDecoder is the fix for the split-character bug, and the bug it fixes is invisible on ASCII test data.</p>" },
+  replacement: { t: "U+FFFD", who: "app",
+    d: "<p>The replacement character, substituted for any byte sequence a decoder cannot interpret. U+FFFD is where information is destroyed silently: the original bytes are unrecoverable from the string, and nothing raised an error.</p>" },
+  external: { t: "external memory", who: "node",
+    d: "<p>Bytes a Node process holds outside the V8 heap, reported as external and arrayBuffers by process.memoryUsage. The heap size limit does not bound external memory, which is how a process with three megabytes of heap reaches a gigabyte of resident size.</p>" },
+  gcmoves: { t: "the collector moves things", who: "node",
+    d: "<p>V8's collector relocates live objects when it compacts, so an object's address is not stable across a collection. Anything the kernel will write into must therefore live somewhere the collector does not move — which is the whole reason Buffer bytes are not in the heap.</p>" },
+  detach: { t: "detaching", who: "node",
+    d: "<p>Transferring an ArrayBuffer to another thread moves the memory rather than copying it, and leaves the original detached: byteLength becomes zero and every view onto it reads as empty. The clearest place ownership becomes directly observable.</p>" },
+  sclone: { t: "structured clone", who: "node",
+    d: "<p>The copy made when a value crosses a thread or a serialisation boundary. A structured clone of a Buffer arrives as a plain Uint8Array, not a Buffer, because the prototype does not survive the crossing — and the bytes are a copy unless the buffer was transferred.</p>" },
+  align: { t: "alignment", who: "node",
+    d: "<p>The requirement that a multi-byte view start at an offset divisible by its element size. Node keeps pool offsets on eight-byte boundaries on purpose, so alignment errors come from your own slicing rather than from the pool.</p>" },
+  retention: { t: "retention", who: "node",
+    d: "<p>A view keeps its whole ArrayBuffer reachable, however small the window. Retention is the hidden cost of borrowing: ten bytes taken out of a fifty-megabyte read hold all fifty megabytes until the view itself is gone.</p>" },
+  endianness: { t: "endianness", who: "hw",
+    d: "<p>The order a machine stores the bytes of a multi-byte number in. Endianness is a property of the hardware and of the wire format, and the two need not agree — which is why Buffer offers both readUInt32BE and readUInt32LE and DataView demands you say.</p>" },
+  newbuffer: { t: "new Buffer(number)", who: "node",
+    d: "<p>The removed constructor whose behaviour depended on its argument's type: a number allocated that many uninitialised bytes, a string encoded it. A value taken from JSON could flip between the two, handing back whatever the pool last held.</p>" },
+});
+
+/* ============================================================
+   CORE — shell behaviour + the one figure factory every
+   instrument in this document is built on.
+   ============================================================ */
+(function () {
+  "use strict";
+
+  /* ---------- theme (delegated: every toggle stays in sync) ---------- */
+  var root = document.documentElement;
+  function setTheme(t) {
+    root.setAttribute("data-theme", t);
+    try {
+      localStorage.setItem("net-theme", t);
+    } catch (e) {}
+  }
+  try {
+    var saved = localStorage.getItem("net-theme");
+    if (saved) root.setAttribute("data-theme", saved);
+  } catch (e) {}
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-theme-toggle]");
+    if (!b) return;
+    setTheme(root.getAttribute("data-theme") === "light" ? "dark" : "light");
+  });
+
+  /* ---------- the contents rail retracts on demand ---------- */
+  var page = document.querySelector(".page");
+  function setRail(open) {
+    if (page) page.classList.toggle("solo", !open);
+    document.querySelectorAll("[data-rail-toggle]").forEach(function (b) {
+      b.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    try {
+      localStorage.setItem("net-rail", open ? "1" : "0");
+    } catch (e) {}
+  }
+  try {
+    if (localStorage.getItem("net-rail") === "0") setRail(false);
+  } catch (e) {}
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-rail-toggle]");
+    if (!b) return;
+    setRail(page.classList.contains("solo"));
+  });
+
+  /* ---------- nav retracts on scroll (animate top, never transform) ---- */
+  var nav = document.querySelector(".nav");
+  var lastY = 0;
+  window.addEventListener(
+    "scroll",
+    function () {
+      var y = window.scrollY;
+      if (nav) nav.classList.toggle("away", y > 220 && y > lastY);
+      lastY = y;
+      spy();
+    },
+    { passive: true }
+  );
+
+  /* ---------- rail scrollspy ---------- */
+  var links = [].slice.call(document.querySelectorAll(".rail a"));
+  var secs = links
+    .map(function (a) {
+      return document.querySelector(a.getAttribute("href"));
+    })
+    .filter(Boolean);
+  function spy() {
+    var y = window.scrollY + 130,
+      i = 0;
+    for (var k = 0; k < secs.length; k++) if (secs[k].offsetTop <= y) i = k;
+    links.forEach(function (a, k) {
+      a.classList.toggle("on", k === i);
+    });
+  }
+
+  /* ---------- term popovers ---------- */
+  var pop = document.createElement("div");
+  pop.className = "pop";
+  pop.setAttribute("role", "dialog");
+  document.body.appendChild(pop);
+  var WHO = {
+    app: "your code",
+    node: "node runtime",
+    kernel: "os kernel",
+    hw: "hardware",
+    mixed: "shared",
+  };
+  function closePop() {
+    pop.classList.remove("open");
+    var l = document.querySelector(".term.lit");
+    if (l) {
+      l.classList.remove("lit");
+      if (l.hasAttribute("aria-expanded")) l.setAttribute("aria-expanded", "false");
+    }
+  }
+  /* A caption is replaced wholesale on every step, so a pop anchored to a
+     chip in the OLD caption has to be closed by whoever replaces it —
+     otherwise it hangs over text that no longer contains its trigger. */
+  window.closeTermPop = closePop;
+
+  /* Prose writes <span class="term" data-t>; captions write <code data-t>.
+     Both become operable buttons here, so the affordance is defined once
+     rather than repeated across 30 spans and 20 caption literals.
+     Idempotent — setCap re-runs it over every caption it mounts. */
+  function upgradeTerms(root) {
+    [].forEach.call(root.querySelectorAll("[data-t]"), function (el) {
+      el.classList.add("term");
+      el.setAttribute("role", "button");
+      el.setAttribute("tabindex", "0");
+      el.setAttribute(
+        "aria-expanded",
+        el.classList.contains("lit") ? "true" : "false"
+      );
+    });
+  }
+  upgradeTerms(document);
+  function openPop(el) {
+    var k = el.getAttribute("data-t");
+    var t = window.TERMS && window.TERMS[k];
+    if (!t) return;
+    var chip = t.who
+      ? '<span class="who w-' + t.who + '">' + (WHO[t.who] || t.who) + "</span>"
+      : "";
+    pop.innerHTML =
+      "<h4>" + (t.t || k) + "</h4>" + t.d + (chip ? "<p>" + chip + "</p>" : "");
+    pop.classList.add("open");
+    var r = el.getBoundingClientRect();
+    var w = pop.offsetWidth,
+      h = pop.offsetHeight;
+    var left = Math.min(Math.max(10, r.left - 10), window.innerWidth - w - 10);
+    var top = r.bottom + 8;
+    if (top + h > window.innerHeight - 10) top = Math.max(10, r.top - h - 8);
+    pop.style.left = left + "px";
+    pop.style.top = top + "px";
+    document.querySelectorAll(".term.lit").forEach(function (n) {
+      n.classList.remove("lit");
+      if (n.hasAttribute("aria-expanded")) n.setAttribute("aria-expanded", "false");
+    });
+    el.classList.add("lit");
+    if (el.hasAttribute("aria-expanded")) el.setAttribute("aria-expanded", "true");
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest && e.target.closest(".term");
+    if (t) {
+      e.preventDefault();
+      if (t.classList.contains("lit")) closePop();
+      else openPop(t);
+      return;
+    }
+    if (!(e.target.closest && e.target.closest(".pop"))) closePop();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
+      var lit = document.querySelector(".term.lit");
+      closePop();
+      if (lit && lit.hasAttribute("tabindex")) lit.focus();
+      return;
+    }
+    /* A focusable term is operated by Enter or Space, like the button it
+       says it is. Terms without a tabindex stay pointer-only. */
+    if (e.key !== "Enter" && e.key !== " ") return;
+    var t = e.target.closest && e.target.closest(".term[tabindex]");
+    if (!t) return;
+    e.preventDefault();
+    if (t.classList.contains("lit")) closePop();
+    else openPop(t);
+  });
+
+  /* ---------- syntax painter ------------------------------------------
+     Tokens are classified by INSPECTING the matched text, never by
+     destructuring capture groups — a group-count mismatch is silent.
+     ------------------------------------------------------------------ */
+  var KW =
+    "const let var function return if else for while new await async import from export " +
+    "class this typeof of in try catch throw null undefined true false void static struct int " +
+    "char unsigned short long sizeof";
+  var KWS = {};
+  KW.split(" ").forEach(function (w) {
+    KWS[w] = 1;
+  });
+  var SCAN =
+    /\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b0x[0-9a-fA-F]+\b|\b\d+(?:\.\d+)?\b|[A-Za-z_$][\w$]*/g;
+  function esc(s) {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+  function paint(src) {
+    var out = "",
+      last = 0,
+      m;
+    SCAN.lastIndex = 0;
+    while ((m = SCAN.exec(src))) {
+      var tok = m[0],
+        i = m.index,
+        cls = null;
+      out += esc(src.slice(last, i));
+      last = i + tok.length;
+      var c0 = tok[0];
+      if (c0 === "/" || c0 === "#") cls = "cm";
+      else if (c0 === '"' || c0 === "'" || c0 === "`") cls = "str";
+      else if (c0 >= "0" && c0 <= "9") cls = "num";
+      else if (KWS[tok]) cls = "kw";
+      else if (src[i - 1] === ".") cls = "prop";
+      else if (/^\s*\(/.test(src.slice(last))) cls = "fn";
+      out += cls ? '<span class="' + cls + '">' + esc(tok) + "</span>" : esc(tok);
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+  window.paintCode = paint;
+  document.querySelectorAll("pre[data-lang]").forEach(function (pre) {
+    if (pre.children.length) return;
+    pre.innerHTML = paint(pre.textContent);
+  });
+
+  /* ---------- svg helpers shared by every figure ---------- */
+  var S = {
+    esc: function (s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    },
+    box: function (o) {
+      var cls = o.owner ? "o-" + o.owner : "plate";
+      return (
+        '<rect' +
+        (o.id ? ' data-id="' + o.id + '"' : "") +
+        ' class="' +
+        cls +
+        (o.cls ? " " + o.cls : "") +
+        '" x="' +
+        o.x +
+        '" y="' +
+        o.y +
+        '" width="' +
+        o.w +
+        '" height="' +
+        o.h +
+        '" rx="' +
+        (o.r == null ? 7 : o.r) +
+        '" stroke-width="' +
+        (o.sw || 1) +
+        '"/>'
+      );
+    },
+    text: function (x, y, s, cls, anchor) {
+      return (
+        '<text class="' +
+        (cls || "lbl") +
+        '" x="' +
+        x +
+        '" y="' +
+        y +
+        '" text-anchor="' +
+        (anchor || "start") +
+        '">' +
+        S.esc(s) +
+        "</text>"
+      );
+    },
+    /* vertical arrow with a 6px standoff at both ends */
+    vArrow: function (x, y1, y2, cls) {
+      var d = y2 > y1 ? 1 : -1;
+      var a = y1 + 6 * d,
+        b = y2 - 6 * d;
+      return (
+        '<path class="arr ' +
+        (cls || "") +
+        '" d="M' +
+        x +
+        " " +
+        a +
+        "L" +
+        x +
+        " " +
+        b +
+        '" marker-end="url(#ah)"/>'
+      );
+    },
+    hArrow: function (y, x1, x2, cls) {
+      var d = x2 > x1 ? 1 : -1;
+      return (
+        '<path class="arr ' +
+        (cls || "") +
+        '" d="M' +
+        (x1 + 6 * d) +
+        " " +
+        y +
+        "L" +
+        (x2 - 6 * d) +
+        " " +
+        y +
+        '" marker-end="url(#ah)"/>'
+      );
+    },
+    defs:
+      '<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" ' +
+      'markerWidth="6" markerHeight="6" orient="auto-start-reverse">' +
+      '<path d="M0 1 L9 5 L0 9 z" fill="var(--text-3)"/></marker>' +
+      '<marker id="ahi" viewBox="0 0 10 10" refX="8" refY="5" ' +
+      'markerWidth="6" markerHeight="6" orient="auto-start-reverse">' +
+      '<path d="M0 1 L9 5 L0 9 z" fill="var(--hi)"/></marker></defs>',
+    svg: function (vb, inner) {
+      return (
+        '<svg viewBox="' +
+        vb +
+        '" xmlns="http://www.w3.org/2000/svg" role="img">' +
+        S.defs +
+        inner +
+        "</svg>"
+      );
+    },
+  };
+  window.S = S;
+
+  /* ---------- the figure factory --------------------------------------
+     spec = {
+       modes?: [{id,label}], modeLabel?,
+       stages(mode) -> [{tab, cap, html, meters?, wire?(el, api)}],
+       flat?: bool          // stage has no plate of its own
+     }
+     Every instrument in this document is one of these. Stage tabs never
+     move: the tab row is built once per mode and only .on changes.
+     ------------------------------------------------------------------ */
+  function mkFig(el, spec) {
+    var modes = spec.modes || null;
+    var mode = modes ? modes[0].id : null;
+    var idx = 0;
+    var body = el.querySelector(".fig-body");
+    var top = el.querySelector(".fig-top");
+
+    if (modes) {
+      var seg = document.createElement("div");
+      seg.className = "seg";
+      seg.setAttribute("role", "group");
+      seg.setAttribute("aria-label", spec.modeLabel || "view");
+      modes.forEach(function (m) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.textContent = m.label;
+        b.setAttribute("data-mode", m.id);
+        b.addEventListener("click", function () {
+          if (mode === m.id) return;
+          mode = m.id;
+          idx = 0;
+          render(true);
+        });
+        seg.appendChild(b);
+      });
+      top.appendChild(seg);
+    }
+
+    body.innerHTML =
+      '<div class="steps"><div class="tabs"></div>' +
+      '<div class="nudge"><button type="button" data-go="-1" ' +
+      'aria-label="previous step">&#8592;</button>' +
+      '<button type="button" data-go="1" aria-label="next step">&#8594;</button>' +
+      '</div></div><div class="stage' +
+      (spec.flat ? " flat" : "") +
+      '"></div><div class="fig-cap" aria-live="polite"></div>' +
+      '<div class="meters"></div>';
+    var tabs = body.querySelector(".tabs");
+    var stageEl = body.querySelector(".stage");
+    var capEl = body.querySelector(".fig-cap");
+    var metEl = body.querySelector(".meters");
+    var nudges = body.querySelectorAll("[data-go]");
+    [].forEach.call(nudges, function (b) {
+      b.addEventListener("click", function () {
+        var n = idx + Number(b.getAttribute("data-go"));
+        if (n < 0 || n >= list.length) return;
+        idx = n;
+        render(false);
+      });
+    });
+
+    var list = [];
+    var api = {
+      setCap: function (h) {
+        /* An open pop is pinned to a chip inside this caption, which is
+           about to stop existing. Close it before the innerHTML lands. */
+        if (capEl.querySelector(".term.lit") && window.closeTermPop)
+          window.closeTermPop();
+        capEl.innerHTML = h;
+        /* A caption writes only data-t; the chips are made operable here,
+           by the same pass that upgraded the prose terms at load. */
+        upgradeTerms(capEl);
+      },
+      setMeters: function (ms) {
+        metEl.innerHTML = (ms || [])
+          .map(function (m) {
+            return (
+              '<div class="meter ' +
+              (m.c || "") +
+              '"><em>' +
+              m.k +
+              "</em><b>" +
+              m.v +
+              "</b></div>"
+            );
+          })
+          .join("");
+      },
+      go: function (i) {
+        idx = i;
+        render(false);
+      },
+      get mode() {
+        return mode;
+      },
+    };
+
+    function buildTabs() {
+      tabs.innerHTML = "";
+      list.forEach(function (s, i) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.textContent = s.tab;
+        b.addEventListener("click", function () {
+          idx = i;
+          render(false);
+        });
+        tabs.appendChild(b);
+      });
+    }
+
+    function render(rebuild) {
+      if (rebuild || !list.length) {
+        list = spec.stages(mode) || [];
+        buildTabs();
+      }
+      if (idx >= list.length) idx = list.length - 1;
+      var s = list[idx];
+      [].forEach.call(tabs.children, function (b, i) {
+        b.classList.toggle("on", i === idx);
+        b.setAttribute("aria-current", i === idx ? "true" : "false");
+      });
+      if (modes) {
+        [].forEach.call(top.querySelectorAll("[data-mode]"), function (b) {
+          b.classList.toggle("on", b.getAttribute("data-mode") === mode);
+        });
+      }
+      nudges[0].disabled = idx === 0;
+      nudges[1].disabled = idx === list.length - 1;
+      stageEl.innerHTML = s.html;
+      api.setCap(s.cap || "");
+      api.setMeters(s.meters);
+      api.stage = stageEl;
+      api.index = idx;
+      if (s.wire) s.wire(stageEl, api);
+    }
+    render(true);
+    el._reload = render;
+    return api;
+  }
+  window.mkFig = mkFig;
+
+  /* ---------- mount ---------- */
+  window.mountFigs = function (SPECS) {
+    document.querySelectorAll("[data-fig]").forEach(function (el) {
+      var s = SPECS[el.getAttribute("data-fig")];
+      if (s) mkFig(el, s);
+    });
+    spy();
+  };
+})();
+
+/* ============================================================
+   THE LEDGER — the document's single data source.
+
+   Eleven stops on one byte's journey. The ledger strip under every
+   figure from §4 onward projects from this array and is MONOTONIC:
+   each section shows every row up to its own and one more than the
+   section before it. The taxonomy is assembled by travelling.
+
+   verb  : own | borrow | copy | none      <- channel 2
+   region: kernel | ext | heap | hw        <- channel 1 (hue)
+   ============================================================ */
+window.HOPS = [
+  { id: "wire", sec: 1, at: "the card writes it", op: "DMA into a ring", verb: "none",
+    region: "hw", owner: "the driver", alive: "the receive ring",
+    note: "No JavaScript exists. Nothing here is a Buffer and nothing here is yours." },
+  { id: "sock", sec: 1, at: "the kernel holds it", op: "socket receive buffer", verb: "none",
+    region: "kernel", owner: "the kernel", alive: "kernel memory, sized by tcp_rmem",
+    note: "The bytes sit in kernel memory until something reads them. Your process cannot address them at all." },
+  { id: "alloc", sec: 2, at: "Node is asked where to put it", op: "the allocator hands over a slice", verb: "borrow",
+    region: "ext", owner: "a shared 8 KB slab", alive: "8,192 bytes, whatever else is in them",
+    note: "The first borrow, and it happens before you have written a line. A hundred bytes at offset 8 of an allocation you did not make and do not exclusively hold." },
+  { id: "read", sec: 2, at: "read(2) writes into it", op: "the kernel copies out", verb: "copy",
+    region: "ext", owner: "the slab", alive: "the same 8,192 bytes",
+    note: "The one copy nobody argues about. It also fixes the address: this memory must not move while a syscall is holding a pointer to it." },
+  { id: "wrap", sec: 3, at: "a JavaScript object appears", op: "a window over the allocation", verb: "borrow",
+    region: "heap", owner: "you, sort of", alive: "the slab, plus a small object in the heap",
+    note: "Three things now exist: an ArrayBuffer holding bytes, a byteOffset and length naming a window into it, and a tiny object in the V8 heap that is neither." },
+  { id: "hand", sec: 4, at: "your handler receives it", op: "keep, narrow, or decode", verb: "borrow",
+    region: "heap", owner: "you", alive: "everything above",
+    note: "The fork the API does not label. Every path from here owns, borrows, or copies, and the method names are no guide to which." },
+  { id: "narrow", sec: 5, at: "you narrow it", op: "subarray", verb: "borrow",
+    region: "ext", owner: "still the slab", alive: "the whole allocation, however small the window",
+    note: "Ten bytes of interest can hold fifty megabytes of allocation open. Borrowing has a cost nobody bills you for until the heap dump." },
+  { id: "decode", sec: 6, at: "you decode it", op: "toString", verb: "copy",
+    region: "heap", owner: "V8, in the heap", alive: "a string in the heap, and the bytes still out there",
+    note: "A reading, not a conversion. The bytes do not change, and nothing verifies that the encoding you named is the one they were written in." },
+  { id: "gather", sec: 7, at: "you accumulate", op: "concat", verb: "copy",
+    region: "ext", owner: "a new allocation", alive: "the result, and every source until they go",
+    note: "One copy if done once. Done per chunk it is quadratic, and the quadratic version is the one that reads more naturally." },
+  { id: "give", sec: 8, at: "you hand it elsewhere", op: "clone, transfer, or a raw .buffer", verb: "copy",
+    region: "heap", owner: "depends, and that is the problem", alive: "one copy, or none, or a detached husk",
+    note: "The boundary where the window stops being honoured. Passing .buffer passes the whole slab; transferring detaches it out from under every view." },
+  { id: "out", sec: 9, at: "back to the kernel", op: "socket.write", verb: "borrow",
+    region: "kernel", owner: "the kernel, until it flushes", alive: "your bytes, pinned until the write completes",
+    note: "Ownership handed back down. Between the call and the callback the bytes are not yours to change, and nothing enforces that." },
+];
+
+window.VERBS = {
+  own: { n: "owns", d: "holds an allocation nothing else has a window onto" },
+  borrow: { n: "borrows", d: "a window onto bytes somebody else allocated" },
+  copy: { n: "copies", d: "new bytes, written once, independent from then on" },
+  none: { n: "—", d: "no JavaScript object exists at this hop" },
+};
+
+/* the operations table §4 builds, and the harness checks against the probe */
+window.OPS = [
+  { op: "src.subarray(2, 5)", verb: "borrow", shared: "shared", through: "borrows", note: "the plain view" },
+  { op: "src.slice(2, 5)", verb: "borrow", shared: "shared", through: "borrows", note: "a different function from Array's, with the opposite meaning" },
+  { op: "Uint8Array.prototype.slice(2, 5)", verb: "copy", shared: "separate", through: "copies", note: "the superclass method, on the same object, copying" },
+  { op: "Buffer.from(src)", verb: "copy", shared: "shared", through: "copies", note: "shares an ArrayBuffer with the source and is still a copy" },
+  { op: "Buffer.from(src.buffer, off + 2, 3)", verb: "borrow", shared: "shared", through: "borrows", note: "an explicit window, and the only from() that borrows" },
+  { op: "Buffer.concat([src, src])", verb: "copy", shared: "shared", through: "copies", note: "pooled, so it shares a buffer with its own input" },
+  { op: "Buffer.alloc(100)", verb: "own", shared: "separate", through: "n/a", note: "its own allocation, zero filled" },
+  { op: "Buffer.allocUnsafe(100)", verb: "borrow", shared: "shared", through: "n/a", note: "a window into the shared slab, uninitialised" },
+  { op: "Buffer.allocUnsafeSlow(100)", verb: "own", shared: "separate", through: "n/a", note: "its own allocation, uninitialised" },
+  { op: "buf.toString()", verb: "copy", shared: "separate", through: "copies", note: "into the V8 heap, and bounded by the maximum string length" },
+];
+
+
+/* The substrate upgrades [data-t] at load and inside every caption mkFig
+   mounts. This document also renders the ledger and one factory of its own,
+   so the same affordance is applied here rather than by editing the carried
+   substrate. Idempotent, same contract. */
+window.upgradeCaption = function (root) {
+  [].forEach.call(root.querySelectorAll("[data-t]"), function (el) {
+    el.classList.add("term");
+    el.setAttribute("role", "button");
+    el.setAttribute("tabindex", "0");
+    el.setAttribute("aria-expanded", el.classList.contains("lit") ? "true" : "false");
+  });
+};
+
+/* ============================================================
+   THE LEDGER — one strip per section from §04 on.
+
+   It is MONOTONIC by construction: section n renders every hop
+   whose own section is <= n, so each strip is a superset of the
+   one above it and §10 holds all eleven. That is the contract the
+   harness checks, and it is why the taxonomy never appears as a
+   table the reader is asked to absorb in one go.
+   ============================================================ */
+(function () {
+  "use strict";
+  var HOPS = window.HOPS, VERBS = window.VERBS;
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+
+  window.mountLedgers = function () {
+    [].forEach.call(document.querySelectorAll("[data-ledger]"), function (host) {
+      var upto = Number(host.getAttribute("data-ledger"));
+      var rows = HOPS.filter(function (h) { return h.sec <= upto; });
+      var newest = rows.length ? rows[rows.length - 1].id : null;
+      host.className = "ldg";
+      host.innerHTML =
+        '<div class="ldg-h"><span>the ledger</span><span>' + rows.length +
+        " of " + HOPS.length + " stops</span><b>" +
+        (upto >= 10 ? "complete" : "still travelling") + "</b></div>" +
+        '<div class="ldg-s"><table><thead><tr>' +
+        "<th>stop</th><th>what happened</th><th>verb</th><th>who owns the bytes</th><th>what is alive</th>" +
+        "</tr></thead><tbody>" +
+        rows.map(function (h) {
+          var v = VERBS[h.verb];
+          return '<tr data-hop="' + h.id + '"' + (h.id === newest ? ' class="on"' : "") + ">" +
+            '<td class="at"><span class="k k-' + (h.region === "ext" ? "node" : h.region) +
+            '" aria-hidden="true"></span>' + esc(h.at) + "</td>" +
+            "<td>" + esc(h.op) + "</td>" +
+            '<td><span class="vb vb-' + h.verb + '">' + v.n + "</span></td>" +
+            "<td>" + esc(h.owner) + "</td><td>" + esc(h.alive) + "</td></tr>";
+        }).join("") + "</tbody></table></div>";
+    });
+  };
+})();
+
+window.SPECS = window.SPECS || {};
+
+/* ============================================================
+   FIGURES 01 - 10
+   ============================================================ */
+window.SPECS = window.SPECS || {};
+(function () {
+  "use strict";
+  var S = window.S;
+  var SPECS = window.SPECS;
+  var T = window.TRANSCRIPTS;
+
+/* A rect registry.
+
+     Every box is declared once under a name, and every arrow is DERIVED
+     from two names — `link("fd17", "lsock")` reads the source's edge and
+     the target's edge itself. An arrow here cannot point at the wrong row
+     because it never writes down a y. The emitted path carries
+     data-from / data-to, so the harness checks the derivation rather than
+     trusting it. */
+  function reg() {
+    var R = {};
+    function clampY(id, y) {
+      return Math.max(R[id].y + 10, Math.min(R[id].y + R[id].h - 10, y));
+    }
+    var g = {
+      R: R,
+      put: function (id, x, y, w, h) {
+        R[id] = { x: x, y: y, w: w, h: h };
+        return R[id];
+      },
+      has: function (id) {
+        return !!R[id];
+      },
+      midY: function (id) {
+        return R[id].y + R[id].h / 2;
+      },
+      midX: function (id) {
+        return R[id].x + R[id].w / 2;
+      },
+      box: function (id, o) {
+        o = o || {};
+        o.id = id;
+        o.x = R[id].x;
+        o.y = R[id].y;
+        o.w = R[id].w;
+        o.h = R[id].h;
+        return S.box(o);
+      },
+      /* dashed placeholder in a slot that is deliberately empty this step */
+      ghost: function (id, label) {
+        var r = R[id];
+        return (
+          '<rect class="band" x="' + r.x + '" y="' + r.y + '" width="' + r.w +
+          '" height="' + r.h + '" rx="7"/>' +
+          S.text(r.x + r.w / 2, r.y + r.h / 2 + 4, label, "mono", "middle")
+        );
+      },
+      /* a -> b, in either direction, turning in the gutter at gx */
+      link: function (a, b, gx, o) {
+        o = o || {};
+        var ay = clampY(a, o.ay == null ? g.midY(a) : o.ay);
+        var by = clampY(b, o.by == null ? g.midY(b) : o.by);
+        var toRight = R[b].x > R[a].x;
+        var x0 = toRight ? R[a].x + R[a].w + 6 : R[a].x - 6;
+        var x1 = toRight ? R[b].x - 6 : R[b].x + R[b].w + 6;
+        return (
+          '<path class="arr ' + (o.cls || "") + '" data-from="' + a +
+          '" data-to="' + b + '" d="M' + x0 + " " + ay + "H" + gx + "V" + by +
+          "H" + x1 + '" marker-end="url(#ah)"/>'
+        );
+      },
+      /* bottom edge of a straight down to the top edge of b */
+      drop: function (a, b, cls, x) {
+        x = x == null ? g.midX(a) : x;
+        return (
+          '<path class="arr ' + (cls || "") + '" data-from="' + a +
+          '" data-to="' + b + '" d="M' + x + " " + (R[a].y + R[a].h + 6) +
+          "V" + (R[b].y - 6) + '" marker-end="url(#ah)"/>'
+        );
+      },
+    };
+    return g;
+  }
+  function ownBox(yes, owner) {
+    return { owner: owner || null, cls: yes ? "lit" : "", sw: yes ? 2 : 1 };
+  }
+
+
+  /* channel 2 chooses the head as well as the dash: a copy ends in a solid
+     arrowhead on new memory, a borrow ends in an open chevron on somebody
+     else's. registry.js always writes url(#ah), so the choice is made here. */
+  var F = window.FACTS;
+  /* A number typed into a drawing can drift from the probe that measured it,
+     and until facts.json existed the pool figure said 8,192 because I typed
+     8,192. Every measured label is now emitted through factText, tagged with
+     the key it came from, and the harness re-checks each one against the
+     captured measurement. */
+  function n(v) { return Number(v).toLocaleString("en-US"); }
+  function factText(x, y, key, render, cls, anchor) {
+    var t = S.text(x, y, render(F[key]), cls, anchor);
+    return t.replace("<text ", '<text data-fact="' + key + '" ');
+  }
+
+  function head(cls) {
+    var hot = /hot/.test(cls || "");
+    if (/borrow/.test(cls || "")) return hot ? "bwi" : "bw";
+    return hot ? "ahi" : "ah";
+  }
+  function dn(g, a, b, cls, x) {
+    x = x == null ? g.midX(a) : x;
+    return '<path class="arr ' + (cls || "") + '" data-from="' + a + '" data-to="' + b +
+      '" d="M' + x + " " + (g.R[a].y + g.R[a].h + 6) + "V" + (g.R[b].y - 6) +
+      '" marker-end="url(#' + head(cls) + ')"/>';
+  }
+  function up(g, a, b, cls, x) {
+    x = x == null ? g.midX(a) : x;
+    return '<path class="arr ' + (cls || "") + '" data-from="' + a + '" data-to="' + b +
+      '" d="M' + x + " " + (g.R[a].y - 6) + "V" + (g.R[b].y + g.R[b].h + 6) +
+      '" marker-end="url(#' + head(cls) + ')"/>';
+  }
+  function side(g, a, b, gx, cls, o) {
+    o = o || {};
+    var ay = o.ay == null ? g.midY(a) : o.ay;
+    var by = o.by == null ? g.midY(b) : o.by;
+    var into = o.into || (g.R[b].x > g.R[a].x ? "left" : g.R[b].x < g.R[a].x ? "right" : "left");
+    var outOf = o.outOf || (gx > g.R[a].x + g.R[a].w / 2 ? "right" : "left");
+    var x0 = outOf === "right" ? g.R[a].x + g.R[a].w + 6 : g.R[a].x - 6;
+    var x1 = into === "left" ? g.R[b].x - 6 : g.R[b].x + g.R[b].w + 6;
+    return '<path class="arr ' + (cls || "") + '" data-from="' + a + '" data-to="' + b +
+      '" d="M' + x0 + " " + ay + "H" + gx + "V" + by + "H" + x1 +
+      '" marker-end="url(#' + head(cls) + ')"/>';
+  }
+  function lbl(g, id, main, sub) {
+    var r = g.R[id], cy = r.y + r.h / 2;
+    return S.text(r.x + r.w / 2, sub ? cy - 2 : cy + 4, main, "lbl", "middle") +
+      (sub ? S.text(r.x + r.w / 2, cy + 15, sub, "sub", "middle") : "");
+  }
+  function setProv(el, kind, text) {
+    var fig = el.closest(".fig");
+    if (!fig) return;
+    var chip = fig.querySelector(".prov");
+    if (!chip) return;
+    chip.className = "prov " + kind;
+    chip.textContent = text;
+  }
+  function xscript(title, body, note) {
+    return '<div class="panes"><div class="pane"><div class="pane-h">' + title + "</div>" +
+      '<div class="pane-b"><pre>' + window.paintCode(body) + "</pre></div></div></div>" +
+      (note ? '<div class="log"><div class="hot"><i>&rarr;</i>' + note + "</div></div>" : "");
+  }
+  function nodeStage(tab, title, key, note, cap, meters) {
+    return { tab: tab, html: xscript(title, T[key], note), cap: cap, meters: meters,
+      wire: function (el) { setProv(el, "node", "executed in node"); } };
+  }
+
+  /* ================================================================
+     FIG 01 — why the bytes are not in the heap
+     ================================================================ */
+  SPECS.mover = {
+    modes: [{ id: "heap", label: "bytes in the heap" }, { id: "ext", label: "bytes outside it" }],
+    modeLabel: "where the bytes are",
+    stages: function (mode) {
+      var inHeap = mode === "heap";
+      function draw(step) {
+        var g = reg();
+        g.put("heap", 40, 60, 340, 300);
+        g.put("obj", 70, 110, 280, 60);
+        g.put("other", 70, 220, 280, 50);
+        g.put("ext", 470, 150, 290, 90);
+        g.put("kern", 470, 300, 290, 60);
+        var s = "";
+        s += S.text(210, 40, "the V8 heap  ·  compacted", "mlbl", "middle");
+        s += S.text(615, 40, "outside the collector", "mlbl", "middle");
+        s += g.box("heap", { cls: "band" });
+        /* the object being written into */
+        var moved = step >= 2;
+        if (inHeap) {
+          if (moved) { g.put("obj", 70, 230, 280, 60); g.put("other", 70, 110, 280, 50); }
+          s += g.box("other", { owner: null, cls: "plate" }) +
+            S.text(210, g.R.other.y + 30, "another object", "sub", "middle");
+          s += g.box("obj", { owner: "app", cls: moved ? "owns" : "owns lit", sw: 2 }) +
+            lbl(g, "obj", "your bytes", moved ? "the collector moved them" : "at some address");
+          s += g.box("ext", { cls: "void" }) + S.text(615, 200, "unused", "sub", "middle");
+        } else {
+          s += g.box("obj", { owner: "app", cls: "plate" }) +
+            lbl(g, "obj", "the Buffer object", "three numbers, no bytes");
+          s += g.box("other", { owner: null, cls: "plate" }) +
+            S.text(210, g.R.other.y + 30, "another object", "sub", "middle");
+          s += g.box("ext", { owner: "node", cls: "owns lit", sw: 2 }) +
+            lbl(g, "ext", "the allocation", moved ? "still exactly where it was" : "a fixed address");
+        }
+        s += g.box("kern", { owner: "kernel" }) + lbl(g, "kern", "the kernel", "holds a pointer");
+        if (step >= 1) s += inHeap
+          ? side(g, "kern", "obj", 420, "copy" + (step === 1 ? " hot" : ""), { into: "right" })
+          : up(g, "kern", "ext", "copy" + (step === 1 ? " hot" : ""), g.midX("ext"));
+        if (step >= 2 && inHeap)
+          s += S.text(615, 260, "the pointer now names nothing", "mlbl", "middle");
+        return S.svg("0 0 800 400", s);
+      }
+      return [
+        { tab: "the address", html: draw(0),
+          cap: inHeap
+            ? "The bytes are a normal heap object, at whatever address the collector last put it. Nothing about that address is promised to anybody."
+            : "The Buffer object is in the heap and holds no bytes at all &mdash; three numbers naming an allocation the collector does not manage.",
+          meters: [{ k: "bytes live in", v: inHeap ? "the heap" : "external memory" },
+            { k: "address stable", v: inHeap ? "no" : "yes", c: inHeap ? "bad" : "ok" },
+            { k: "collector manages it", v: inHeap ? "yes" : "no" }] },
+        { tab: "the syscall", html: draw(1),
+          cap: "The kernel is handed an address and will write there when the data arrives &mdash; which may be after your JavaScript has stopped running and a collection has happened in between.",
+          meters: [{ k: "who writes", v: "the kernel" }, { k: "when", v: "later" },
+            { k: "js running", v: "not necessarily", c: "hot" }] },
+        { tab: "a collection", html: draw(2),
+          cap: inHeap
+            ? "The collector compacts and relocates the object. The kernel's pointer is unchanged and now names memory that belongs to something else &mdash; and nothing in either party can detect it."
+            : "The collector compacts the heap and moves the small object freely. The allocation does not move, because the collector does not manage it, so the kernel's pointer stays correct.",
+          meters: inHeap
+            ? [{ k: "object moved", v: "yes", c: "bad" }, { k: "pointer updated", v: "no", c: "bad" }, { k: "detected", v: "never", c: "bad" }]
+            : [{ k: "object moved", v: "yes" }, { k: "bytes moved", v: "no", c: "ok" }, { k: "pointer still valid", v: "yes", c: "ok" }] },
+      ];
+    },
+  };
+
+  /* ================================================================
+     FIG 02 — a hundred bytes in an eight-kilobyte slab
+     ================================================================ */
+  function slabSvg(kind) {
+    var g = reg();
+    var s = "";
+    var W = 700, X = 60, Y = 130, H = 66;
+    var pooled = kind !== "own";
+    var total = pooled ? F.poolSize : F.allocBacking;
+    g.put("slab", X, Y, W, H);
+    s += S.text(X + W / 2, 44, pooled ? "one shared allocation of" : "its own allocation of", "mlbl", "middle");
+    s += factText(X + W / 2, 66, pooled ? "poolSize" : "allocBacking",
+      function (v) { return n(v) + " bytes"; }, "mlbl", "middle");
+    s += g.box("slab", { owner: pooled ? "node" : null, cls: pooled ? "" : "void" });
+    if (pooled) {
+      /* the offset is drawn at a representative position, because the real
+         one depends on what the process allocated before you — which is the
+         point rather than a detail. The transcript below shows one run. */
+      var frac = kind === "from" ? 0.22 : 0.06;
+      var px = X + frac * W;
+      var pw = Math.max(6, (100 / total) * W);
+      g.put("prev", X, Y, Math.max(6, frac * W), H);
+      g.put("mine", px, Y, pw, H);
+      g.put("rest", px + pw, Y, X + W - (px + pw), H);
+      s += g.box("prev", { owner: "kernel", cls: "owns" });
+      s += g.box("mine", { owner: "app", cls: "owns lit", sw: 2 });
+      s += g.box("rest", { cls: "band" });
+      s += S.text(X + W / 2, Y + H + 44, "your 100 bytes are the lit sliver, at a non-zero offset", "mono", "middle");
+      s += S.text(X + W / 2, Y + H + 64, "everything else in this allocation stays alive as long as they do", "sub", "middle");
+    } else {
+      s += factText(X + W / 2, Y + 40, "allocBacking",
+        function (v) { return v + " bytes, and nothing else"; }, "lbl", "middle");
+      s += factText(X + W / 2, Y + H + 44, "allocOffset",
+        function (v) { return "byteOffset " + v + "  ·  buffer.byteLength " + F.allocBacking; }, "mono", "middle");
+      s += S.text(X + W / 2, Y + H + 64, "freed when you drop it, and nobody else is looking in", "sub", "middle");
+    }
+    return S.svg("0 0 820 280", s);
+  }
+  SPECS.slab = {
+    stages: function () {
+      return [
+        { tab: "allocUnsafe(100)", html: slabSvg("unsafe"),
+          wire: function (el) { setProv(el, "model", "modelled"); },
+          cap: "The allocator that the I/O path uses. A hundred bytes at offset 8 of an allocation eighty times larger, holding whatever the previous occupant left behind.",
+          meters: [{ k: "byteOffset", v: "non-zero" }, { k: "buffer.byteLength", v: n(F.unsafeBacking), c: "hot" }, { k: "zero filled", v: "no", c: "bad" }, { k: "verb", v: "borrows" }] },
+        { tab: "from('hello')", html: slabSvg("from"),
+          wire: function (el) { setProv(el, "model", "modelled"); },
+          cap: "Encoding a string is pooled too, and the offset has moved along by whatever was allocated before it. The bytes are fully overwritten, so the previous occupant is not readable &mdash; through this window.",
+          meters: [{ k: "byteOffset", v: "further along" }, { k: "buffer.byteLength", v: n(F.fromBacking), c: "hot" }, { k: "overwritten", v: "fully", c: "ok" }, { k: "verb", v: "borrows" }] },
+        { tab: "alloc(100)", html: slabSvg("own"),
+          wire: function (el) { setProv(el, "model", "modelled"); },
+          cap: "Its own allocation, zero filled before it is handed back. Costs a pass over the memory and owes nothing to anybody &mdash; which is why it is the one to reach for by default.",
+          meters: [{ k: "byteOffset", v: F.allocOffset }, { k: "buffer.byteLength", v: F.allocBacking, c: "ok" }, { k: "zero filled", v: "yes", c: "ok" }, { k: "verb", v: "owns" }] },
+        nodeStage("measured", "node &middot; five allocations", "pool",
+          "Anything under half the pool size is carved out of the shared slab. Over it, and you get your own allocation.",
+          "Five allocations, three allocators. The column that matters is the last: an allocation of 8,192 bytes behind a Buffer of 100 is not a rounding error, it is a different allocation that you are borrowing a corner of.",
+          [{ k: "poolSize", v: n(F.poolSize) }, { k: "pooled below", v: n(F.poolCutoff) }, { k: "of five", v: "2 own", c: "ok" }, { k: "borrowing", v: 3, c: "hot" }]),
+        nodeStage("alignment", "node &middot; where the throw comes from", "align",
+          "Node aligns pool offsets on eight-byte boundaries deliberately. Your own subarray is under no such obligation.",
+          "The pool is safe by construction and the slice is not. An offset of 9 cannot host a view whose elements are eight bytes wide, and the error that comes back mentions multiples of eight and says nothing about Buffers.",
+          [{ k: "pool offset", v: 8, c: "ok" }, { k: "after subarray(1)", v: 9, c: "bad" }, { k: "aligned", v: "no" }, { k: "the error names", v: "Float64Array" }]),
+      ];
+    },
+  };
+
+  /* ================================================================
+     FIG 03 — the window, moved. Runs in the page: an ArrayBuffer and
+     two Uint8Arrays are real here, so nothing about this is drawn.
+     ================================================================ */
+  var SRC = [0x4e, 0x6f, 0x64, 0x65, 0x20, 0x69, 0x73, 0x20, 0x66, 0x61, 0x73, 0x74];
+  function windowHtml() {
+    return '<div class="slider"><label for="wo">byteOffset</label>' +
+      '<input id="wo" type="range" min="0" max="9" value="3" data-off />' +
+      '<b data-offv>3</b></div>' +
+      '<div class="slider"><label for="wl">length</label>' +
+      '<input id="wl" type="range" min="1" max="9" value="4" data-len />' +
+      '<b data-lenv>4</b></div>' +
+      '<div class="bg" data-bytes></div>' +
+      '<div class="run"><button type="button" data-write>write 0x2a through the window</button>' +
+      '<button type="button" data-reset>reset the bytes</button>' +
+      '<span class="tally" data-tally>one ArrayBuffer, two views</span></div>' +
+      '<dl class="kv" data-kv></dl>';
+  }
+  function windowWire(el) {
+    setProv(el, "here", "executed here");
+    var ab = new ArrayBuffer(SRC.length);
+    var whole = new Uint8Array(ab);
+    whole.set(SRC);
+    var offEl = el.querySelector("[data-off]"), lenEl = el.querySelector("[data-len]");
+    var bytes = el.querySelector("[data-bytes]"), kv = el.querySelector("[data-kv]");
+    var tally = el.querySelector("[data-tally]");
+    function view() {
+      var o = Number(offEl.value);
+      var l = Math.min(Number(lenEl.value), whole.length - o);
+      return new Uint8Array(ab, o, l);
+    }
+    function render() {
+      var v = view();
+      el.querySelector("[data-offv]").textContent = v.byteOffset;
+      el.querySelector("[data-lenv]").textContent = v.length;
+      bytes.innerHTML = [].map.call(whole, function (b, i) {
+        var inWin = i >= v.byteOffset && i < v.byteOffset + v.length;
+        return '<div class="bgc' + (inWin ? " win" : "") + '"><u>' +
+          b.toString(16).padStart(2, "0") + "</u><b>" + i + "</b></div>";
+      }).join("");
+      kv.innerHTML =
+        "<dt>the allocation</dt><dd>" + ab.byteLength + " bytes, one ArrayBuffer</dd>" +
+        "<dt>this window</dt><dd>byteOffset " + v.byteOffset + ", length " + v.length + "</dd>" +
+        "<dt>bytes the window owns</dt><dd>none &mdash; every one of them belongs to the allocation</dd>" +
+        "<dt>reading it as text</dt><dd>" + JSON.stringify(new TextDecoder().decode(v)) + "</dd>";
+    }
+    offEl.addEventListener("input", render);
+    lenEl.addEventListener("input", render);
+    el.querySelector("[data-write]").addEventListener("click", function () {
+      var v = view();
+      v.fill(0x2a);
+      tally.innerHTML = "wrote through the window &middot; the other view now reads <b>" +
+        JSON.stringify(new TextDecoder().decode(whole)) + "</b>";
+      render();
+    });
+    el.querySelector("[data-reset]").addEventListener("click", function () {
+      whole.set(SRC);
+      tally.textContent = "one ArrayBuffer, two views";
+      render();
+    });
+    render();
+  }
+  SPECS.window = {
+    stages: function () {
+      return [
+        { tab: "one window", html: windowHtml(), wire: windowWire,
+          cap: "Three numbers make a view: which allocation, where it starts, and how long it is. Moving the first two changes nothing about the bytes &mdash; it changes which of them this object is willing to show.",
+          meters: [{ k: "allocations", v: 1 }, { k: "views", v: 2 }, { k: "bytes owned by the view", v: 0, c: "hot" }] },
+        { tab: "writing through", html: windowHtml(), wire: windowWire,
+          cap: "The write goes to the allocation, so the other view sees it. Neither object holds a reference to the other and no notification passes between them &mdash; the second one simply reads different bytes the next time it is asked.",
+          meters: [{ k: "views notified", v: 0, c: "hot" }, { k: "views affected", v: "all of them", c: "bad" }, { k: "way to prevent it", v: "copy first" }] },
+      ];
+    },
+  };
+
+  /* ================================================================
+     FIG 04 — ten operations, sorted by what they actually do
+     ================================================================ */
+  function verbsHtml() {
+    return '<div class="run"><button type="button" data-f="all">all ten</button>' +
+      '<button type="button" data-f="own">owns</button>' +
+      '<button type="button" data-f="borrow">borrows</button>' +
+      '<button type="button" data-f="copy">copies</button>' +
+      '<span class="tally" data-tally></span></div>' +
+      '<div class="fig-scroll"><table class="tbl" data-tbl></table></div>';
+  }
+  function verbsWire(el) {
+    setProv(el, "model", "modelled");
+    var OPS = window.OPS, VERBS = window.VERBS;
+    var tbl = el.querySelector("[data-tbl]"), tally = el.querySelector("[data-tally]");
+    var btns = [].slice.call(el.querySelectorAll("[data-f]"));
+    function render(f) {
+      btns.forEach(function (b) { b.classList.toggle("on", b.dataset.f === f); });
+      var rows = OPS.filter(function (o) { return f === "all" || o.verb === f; });
+      tbl.innerHTML = "<thead><tr><th>operation</th><th>same .buffer</th>" +
+        "<th>writes through</th><th>verb</th><th>and so</th></tr></thead><tbody>" +
+        rows.map(function (o) {
+          var lied = o.shared === "shared" && o.through === "copies";
+          return "<tr><td class=\"who\">" + o.op + "</td><td class=\"who\">" + o.shared +
+            '</td><td class="who">' + (o.through === "n/a" ? "&mdash; no source" : o.through) + "</td>" +
+            '<td><span class="vb vb-' + o.verb + '">' + VERBS[o.verb].n + "</span></td>" +
+            "<td>" + o.note + (lied ? " &mdash; <b>and .buffer said otherwise</b>" : "") + "</td></tr>";
+        }).join("") + "</tbody>";
+      var lies = OPS.filter(function (o) { return o.shared === "shared" && o.through === "copies"; }).length;
+      tally.innerHTML = rows.length + " of " + OPS.length + " &middot; <b>" + lies +
+        "</b> where the structural test disagrees with the behaviour";
+    }
+    btns.forEach(function (b) { b.addEventListener("click", function () { render(b.dataset.f); }); });
+    render("all");
+  }
+  SPECS.verbs = {
+    stages: function () {
+      return [
+        { tab: "the table", html: verbsHtml(), wire: verbsWire,
+          cap: "Every operation, with both tests side by side. Three rows share an ArrayBuffer with their source and are still copies, because the pool put them there &mdash; the structural test is not merely unreliable here, it is wrong in a specific and predictable direction.",
+          meters: [{ k: "operations", v: 10 }, { k: "borrow", v: 4 }, { k: "copy", v: 4 }, { k: "own", v: 2 }] },
+        nodeStage("measured", "node &middot; both tests, on six of them", "verbs",
+          "The behavioural test writes through the result and checks whether the source moved. It is the one that holds.",
+          "The last block is the sharpest part. A window built from <code data-t=\"arraybuffer\">.buffer</code> with a literal offset does not point where you think: <code data-t=\"byteoffset\">byteOffset</code> is not zero for a pooled Buffer, so byte 2 of the allocation is byte 2 of somebody else's data.",
+          [{ k: "structural test", v: "wrong 2 of 6", c: "bad" }, { k: "behavioural test", v: "right 6 of 6", c: "ok" }, { k: "src.byteOffset", v: 144, c: "hot" }]),
+      ];
+    },
+  };
+
+  /* ================================================================
+     FIG 05 — ten bytes holding fifty megabytes
+     ================================================================ */
+  function retainSvg(step) {
+    var g = reg();
+    var s = "";
+    g.put("alloc", 60, 120, 660, 78);
+    g.put("view", 60, 120, 14, 78);
+    g.put("owner", 300, 280, 180, 56);
+    s += S.text(390, 50, "one allocation", "mlbl", "middle");
+    s += factText(390, 72, "bigBytes", function (v) { return n(v) + " bytes"; }, "mlbl", "middle");
+    s += g.box("alloc", { owner: step >= 2 ? null : "node", cls: step >= 2 ? "band" : "owns" });
+    if (step >= 1) s += g.box("view", { owner: "app", cls: "owns lit", sw: 2 });
+    s += S.text(470, 232, step === 0 ? "held by the variable that read it"
+      : step === 1 ? "the read is dropped; the ten-byte view is not"
+      : "nothing points at it any more", "mono", "middle");
+    s += g.box("owner", { owner: step >= 2 ? "app" : null, cls: step >= 2 ? "owns" : "plate" });
+    s += lbl(g, "owner", step >= 2 ? "a 10-byte copy" : "your 10 bytes",
+      step >= 2 ? "owns them outright" : "a window, at the far left");
+    if (step === 1) s += side(g, "owner", "view", 250, "borrow hot", { into: "right" });
+    s += factText(390, 366, step === 2 ? "afterCopyMB" : "bigMB",
+      function (v) { return "arrayBuffers  " + v + " MB"; }, step === 2 ? "mono" : "lbl", "middle");
+    return S.svg("0 0 780 400", s);
+  }
+  SPECS.retain = {
+    stages: function () {
+      return [
+        { tab: "the read", html: retainSvg(0),
+          wire: function (el) { setProv(el, "model", "modelled"); },
+          cap: "Fifty megabytes arrive and are held by the variable that read them. Nothing surprising yet &mdash; this is what the memory is for.",
+          meters: [{ k: "allocation", v: F.bigMB + " MB" }, { k: "of interest", v: F.windowBytes + " bytes" }, { k: "held by", v: "the read" }] },
+        { tab: "the subarray", html: retainSvg(1),
+          wire: function (el) { setProv(el, "model", "modelled"); },
+          cap: "The read is dropped and a ten-byte view is kept. The window is a strip a few pixels wide against the allocation, and it holds every byte of it reachable &mdash; there is no partial collection.",
+          meters: [{ k: "window", v: F.windowBytes + " bytes" }, { k: "still alive", v: F.bigMB + " MB", c: "bad" }, { k: "ratio", v: n(F.bigBytes / F.windowBytes) + " : 1", c: "bad" }] },
+        { tab: "a copy instead", html: retainSvg(2),
+          wire: function (el) { setProv(el, "model", "modelled"); },
+          cap: "Copy the window out and the allocation has nothing pointing at it. Ten bytes cost ten bytes. The copy is the price of not holding the original open.",
+          meters: [{ k: "window", v: F.windowBytes + " bytes" }, { k: "still alive", v: F.windowBytes + " bytes", c: "ok" }, { k: "cost paid", v: "one copy" }] },
+        nodeStage("measured", "node &middot; arrayBuffers, with the collector forced", "retention",
+          "Nothing here is a leak. Every allocation is legitimately reachable, from a view a few bytes long.",
+          "Fifty megabytes, held by a window of ten bytes, surviving repeated forced collections. It only goes when the last window onto it does &mdash; and copying ten bytes out is what makes that happen.",
+          [{ k: "after the read", v: F.bigMB + " MB" }, { k: "holding " + F.windowBytes + " bytes", v: F.bigMB + " MB", c: "bad" }, { k: "after the copy", v: F.afterCopyMB + " MB", c: "ok" }]),
+      ];
+    },
+  };
+
+  /* ================================================================
+     FIG 06 — one row of bytes, six readings
+     ================================================================ */
+  var ROW = [0x68, 0x69, 0x20, 0xf0, 0x9f, 0x91, 0x8b, 0x21];
+  /* The units are DECODED HERE, not tabulated. A streaming TextDecoder is
+     fed one byte at a time and asked what came out; the bytes that produced
+     nothing are the ones the unit above them spans. latin1 and hex are
+     computed directly because TextDecoder's "latin1" label is windows-1252,
+     which is not what Node means by the name — one of the two places this
+     page and Node genuinely disagree, and it is worth not papering over. */
+  function decodeUnits(bytes, enc) {
+    var out = [], start = 0, i;
+    if (enc === "hex") {
+      for (i = 0; i < bytes.length; i++) out.push([i, 1, bytes[i].toString(16).padStart(2, "0")]);
+      return out;
+    }
+    if (enc === "latin1") {
+      for (i = 0; i < bytes.length; i++) out.push([i, 1, String.fromCharCode(bytes[i])]);
+      return out;
+    }
+    var dec = new TextDecoder(enc);
+    var arr = new Uint8Array(bytes);
+    for (i = 0; i < arr.length; i++) {
+      var got = dec.decode(arr.subarray(i, i + 1), { stream: true });
+      if (got) { out.push([start, i - start + 1, got]); start = i + 1; }
+    }
+    var tail = dec.decode();
+    if (tail) out.push([start, arr.length - start, tail]);
+    return out;
+  }
+  var ENCS = [
+    { id: "utf8", n: "utf8", round: "not always" },
+    { id: "latin1", n: "latin1", round: "exact" },
+    { id: "hex", n: "hex", round: "exact" },
+    { id: "utf-16le", n: "utf16le", round: "not always" },
+  ];
+  function gridHtml() {
+    return '<div class="bg" data-bytes></div><div class="gl" data-glyphs></div>' +
+      '<div class="log" data-log></div><span hidden data-computed></span>';
+  }
+  function gridWire(enc) {
+    return function (el) {
+      setProv(el, "here", "executed here");
+      var units = decodeUnits(ROW, enc);
+      el.querySelector("[data-bytes]").innerHTML = ROW.map(function (b, i) {
+        return '<div class="bgc"><u>' + b.toString(16).padStart(2, "0") + "</u><b>" + i + "</b></div>";
+      }).join("");
+      el.querySelector("[data-glyphs]").innerHTML = units.map(function (u) {
+        var w = u[1] * 38 + (u[1] - 1) * 3;
+        var glyph = u[2] === " " ? "&#9251;" : u[2].replace(/[\u0000-\u001f\u007f-\u009f]/g, "\u00b7");
+        return '<div class="glc' + (u[1] > 1 ? " span" : "") + '" style="min-width:' + w +
+          "px;flex:0 0 " + w + 'px">' + glyph + "<i>" + u[1] + (u[1] > 1 ? " bytes" : " byte") + "</i></div>";
+      }).join("");
+      var widest = units.reduce(function (m, u) { return Math.max(m, u[1]); }, 0);
+      el.querySelector("[data-log]").innerHTML =
+        '<div class="hot"><i>&rarr;</i>' + units.length + " units decoded from " + ROW.length +
+        " bytes &middot; widest unit " + widest + " byte" + (widest > 1 ? "s" : "") +
+        "</div><div><i>&middot;</i>the byte row above is unchanged, and will be after every reading</div>";
+      el.querySelector("[data-computed]").setAttribute("data-computed", enc + ":" + units.length);
+    };
+  }
+  SPECS.reading = {
+    modes: ENCS.map(function (e) { return { id: e.id, label: e.n }; }),
+    modeLabel: "read the bytes as",
+    stages: function (mode) {
+      var e = ENCS.filter(function (x) { return x.id === mode; })[0];
+      var units = decodeUnits(ROW, mode);
+      return [
+        { tab: "the grid", html: gridHtml(), wire: gridWire(mode),
+          cap: "Each unit sits under the bytes it consumed. " +
+            (mode === "utf8" ? "One glyph spans four bytes and three others take one each. The rule decides the grouping; nothing in the bytes announces it."
+              : mode === "latin1" ? "Eight bytes, eight units, one to one &mdash; which is what makes this the only reading here that survives a round trip through a string."
+              : mode === "hex" ? "Two characters per byte, no grouping and no interpretation. Reversible because it discards nothing."
+              : "Two bytes per unit, read in the machine's order, producing characters nobody intended."),
+          meters: [{ k: "bytes", v: ROW.length }, { k: "units", v: units.length },
+            { k: "widest unit", v: units.reduce(function (m, u) { return Math.max(m, u[1]); }, 0) + " bytes" },
+            { k: "round trips", v: e.round, c: e.round === "exact" ? "ok" : "hot" }] },
+        nodeStage("six readings", "node &middot; the same eight bytes, six ways", "readings",
+          "The last block is the one that matters: utf8 destroys what it cannot interpret, and latin1 gives the bytes back.",
+          "Six readings, one byte row, and the row is identical afterwards. Below them, three bytes that are not valid utf8 become three replacement characters &mdash; and encoding that string back produces nine different bytes. Nothing raised an error at any point.",
+          [{ k: "readings", v: 6 }, { k: "bytes changed", v: 0, c: "ok" }, { k: "utf8 round trip", v: "3 bytes to 9", c: "bad" }, { k: "latin1 round trip", v: "exact", c: "ok" }]),
+        nodeStage("across a seam", "node &middot; four bytes, two chunks", "split",
+          "On ascii-only test data all three strategies agree exactly, which is why this survives so long in so many codebases.",
+          "The emoji is four bytes and the boundary falls after the second of them. Decoding each chunk alone produces damage on both sides; <span class=\"term\" data-t=\"strdecoder\">StringDecoder</span> holds the fragment back until the rest arrives, and gathering first works too.",
+          [{ k: "per-chunk toString", v: "damaged", c: "bad" }, { k: "StringDecoder", v: "correct", c: "ok" }, { k: "concat then decode", v: "correct", c: "ok" }, { k: "on ascii data", v: "all agree", c: "hot" }]),
+      ];
+    },
+  };
+
+  /* ================================================================
+     FIG 07 — the same ten megabytes, gathered two ways
+     ================================================================ */
+  function stairHtml(mode) {
+    return '<div class="run"><button type="button" data-run>gather 40 chunks</button>' +
+      '<span class="tally" data-tally>nothing gathered yet</span></div>' +
+      '<div class="panes two"><div class="pane"><div class="pane-h">concat once, at the end</div>' +
+      '<div class="pane-b"><div class="log" data-once></div></div></div>' +
+      '<div class="pane"><div class="pane-h">concat per chunk</div>' +
+      '<div class="pane-b"><div class="log" data-each></div></div></div></div>';
+  }
+  function stairWire(el) {
+    setProv(el, "here", "executed here");
+    el.querySelector("[data-run]").addEventListener("click", function () {
+      var N = 40, SZ = 1024;
+      var once = el.querySelector("[data-once]"), each = el.querySelector("[data-each]");
+      var chunks = [];
+      for (var i = 0; i < N; i++) chunks.push(new Uint8Array(SZ));
+      /* concat once: one allocation, one pass */
+      var total = N * SZ, copiedOnce = 0;
+      var out = new Uint8Array(total), at = 0;
+      chunks.forEach(function (c) { out.set(c, at); at += c.length; copiedOnce += c.length; });
+      once.innerHTML = "<div><i>1</i>allocate " + total.toLocaleString() + " bytes</div>" +
+        "<div><i>2</i>copy each chunk in, once</div>" +
+        '<div class="hot"><i>=</i>' + copiedOnce.toLocaleString() + " bytes copied</div>";
+      /* concat per chunk: reallocate and recopy every time round */
+      var acc = new Uint8Array(0), copiedEach = 0, rows = "";
+      chunks.forEach(function (c, k) {
+        var next = new Uint8Array(acc.length + c.length);
+        next.set(acc, 0); next.set(c, acc.length);
+        copiedEach += acc.length + c.length;
+        acc = next;
+        if (k < 3 || k === N - 1)
+          rows += "<div><i>" + (k + 1) + "</i>copied " + copiedEach.toLocaleString() + " bytes so far</div>";
+        else if (k === 3) rows += "<div><i>&middot;</i>&hellip;</div>";
+      });
+      each.innerHTML = rows + '<div class="hot"><i>=</i>' + copiedEach.toLocaleString() + " bytes copied</div>";
+      el.querySelector("[data-tally]").innerHTML =
+        "same " + total.toLocaleString() + " bytes out &middot; <b>" +
+        Math.round(copiedEach / copiedOnce) + "x</b> the copying for 40 chunks";
+    });
+  }
+  SPECS.staircase = {
+    stages: function () {
+      return [
+        { tab: "forty chunks", html: stairHtml(), wire: stairWire,
+          cap: "Forty is small enough to run here and already enough to see the shape. Gathering once copies each chunk exactly once; gathering per chunk copies everything accumulated so far, every time round.",
+          meters: (function () {
+            var N = 40, SZ = 1024, each = 0, acc = 0;
+            for (var i = 0; i < N; i++) { each += acc + SZ; acc += SZ; }
+            return [{ k: "chunks", v: N }, { k: "output", v: n(N * SZ) + " bytes" },
+              { k: "once", v: n(N * SZ) + " copied", c: "ok" },
+              { k: "per chunk", v: n(each) + " copied", c: "bad" }];
+          })() },
+        nodeStage("ten thousand", "node &middot; the same shape at scale", "concat",
+          "The result is byte-identical. The difference is entirely in how many times the same bytes were moved.",
+          "Ten thousand chunks and the ratio is five thousand to one: forty-eight gigabytes of copying to produce ten megabytes. Both loops are correct, and the expensive one is the one that reads more naturally.",
+          [{ k: "payload", v: "10 MB" }, { k: "concat once", v: "10 MB copied", c: "ok" }, { k: "per chunk", v: "48,833 MB", c: "bad" }, { k: "ratio", v: "5,001x", c: "bad" }]),
+      ];
+    },
+  };
+
+  /* ================================================================
+     FIG 08 — three ways the window stops being honoured
+     ================================================================ */
+  var HB = { alloc: 64, win: 12, off: 24 };
+  function handoffHtml(kind) {
+    if (kind === "raw") {
+      return '<div class="run"><button type="button" data-go>hand over .buffer</button>' +
+        '<span class="tally" data-tally>a ' + HB.win + "-byte view inside a " + HB.alloc + '-byte allocation</span></div>' +
+        '<div class="bg" data-bytes></div><dl class="kv" data-kv></dl>';
+    }
+    if (kind === "align") {
+      return '<div class="slider"><label for="ao">subarray offset</label>' +
+        '<input id="ao" type="range" min="0" max="8" value="0" data-off /><b data-offv>0</b></div>' +
+        '<div class="run"><button type="button" data-go>build a Float64Array over it</button>' +
+        '<span class="tally" data-tally>eight bytes per element</span></div>' +
+        '<dl class="kv" data-kv></dl>';
+    }
+    return '<div class="run"><button type="button" data-clone>structured clone</button>' +
+      '<button type="button" data-transfer>transfer</button>' +
+      '<span class="tally" data-tally>one allocation, one view onto it</span></div>' +
+      '<dl class="kv" data-kv></dl>';
+  }
+  function handoffWire(kind) {
+    return function (el) {
+      setProv(el, "here", "executed here");
+      var kv = el.querySelector("[data-kv]"), tally = el.querySelector("[data-tally]");
+      if (kind === "raw") {
+        var ab = new ArrayBuffer(HB.alloc);
+        var prev = new Uint8Array(ab);
+        for (var i = 0; i < HB.alloc; i++) prev[i] = 0xde;
+        var mine = new Uint8Array(ab, HB.off, HB.win);
+        mine.set([0x4e, 0x6f, 0x64, 0x65, 0x20, 0x69, 0x73, 0x20, 0x66, 0x61, 0x73, 0x74]);
+        var bytes = el.querySelector("[data-bytes]");
+        function paint(showAll) {
+          bytes.innerHTML = [].map.call(new Uint8Array(ab), function (b, i) {
+            var inWin = i >= HB.off && i < HB.off + HB.win;
+            if (!showAll && !inWin) return "";
+            return '<div class="bgc' + (inWin ? " win" : " on") + '"><u>' +
+              b.toString(16).padStart(2, "0") + "</u><b>" + i + "</b></div>";
+          }).join("");
+          kv.innerHTML =
+            "<dt>your view</dt><dd>byteOffset " + HB.off + ", length " + HB.win + "</dd>" +
+            "<dt>what .buffer is</dt><dd>the whole " + HB.alloc + "-byte allocation</dd>" +
+            "<dt>bytes handed over</dt><dd>" + (showAll
+              ? HB.alloc + " &mdash; including " + (HB.alloc - HB.win) + " that are not yours"
+              : HB.win + ", if the offset travels with it") + "</dd>";
+        }
+        el.querySelector("[data-go]").addEventListener("click", function () {
+          paint(true);
+          tally.innerHTML = "handed over <b>" + HB.alloc + "</b> bytes to receive <b>" + HB.win +
+            "</b> &middot; the rest is the previous occupant";
+        });
+        paint(false);
+        return;
+      }
+      if (kind === "align") {
+        var buf = new Uint8Array(new ArrayBuffer(64), 8, 40);
+        var offEl = el.querySelector("[data-off]");
+        function show(msg, ok) {
+          var o = Number(offEl.value);
+          el.querySelector("[data-offv]").textContent = o;
+          var v = buf.subarray(o);
+          kv.innerHTML =
+            "<dt>the base view</dt><dd>byteOffset 8 &mdash; a multiple of 8</dd>" +
+            "<dt>after subarray(" + o + ")</dt><dd>byteOffset " + v.byteOffset +
+            " &mdash; " + (v.byteOffset % 8 === 0 ? "still aligned" : "not a multiple of 8") + "</dd>" +
+            "<dt>result</dt><dd>" + (msg || "not tried yet") + "</dd>";
+        }
+        offEl.addEventListener("input", function () { show(null); });
+        el.querySelector("[data-go]").addEventListener("click", function () {
+          var v = buf.subarray(Number(offEl.value));
+          try {
+            new Float64Array(v.buffer, v.byteOffset, 2);
+            show("built &mdash; the offset happened to be a multiple of 8", true);
+            tally.innerHTML = "offset <b>" + v.byteOffset + "</b> &middot; aligned, so it worked";
+          } catch (err) {
+            show(err.message, false);
+            tally.innerHTML = "offset <b>" + v.byteOffset + "</b> &middot; " + err.message;
+          }
+        });
+        show(null);
+        return;
+      }
+      /* The detach half uses ArrayBuffer.prototype.transfer rather than a
+         structured clone with a transfer list: it is the same operation at
+         the language level, and it works without a postMessage target, so
+         the stage genuinely executes rather than describing itself. The
+         clone half is a copy, which is all a structured clone is here. */
+      var ab2 = new ArrayBuffer(8);
+      var view = new Uint8Array(ab2);
+      view.set([1, 2, 3, 4, 5, 6, 7, 8]);
+      function state(extra) {
+        kv.innerHTML =
+          "<dt>the allocation</dt><dd>byteLength " + ab2.byteLength +
+          (ab2.byteLength === 0 ? " &mdash; detached" : "") + "</dd>" +
+          "<dt>the view onto it</dt><dd>length " + view.length +
+          ", reading " + JSON.stringify([].join.call(view, " ")) + "</dd>" +
+          (extra || "");
+      }
+      el.querySelector("[data-clone]").addEventListener("click", function () {
+        var c = new Uint8Array(view);
+        c[0] = 0x63;
+        state("<dt>the copy</dt><dd>" + c.constructor.name + ", length " + c.length +
+          "</dd><dt>writing into it</dt><dd>the source is unchanged &mdash; it is a copy</dd>");
+        tally.innerHTML = "copied &middot; source intact &middot; a structured clone of a Buffer " +
+          "arrives as a plain <b>Uint8Array</b>, because the prototype does not cross";
+      });
+      el.querySelector("[data-transfer]").addEventListener("click", function () {
+        if (ab2.byteLength) ab2.transfer();
+        state("<dt>every view onto it</dt><dd>reads as empty, including ones held elsewhere</dd>");
+        tally.innerHTML = "transferred &middot; byteLength is now <b>" + ab2.byteLength +
+          "</b> &middot; the view was never told";
+      });
+      state();
+    };
+  }
+
+  SPECS.handoff = {
+    stages: function () {
+      return [
+        { tab: ".buffer", html: handoffHtml("raw"), wire: handoffWire("raw"),
+          cap: "The property hands over the allocation, not the window. Anything that takes it and does not also take <code data-t=\"byteoffset\">byteOffset</code> and length is reading whatever else is in there &mdash; which in a pooled Buffer is other people's data.",
+          meters: [{ k: "your window", v: HB.win + " bytes" }, { k: ".buffer", v: HB.alloc + " bytes", c: "bad" }, { k: "carried automatically", v: "nothing", c: "bad" }] },
+        { tab: "alignment", html: handoffHtml("align"), wire: handoffWire("align"),
+          cap: "A view whose elements are eight bytes wide must start on a multiple of eight. Node keeps pool offsets aligned deliberately; a <code data-t=\"subarray\">subarray</code> at an arbitrary offset is under no such obligation.",
+          meters: [{ k: "pool offsets", v: "aligned", c: "ok" }, { k: "your offsets", v: "whatever you asked for", c: "hot" }, { k: "the error names", v: "Float64Array" }] },
+        { tab: "copy or transfer", html: handoffHtml("cross"), wire: handoffWire("cross"),
+          cap: "Copying leaves the source alone; a <span class=\"term\" data-t=\"sclone\">structured clone</span> across a thread is this plus a lost prototype. Transferring moves the allocation and leaves the original <span class=\"term\" data-t=\"detach\">detached</span> &mdash; byteLength zero, every view empty, and not one of them was notified.",
+          meters: [{ k: "copy", v: "source intact", c: "ok" }, { k: "a clone arrives as", v: "Uint8Array", c: "hot" }, { k: "transfer", v: "detaches", c: "bad" }, { k: "views notified", v: 0, c: "bad" }] },
+        nodeStage("in node", "node &middot; the same three, on a Buffer", "transfer",
+          "A Buffer arrives from a clone as a plain Uint8Array. The encoding methods are on the prototype, and the prototype does not cross.",
+          "The detached allocation reports zero bytes and the view over it reads as empty. Underneath, the JSON form is worth knowing about too &mdash; a Buffer serialises as an object with a type tag and an array of numbers, which is neither cheap nor what most receivers expect.",
+          [{ k: "clone arrives as", v: "Uint8Array", c: "hot" }, { k: "after transfer", v: "byteLength 0", c: "bad" }, { k: "the view reads", v: "empty" }, { k: "JSON form", v: "{type,data[]}" }]),
+      ];
+    },
+  };
+
+  /* ================================================================
+     FIG 09 — the window where the bytes are not yours
+     ================================================================ */
+  function borrowWinSvg(step, safe) {
+    var g = reg();
+    var s = "";
+    g.put("you", 60, 70, 300, 62);
+    g.put("buf", 60, 200, 300, 74);
+    g.put("kern", 460, 200, 280, 74);
+    g.put("wire", 460, 340, 280, 56);
+    s += S.text(210, 46, "your javascript", "mlbl", "middle");
+    s += S.text(600, 46, "the kernel", "mlbl", "middle");
+    s += g.box("you", { owner: "app" });
+    s += lbl(g, "you", step === 0 ? "socket.write(buf)" : step === 1 ? "returned already" : "the callback ran",
+      step === 0 ? "hands over an address" : step === 1 ? "your turn continues" : "the bytes are yours again");
+    var mid = step === 1;
+    s += g.box("buf", { owner: mid ? "kernel" : "node", cls: mid ? "borrows lit" : "owns", sw: mid ? 2 : 1 });
+    s += lbl(g, "buf", "your bytes", mid ? "being read by the kernel" : step === 2 ? "safe to reuse" : "yours");
+    s += g.box("kern", { owner: "kernel" });
+    s += lbl(g, "kern", "the send buffer", mid ? "copying out of your memory" : "holds a copy");
+    s += g.box("wire", { owner: "hw" }) + lbl(g, "wire", "the wire", null);
+    if (step >= 1) s += side(g, "buf", "kern", 410, "borrow" + (mid ? " hot" : ""));
+    if (step >= 2) s += dn(g, "kern", "wire", "copy", g.midX("kern"));
+    if (mid && !safe) {
+      g.put("mut", 60, 340, 300, 56);
+      s += g.box("mut", { owner: "app", cls: "owns" });
+      s += lbl(g, "mut", "buf.write(next chunk)", "nothing stops this");
+      s += up(g, "mut", "buf", "copy hot", g.midX("mut"));
+    }
+    return S.svg("0 0 800 420", s);
+  }
+  SPECS.borrowwin = {
+    modes: [{ id: "bad", label: "reusing the buffer" }, { id: "ok", label: "waiting for the callback" }],
+    modeLabel: "what you do next",
+    stages: function (mode) {
+      var safe = mode === "ok";
+      return [
+        { tab: "the call", html: borrowWinSvg(0, safe),
+          cap: "The call hands the kernel an address and a length. Nothing is copied yet and nothing has gone anywhere &mdash; what has happened is that a second party now holds a pointer into your memory.",
+          meters: [{ k: "bytes copied", v: 0 }, { k: "who holds a pointer", v: "the kernel", c: "hot" }, { k: "your turn", v: "continues" }] },
+        { tab: "the window", html: borrowWinSvg(1, safe),
+          cap: safe
+            ? "The kernel copies out of your memory while your turn carries on elsewhere. Leaving the buffer alone for the duration costs nothing and is the whole of the discipline."
+            : "The kernel is reading your memory and your code writes into it. There is no lock, no flag and no error &mdash; what goes on the wire is whichever version the kernel happened to read.",
+          meters: safe
+            ? [{ k: "bytes being read", v: "yours" }, { k: "you modify them", v: "no", c: "ok" }, { k: "what goes out", v: "what you wrote", c: "ok" }]
+            : [{ k: "bytes being read", v: "yours" }, { k: "you modify them", v: "yes", c: "bad" }, { k: "what goes out", v: "undefined", c: "bad" }, { k: "error raised", v: "none", c: "bad" }] },
+        { tab: "the callback", html: borrowWinSvg(2, safe),
+          cap: "The callback is not a delivery receipt. It says the kernel has finished reading your memory and you may have it back &mdash; an ownership boundary, unmarked in the type system, communicated by convention.",
+          meters: [{ k: "what it means", v: "the borrow ended" }, { k: "what it does not mean", v: "it arrived", c: "hot" }, { k: "safe to reuse", v: "now", c: "ok" }] },
+      ];
+    },
+  };
+
+  /* ================================================================
+     FIG 10 — four numbers, and which one the limit governs
+     ================================================================ */
+  var BARS = [
+    { id: "hu", key: "heapUsedMB", n: "heapUsed", who: "app" },
+    { id: "ex", key: "externalMB", n: "external", who: "node" },
+    { id: "ab", key: "arrayBuffersMB", n: "arrayBuffers", who: "node" },
+    { id: "rs", key: "rssMB", n: "rss", who: "kernel" },
+  ];
+  function numbersSvg(step) {
+    var g = reg();
+    var s = "";
+    var X = 150, W = 520, BASE = 300;
+    var max = F.heapLimitMB;
+    BARS.forEach(function (b, i) {
+      var w = Math.max(4, (F[b.key] / max) * W);
+      var y = 80 + i * 54;
+      g.put(b.id, X, y, w, 34);
+      s += g.box(b.id, { owner: b.who, cls: step >= 1 && b.id === "hu" ? "owns lit" : "owns", sw: step >= 1 && b.id === "hu" ? 2 : 1 });
+      s += S.text(X - 12, y + 22, b.n, "mono", "end");
+      s += factText(X + w + 12, y + 22, b.key, function (v) { return n(v) + " MB"; }, "sub", "start");
+    });
+    if (step >= 1) {
+      s += '<path class="tick" d="M' + (X + W) + " 56V" + BASE + '"/>';
+      s += S.text(X + W, 34, "the heap limit", "mlbl", "middle");
+      s += factText(X + W, 52, "heapLimitMB", function (v) { return n(v) + " MB"; }, "mlbl", "middle");
+    }
+    if (step >= 2) {
+      s += S.text(X + W / 2, BASE + 34, "three of these four are past the limit and none of them broke", "lbl", "middle");
+      s += S.text(X + W / 2, BASE + 56, "because the limit governs the first bar and nothing else", "sub", "middle");
+    }
+    return S.svg("0 0 800 380", s);
+  }
+  SPECS.numbers = {
+    stages: function () {
+      return [
+        { tab: "four numbers", html: numbersSvg(0),
+          wire: function (el) { setProv(el, "model", "modelled"); },
+          cap: "One process holding a little over a gigabyte of Buffers. Three of the four numbers move together and the fourth &mdash; the one most tooling watches &mdash; does not move at all.",
+          meters: BARS.map(function (b) { return { k: b.n, v: n(F[b.key]) + " MB" }; }) },
+        { tab: "the limit", html: numbersSvg(1),
+          wire: function (el) { setProv(el, "model", "modelled"); },
+          cap: "The heap size limit is drawn where it actually applies. It bounds the lit bar. The other three are bounded by the machine, and a heap-limit flag will not change any of them.",
+          meters: [{ k: "limit", v: n(F.heapLimitMB) + " MB" }, { k: "bars it governs", v: 1, c: "hot" }, { k: "bars it does not", v: BARS.length - 1, c: "bad" }] },
+        { tab: "the consequence", html: numbersSvg(2),
+          wire: function (el) { setProv(el, "model", "modelled"); },
+          cap: "A process can be killed by the operating system for size while reporting a nearly empty heap. The bytes were never in the heap, which was the point of putting them outside it in the first place.",
+          meters: [{ k: "heap headroom", v: n(F.heapLimitMB - F.heapUsedMB) + " MB", c: "ok" }, { k: "resident", v: n(F.rssMB) + " MB", c: "bad" }, { k: "what kills it", v: "the OS, not V8" }] },
+        nodeStage("measured", "node &middot; process.memoryUsage()", "memory",
+          "external counts arrayBuffers plus a little else. rss is what the operating system sees, and it is the number that gets a process killed.",
+          "Twelve allocations of a hundred megabytes, touched so the pages are real. The heap barely moves. This is the last entry in the ledger and it is the reckoning for all the borrowing above it &mdash; every window still held keeps its whole allocation in this column.",
+          [{ k: "heapUsed", v: n(F.heapUsedMB) + " MB", c: "ok" }, { k: "arrayBuffers", v: n(F.arrayBuffersMB) + " MB", c: "hot" }, { k: "rss", v: n(F.rssMB) + " MB", c: "bad" }, { k: "heap limit", v: n(F.heapLimitMB) + " MB" }]),
+      ];
+    },
+  };
+})();
+
+window.mountFigs(window.SPECS);
+window.mountLedgers();
+</script>
+</body>
+</html>

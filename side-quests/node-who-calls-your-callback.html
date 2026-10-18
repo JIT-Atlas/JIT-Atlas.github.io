@@ -1,0 +1,5027 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Who calls your callback — the dispatch chain from the kernel to your handler</title>
+<meta name="description" content="libuv does not call your JavaScript callback. The six handoffs, two language boundaries and one copy between a byte arriving and your handler running — for net.createServer and http.createServer." />
+<style>
+
+/* ============================================================
+   TOKENS — two independent encoding channels
+   HUE   = who implements it   (app / node / kernel / hw)
+   BAND  = which layer it is   (application / transport / network / link)
+   LIME  = you are here        (never an owner, never decoration)
+   ============================================================ */
+:root,
+[data-theme="dark"] {
+  --bg: #0a0c0f;
+  --grid: rgba(255, 255, 255, 0.028);
+  --surface: #101318;
+  --surface-2: #161a20;
+  --raise: #1d222a;
+  --plate: #12161b;
+  --border: #262c35;
+  --border-2: #333c48;
+  --text: #e7eaf0;
+  --text-2: #a9b1bd;
+  --text-3: #838b98;
+  --text-inv: #0a0c0f;
+
+  --app: #edb44e;
+  --app-tint: #2a2213;
+  --app-ink: #f0c473;
+  --node: #4fc98a;
+  --node-tint: #12271d;
+  --node-ink: #74d6a4;
+  --kernel: #66a9f7;
+  --kernel-tint: #14212f;
+  --kernel-ink: #8dbdf9;
+  --hw: #b28cf8;
+  --hw-tint: #221c33;
+  --hw-ink: #c3a6fa;
+
+  --hi: #d2ea52;
+  --hi-tint: #23290f;
+  --hi-ink: #d2ea52;
+  --on-accent: #0a0c0f;
+
+  --em: #edcf7c;
+  --code: #57d4c6;
+  --code-bg: rgba(87, 212, 198, 0.09);
+  --code-bd: rgba(87, 212, 198, 0.22);
+  --warn: #f2836c;
+
+  --kw: #66a9f7;
+  --str: #4fc98a;
+  --num: #b28cf8;
+  --fn: #edb44e;
+  --prop: #57d4c6;
+  --cm: #838b99;
+
+  --sb-thumb: rgba(131, 139, 152, 0.05);
+  --sb-thumb-hover: rgba(131, 139, 152, 0.32);
+  --sb-thumb-active: rgba(131, 139, 152, 0.44);
+  --shadow: 0 18px 46px -22px rgba(0, 0, 0, 0.9);
+}
+
+[data-theme="light"] {
+  --bg: #f6f7f9;
+  --grid: rgba(15, 20, 30, 0.035);
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --raise: #e5e9ef;
+  --plate: #ffffff;
+  --border: #d8dee6;
+  --border-2: #c2cad6;
+  --text: #12161c;
+  --text-2: #4c5462;
+  --text-3: #62626c;
+  --text-inv: #ffffff;
+
+  --app: #8a5c00;
+  --app-tint: #f7eed8;
+  --app-ink: #744d00;
+  --node: #0d7a52;
+  --node-tint: #dcf1e7;
+  --node-ink: #0a6544;
+  --kernel: #1b5fb5;
+  --kernel-tint: #dde9f9;
+  --kernel-ink: #17509a;
+  --hw: #6337c4;
+  --hw-tint: #e9e2fa;
+  --hw-ink: #542eaa;
+
+  --hi: #5f7a00;
+  --hi-tint: #eaf2cb;
+  --hi-ink: #4d6400;
+  --on-accent: #ffffff;
+
+  --em: #7d5a00;
+  --code: #0e6f77;
+  --code-bg: rgba(14, 111, 119, 0.08);
+  --code-bd: rgba(14, 111, 119, 0.2);
+  --warn: #b23a20;
+
+  --kw: #1b5fb5;
+  --str: #0d7a52;
+  --num: #6337c4;
+  --fn: #8a5c00;
+  --prop: #0e6f77;
+  --cm: #6b7480;
+
+  --sb-thumb: rgba(98, 98, 108, 0.07);
+  --sb-thumb-hover: rgba(98, 98, 108, 0.4);
+  --sb-thumb-active: rgba(98, 98, 108, 0.52);
+  --shadow: 0 18px 46px -26px rgba(20, 26, 38, 0.42);
+}
+
+:root {
+  --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo,
+    Consolas, "Liberation Mono", monospace;
+  --measure: 78ch;
+  --bleed: 0px;
+  --r: 10px;
+  --r-s: 7px;
+  --sb-size: 10px;
+  --sb-inset: 3px;
+}
+
+/* scrollbars — standard properties are primary; webkit is a fallback only */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sb-thumb) transparent;
+}
+.modal:hover,
+.fig-scroll:hover,
+pre:hover,
+.log:hover {
+  scrollbar-color: var(--sb-thumb-hover) transparent;
+}
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar {
+    width: var(--sb-size);
+    height: var(--sb-size);
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--sb-thumb);
+    background-clip: padding-box;
+    border: var(--sb-inset) solid transparent;
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--sb-thumb-hover);
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:active {
+    background: var(--sb-thumb-active);
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-button {
+    display: none;
+  }
+}
+
+/* ============================================================
+   SHELL
+   ============================================================ */
+* {
+  box-sizing: border-box;
+}
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 92px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 96px 96px, 96px 96px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16.5px;
+  line-height: 1.72;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection {
+  background: var(--hi);
+  color: var(--on-accent);
+}
+/* clicking a tabindex'd element focuses it, and the UA then paints its own
+   blue ring. Suppress the ring for pointer focus only — keyboard focus
+   still gets a visible, on-palette one. */
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--hi);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+/* SVG groups do not paint an outline reliably, so give them a stroke */
+svg .hit:focus-visible > rect {
+  stroke: var(--hi);
+  stroke-width: 2.4;
+}
+
+/* ---------- nav ---------- */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 56px;
+  padding: 0 20px;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(14px) saturate(1.3);
+  border-bottom: 1px solid var(--border);
+  transition: top 0.28s ease;
+}
+.nav.away {
+  top: -57px;
+}
+.nav-mark {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 5px;
+  background: var(--hi);
+  color: var(--on-accent);
+  white-space: nowrap;
+}
+.nav-title {
+  font-size: 13px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-sp {
+  flex: 1;
+}
+.nav-legend {
+  display: flex;
+  gap: 12px;
+}
+.nav-legend b {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.nav-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  flex: none;
+}
+.icon-btn:hover {
+  color: var(--text);
+  border-color: var(--border-2);
+}
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+}
+[aria-expanded="false"] svg path {
+  opacity: 0.35;
+}
+[data-theme="dark"] .theme-toggle .sun {
+  display: none;
+}
+[data-theme="light"] .theme-toggle .moon {
+  display: none;
+}
+@media (max-width: 900px) {
+  .nav-legend,
+  .nav-title {
+    display: none;
+  }
+}
+@media (max-width: 1000px) {
+  .rail-btn {
+    display: none;
+  }
+}
+
+/* ---------- page grid ---------- */
+.page {
+  display: grid;
+  /* the rail track always exists — collapsing it to one track drops the
+     content into row 1 and pushes the page a full viewport down */
+  grid-template-columns: 236px minmax(0, 1fr);
+  gap: 0;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 24px;
+  transition: grid-template-columns 0.24s ease;
+  /* everything a figure can NOT have: rail + page padding + main padding */
+  --chrome: 340px;
+}
+.page.solo {
+  grid-template-columns: 0 minmax(0, 1fr);
+  --chrome: 104px;
+}
+.rail {
+  /* EXPLICIT placement, both items. A display:none grid item stops being a
+     grid item at all, so with auto-placement .main slides into cell 1 —
+     the 0px track — and the whole document renders in zero width. Keeping
+     the track count right is not enough; the content has to be pinned. */
+  grid-column: 1;
+  position: sticky;
+  top: 56px;
+  align-self: start;
+  height: calc(100vh - 56px);
+  overflow-y: auto;
+  padding: 26px 20px 60px 0;
+  font-size: 13px;
+}
+.page.solo .rail {
+  display: none;
+}
+.rail-h {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 0 0 10px;
+}
+.rail a {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 6px;
+  padding: 4px 8px 4px 0;
+  color: var(--text-2);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  padding-left: 10px;
+  line-height: 1.4;
+}
+.rail a em {
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.rail a:hover {
+  color: var(--text);
+}
+.rail a.on {
+  color: var(--text);
+  border-left-color: var(--hi);
+}
+.rail a.on em {
+  color: var(--hi-ink);
+}
+/* the content column is centred in whatever space the rail leaves */
+.main {
+  grid-column: 2;
+  padding: 0 28px 120px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.main > * {
+  width: 100%;
+  max-width: var(--measure);
+}
+@media (max-width: 1000px) {
+  .page {
+    grid-template-columns: 0 minmax(0, 1fr);
+    /* no rail and no main padding down here — only the page's own 24px */
+    --chrome: 48px;
+  }
+  .rail {
+    display: none;
+  }
+  .main {
+    padding: 0 0 120px;
+  }
+}
+
+/* ---------- masthead ---------- */
+.mast {
+  padding: 62px 0 30px;
+  max-width: var(--measure);
+}
+.kicker {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--hi-ink);
+  margin: 0 0 16px;
+  font-weight: 600;
+}
+h1 {
+  font-size: clamp(29px, 4vw, 45px);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  font-weight: 700;
+  margin: 0 0 20px;
+}
+h1 span {
+  color: var(--text-3);
+}
+.dek {
+  font-size: 19px;
+  line-height: 1.6;
+  color: var(--text-2);
+  margin: 0 0 26px;
+}
+.mast-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.mast-meta span {
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+}
+
+/* ---------- thesis ---------- */
+.thesis {
+  max-width: var(--measure);
+  margin: 8px 0 46px;
+  padding: 22px 24px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--hi);
+  border-radius: var(--r);
+  background: var(--surface);
+}
+.thesis p {
+  margin: 0 0 10px;
+  font-size: 18px;
+  line-height: 1.62;
+}
+.thesis p:last-child {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 16px;
+}
+
+/* ---------- sections ---------- */
+section {
+  max-width: var(--measure);
+  padding-top: 30px;
+  margin-bottom: 4px;
+}
+.sec-h {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 30px 0 6px;
+}
+.sec-n {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--text-3);
+  padding-top: 5px;
+  flex: none;
+}
+h2 {
+  font-size: 25px;
+  line-height: 1.24;
+  letter-spacing: -0.018em;
+  font-weight: 680;
+  margin: 0;
+}
+h3 {
+  font-size: 16.5px;
+  font-weight: 660;
+  letter-spacing: -0.005em;
+  margin: 30px 0 8px;
+  color: var(--text);
+}
+p {
+  margin: 0 0 16px;
+}
+strong {
+  font-weight: 640;
+  color: var(--em);
+}
+.lead {
+  font-size: 17.5px;
+  color: var(--text-2);
+}
+ul,
+ol {
+  margin: 0 0 16px;
+  padding-left: 20px;
+}
+li {
+  margin-bottom: 6px;
+}
+li::marker {
+  color: var(--text-3);
+}
+/* ---------- definitions ----------
+   Term on the left, one sentence on the right. If it needs three sentences
+   it is not a definition yet. */
+.defs {
+  margin: 0 0 20px;
+  display: grid;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--r-s);
+  overflow: hidden;
+}
+.defs > div {
+  background: var(--surface);
+  padding: 13px 16px;
+  display: grid;
+  grid-template-columns: 148px 1fr;
+  gap: 14px;
+  align-items: baseline;
+}
+.defs dt {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.05em;
+  font-weight: 640;
+  color: var(--em);
+}
+.defs dd {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+/* ---------- reference table ----------
+   The document's own hue channel carries over: a column owned by the kernel
+   is underlined in --kernel, one owned by Node in --node, so the table and
+   the figures agree without a second legend. */
+.ref-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-s);
+  margin: 0 0 20px;
+}
+.ref {
+  width: 100%;
+  min-width: 580px;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.ref.wide {
+  min-width: 720px;
+}
+.ref th,
+.ref td {
+  text-align: left;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  line-height: 1.5;
+}
+.ref thead th {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--text-3);
+  background: var(--surface-2);
+}
+.ref thead th.o-node {
+  color: var(--node-ink);
+  box-shadow: inset 0 -2px 0 var(--node);
+}
+.ref thead th.o-kernel {
+  color: var(--kernel-ink);
+  box-shadow: inset 0 -2px 0 var(--kernel);
+}
+.ref thead th.o-app {
+  color: var(--app-ink);
+  box-shadow: inset 0 -2px 0 var(--app);
+}
+.ref thead th.o-hw {
+  color: var(--hw-ink);
+  box-shadow: inset 0 -2px 0 var(--hw);
+}
+.ref tbody th {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-3);
+  background: var(--plate);
+  white-space: nowrap;
+  width: 1%;
+}
+.ref tbody td {
+  color: var(--text-2);
+}
+.ref tbody tr:last-child th,
+.ref tbody tr:last-child td {
+  border-bottom: 0;
+}
+.ref .no {
+  color: var(--text-3);
+}
+
+/* ---------- facts as points ----------
+   A paragraph that enumerates a fixed set is a list wearing prose. The
+   lead-in NAMES the item and ends with a period; what follows is detail
+   that is not already in the label. */
+ul.pts,
+ol.pts {
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 0;
+}
+.pts > li {
+  position: relative;
+  padding-left: 26px;
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+.pts > li:last-child {
+  margin-bottom: 0;
+}
+ul.pts > li::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0.66em;
+  width: 8px;
+  height: 2px;
+  background: var(--text-3);
+}
+ol.pts {
+  counter-reset: pt;
+}
+ol.pts > li::before {
+  counter-increment: pt;
+  content: counter(pt, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 0.16em;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+}
+.pts > li > b:first-child {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  font-weight: 640;
+  letter-spacing: -0.005em;
+  color: var(--em);
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 44px 0;
+}
+a.x {
+  color: var(--hi-ink);
+  text-decoration-color: color-mix(in srgb, var(--hi) 40%, transparent);
+  text-underline-offset: 3px;
+}
+
+/* ---------- callouts ---------- */
+.note {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-2);
+  border-radius: var(--r-s);
+  background: var(--surface);
+  padding: 16px 18px;
+  margin: 0 0 20px;
+  font-size: 15.5px;
+}
+.note b.nh {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.note.key {
+  border-left-color: var(--hi);
+}
+.note.key b.nh {
+  color: var(--hi-ink);
+}
+.note.trap {
+  border-left-color: var(--warn);
+}
+.note.trap b.nh {
+  color: var(--warn);
+}
+.note p:last-child {
+  margin: 0;
+}
+
+/* ---------- code ---------- */
+code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  color: var(--code);
+  background: var(--code-bg);
+  border: 1px solid var(--code-bd);
+  border-radius: 4px;
+  padding: 0.1em 0.34em;
+}
+.code {
+  border: 1px solid var(--border);
+  border-radius: var(--r-s);
+  background: var(--plate);
+  margin: 0 0 20px;
+  overflow: hidden;
+}
+.code-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.code pre {
+  margin: 0;
+  padding: 14px 18px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.66;
+  color: var(--text);
+  tab-size: 2;
+}
+.code pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+.kw {
+  color: var(--kw);
+}
+.str {
+  color: var(--str);
+}
+.num {
+  color: var(--num);
+}
+.fn {
+  color: var(--fn);
+}
+.prop {
+  color: var(--prop);
+}
+.cm {
+  color: var(--cm);
+}
+
+/* ---------- terms ---------- */
+.term {
+  color: color-mix(in srgb, currentColor 74%, var(--hi));
+  cursor: help;
+}
+.term:hover,
+.term.lit {
+  color: var(--hi-ink);
+  background: var(--hi-tint);
+  border-radius: 3px;
+  padding: 0 3px;
+  margin: 0 -3px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+/* An annotated code chip: a <code> that is also a .term.
+   `code` carries its own padding and border, and `.term:hover` REPLACES
+   padding with `0 3px` — which reflows the line the moment the pointer
+   lands on it. Both states are pinned here so the geometry never moves. */
+code.term {
+  color: var(--code);
+  border-color: color-mix(in srgb, var(--code-bd) 55%, var(--hi));
+  border-bottom-style: dashed;
+  cursor: help;
+}
+code.term:hover,
+code.term.lit {
+  color: var(--hi-ink);
+  background: var(--hi-tint);
+  border-color: var(--hi);
+  border-radius: 4px;
+  /* identical to the `code` rule above — hover must not resize the chip */
+  padding: 0.1em 0.34em;
+  margin: 0;
+}
+/* :focus first, then :focus-visible — only keyboard focus paints a ring */
+.term:focus {
+  outline: none;
+}
+.term:focus-visible {
+  outline: 2px solid var(--hi);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.pop {
+  position: fixed;
+  z-index: 90;
+  width: min(430px, calc(100vw - 26px));
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-s);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+  font-size: 14.5px;
+  line-height: 1.6;
+  display: none;
+}
+.pop.open {
+  display: block;
+}
+.pop h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-family: var(--mono);
+  letter-spacing: 0.06em;
+  color: var(--hi-ink);
+  text-transform: none;
+}
+.pop p {
+  margin: 0 0 8px;
+  color: var(--text-2);
+}
+.pop p:last-child {
+  margin: 0;
+}
+.pop .who {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
+/* ---------- owner chips ---------- */
+.w-app {
+  background: var(--app-tint);
+  color: var(--app-ink);
+}
+.w-node {
+  background: var(--node-tint);
+  color: var(--node-ink);
+}
+.w-kernel {
+  background: var(--kernel-tint);
+  color: var(--kernel-ink);
+}
+.w-hw {
+  background: var(--hw-tint);
+  color: var(--hw-ink);
+}
+
+/* ---------- footer ---------- */
+footer {
+  max-width: var(--measure);
+  margin-top: 70px;
+  padding-top: 26px;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+  color: var(--text-3);
+}
+
+/* ============================================================
+   FIGURES
+   ============================================================ */
+:root {
+  --fbleed: 340px;
+}
+@media (max-width: 1180px) {
+  :root {
+    --fbleed: 0px;
+  }
+}
+
+.fig {
+  /* Bleed evenly on both sides, but never past what the column actually
+     has: between ~1180 and ~1330px the bleed alone overflows the track.
+     Both the width and the offset are computed from the same value. */
+  --figw: min(
+    calc(100% + var(--fbleed)),
+    calc(min(100vw, 1400px) - var(--chrome, 340px))
+  );
+  width: var(--figw);
+  /* the offset is IN the shorthand — a later `margin:` silently reset a
+     separate margin-left, which is what pinned every figure to the left */
+  margin: 26px 0 30px calc((100% - var(--figw)) / 2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--surface);
+  overflow: hidden;
+}
+.fig-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.fig-n {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  font-weight: 600;
+  color: var(--on-accent);
+  background: var(--hi);
+  padding: 3px 7px;
+  border-radius: 4px;
+  flex: none;
+}
+.fig-t {
+  font-size: 13.5px;
+  font-weight: 620;
+  letter-spacing: -0.004em;
+  margin-right: auto;
+}
+.fig-body {
+  padding: 16px;
+}
+.fig-scroll {
+  overflow-x: auto;
+}
+
+/* segmented controls */
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--plate);
+  flex-wrap: wrap;
+}
+.seg button {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--text-3);
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.seg button:hover {
+  color: var(--text);
+  background: var(--raise);
+}
+.seg button.on {
+  background: var(--hi);
+  color: var(--on-accent);
+}
+.seg button.on:hover {
+  background: var(--hi);
+  color: var(--on-accent);
+}
+
+/* stage tabs + transport */
+.steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.steps .tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+.steps .tabs button {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  color: var(--text-3);
+  background: var(--plate);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 4px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.steps .tabs button:hover {
+  color: var(--text);
+  border-color: var(--border-2);
+}
+.steps .tabs button.on {
+  color: var(--hi-ink);
+  border-color: var(--hi);
+  background: var(--hi-tint);
+}
+.nudge {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+.nudge button {
+  width: 30px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--plate);
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+.nudge button:hover {
+  color: var(--text);
+  border-color: var(--border-2);
+}
+.nudge button[disabled] {
+  opacity: 0.36;
+  cursor: default;
+}
+
+/* stage */
+.stage {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--r-s);
+  background: var(--plate);
+  padding: 14px;
+}
+.stage.flat {
+  border: 0;
+  background: none;
+  padding: 0;
+}
+.stage svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* no diagram may outgrow the viewport it is being read in */
+  max-height: 76vh;
+}
+
+/* caption + meters */
+.fig-cap {
+  margin-top: 12px;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+  min-height: 46px;
+}
+.fig-cap b {
+  color: var(--text);
+  font-weight: 620;
+}
+.meters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.meter {
+  border: 1px solid var(--border);
+  border-radius: var(--r-s);
+  background: var(--plate);
+  padding: 7px 11px;
+  min-width: 108px;
+}
+.meter em {
+  display: block;
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 9.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 2px;
+}
+.meter b {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.meter.hot b {
+  color: var(--hi-ink);
+}
+.meter.bad b {
+  color: var(--warn);
+}
+.meter.ok b {
+  color: var(--node-ink);
+}
+
+/* panes */
+.panes {
+  display: grid;
+  gap: 12px;
+}
+.panes.two {
+  grid-template-columns: 1fr 1fr;
+}
+.panes.three {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+.panes.side {
+  grid-template-columns: minmax(0, 1fr) 300px;
+}
+@media (max-width: 860px) {
+  .panes.two,
+  .panes.three,
+  .panes.side {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.pane {
+  border: 1px solid var(--border);
+  border-radius: var(--r-s);
+  background: var(--plate);
+  overflow: hidden;
+}
+.pane-h {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.pane-b {
+  padding: 12px;
+  font-size: 13.5px;
+}
+.pane-b pre {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.62;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* a toggle that lives in a pane header rather than at the top of a figure */
+.pane-h .seg {
+  margin-left: auto;
+  padding: 1px;
+  border-radius: 5px;
+}
+.pane-h .seg button {
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+}
+.pane-b [hidden] {
+  display: none;
+}
+
+/* the request as text: one row per line, byte offset in the gutter, and
+   CR and LF drawn as the two bytes they are rather than as the break they
+   cause. Field tints are the byte grid's own tokens, not new colours. */
+.raw {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.66;
+  white-space: pre;
+  overflow-x: auto;
+}
+.raw i {
+  display: inline-block;
+  width: 34px;
+  color: var(--text-3);
+  font-style: normal;
+  text-align: right;
+  padding-right: 14px;
+  user-select: none;
+}
+.rw {
+  color: var(--text-2);
+  border-radius: 2px;
+}
+.rw .ctl {
+  font-style: normal;
+  opacity: 0.7;
+}
+.rw.f-m {
+  color: var(--app-ink);
+  background: var(--app-tint);
+}
+.rw.f-u {
+  color: var(--node-ink);
+  background: var(--node-tint);
+}
+.rw.f-h {
+  color: var(--kernel-ink);
+  background: var(--kernel-tint);
+}
+.rw.f-b {
+  color: var(--hw-ink);
+  background: var(--hw-tint);
+}
+/* last, so the byte under the current callback wins over its field tint */
+.rw.on {
+  color: var(--hi-ink);
+  background: var(--hi-tint);
+  box-shadow: inset 0 0 0 1px var(--hi);
+}
+
+/* log */
+.log {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  max-height: 152px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-s);
+  background: var(--plate);
+  padding: 9px 12px;
+}
+.log div {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 10px;
+  color: var(--text-2);
+}
+.log div i {
+  font-style: normal;
+  color: var(--text-3);
+}
+.log div.hot {
+  color: var(--text);
+}
+.log div.hot i {
+  color: var(--hi-ink);
+}
+
+/* key/value rows */
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.kv dt {
+  color: var(--text-3);
+  letter-spacing: 0.06em;
+}
+.kv dd {
+  margin: 0;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* byte grid */
+.bytes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1;
+}
+.by {
+  width: 25px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  gap: 1px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-3);
+  position: relative;
+}
+.by u {
+  text-decoration: none;
+  font-size: 9px;
+  color: var(--text-3);
+}
+.by b {
+  font-weight: 600;
+  font-size: 10.5px;
+  color: var(--text-2);
+}
+.by.on {
+  border-color: var(--hi);
+  background: var(--hi-tint);
+}
+.by.on b,
+.by.on u {
+  color: var(--hi-ink);
+}
+.by.cut {
+  border-left: 2px solid var(--warn);
+}
+.by.f-m {
+  background: var(--app-tint);
+  border-color: color-mix(in srgb, var(--app) 40%, transparent);
+}
+.by.f-m b {
+  color: var(--app-ink);
+}
+.by.f-u {
+  background: var(--node-tint);
+  border-color: color-mix(in srgb, var(--node) 40%, transparent);
+}
+.by.f-u b {
+  color: var(--node-ink);
+}
+.by.f-h {
+  background: var(--kernel-tint);
+  border-color: color-mix(in srgb, var(--kernel) 40%, transparent);
+}
+.by.f-h b {
+  color: var(--kernel-ink);
+}
+.by.f-b {
+  background: var(--hw-tint);
+  border-color: color-mix(in srgb, var(--hw) 40%, transparent);
+}
+.by.f-b b {
+  color: var(--hw-ink);
+}
+
+/* tables */
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.tbl th {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 600;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.tbl td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  color: var(--text-2);
+}
+.tbl tr:last-child td {
+  border-bottom: 0;
+}
+.tbl td.who {
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.tbl tbody tr.on td {
+  background: var(--hi-tint);
+  color: var(--text);
+}
+.tbl tbody tr[data-pick] {
+  cursor: pointer;
+}
+.tbl tbody tr[data-pick]:hover td {
+  background: var(--raise);
+}
+.chip {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+/* code lines with a lit current line.
+   `.codelines` / `.cl` were emitted by FIG 02 from the first build and
+   never had a rule, so the current-line highlight that the whole figure
+   steps through had no visible effect. */
+.codelines {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.72;
+}
+.cl {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 10px;
+  padding: 0 6px;
+  margin: 0 -6px;
+  border-radius: 3px;
+  color: var(--text-2);
+}
+.cl i {
+  font-style: normal;
+  text-align: right;
+  color: var(--text-3);
+  user-select: none;
+}
+.cl.on {
+  color: var(--text);
+  background: var(--hi-tint);
+  box-shadow: inset 0 0 0 1px var(--hi);
+}
+.cl.on i {
+  color: var(--hi-ink);
+}
+/* every line dimmed when none is running. 0.75 is not a taste decision:
+   it is the lowest value that still clears 4:1 against --plate in the
+   light theme, which contrast-f02 reads out of this rule rather than
+   being told. */
+.cl.off {
+  opacity: 0.75;
+}
+.codenote {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+/* one system call, spelled out: the signature, then a gloss per argument,
+   then what changed in the kernel, then who issued it. The same shape is
+   used for the steps that make NO call, so nothing moves as you step. */
+.sysc {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sysc-sig {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--kernel);
+  border-radius: var(--r-s);
+  padding: 8px 11px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.sysc-sig.none {
+  border-left-color: var(--node);
+  color: var(--text-2);
+}
+.sysc-sig b {
+  color: var(--hi-ink);
+  font-weight: 600;
+}
+.sysc-eff {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.58;
+  color: var(--text-2);
+}
+.sysc-eff b {
+  color: var(--text);
+  font-weight: 600;
+}
+.sysc-by {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+.sysc-by b {
+  color: var(--text-2);
+  font-weight: 500;
+}
+.sysc .kv {
+  gap: 6px 14px;
+  align-items: baseline;
+}
+.sysc .kv dt {
+  color: var(--kernel-ink);
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.sysc.none .kv dt {
+  color: var(--node-ink);
+}
+.sysc .kv dd {
+  color: var(--text-2);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* who supplies the argument — the two-callback table of the final step */
+.argt {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.argt th {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 400;
+  padding: 0 10px 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.argt td {
+  padding: 8px 10px 8px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+  vertical-align: top;
+  line-height: 1.5;
+}
+.argt tr:last-child td {
+  border-bottom: 0;
+}
+.argt td code {
+  white-space: nowrap;
+}
+.argt td b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+
+/* ============================================================
+   THE DOCUMENT-WIDE API SWITCH
+
+   One `data-api` on `.page` is the only source of truth. Prose
+   alternates swap in CSS rather than JavaScript, so they cannot
+   desync from the figures and they are already correct before any
+   script has run. Figures re-render from window.API and KEEP THEIR
+   STEP INDEX — a document-scoped control that threw you back to
+   step 1 of twelve figures would be unusable.
+   ============================================================ */
+[data-api="net"] .a-http,
+[data-api="http"] .a-net {
+  display: none;
+}
+
+/* The switch lives in the NAV, which already slides away on scroll-down and
+   returns on scroll-up. A second sticky strip cost ~100px of viewport, and
+   because the nav hides and this did not, scrolling left it floating with a
+   gap of content showing above it. One sticky strip, not two.
+
+   This bar is now an ordinary block: it explains the switch once, at the
+   top, and then scrolls out of the way. */
+.apibar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 22px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-s);
+  background: var(--surface);
+}
+.apibar .lab {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.apibar .hint {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: right;
+}
+@media (max-width: 700px) {
+  .apibar .hint {
+    display: none;
+  }
+}
+
+/* the same control, compact, in the nav */
+.nav .seg {
+  flex: none;
+  padding: 1px;
+  border-radius: 5px;
+}
+.nav .seg button {
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  padding: 4px 9px;
+}
+@media (max-width: 560px) {
+  .nav-mark {
+    display: none;
+  }
+}
+
+/* A stepper whose diagram scrolls out of view as you step is not an
+   instrument. The diagram sits BESIDE its detail card, never above it, so
+   the whole figure — tabs, stage, caption, meters — fits one viewport. */
+.panes.wide {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 12px;
+}
+.panes.wide > .rcol {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .panes.wide {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* the band of the stack the switch cannot reach */
+.inv {
+  border-left: 2px solid var(--node);
+  background: var(--node-tint);
+  border-radius: var(--r-s);
+  padding: 11px 14px;
+  margin: 18px 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.inv b.nh {
+  display: block;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--node-ink);
+  margin-bottom: 5px;
+}
+
+/* two callback worlds, side by side */
+.worlds {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+@media (max-width: 860px) {
+  .worlds {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* code lines, shared with the sibling document */
+.codelines {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.72;
+}
+.cl {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 10px;
+  padding: 0 6px;
+  margin: 0 -6px;
+  border-radius: 3px;
+  color: var(--text-2);
+}
+.cl i {
+  font-style: normal;
+  text-align: right;
+  color: var(--text-3);
+  user-select: none;
+}
+.cl.on {
+  color: var(--text);
+  background: var(--hi-tint);
+  box-shadow: inset 0 0 0 1px var(--hi);
+}
+.cl.on i {
+  color: var(--hi-ink);
+}
+.cl.off {
+  opacity: 0.75;
+}
+
+/* one call, spelled out */
+.sysc {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sysc-sig {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--kernel);
+  border-radius: var(--r-s);
+  padding: 8px 11px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.sysc-sig.js {
+  border-left-color: var(--node);
+}
+.sysc-sig.you {
+  border-left-color: var(--app);
+}
+.sysc-sig b {
+  color: var(--hi-ink);
+  font-weight: 600;
+}
+.sysc-eff {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.58;
+  color: var(--text-2);
+}
+.sysc-eff b {
+  color: var(--text);
+  font-weight: 600;
+}
+.sysc-by {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+.sysc-by b {
+  color: var(--text-2);
+  font-weight: 500;
+}
+.sysc .kv {
+  gap: 6px 14px;
+  align-items: baseline;
+}
+.sysc .kv dt {
+  color: var(--kernel-ink);
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.sysc.js .kv dt {
+  color: var(--node-ink);
+}
+.sysc.you .kv dt {
+  color: var(--app-ink);
+}
+.sysc .kv dd {
+  color: var(--text-2);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* what a layer knows, and what it does not */
+.knows {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.knows th {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 400;
+  padding: 0 10px 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.knows td {
+  padding: 8px 10px 8px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+  vertical-align: top;
+  line-height: 1.5;
+}
+.knows tr:last-child td {
+  border-bottom: 0;
+}
+.knows td.no {
+  color: var(--warn);
+}
+
+/* ---------- SVG vocabulary ---------- */
+svg .plate {
+  fill: var(--surface-2);
+  stroke: var(--border);
+}
+svg .lbl {
+  fill: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+}
+svg .sub {
+  fill: var(--text-2);
+  font-family: var(--sans);
+  font-size: 11.5px;
+}
+svg .mlbl {
+  fill: var(--text-3);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+svg .mono {
+  fill: var(--text-2);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+svg .band {
+  fill: var(--plate);
+  stroke: var(--border);
+  stroke-dasharray: 3 4;
+}
+svg .o-app {
+  fill: var(--app-tint);
+  stroke: var(--app);
+}
+svg .o-node {
+  fill: var(--node-tint);
+  stroke: var(--node);
+}
+svg .o-kernel {
+  fill: var(--kernel-tint);
+  stroke: var(--kernel);
+}
+svg .o-hw {
+  fill: var(--hw-tint);
+  stroke: var(--hw);
+}
+svg .t-app {
+  fill: var(--app-ink);
+}
+svg .t-node {
+  fill: var(--node-ink);
+}
+svg .t-kernel {
+  fill: var(--kernel-ink);
+}
+svg .t-hw {
+  fill: var(--hw-ink);
+}
+svg .lit {
+  stroke: var(--hi);
+  stroke-width: 2;
+}
+svg .dim {
+  opacity: 0.34;
+}
+svg .arr {
+  stroke: var(--text-3);
+  stroke-width: 1.6;
+  fill: none;
+}
+svg .arr.flow {
+  stroke: var(--hi);
+  stroke-dasharray: 7 6;
+  animation: march 0.85s linear infinite;
+}
+@keyframes march {
+  to {
+    stroke-dashoffset: -13;
+  }
+}
+svg .hit {
+  cursor: pointer;
+}
+svg .hit:hover .plate,
+svg .hit:hover rect.o-app,
+svg .hit:hover rect.o-node,
+svg .hit:hover rect.o-kernel,
+svg .hit:hover rect.o-hw {
+  stroke-width: 2;
+}
+svg text {
+  pointer-events: none;
+}
+.svg-flow {
+  pointer-events: none;
+}
+
+</style>
+</head>
+<body>
+<nav class="nav">
+  <button class="icon-btn rail-btn" data-rail-toggle type="button"
+    aria-label="show or hide the contents rail" aria-expanded="true">
+    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+  </button>
+  <span class="nav-mark">dispatch</span>
+  <span class="nav-title">Who calls your callback</span>
+  <span class="nav-sp"></span>
+  <span class="seg" role="group" aria-label="which api, for the whole document">
+    <button type="button" data-api-btn="net" aria-pressed="true">net</button>
+    <button type="button" data-api-btn="http" aria-pressed="false">http</button>
+  </span>
+  <span class="nav-legend">
+    <b><i style="background:var(--app)"></i>you</b>
+    <b><i style="background:var(--node)"></i>node</b>
+    <b><i style="background:var(--kernel)"></i>kernel</b>
+    <b><i style="background:var(--hw)"></i>hardware</b>
+  </span>
+  <button class="icon-btn theme-toggle" data-theme-toggle type="button" aria-label="switch theme">
+    <svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+    <svg class="moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+  </button>
+</nav>
+
+<div class="page" data-api="net">
+  <aside class="rail" aria-label="contents">
+    <p class="rail-h">contents</p>
+    <a href="#s00"><em>00</em><span>Two directions</span></a>
+    <a href="#s01"><em>01</em><span>Registration is an array push</span></a>
+    <a href="#s02"><em>02</em><span>Who starts the read</span></a>
+    <a href="#s03"><em>03</em><span>Interest, not polling</span></a>
+    <a href="#s04"><em>04</em><span>Five bytes arrive</span></a>
+    <a href="#s05"><em>05</em><span>Where your Buffer comes from</span></a>
+    <a href="#s06"><em>06</em><span>One callback, three meanings</span></a>
+    <a href="#s07"><em>07</em><span>Finding the JavaScript object</span></a>
+    <a href="#s08"><em>08</em><span>Crossing into V8</span></a>
+    <a href="#s09"><em>09</em><span>The last few frames</span></a>
+    <a href="#s10"><em>10</em><span>Two callback worlds</span></a>
+    <a href="#s11"><em>11</em><span>The responsibility map</span></a>
+  </aside>
+
+  <main class="main">
+    <header class="mast">
+      <p class="kicker">Node internals · the dispatch chain</p>
+      <h1>Who calls<br /><span>your callback</span></h1>
+      <p class="dek">
+        It is not libuv. libuv gets the <em>native</em> event to Node; Node is
+        what turns a native event into JavaScript behaviour. This document is
+        the two layers that sentence usually leaves out.
+      </p>
+      <p class="mast-meta">
+        <span>12 sections</span><span>12 figures</span><span>one switch, whole page</span
+        ><span data-version="1.0">v1.0</span>
+      </p>
+    </header>
+
+    <div class="apibar">
+      <span class="lab">this whole page reads</span>
+      <span class="seg" role="group" aria-label="which api">
+        <button type="button" data-api-btn="net" aria-pressed="true">net.createServer</button>
+        <button type="button" data-api-btn="http" aria-pressed="false">http.createServer</button>
+      </span>
+      <span class="hint">
+        every figure, code sample and sentence below switches together. The
+        same control stays in the bar at the top of the window as you read
+      </span>
+    </div>
+
+    <div class="thesis">
+      <p>
+        <span class="a-net">You write <code data-t="dataevent">socket.on('data', h)</code> and later
+        <code>h</code> runs.</span><span class="a-http">You write <code data-t="dataevent">req.on('data', h)</code> and later
+        <code>h</code> runs.</span>
+        Between those two events are six handoffs, two language boundaries and
+        exactly one copy of your bytes.
+      </p>
+      <p>
+        <span class="term" data-t="libuv">libuv</span> does not know your
+        function exists. It does not know what
+        <code data-t="dataevent">'data'</code> is, what an
+        <code data-t="emitter">EventEmitter</code> is, or what a
+        <code>Buffer</code> is. Those are Node's ideas, and Node is the
+        translator.
+      </p>
+    </div>
+
+    <!-- ================= 00 ================= -->
+    <section id="s00">
+      <div class="sec-h"><span class="sec-n">§00</span><h2>Two directions, and only one of them is yours</h2></div>
+      <p class="lead">
+        Setting an operation up and having it complete are two different
+        journeys through the same six layers, in opposite directions, using
+        different machinery.
+      </p>
+      <p>
+        Going down is a chain of ordinary function calls: a method on a
+        JavaScript object reaches a C++ object, which reaches a libuv handle,
+        which makes a system call. It happens on your stack, it happens
+        immediately, and it returns immediately.
+      </p>
+      <p>
+        Coming back up is nothing like that. It begins with a hardware
+        interrupt in a process that is not scheduled, and it arrives in
+        JavaScript only because Node left itself a trail of pointers on the
+        way down.
+      </p>
+
+      <figure class="fig" data-fig="directions" id="f01">
+        <div class="fig-top">
+          <span class="fig-n">FIG 01</span>
+          <span class="fig-t">Down is a call. Up is a delivery.</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <div class="note key">
+        <b class="nh">the switch at the top of this page</b>
+        <p>
+          This document is written twice. <b>net</b> shows the shorter chain,
+          where the socket is the stream you read. <b>http</b> shows the same
+          chain with a parser and a second Readable stacked on it. Flipping
+          the switch rewrites every figure, every code sample and the sentences
+          around them.
+        </p>
+        <p>
+          The reason it is worth a switch rather than a paragraph:
+          <b>the bottom four layers do not change</b>. Figures 04 through 08 are
+          byte-identical in both modes, and that is the layering claim made
+          checkable rather than asserted.
+        </p>
+      </div>
+    </section>
+
+    <!-- ================= 01 ================= -->
+    <section id="s01">
+      <div class="sec-h"><span class="sec-n">§01</span><h2>Registration is an array push, and nothing else</h2></div>
+      <p>
+        <span class="a-net">When you call <code data-t="dataevent">socket.on('data', h)</code>, the</span><span class="a-http">When you call <code data-t="dataevent">req.on('data', h)</code>, the</span>
+        first thing that happens is the least interesting thing that could
+        happen: your function is stored in a table on the object, under the
+        string you passed.
+      </p>
+      <p>
+        The useful mental model in most explanations is
+        <code>_events = { data: handler }</code>, and it is close enough to be
+        worth having. The real shape is slightly different in a way that
+        matters when you go looking: Node stores <strong>the function
+        itself</strong> for a single listener, and only promotes the slot to an
+        array on the second one.
+      </p>
+
+      <figure class="fig" data-fig="register" id="f02">
+        <div class="fig-top">
+          <span class="fig-n">FIG 02</span>
+          <span class="fig-t">What the listener table actually holds</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <p>
+        Nothing native has been touched. No descriptor, no system call, no
+        libuv handle. <strong>Registering interest is cheap precisely because
+        it does nothing</strong> — which raises the obvious question of what
+        does.
+      </p>
+    </section>
+
+    <!-- ================= 02 ================= -->
+    <section id="s02">
+      <div class="sec-h"><span class="sec-n">§02</span><h2>Who actually tells the socket to read</h2></div>
+      <p class="lead">
+        This is the section the switch at the top of the page exists for,
+        because <b>net</b> and <b>http</b> give different answers, and the
+        difference explains a great deal of otherwise confusing behaviour.
+      </p>
+      <p class="a-net">
+        In <code data-t="netmod">net</code>, your listener is the trigger.
+        <code>Readable.prototype.on</code> does one extra thing beyond storing
+        the function: if the event is <code data-t="dataevent">'data'</code>
+        and the stream has not been explicitly paused, it resumes it. That
+        resume is deferred a tick, then reaches
+        <code data-t="flowing">flowing mode</code>, then <code>_read</code>,
+        then the C++ handle, then
+        <code data-t="uvreadstart">uv_read_start</code>.
+      </p>
+      <p class="a-http">
+        In <code data-t="httpmod">http</code>, the answer is that
+        <strong>it already happened</strong>. The connection socket has been
+        reading since the moment it was accepted — it has to be, because the
+        server cannot know a request exists until it has read and parsed the
+        request line. By the time your handler runs,
+        <code data-t="llhttpp">llhttp</code> has already consumed the headers
+        off the wire. Your <code data-t="dataevent">req.on('data')</code>
+        resumes a <em>second</em> Readable
+        (<code data-t="incoming">http.IncomingMessage</code>) whose source is
+        the parser, not a descriptor.
+      </p>
+
+      <figure class="fig" data-fig="readstart" id="f03">
+        <div class="fig-top">
+          <span class="fig-n">FIG 03</span>
+          <span class="fig-t">From a listener to a libuv call</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <div class="note trap">
+        <b class="nh">the detail worth carrying away</b>
+        <p>
+          <code data-t="uvreadstart">uv_read_start</code> is handed
+          <strong>two</strong> native callbacks, not one:
+          <code data-t="alloccb">alloc_cb</code> and
+          <code data-t="readcb">read_cb</code>. Almost every explanation of
+          this chain mentions only the second, which leaves no answer to the
+          question of where the <code>data</code> Buffer's memory came from.
+          §05 is that answer.
+        </p>
+      </div>
+    </section>
+
+    <!-- ================= 03 ================= -->
+    <section id="s03">
+      <div class="sec-h"><span class="sec-n">§03</span><h2>Interest, not polling</h2></div>
+      <p>
+        libuv is not sitting in a loop asking the socket whether anything has
+        arrived. It registers interest once and then blocks, and a socket that becomes readable
+        appends <em>itself</em> to that epoll instance’s
+        <span class="term" data-t="epollready">ready list</span>. The distinction is
+        the whole reason ten thousand idle connections can cost nothing.
+      </p>
+
+      <figure class="fig" data-fig="epoll" id="f04">
+        <div class="fig-top">
+          <span class="fig-n">FIG 04</span>
+          <span class="fig-t">One syscall, and then a thread that is not running</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <div class="inv">
+        <b class="nh">below here, the switch does nothing</b>
+        This figure and the next three are identical whichever API is
+        selected. Flip the switch and watch: the tabs, the diagrams and the
+        numbers do not move. <b>That is the layering claim, made checkable.</b>
+      </div>
+    </section>
+
+    <!-- ================= 04 ================= -->
+    <section id="s04">
+      <div class="sec-h"><span class="sec-n">§04</span><h2>Five bytes arrive, and Node does not run</h2></div>
+      <p>
+        A peer sends <code>hello</code>. What follows is entirely the kernel's
+        and the hardware's, and it is worth stepping through precisely because
+        no Node code of any kind executes during it.
+      </p>
+
+      <figure class="fig" data-fig="arrive" id="f05">
+        <div class="fig-top">
+          <span class="fig-n">FIG 05</span>
+          <span class="fig-t">From the wire to a ready list</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <p>
+        The acknowledgement goes back out before your process learns anything.
+        <strong>TCP is not implemented by Node</strong>; the sequence numbers,
+        the window, the retransmission and the reassembly all happen in a layer
+        that has never heard of JavaScript.
+      </p>
+    </section>
+
+    <!-- ================= 05 ================= -->
+    <section id="s05">
+      <div class="sec-h"><span class="sec-n">§05</span><h2>Where your Buffer actually comes from</h2></div>
+      <p class="lead">
+        Before every read, libuv calls back into Node to ask for somewhere to
+        put bytes that do not exist yet. This is the step most descriptions of
+        the chain omit, and it is the answer to a question they therefore
+        cannot answer.
+      </p>
+      <p>
+        libuv cannot allocate the memory itself. It has no idea what a
+        <code>Buffer</code> is, and it must not decide how large your process's
+        reads are. So <code data-t="alloccb">alloc_cb</code> receives an
+        out-parameter and Node fills in a pointer and a length —
+        <strong>memory travelling the other way across the boundary</strong>.
+      </p>
+
+      <figure class="fig" data-fig="alloc" id="f06">
+        <div class="fig-top">
+          <span class="fig-n">FIG 06</span>
+          <span class="fig-t">The allocation callback, the pool, and the one copy</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <div class="note trap">
+        <b class="nh">a real leak shape</b>
+        <p>
+          Because Node answers out of a
+          <span class="term" data-t="poolbuf">pool</span>, the chunk your
+          handler receives is usually a <em>view</em> into a larger allocation
+          shared with other chunks. Keeping a five-byte chunk can retain the
+          whole thing. <code>Buffer.from(chunk)</code> exists for exactly this,
+          and <code>chunk.byteOffset</code> is rarely zero.
+        </p>
+      </div>
+    </section>
+
+    <!-- ================= 06 ================= -->
+    <section id="s06">
+      <div class="sec-h"><span class="sec-n">§06</span><h2>One native callback, three different meanings</h2></div>
+      <p>
+        The other callback handed to
+        <code data-t="uvreadstart">uv_read_start</code> is
+        <code data-t="readcb">read_cb</code>, and its second parameter is a
+        <em>signed</em> integer. That sign is doing a great deal of work:
+        data, end of stream and failure all arrive through the same C
+        function.
+      </p>
+
+      <figure class="fig" data-fig="nread" id="f07">
+        <div class="fig-top">
+          <span class="fig-n">FIG 07</span>
+          <span class="fig-t">nread, and what its sign decides</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <p>
+        Which is why the three become three different JavaScript events in
+        Node's C++ layer rather than in libuv.
+        <code data-t="dataevent">'data'</code>, <code>'end'</code> and
+        <code>'error'</code> are Node's vocabulary; libuv reported one number.
+      </p>
+    </section>
+
+    <!-- ================= 07 ================= -->
+    <section id="s07">
+      <div class="sec-h"><span class="sec-n">§07</span><h2>How a native event finds a JavaScript object</h2></div>
+      <p>
+        The event arrives naming a descriptor. Your handler expects an object.
+        Between the two are three stored pointers and one piece of pointer arithmetic
+        (<span class="term" data-t="containerof">container_of</span>) — and, importantly,
+        no search of any kind.
+      </p>
+
+      <figure class="fig" data-fig="web" id="f08">
+        <div class="fig-top">
+          <span class="fig-n">FIG 08</span>
+          <span class="fig-t">fd 42 → uv_tcp_t → TCPWrap → the JavaScript object</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <p>
+        The pivot is <code data-t="handledata">handle->data</code>, a free-form
+        <code>void*</code> that libuv reserves on every handle and never
+        touches. Node stores its C++ wrapper there. <strong>That one pointer is
+        the seam between a general-purpose C library and a specific
+        runtime</strong> — follow it, and you have left libuv.
+      </p>
+    </section>
+
+    <!-- ================= 08 ================= -->
+    <section id="s08">
+      <div class="sec-h"><span class="sec-n">§08</span><h2>Crossing into V8 is more than a function call</h2></div>
+      <p class="lead">
+        Node does not simply call a JavaScript function from C++. <code data-t="makecallback">MakeCallback</code> re-enters
+        JavaScript with bookkeeping that a plain call would skip, and one piece of it explains an ordering rule you have
+        probably relied on without knowing where it lives.
+      </p>
+
+      <figure class="fig" data-fig="makecallback" id="f09">
+        <div class="fig-top">
+          <span class="fig-n">FIG 09</span>
+          <span class="fig-t">MakeCallback, and the drain on the way out</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <div class="note key">
+        <b class="nh">why await resumes before the next chunk</b>
+        <p>
+          When the outermost native-to-JavaScript call returns, Node drains the
+          entire <code>nextTick</code> queue and then the microtask queue
+          before control goes back to libuv. So a promise you resolve inside a
+          <code data-t="dataevent">'data'</code> handler settles before the next
+          chunk can be delivered — not because promises are special, but
+          because <span class="term" data-t="tickdrain">the drain</span> happens
+          on the way out of the callback that delivered this one.
+        </p>
+      </div>
+
+      <p>
+        Note also what V8 is asked to call. It is not your function. It is
+        <code>onStreamRead</code>, Node's own JavaScript, with three or four
+        more frames still to go.
+      </p>
+    </section>
+
+    <!-- ================= 09 ================= -->
+    <section id="s09">
+      <div class="sec-h"><span class="sec-n">§09</span><h2>The last few frames, where the two APIs finally differ</h2></div>
+      <p class="a-net">
+        In <code data-t="netmod">net</code> it is short: Node's JavaScript
+        pushes the chunk into the socket's own Readable, the stream is flowing
+        so the queue is bypassed, the socket emits, and the emitter calls you.
+      </p>
+      <p class="a-http">
+        In <code data-t="httpmod">http</code> it is longer, and the socket's
+        only <code data-t="dataevent">'data'</code> listener is not yours — it
+        belongs to the server. Bytes go to
+        <code data-t="llhttpp">llhttp</code> first, which fires its own
+        callbacks synchronously, and the body slices are pushed into
+        <code data-t="incoming">req</code>: a second Readable, with its own
+        flowing state and its own backpressure.
+      </p>
+
+      <figure class="fig" data-fig="emit" id="f10">
+        <div class="fig-top">
+          <span class="fig-n">FIG 10</span>
+          <span class="fig-t">Node's JavaScript, then the emitter, then you</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <p>
+        In both cases your function is the last frame on a stack that still has
+        the native read callback at the bottom of it. <strong>You are running
+        inside the C++ call that started this.</strong> Block here and nothing
+        else in the process runs, because there is nothing else running.
+      </p>
+    </section>
+
+    <!-- ================= 10 ================= -->
+    <section id="s10">
+      <div class="sec-h"><span class="sec-n">§10</span><h2>Two things called “the callback”</h2></div>
+      <p>
+        A great deal of confusion about this chain comes from one word doing
+        two jobs. There are two callbacks involved and they share nothing: not
+        a language, not a caller, not an argument.
+      </p>
+
+      <figure class="fig" data-fig="worlds" id="f11">
+        <div class="fig-top">
+          <span class="fig-n">FIG 11</span>
+          <span class="fig-t">Native callback ≠ JavaScript callback</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <p>
+        Which is why <em>“libuv calls my callback”</em> is wrong in a specific
+        and fixable way. libuv gets the native event to Node.
+        <strong>Node turns that native event into JavaScript behaviour.</strong>
+        The middle is not a detail; it is the part that does the work.
+      </p>
+    </section>
+
+    <!-- ================= 11 ================= -->
+    <section id="s11">
+      <div class="sec-h"><span class="sec-n">§11</span><h2>The responsibility map</h2></div>
+      <p class="lead">
+        Every layer in this document is easiest to hold by what it
+        <em>cannot</em> know. Responsibilities are memorable; the gaps between
+        them are what make the architecture make sense.
+      </p>
+
+      <figure class="fig" data-fig="map" id="f12">
+        <div class="fig-top">
+          <span class="fig-n">FIG 12</span>
+          <span class="fig-t">What each layer does, and what it has never heard of</span>
+        </div>
+        <div class="fig-body"></div>
+      </figure>
+
+      <div class="note key">
+        <b class="nh">the chain, in one sentence</b>
+        <p>
+          The kernel produces an OS-level event; libuv observes it and
+          dispatches a <em>native</em> callback; Node's C++ layer translates
+          that into a Node operation; V8 executes JavaScript; Node's stream and
+          <code data-t="emitter">EventEmitter</code> machinery reaches your
+          function.
+        </p>
+        <p>
+          Six handoffs, two boundary crossings, one copy — and only the top two
+          rows of that list changed when you flipped the switch.
+        </p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+window.TERMS = {
+  fd: {
+    t: "file descriptor",
+    who: "kernel",
+    d: "<p>A small non-negative integer that indexes a per-process table. Row <code>n</code> of that table points at a kernel object — a file, a pipe, a socket. The number is meaningless outside the process that holds it.</p>",
+  },
+  socket: {
+    t: "socket",
+    who: "kernel",
+    d: "<p>The kernel object behind a network descriptor: a protocol, a local address, sometimes a remote address, and two buffers. Your process never holds it. It holds a descriptor that refers to it.</p>",
+  },
+  listening: {
+    t: "listening socket",
+    who: "kernel",
+    d: "<p>A socket that has had <code>listen()</code> called on it. It never carries data. Its job is to hold two queues of half-finished and finished handshakes, and to hand out a <em>new</em> descriptor each time you call <code>accept()</code>.</p>",
+  },
+  tuple: {
+    t: "the four-tuple",
+    who: "kernel",
+    d: "<p>Source address, source port, destination address, destination port. The kernel uses all four to decide which socket an arriving packet belongs to, which is how one server port serves thousands of simultaneous connections.</p>",
+  },
+  syscall: {
+    t: "system call",
+    who: "kernel",
+    d: "<p>The instruction that transfers control from your process to the kernel. Cheap — a microsecond or two — but the only way to reach anything the kernel owns, and the only place a thread can be put to sleep.</p>",
+  },
+  userspace: {
+    t: "userspace",
+    who: "node",
+    d: "<p>Everything running in your process's own address space: V8, your JavaScript, node's C++, libuv, OpenSSL. It cannot touch a socket except by asking the kernel.</p>",
+  },
+  libuv: {
+    t: "libuv",
+    who: "node",
+    d: "<p>The C library underneath Node that owns the event loop and makes the actual system calls. It also papers over the differences between epoll, kqueue and IOCP so Node's JavaScript does not have to know which one is under it.</p>",
+  },
+  tcpwrap: {
+    t: "TCPWrap",
+    who: "node",
+    d: "<p>The C++ object that a JavaScript <code>net.Server</code> or <code>net.Socket</code> holds. It owns a <code>uv_tcp_t</code>, which owns the descriptor. Three objects in three languages, one socket.</p>",
+  },
+  llhttp: {
+    t: "llhttp",
+    who: "node",
+    d: "<p>Node's HTTP parser: a state machine generated from a description of HTTP/1.1 and compiled to C. Feed it bytes, it emits callbacks. It replaced http_parser in Node 12.</p>",
+  },
+  bytestream: {
+    t: "byte stream",
+    who: "kernel",
+    d: "<p>TCP's delivery contract: the bytes you wrote come out the other end, in order, exactly once. Not <em>the writes you made come out as writes</em> — the boundaries between them are not transmitted and cannot be recovered.</p>",
+  },
+  segment: {
+    t: "segment",
+    who: "kernel",
+    d: "<p>One TCP-sized piece of the stream, with a TCP header on it. How the stream is cut into segments is decided by the path MTU, the congestion window and Nagle's algorithm — never by the sender's application.</p>",
+  },
+  mss: {
+    t: "MSS",
+    who: "kernel",
+    d: "<p>Maximum segment size: the largest payload TCP will put in one segment, typically 1460 bytes on a 1500-byte-MTU Ethernet path. Anything larger is cut up.</p>",
+  },
+  mtu: {
+    t: "MTU",
+    who: "hw",
+    d: "<p>The largest frame the link will carry — 1500 bytes on ordinary Ethernet. IP fragments or TCP segments to fit it.</p>",
+  },
+  backlog: {
+    t: "backlog",
+    who: "kernel",
+    d: "<p>The size of the accept queue: connections the kernel has finished handshaking that your process has not accepted yet. Node asks for 511 by default. When it fills, new connections are dropped or refused.</p>",
+  },
+  epoll: {
+    t: "epoll",
+    who: "kernel",
+    d: "<p>Linux's readiness interface. You register descriptors once, then call <code>epoll_wait</code>, which sleeps until at least one of them is worth looking at. kqueue is the BSD and macOS equivalent; IOCP on Windows works differently. It reports completions rather than readiness.</p>",
+  },
+  poll: {
+    t: "the poll phase",
+    who: "node",
+    d: "<p>The phase of the libuv loop where the process actually sleeps. Everything else in a loop iteration is bookkeeping between wakeups.</p>",
+  },
+  pool: {
+    t: "the thread pool",
+    who: "node",
+    d: "<p>Four libuv worker threads by default, used for work with no non-blocking interface: file system calls, <code>getaddrinfo</code>, some crypto, zlib. Sockets never use it.</p>",
+  },
+  getaddrinfo: {
+    t: "getaddrinfo",
+    who: "kernel",
+    d: "<p><code>getaddrinfo</code> is the C library function that turns a hostname into addresses using the machine's own configuration — <code>/etc/hosts</code>, then <code>/etc/resolv.conf</code>, and whatever else nsswitch says. It blocks, and has no non-blocking equivalent, which is why Node runs it on a pool thread.</p>",
+  },
+  cares: {
+    t: "c-ares",
+    who: "node",
+    d: "<p>An asynchronous DNS library bundled with Node. It builds and parses DNS messages itself over a UDP socket, so it needs no thread, and consults no local configuration beyond the resolver list.</p>",
+  },
+  record: {
+    t: "TLS record",
+    who: "node",
+    d: "<p>TLS's own framing: a type byte, a version, a two-byte length, then the encrypted payload. TCP carries these like any other bytes and has no idea what they are.</p>",
+  },
+  sni: {
+    t: "SNI",
+    who: "node",
+    d: "<p>Server Name Indication: the hostname sent in the clear in the ClientHello so a server hosting many sites on one address knows which certificate to present. Visible to anything on the path unless encrypted client hello is in use.</p>",
+  },
+  incoming: {
+    t: "IncomingMessage",
+    who: "node",
+    d: "<p>The object Node's HTTP machinery hands your handler. Its fields are not read off the wire. They are what the parser filled in from bytes that had already arrived.</p>",
+  },
+  chunked: {
+    t: "chunked",
+    who: "node",
+    d: "<p>The HTTP/1.1 framing used when the body length is not known in advance: each piece is preceded by its size in hex, and a zero-length chunk ends the message.</p>",
+  },
+  opcode: {
+    t: "opcode",
+    who: "node",
+    d: "<p>Four bits in a WebSocket frame saying what kind of frame it is: text, binary, close, ping or pong.</p>",
+  },
+  mask: {
+    t: "masking key",
+    who: "node",
+    d: "<p>Four bytes that every client-to-server WebSocket frame XORs its payload with. It is not security. It exists so that a hostile page cannot make a browser emit bytes that look like a valid HTTP request to a confused proxy.</p>",
+  },
+  eaddrinuse: {
+    t: "EADDRINUSE",
+    who: "kernel",
+    d: "<p>The error <code>bind()</code> returns when the address and port you asked for are already reserved. It surfaces on the server's <code>'error'</code> event, two steps after the call people usually blame.</p>",
+  },
+  ephemeral: {
+    t: "ephemeral port",
+    who: "kernel",
+    d: "<p>The temporary source port the kernel picks for an outgoing connection, from a range like 32768-60999. It is the only part of the four-tuple a client does not choose.</p>",
+  },
+  nagle: {
+    t: "Nagle's algorithm",
+    who: "kernel",
+    d: "<p>A rule that holds small writes back briefly to avoid sending a header-heavy tiny segment. One of several reasons the number of segments does not match the number of times you called <code>write()</code>.</p>",
+  },
+  drain: {
+    t: "backpressure",
+    who: "node",
+    d: "<p>What <code>write()</code> returning <code>false</code> means: the kernel's send buffer is full and Node is now holding the rest in your process's memory. The <code>'drain'</code> event says it is safe to continue.</p>",
+  },
+  dma: {
+    t: "DMA",
+    who: "hw",
+    d: "<p>Direct memory access: the card writes the received frame into memory itself and then raises an interrupt, rather than the CPU copying it byte by byte.</p>",
+  },
+  keepalive: {
+    t: "keep-alive",
+    who: "node",
+    d: "<p>Reusing one TCP connection for several HTTP requests, which is the default in HTTP/1.1. The parser resets between messages; the socket does not.</p>",
+  },
+  ttl: {
+    t: "TTL",
+    who: "kernel",
+    d: "<p>A counter in the IP header that every router decrements. At zero the packet is discarded, which is what stops a routing loop from lasting forever.</p>",
+  },
+
+  /* ---- the figure captions -------------------------------------------
+     `listenjs` and `listensys` are the same six letters at two different
+     layers with two different owners. Keeping them apart is the point of
+     fig 02, not an oversight. */
+  createserver: {
+    t: "net.createServer()",
+    who: "node",
+    d: "<p>A library function, not a system call. It allocates one <code>net.Server</code>, stores your connection handler on it, and returns. Run it under strace and you see nothing at all: no descriptor, no port, no kernel involvement.</p><p>The C++ <code>TCPWrap</code> and the libuv handle behind it are not created here either. They wait for <code>listen()</code>. Two processes can call <code>createServer</code> on port 3000 quite happily.</p>",
+  },
+  listenjs: {
+    t: "server.listen()",
+    who: "node",
+    d: "<p>The JavaScript method, and the only line in the program that crosses into the kernel. libuv builds a <code>uv_tcp_t</code>, then <code>listen</code> fires three system calls in order: <code>socket()</code>, <code>bind()</code>, <code>listen()</code>, plus a <code>setsockopt</code> or two along the way.</p><p>Because all three happen inside one method call, a failure in any of them surfaces the same way, one asynchronous <code>error</code> event on the server. That is why the port-in-use failure looks like it came from here when <code>bind</code> is what actually refused.</p>",
+  },
+  bindsys: {
+    t: "bind(2)",
+    who: "kernel",
+    d: "<p>The system call that claims an address. <code>bind</code> takes a socket that has no name and gives it one: before it returns the socket has no port, after it returns <code>0.0.0.0:3000</code> is this socket's and the kernel refuses it to anyone else, unless that other socket asked for <code>SO_REUSEPORT</code> first.</p><p>This is the call that returns <b>EADDRINUSE</b>, two lines below the <code>createServer</code> that usually gets blamed for it. Binding still does not make you a server: a bound socket that is never listened on accepts nothing.</p>",
+  },
+  listensys: {
+    t: "listen(2)",
+    who: "kernel",
+    d: "<p>The system call that converts a bound socket into a <b>listening socket</b>. The kernel allocates the SYN queue and the accept queue behind it and starts completing three-way handshakes on your behalf — whether or not your process ever calls <code>accept()</code>, and whether or not your JavaScript is busy.</p><p>The second argument is the backlog; Node passes 511. A listening socket never carries a byte of data. Its only output is new descriptors.</p>",
+  },
+  epollwait: {
+    t: "epoll_wait(2)",
+    who: "kernel",
+    d: "<p>The call the process sleeps inside. <code>epoll_wait</code> asks the kernel for the registered descriptors that are ready now, and blocks until at least one of them is, or until the timeout libuv computed from its nearest timer runs out.</p><p>This is the poll phase, and it is why an idle Node server costs no CPU at all. Nothing is copied here: what comes back is a list of descriptors, not data. The <code>read()</code> is still ahead.</p>",
+  },
+  acceptsys: {
+    t: "accept(2)",
+    who: "kernel",
+    d: "<p>Takes a finished connection off the listening socket's accept queue and returns <b>a new descriptor</b> for it. The handshake completed earlier, on the kernel's own time; <code>accept</code> only collects the result.</p><p>fd 17 stays the listening socket for the life of the process. fd 21 is the connection, and every byte of the request and the reply travels through 21. On Linux libuv actually calls <code>accept4()</code>, which sets non-blocking and close-on-exec in the same trip.</p>",
+  },
+  httpmod: {
+    t: "the http module",
+    who: "node",
+    d: "<p>Node's HTTP/1.1 implementation, written on top of <code>net</code>. It opens the listening socket through exactly the same three system calls — from the kernel's side an <code>http</code> server and a <code>net</code> server are indistinguishable — and then interposes a parser between the socket's data events and your callback.</p><p>That is the whole difference: <code>net</code> hands you a Buffer whose boundaries the network chose, <code>http</code> hands you an <code>IncomingMessage</code> whose boundaries the protocol chose.</p>",
+  },
+  rmem: {
+    t: "tcp_rmem / tcp_wmem",
+    who: "kernel",
+    d: "<p><code>tcp_rmem</code> is three numbers — minimum, default, maximum — bounding a TCP socket's receive buffer; <code>tcp_wmem</code> does the same for the send side. A new connection starts at the default and the kernel autotunes between the min and the max as it learns the connection's bandwidth-delay product.</p><p>Your process never allocates this memory, cannot see it, and did not ask for it. <code>setsockopt(SO_RCVBUF)</code> replaces the autotuning with a fixed size, which on a fast link is almost always a downgrade.</p>",
+  },
+  contentlength: {
+    t: "Content-Length",
+    who: "app",
+    d: "<p>The header that says how many bytes of body to expect. It is how HTTP frames a message on a transport that has no messages, and it is a promise: send fewer bytes than <code>Content-Length</code> declared and the connection hangs waiting, send more and the parser reads the surplus as the start of the next request.</p><p>TCP neither sets it nor checks it. Nothing below the parser knows the header exists, which is why it can be split across two segments in the middle of the word like any other run of bytes.</p>",
+  },
+  headerscomplete: {
+    t: "on_headers_complete",
+    who: "node",
+    d: "<p>The parser callback that fires the instant the empty line ending the header block is recognised. <code>node:http</code> treats <code>headers_complete</code> as its cue to build the request object and call your handler.</p><p>So your handler runs with every header in hand and, quite possibly, <b>zero body bytes</b>, the body may still be somewhere on the network. That is why the body is a stream rather than an argument, and why reading it is an event rather than a property access.</p>",
+  },
+  dnsmod: {
+    t: "the dns module",
+    who: "node",
+    d: "<p>One module holding two unrelated implementations. <code>dns.lookup</code> hands the name to the operating system and occupies a thread pool slot while it waits; <code>dns.resolve*</code> speaks DNS itself over a UDP socket with c-ares and occupies no thread at all.</p><p>They can disagree about the same hostname on the same machine, because only the first reads local configuration. Everything in Node that accepts a hostname uses the first by default.</p>",
+  },
+  httpsmod: {
+    t: "the https module",
+    who: "node",
+    d: "<p>The same API as <code>http</code>, with a TLS session interposed between the socket and the parser. OpenSSL decrypts inside your process, in userspace, and hands the plaintext to the very same llhttp state machine, so an <code>https</code> handler and an <code>http</code> handler are given identical objects.</p><p>The kernel's job does not change at all: the same opaque bytes over the same TCP socket. Every difference between the two lives above the descriptor.</p>",
+  },
+  netmod: {
+    t: "the net module",
+    who: "node",
+    d: "<p>Node's TCP layer, and a thin one: it wraps libuv's stream handles, gives you <code>Server</code> and <code>Socket</code>, and turns readiness into <code>data</code> events. There is no protocol in <code>net</code> and no interpretation of any kind.</p><p>What you get is exactly what the kernel had, split exactly where the kernel split it. Framing — deciding where one message ends — is left entirely to you.</p>",
+  },
+  dataevent: {
+    t: "the 'data' event",
+    who: "node",
+    d: "<p>Emitted once per <code>read()</code> that returned bytes — not once per message, and not once per <code>write()</code> at the other end. How many you get is decided by segmentation, timing and the size of libuv's read buffer, none of which your program controls.</p><p>Two runs of the same client against the same server can produce different numbers of <code>data</code> events carrying identical bytes. Code that treats one event as one message is not wrong yet, only unlucky yet.</p>",
+  },
+  readsys: {
+    t: "read(2)",
+    who: "kernel",
+    d: "<p>Copies bytes out of the socket's receive buffer into memory your process owns, and returns how many it moved. <code>read</code> never waits for a message and has no idea what one is: it hands back whatever has arrived, up to the size of the buffer you offered.</p><p>This is the call that decides chunk boundaries. libuv issues it once <code>epoll_wait</code> says the descriptor is readable, and passes the result straight up as a <code>data</code> event.</p>",
+  },
+  buffer: {
+    t: "Buffer",
+    who: "node",
+    d: "<p>A fixed-length view of bytes held outside V8's heap — the memory libuv reads into and hands up. Its contents are exactly what <code>read()</code> returned, in exactly the order the kernel had them.</p><p>Nothing in a <code>Buffer</code> is a method, a header or a URL. Those are interpretations that you or a parser impose afterwards; the bytes themselves carry no structure whatsoever.</p>",
+  },
+  upgradeevent: {
+    t: "the 'upgrade' event",
+    who: "node",
+    d: "<p>What <code>node:http</code> emits when a request arrives carrying <code>Connection: Upgrade</code>. It hands you the request, the raw socket, and whatever bytes were already read past the header block, then steps out of the way permanently.</p><p>Node core has no WebSocket implementation. Everything after this <code>upgrade</code> event — the accept key, frames, masking, ping and pong — is a package you installed, running in JavaScript, on a socket the kernel is still serving exactly as before.</p>",
+  },
+  fork: {
+    t: "fork(2)",
+    who: "kernel",
+    d: "<p>Duplicates the calling process. The child gets a copy of the descriptor table, so every open descriptor now exists twice: two numbers, in two processes, pointing at one kernel object.</p><p>Nothing is copied on the kernel's side. The socket, its queues and its port are not duplicated by <code>fork</code>, and only the references to them are, and the kernel bumps a count.</p>",
+  },
+  cluster: {
+    t: "the cluster module",
+    who: "node",
+    d: "<p>Node's wrapper around forking. The primary creates the listening socket, workers inherit the descriptor, and several processes end up serving one accept queue — which is why <code>cluster</code> needs no proxy and no shared-port trick.</p><p>It is a scheduling arrangement, not a networking feature. The kernel sees one socket with several references; who gets each connection is decided either by whoever calls <code>accept()</code> first or by the primary handing descriptors out round-robin.</p>",
+  },
+  closesys: {
+    t: "close(2)",
+    who: "kernel",
+    d: "<p>Removes one row from the descriptor table and decrements the kernel object's reference count. That is the whole of it, and the number is free for reuse immediately.</p><p>If another descriptor still refers to the same socket — in this process or in any process that inherited it — the socket stays alive, the port stays taken and the server keeps serving. Only the last <code>close</code> tears anything down.</p>",
+  },
+  dnslookup: {
+    t: "dns.lookup()",
+    who: "node",
+    d: "<p>Not a DNS call, despite the name and the module it lives in. <code>dns.lookup</code> calls <code>getaddrinfo</code>, which asks the operating system to resolve the name by whatever means the machine is configured to use — <code>/etc/hosts</code> first, then nsswitch, then a resolver.</p><p>Everything that takes a hostname goes through it by default: <code>http.get</code>, <code>net.connect</code>, your database driver. Because <code>getaddrinfo</code> blocks, every call occupies a thread pool slot for its whole duration.</p>",
+  },
+  dgrammod: {
+    t: "node:dgram",
+    who: "node",
+    d: "<p>Node's UDP module. <code>dgram</code> gives you a socket you send datagrams on, with no connection to set up and no stream to read: one <code>send()</code> is one datagram, and one <code>'message'</code> event is one datagram.</p><p>The framing problem that dominates <code>net</code> does not exist here. The delivery problem does: nothing is retransmitted, nothing is reordered, and nothing tells you a datagram never arrived.</p>",
+  },
+  connectionevent: {
+    t: "'connection'",
+    who: "node",
+    d: "<p>Emitted by a <code>net.Server</code> once per accepted connection. By the time a <code>'connection'</code> event reaches your code the handshake is long finished: the kernel completed it, put the socket on the accept queue, and <code>accept()</code> handed back a descriptor for it.</p><p>You are being told about a connection that already exists, not asked to establish one.</p>",
+  },
+  dnsresolve: {
+    t: "dns.resolve4()",
+    who: "node",
+    d: "<p>An actual DNS query. c-ares builds the message, sends it over a UDP socket to the servers listed in <code>/etc/resolv.conf</code> and parses the reply, with no thread pool involved, because a UDP socket is already non-blocking.</p><p><code>dns.resolve4</code> bypasses the OS resolver, which means it bypasses <code>/etc/hosts</code> as well. A name that resolves for every other program on the machine can fail here, and that asymmetry is usually how someone discovers they were using it.</p>",
+  },
+  httpget: {
+    t: "http.get()",
+    who: "node",
+    d: "<p>A convenience wrapper: build a request, send it, end it. Underneath, <code>http.get</code> opens an ordinary TCP connection through <code>net</code>, which resolves the hostname with <code>dns.lookup()</code> first.</p><p>So a single call to a hostname costs a thread pool slot before it costs a socket, worth knowing when a burst of outbound requests mysteriously slows down file reads.</p>",
+  },
+  netconnect: {
+    t: "net.connect()",
+    who: "node",
+    d: "<p>Opens an outbound TCP connection: <code>socket()</code>, then <code>connect()</code>, then the descriptor joins epoll like any other. The three-way handshake runs in the kernel while your JavaScript carries on.</p><p>Given a hostname rather than an address, <code>net.connect</code> calls <code>dns.lookup()</code> first, so the first thing an outbound connection touches is usually the thread pool, not the network.</p>",
+  },
+  fsmod: {
+    t: "the fs module",
+    who: "node",
+    d: "<p>File system calls have no usable non-blocking form for regular files, so libuv runs <code>fs</code> work on the thread pool instead of in the event loop. Four slots by default, shared with <code>getaddrinfo</code> and parts of crypto and zlib.</p><p>Which is why a slow disk and a slow name lookup can queue behind each other while thousands of sockets carry on untouched: sockets never use the pool at all.</p>",
+  },
+  cryptomod: {
+    t: "the crypto module",
+    who: "node",
+    d: "<p>Most of <code>crypto</code> is synchronous C++ running on the main thread. The deliberately expensive functions — <code>pbkdf2</code>, <code>scrypt</code>, key generation, <code>randomBytes</code> — take the thread pool instead, because holding the loop for a hundred milliseconds is worse than queueing.</p><p>So a login storm and a directory listing compete for the same four slots. <code>UV_THREADPOOL_SIZE</code> is the usual lever, and it has to be set before the pool is first used.</p>",
+  },
+  resolvconf: {
+    t: "/etc/resolv.conf",
+    who: "kernel",
+    d: "<p>The list of nameservers this machine should ask, plus search domains and a few options. Ordinary text, read by whoever is doing the resolving: the C library on behalf of <code>getaddrinfo</code>, or c-ares on behalf of <code>dns.resolve*</code>.</p><p><code>resolv.conf</code> is the one piece of local configuration both paths agree on. Almost everything else about them differs.</p>",
+  },
+  etchosts: {
+    t: "/etc/hosts",
+    who: "kernel",
+    d: "<p><code>/etc/hosts</code> is a static name-to-address table consulted before any nameserver, the reason <code>localhost</code> resolves with no network involved at all.</p><p>Only the OS resolver reads it. <code>dns.lookup()</code> honours it because <code>getaddrinfo</code> does; <code>dns.resolve4()</code> never sees it. That is how the same name on the same machine can resolve two different ways in one process.</p>",
+  },
+  socketsys: {
+    t: "socket()",
+    who: "kernel",
+    d: "<p>The system call that creates a socket and returns a descriptor for it. <code>socket(AF_INET, SOCK_STREAM, 0)</code> asks for IPv4 and a byte stream, which the kernel resolves to TCP.</p><p>What comes back has no address and no peer: <code>socket()</code> creates the object, <code>bind()</code> gives it a name. libuv makes the call lazily, the first time a handle needs an address, so the descriptor is younger than the handle that holds it.</p>",
+  },
+  epollctl: {
+    t: "epoll_ctl()",
+    who: "kernel",
+    d: "<p>Adds, changes or removes one descriptor in an epoll set. <code>epoll_ctl</code> copies nothing and scans nothing — it hangs a callback off the socket's wait queue so that the socket pushes itself onto a ready list when something happens to it.</p><p>An idle watch therefore costs no CPU, which is what lets one thread hold a hundred thousand of them. Compare <code>select()</code>, where the cost is paid per call, per descriptor, forever.</p>",
+  },
+  uvtcp: {
+    t: "uv_tcp_t",
+    who: "node",
+    d: "<p>libuv's handle for a TCP socket: about a hundred bytes on your process's heap holding the descriptor, a pointer to the loop, a queue of pending writes, and slots for callbacks.</p><p>A <code>uv_tcp_t</code> is bookkeeping in userspace. Allocating one is not a system call, the kernel never learns that it exists, and destroying one without closing the descriptor leaks the descriptor rather than the struct.</p>",
+  },
+  netsocket: {
+    t: "net.Socket",
+    who: "node",
+    d: "<p>The JavaScript object a connection handler is given. A <code>net.Socket</code> is a Duplex stream, and therefore a Readable, and therefore an EventEmitter — which is why <code>socket.on('data', …)</code> works at all.</p><p>It holds no descriptor of its own. <code>socket._handle</code> points at a TCPWrap, which owns a uv_tcp_t, which holds the integer. Three objects deep before you reach anything the kernel would recognise.</p>",
+  },
+  emitter: {
+    t: "EventEmitter dispatch",
+    who: "node",
+    d: "<p>The mechanism that turns <code>emit('connection', socket)</code> into a call to your function. The EventEmitter looks up the listener array stored under that event name and calls each entry in turn, synchronously, passing along whatever arguments <code>emit</code> was given.</p><p>Nothing is watching your code and deciding to run it. You pushed a function into a table; something else later read that table. The parameter name is yours, the value is not.</p>",
+  },
+  readcb: {
+    t: "the read callback",
+    who: "node",
+    d: "<p>The <em>read callback</em> is the native function libuv calls when a stream has been read. Its signature is <code>void on_read(uv_stream_t*, ssize_t nread, const uv_buf_t*)</code> — C, compiled, and supplied by Node when it called <code>uv_read_start</code>.</p><p>It is not your JavaScript function and it never becomes your JavaScript function. It is where Node's translation work begins.</p>",
+  },
+  alloccb: {
+    t: "the allocation callback",
+    who: "node",
+    d: "<p>The other function handed to <code>uv_read_start</code>. libuv calls it <em>before</em> every read to ask your process for somewhere to put bytes that do not exist yet, filling in an out-parameter with a pointer and a length.</p><p>Node answers out of a pool, so the Buffer your handler receives is usually a view into memory shared with other chunks. This is why the allocation callback is the honest answer to “where does <code>data</code> come from”.</p>",
+  },
+  uvreadstart: {
+    t: "uv_read_start()",
+    who: "node",
+    d: "<p>The libuv call that puts a stream into reading mode. <code>uv_read_start(handle, alloc_cb, read_cb)</code> stores two native function pointers on the handle and registers interest with the platform's polling mechanism.</p><p>It reads nothing and returns immediately. Everything it sets up is a pointer in a struct.</p>",
+  },
+  makecallback: {
+    t: "MakeCallback",
+    who: "node",
+    d: "<p><code>MakeCallback</code> is Node's C++ entry point back into JavaScript. It is not a bare V8 call: it opens an <code>InternalCallbackScope</code>, runs async_hooks before/after pairs, and — if this is the outermost native entry — drains the nextTick and microtask queues on the way out.</p><p>That drain is why a promise resolved inside a <code>'data'</code> handler settles before the next chunk arrives.</p>",
+  },
+  handledata: {
+    t: "handle->data",
+    who: "node",
+    d: "<p>A free-form <code>void*</code> that libuv reserves on every handle and never touches. Node stores its own C++ wrapper there, which is the entire mechanism by which a libuv event finds a Node object.</p><p>The <code>handle->data</code> pointer is the seam between a general-purpose C library and a specific runtime. Follow it and you leave libuv.</p>",
+  },
+  flowing: {
+    t: "flowing mode",
+    who: "node",
+    d: "<p>A Readable is in flowing mode when it pushes chunks out as they arrive rather than queueing them for <code>read()</code>. Adding a <code>'data'</code> listener resumes the stream, which is what eventually reaches <code>uv_read_start</code>.</p><p>The state is tri-valued: <code>false</code> means an explicit <code>pause()</code> and is respected; <code>null</code> or <code>undefined</code> mean not yet decided, and adding a listener decides it.</p>",
+  },
+  tickdrain: {
+    t: "the tick drain",
+    who: "node",
+    d: "<p>When the outermost native-to-JavaScript call returns, Node empties the <code>process.nextTick</code> queue completely, then the V8 microtask queue, before control goes back to libuv.</p><p>Nested calls do not each drain — the check is a flag set when the callback scope was opened. This is the whole ordering rule behind nextTick beating promises inside an I/O handler.</p>",
+  },
+  incoming: {
+    t: "http.IncomingMessage",
+    who: "node",
+    d: "<p>The <code>req</code> object of an http server: a Readable whose source is the HTTP parser rather than a descriptor. In an http server there are two Readables over one socket — the socket itself, which Node drives, and the IncomingMessage, which you drive.</p><p>Body chunks pushed into it are slices of the same allocation the socket read into, so no second copy is made.</p>",
+  },
+  llhttpp: {
+    t: "llhttp",
+    who: "node",
+    d: "<p>The HTTP parser Node compiles in. <code>llhttp</code> is fed raw bytes and fires callbacks — on_url, on_header_field, on_headers_complete, on_body — synchronously, inside the socket's own <code>'data'</code> event.</p><p>Your request handler is invoked from on_headers_complete, which is why it can run while the body is still on the wire.</p>",
+  },
+  containerof: {
+    t: "container_of",
+    who: "node",
+    d: "<p>The C idiom for recovering a struct's address from a pointer to one of its members, by subtracting the member's offset. libuv uses it to get from an I/O watcher back to the handle that embeds it.</p><p>It is why libuv needs no lookup table to go from a ready descriptor to the handle that owns it: <code>container_of</code> is arithmetic, not a search.</p>",
+  },
+  epollready: {
+    t: "the epoll ready list",
+    who: "kernel",
+    d: "<p>Each epoll instance keeps a <em>ready list</em> of descriptors that have become ready. A watched socket appends itself to that list from its own wait queue callback when data lands — the kernel does not scan anything.</p><p>This is why an idle watched descriptor costs nothing and why one thread can hold a hundred thousand of them.</p>",
+  },
+  poolbuf: {
+    t: "the buffer pool",
+    who: "node",
+    d: "<p>Node allocates a single ArrayBuffer and slices it repeatedly, rather than allocating per read. A Buffer handed to your handler is typically a view into that pool at some non-zero <code>byteOffset</code>.</p><p>The practical consequence: retaining one small chunk can retain the whole pool allocation, which is what <code>Buffer.from(chunk)</code> is for.</p>",
+  },
+};
+</script>
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- theme (delegated: every toggle stays in sync) ---------- */
+  var root = document.documentElement;
+  function setTheme(t) {
+    root.setAttribute("data-theme", t);
+    try {
+      localStorage.setItem("net-theme", t);
+    } catch (e) {}
+  }
+  try {
+    var saved = localStorage.getItem("net-theme");
+    if (saved) root.setAttribute("data-theme", saved);
+  } catch (e) {}
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-theme-toggle]");
+    if (!b) return;
+    setTheme(root.getAttribute("data-theme") === "light" ? "dark" : "light");
+  });
+
+  /* ---------- the contents rail retracts on demand ---------- */
+  var page = document.querySelector(".page");
+  function setRail(open) {
+    if (page) page.classList.toggle("solo", !open);
+    document.querySelectorAll("[data-rail-toggle]").forEach(function (b) {
+      b.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    try {
+      localStorage.setItem("net-rail", open ? "1" : "0");
+    } catch (e) {}
+  }
+  try {
+    if (localStorage.getItem("net-rail") === "0") setRail(false);
+  } catch (e) {}
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-rail-toggle]");
+    if (!b) return;
+    setRail(page.classList.contains("solo"));
+  });
+
+  /* ---------- nav retracts on scroll (animate top, never transform) ---- */
+  var nav = document.querySelector(".nav");
+  var lastY = 0;
+  window.addEventListener(
+    "scroll",
+    function () {
+      var y = window.scrollY;
+      if (nav) nav.classList.toggle("away", y > 220 && y > lastY);
+      lastY = y;
+      spy();
+    },
+    { passive: true }
+  );
+
+  /* ---------- rail scrollspy ---------- */
+  var links = [].slice.call(document.querySelectorAll(".rail a"));
+  var secs = links
+    .map(function (a) {
+      return document.querySelector(a.getAttribute("href"));
+    })
+    .filter(Boolean);
+  function spy() {
+    var y = window.scrollY + 130,
+      i = 0;
+    for (var k = 0; k < secs.length; k++) if (secs[k].offsetTop <= y) i = k;
+    links.forEach(function (a, k) {
+      a.classList.toggle("on", k === i);
+    });
+  }
+
+  /* ---------- term popovers ---------- */
+  var pop = document.createElement("div");
+  pop.className = "pop";
+  pop.setAttribute("role", "dialog");
+  document.body.appendChild(pop);
+  var WHO = {
+    app: "your code",
+    node: "node runtime",
+    kernel: "os kernel",
+    hw: "hardware",
+    mixed: "shared",
+  };
+  function closePop() {
+    pop.classList.remove("open");
+    var l = document.querySelector(".term.lit");
+    if (l) {
+      l.classList.remove("lit");
+      if (l.hasAttribute("aria-expanded")) l.setAttribute("aria-expanded", "false");
+    }
+  }
+  /* A caption is replaced wholesale on every step, so a pop anchored to a
+     chip in the OLD caption has to be closed by whoever replaces it —
+     otherwise it hangs over text that no longer contains its trigger. */
+  window.closeTermPop = closePop;
+
+  /* Prose writes <span class="term" data-t>; captions write <code data-t>.
+     Both become operable buttons here, so the affordance is defined once
+     rather than repeated across 30 spans and 20 caption literals.
+     Idempotent — setCap re-runs it over every caption it mounts. */
+  function upgradeTerms(root) {
+    [].forEach.call(root.querySelectorAll("[data-t]"), function (el) {
+      el.classList.add("term");
+      el.setAttribute("role", "button");
+      el.setAttribute("tabindex", "0");
+      el.setAttribute(
+        "aria-expanded",
+        el.classList.contains("lit") ? "true" : "false"
+      );
+    });
+  }
+  upgradeTerms(document);
+  function openPop(el) {
+    var k = el.getAttribute("data-t");
+    var t = window.TERMS && window.TERMS[k];
+    if (!t) return;
+    var chip = t.who
+      ? '<span class="who w-' + t.who + '">' + (WHO[t.who] || t.who) + "</span>"
+      : "";
+    pop.innerHTML =
+      "<h4>" + (t.t || k) + "</h4>" + t.d + (chip ? "<p>" + chip + "</p>" : "");
+    pop.classList.add("open");
+    var r = el.getBoundingClientRect();
+    var w = pop.offsetWidth,
+      h = pop.offsetHeight;
+    var left = Math.min(Math.max(10, r.left - 10), window.innerWidth - w - 10);
+    var top = r.bottom + 8;
+    if (top + h > window.innerHeight - 10) top = Math.max(10, r.top - h - 8);
+    pop.style.left = left + "px";
+    pop.style.top = top + "px";
+    document.querySelectorAll(".term.lit").forEach(function (n) {
+      n.classList.remove("lit");
+      if (n.hasAttribute("aria-expanded")) n.setAttribute("aria-expanded", "false");
+    });
+    el.classList.add("lit");
+    if (el.hasAttribute("aria-expanded")) el.setAttribute("aria-expanded", "true");
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest && e.target.closest(".term");
+    if (t) {
+      e.preventDefault();
+      if (t.classList.contains("lit")) closePop();
+      else openPop(t);
+      return;
+    }
+    if (!(e.target.closest && e.target.closest(".pop"))) closePop();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
+      var lit = document.querySelector(".term.lit");
+      closePop();
+      if (lit && lit.hasAttribute("tabindex")) lit.focus();
+      return;
+    }
+    /* A focusable term is operated by Enter or Space, like the button it
+       says it is. Terms without a tabindex stay pointer-only. */
+    if (e.key !== "Enter" && e.key !== " ") return;
+    var t = e.target.closest && e.target.closest(".term[tabindex]");
+    if (!t) return;
+    e.preventDefault();
+    if (t.classList.contains("lit")) closePop();
+    else openPop(t);
+  });
+
+  /* ---------- syntax painter ------------------------------------------
+     Tokens are classified by INSPECTING the matched text, never by
+     destructuring capture groups — a group-count mismatch is silent.
+     ------------------------------------------------------------------ */
+  var KW =
+    "const let var function return if else for while new await async import from export " +
+    "class this typeof of in try catch throw null undefined true false void static struct int " +
+    "char unsigned short long sizeof";
+  var KWS = {};
+  KW.split(" ").forEach(function (w) {
+    KWS[w] = 1;
+  });
+  var SCAN =
+    /\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b0x[0-9a-fA-F]+\b|\b\d+(?:\.\d+)?\b|[A-Za-z_$][\w$]*/g;
+  function esc(s) {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+  function paint(src) {
+    var out = "",
+      last = 0,
+      m;
+    SCAN.lastIndex = 0;
+    while ((m = SCAN.exec(src))) {
+      var tok = m[0],
+        i = m.index,
+        cls = null;
+      out += esc(src.slice(last, i));
+      last = i + tok.length;
+      var c0 = tok[0];
+      if (c0 === "/" || c0 === "#") cls = "cm";
+      else if (c0 === '"' || c0 === "'" || c0 === "`") cls = "str";
+      else if (c0 >= "0" && c0 <= "9") cls = "num";
+      else if (KWS[tok]) cls = "kw";
+      else if (src[i - 1] === ".") cls = "prop";
+      else if (/^\s*\(/.test(src.slice(last))) cls = "fn";
+      out += cls ? '<span class="' + cls + '">' + esc(tok) + "</span>" : esc(tok);
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+  window.paintCode = paint;
+  document.querySelectorAll("pre[data-lang]").forEach(function (pre) {
+    if (pre.children.length) return;
+    pre.innerHTML = paint(pre.textContent);
+  });
+
+  /* ---------- svg helpers shared by every figure ---------- */
+  var S = {
+    esc: function (s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    },
+    box: function (o) {
+      var cls = o.owner ? "o-" + o.owner : "plate";
+      return (
+        '<rect' +
+        (o.id ? ' data-id="' + o.id + '"' : "") +
+        ' class="' +
+        cls +
+        (o.cls ? " " + o.cls : "") +
+        '" x="' +
+        o.x +
+        '" y="' +
+        o.y +
+        '" width="' +
+        o.w +
+        '" height="' +
+        o.h +
+        '" rx="' +
+        (o.r == null ? 7 : o.r) +
+        '" stroke-width="' +
+        (o.sw || 1) +
+        '"/>'
+      );
+    },
+    text: function (x, y, s, cls, anchor) {
+      return (
+        '<text class="' +
+        (cls || "lbl") +
+        '" x="' +
+        x +
+        '" y="' +
+        y +
+        '" text-anchor="' +
+        (anchor || "start") +
+        '">' +
+        S.esc(s) +
+        "</text>"
+      );
+    },
+    /* vertical arrow with a 6px standoff at both ends */
+    vArrow: function (x, y1, y2, cls) {
+      var d = y2 > y1 ? 1 : -1;
+      var a = y1 + 6 * d,
+        b = y2 - 6 * d;
+      return (
+        '<path class="arr ' +
+        (cls || "") +
+        '" d="M' +
+        x +
+        " " +
+        a +
+        "L" +
+        x +
+        " " +
+        b +
+        '" marker-end="url(#ah)"/>'
+      );
+    },
+    hArrow: function (y, x1, x2, cls) {
+      var d = x2 > x1 ? 1 : -1;
+      return (
+        '<path class="arr ' +
+        (cls || "") +
+        '" d="M' +
+        (x1 + 6 * d) +
+        " " +
+        y +
+        "L" +
+        (x2 - 6 * d) +
+        " " +
+        y +
+        '" marker-end="url(#ah)"/>'
+      );
+    },
+    defs:
+      '<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" ' +
+      'markerWidth="6" markerHeight="6" orient="auto-start-reverse">' +
+      '<path d="M0 1 L9 5 L0 9 z" fill="var(--text-3)"/></marker>' +
+      '<marker id="ahi" viewBox="0 0 10 10" refX="8" refY="5" ' +
+      'markerWidth="6" markerHeight="6" orient="auto-start-reverse">' +
+      '<path d="M0 1 L9 5 L0 9 z" fill="var(--hi)"/></marker></defs>',
+    svg: function (vb, inner) {
+      return (
+        '<svg viewBox="' +
+        vb +
+        '" xmlns="http://www.w3.org/2000/svg" role="img">' +
+        S.defs +
+        inner +
+        "</svg>"
+      );
+    },
+  };
+  window.S = S;
+
+  /* ---------- the figure factory --------------------------------------
+     spec = {
+       modes?: [{id,label}], modeLabel?,
+       stages(mode) -> [{tab, cap, html, meters?, wire?(el, api)}],
+       flat?: bool          // stage has no plate of its own
+     }
+     Every instrument in this document is one of these. Stage tabs never
+     move: the tab row is built once per mode and only .on changes.
+     ------------------------------------------------------------------ */
+  function mkFig(el, spec) {
+    var modes = spec.modes || null;
+    var mode = modes ? modes[0].id : null;
+    var idx = 0;
+    var body = el.querySelector(".fig-body");
+    var top = el.querySelector(".fig-top");
+
+    if (modes) {
+      var seg = document.createElement("div");
+      seg.className = "seg";
+      seg.setAttribute("role", "group");
+      seg.setAttribute("aria-label", spec.modeLabel || "view");
+      modes.forEach(function (m) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.textContent = m.label;
+        b.setAttribute("data-mode", m.id);
+        b.addEventListener("click", function () {
+          if (mode === m.id) return;
+          mode = m.id;
+          idx = 0;
+          render(true);
+        });
+        seg.appendChild(b);
+      });
+      top.appendChild(seg);
+    }
+
+    body.innerHTML =
+      '<div class="steps"><div class="tabs"></div>' +
+      '<div class="nudge"><button type="button" data-go="-1" ' +
+      'aria-label="previous step">&#8592;</button>' +
+      '<button type="button" data-go="1" aria-label="next step">&#8594;</button>' +
+      '</div></div><div class="stage' +
+      (spec.flat ? " flat" : "") +
+      '"></div><div class="fig-cap" aria-live="polite"></div>' +
+      '<div class="meters"></div>';
+    var tabs = body.querySelector(".tabs");
+    var stageEl = body.querySelector(".stage");
+    var capEl = body.querySelector(".fig-cap");
+    var metEl = body.querySelector(".meters");
+    var nudges = body.querySelectorAll("[data-go]");
+    [].forEach.call(nudges, function (b) {
+      b.addEventListener("click", function () {
+        var n = idx + Number(b.getAttribute("data-go"));
+        if (n < 0 || n >= list.length) return;
+        idx = n;
+        render(false);
+      });
+    });
+
+    var list = [];
+    var api = {
+      setCap: function (h) {
+        /* An open pop is pinned to a chip inside this caption, which is
+           about to stop existing. Close it before the innerHTML lands. */
+        if (capEl.querySelector(".term.lit") && window.closeTermPop)
+          window.closeTermPop();
+        capEl.innerHTML = h;
+        /* A caption writes only data-t; the chips are made operable here,
+           by the same pass that upgraded the prose terms at load. */
+        upgradeTerms(capEl);
+      },
+      setMeters: function (ms) {
+        metEl.innerHTML = (ms || [])
+          .map(function (m) {
+            return (
+              '<div class="meter ' +
+              (m.c || "") +
+              '"><em>' +
+              m.k +
+              "</em><b>" +
+              m.v +
+              "</b></div>"
+            );
+          })
+          .join("");
+      },
+      go: function (i) {
+        idx = i;
+        render(false);
+      },
+      get mode() {
+        return mode;
+      },
+    };
+
+    function buildTabs() {
+      tabs.innerHTML = "";
+      list.forEach(function (s, i) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.textContent = s.tab;
+        b.addEventListener("click", function () {
+          idx = i;
+          render(false);
+        });
+        tabs.appendChild(b);
+      });
+    }
+
+    function render(rebuild) {
+      if (rebuild || !list.length) {
+        list = spec.stages(mode) || [];
+        buildTabs();
+      }
+      if (idx >= list.length) idx = list.length - 1;
+      var s = list[idx];
+      [].forEach.call(tabs.children, function (b, i) {
+        b.classList.toggle("on", i === idx);
+        b.setAttribute("aria-current", i === idx ? "true" : "false");
+      });
+      if (modes) {
+        [].forEach.call(top.querySelectorAll("[data-mode]"), function (b) {
+          b.classList.toggle("on", b.getAttribute("data-mode") === mode);
+        });
+      }
+      nudges[0].disabled = idx === 0;
+      nudges[1].disabled = idx === list.length - 1;
+      stageEl.innerHTML = s.html;
+      api.setCap(s.cap || "");
+      api.setMeters(s.meters);
+      api.stage = stageEl;
+      api.index = idx;
+      if (s.wire) s.wire(stageEl, api);
+    }
+    render(true);
+    el._reload = render;
+    return api;
+  }
+  window.mkFig = mkFig;
+
+  /* ---------- mount ---------- */
+  window.mountFigs = function (SPECS) {
+    document.querySelectorAll("[data-fig]").forEach(function (el) {
+      var s = SPECS[el.getAttribute("data-fig")];
+      if (s) mkFig(el, s);
+    });
+    spy();
+  };
+})();
+</script>
+<script>
+/* ============================================================
+   THE API SWITCH
+
+   The one hard requirement of this document: net.createServer and
+   http.createServer are toggled for the WHOLE page, not per figure.
+
+   Three consequences, all deliberate:
+
+   1. ONE source of truth — `data-api` on `.page`. Prose alternates are
+      hidden by CSS from that attribute, so a paragraph can never
+      disagree with the figure beneath it, and the page is already
+      correct before this script parses.
+
+   2. Figures KEEP THEIR STEP INDEX across a flip. mkFig's render(true)
+      rebuilds the stage list and clamps idx rather than zeroing it, so
+      no figure-level mode machinery is used here at all: an api figure
+      declares no `modes`, and reads window.API inside stages().
+
+   3. Because the index is preserved, both modes MUST produce the same
+      number of stages in every figure. That is not a convention — the
+      audit asserts stage-count parity per figure, because an index
+      preserved into a shorter list is an index silently changed.
+   ============================================================ */
+(function () {
+  "use strict";
+  var KEY = "wcyc-api";
+  var page = document.querySelector(".page");
+
+  function paint(a) {
+    page.setAttribute("data-api", a);
+    document.querySelectorAll("[data-api-btn]").forEach(function (b) {
+      var on = b.getAttribute("data-api-btn") === a;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
+
+  function setApi(a, reload) {
+    if (a !== "net" && a !== "http") return;
+    window.API = a;
+    paint(a);
+    try {
+      localStorage.setItem(KEY, a);
+    } catch (e) {}
+    if (reload)
+      document.querySelectorAll("[data-fig]").forEach(function (el) {
+        /* _reload(true) rebuilds the list from the new api and clamps the
+           index; it does not reset it. An open popover is pinned to a chip
+           that is about to stop existing, so close it first. */
+        if (window.closeTermPop) window.closeTermPop();
+        if (el._reload) el._reload(true);
+      });
+  }
+
+  var saved = "net";
+  try {
+    var s = localStorage.getItem(KEY);
+    if (s === "net" || s === "http") saved = s;
+  } catch (e) {}
+  setApi(saved, false);
+
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-api-btn]");
+    if (b) setApi(b.getAttribute("data-api-btn"), true);
+  });
+
+  window.setApi = function (a) {
+    setApi(a, true);
+  };
+})();
+
+</script>
+<script>
+/* ============================================================
+   FIGURES — every one of them reads window.API.
+
+   No figure declares `modes`. The api is document-scoped, so a
+   per-figure segmented control would be a second source of truth
+   with nothing to keep it honest. stages() reads window.API and
+   mkFig's render(true) rebuilds from it, preserving the index.
+   ============================================================ */
+window.SPECS = window.SPECS || {};
+(function () {
+  "use strict";
+  var S = window.S;
+  var A = function (net, http) {
+    return window.API === "net" ? net : http;
+  };
+  var isNet = function () {
+    return window.API === "net";
+  };
+
+  /* ---------- the five-layer stack, used by several figures --------
+     Six bands, one arrow spine in the right margin. The spine is the
+     figure's whole argument: setup travels down it, dispatch travels
+     up it, and no arrow ever skips a band. */
+  var LAY = [
+    ["YOUR CODE", "app"],
+    ["NODE'S JAVASCRIPT", "node"],
+    ["NODE'S C++", "node"],
+    ["LIBUV", "node"],
+    ["KERNEL", "kernel"],
+    ["HARDWARE", "hw"],
+  ];
+  /* A viewBox WIDER than its container is a diagram designed at a size it
+     will never be seen at: the svg scales down to fit and every label
+     shrinks with it. A full-width pane in this document is ~886px, so the
+     stack is drawn at 900 and renders at ~0.98 — near 1:1. It is also never
+     placed in a side column again; six wide bands need the width. */
+  /* Two widths, one function. WIDE (900) is for the overview figure, which
+     has no card beside it and can afford the spine notes. MINI (440) is
+     drawn at the width of the left column of .panes.wide, so it renders at
+     ~1.03x — near 1:1 — and sits BESIDE its card instead of above it.
+
+     The vertical rhythm is deliberately tight: six bands at a 54px pitch
+     is 366px, which leaves room for the tabs, caption and meters inside
+     one viewport. A diagram that pushes the meters below the fold makes
+     the reader scroll to see what their own click changed. */
+  var LH = 44,
+    LP = 54,
+    LY = 18;
+  function geom(mini) {
+    return mini
+      ? { x: 10, w: 358, spx: 400, vbw: 440, notes: false }
+      : { x: 14, w: 566, spx: 632, vbw: 900, notes: true };
+  }
+  function bandY(i) {
+    return LY + i * LP;
+  }
+  function stackSvg(o) {
+    var g = geom(o.mini);
+    var s = "";
+    LAY.forEach(function (l, i) {
+      var y = bandY(i),
+        on = !(o.dead || []).includes(i);
+      s += '<g class="' + (on ? "" : "dim") + '">';
+      s += S.box({
+        id: "L" + i,
+        x: g.x,
+        y: y,
+        w: g.w,
+        h: LH,
+        owner: on ? l[1] : null,
+        cls: o.lit === i ? "lit" : "",
+        sw: o.lit === i ? 2 : 1,
+      });
+      s += S.text(g.x + 14, y + 17, l[0], "mlbl");
+      s += S.text(g.x + 14, y + 34, (o.subs && o.subs[i]) || "", "mono");
+      s += "</g>";
+    });
+    var sp = o.span || [-1, -1];
+    for (var i = 0; i < LAY.length - 1; i++) {
+      var a = bandY(i) + LH,
+        b = bandY(i + 1);
+      var live = i >= sp[0] && i <= sp[1];
+      s +=
+        '<g class="svg-flow">' +
+        (o.dir === "up"
+          ? S.vArrow(g.spx, b, a, live ? "flow" : "")
+          : S.vArrow(g.spx, a, b, live ? "flow" : "")) +
+        "</g>";
+      if (g.notes && o.notes && o.notes[i])
+        s += S.text(g.spx + 18, (a + b) / 2 + 4, o.notes[i], "mono");
+    }
+    s += S.text(g.x, bandY(5) + LH + 24, o.cap || "", "mono");
+    return S.svg("0 0 " + g.vbw + " " + (bandY(5) + LH + 38), s);
+  }
+  window.__stackSvg = stackSvg;
+
+  function pane(h, b, cls) {
+    return (
+      '<div class="pane"><div class="pane-h">' +
+      h +
+      '</div><div class="pane-b' +
+      (cls ? " " + cls : "") +
+      '">' +
+      b +
+      "</div></div>"
+    );
+  }
+  function code(lines, lit) {
+    return (
+      '<div class="codelines">' +
+      lines
+        .map(function (l, k) {
+          return (
+            '<div class="cl' +
+            (k === lit ? " on" : lit < 0 ? " off" : "") +
+            '"><i>' +
+            (k + 1) +
+            "</i><span>" +
+            window.paintCode(l) +
+            "</span></div>"
+          );
+        })
+        .join("") +
+      "</div>"
+    );
+  }
+  function card(o) {
+    /* o = { kind:'sys'|'js'|'you', sig, kv:[[k,v]], eff, by } */
+    var sig = window
+      .paintCode(o.sig.replace(/<b>/g, "\u0001").replace(/<\/b>/g, "\u0002"))
+      .replace(/\u0001/g, "<b>")
+      .replace(/\u0002/g, "</b>");
+    var k = o.kind === "sys" ? "" : " " + o.kind;
+    return (
+      '<div class="sysc' + k + '"><div class="sysc-sig' + k + '">' + sig + "</div>" +
+      '<dl class="kv">' +
+      o.kv
+        .map(function (r) {
+          return "<dt>" + S.esc(r[0]) + "</dt><dd>" + r[1] + "</dd>";
+        })
+        .join("") +
+      "</dl>" +
+      '<p class="sysc-eff">' + o.eff + "</p>" +
+      '<p class="sysc-by">' + o.by + "</p></div>"
+    );
+  }
+  window.__pane = pane;
+  window.__code = code;
+  window.__card = card;
+  window.__A = A;
+  window.__isNet = isNet;
+
+  /* ================================================================
+     FIG 01 — two directions through one stack
+     ================================================================ */
+  SPECS.directions = {
+    stages: function () {
+      var top = A("net.Socket", "http.IncomingMessage");
+      var reg = A("socket.on('data', h)", "req.on('data', h)");
+      var subs = [
+        A("socket.on('data', h)  \u2014 your arrow function", "req.on('data', h)  \u2014 your arrow function"),
+        A(
+          "net.Socket \u00b7 Readable \u00b7 EventEmitter",
+          "http.IncomingMessage \u00b7 llhttp \u00b7 net.Socket \u00b7 EventEmitter"
+        ),
+        "TCPWrap \u00b7 StreamBase \u00b7 MakeCallback",
+        "uv_tcp_t \u00b7 uv_read_start \u00b7 the loop",
+        "TCP/IP \u00b7 socket buffers \u00b7 epoll",
+        "NIC \u00b7 DMA \u00b7 the interrupt",
+      ];
+      return [
+        {
+          tab: "you ask",
+          cap:
+            "Setup travels <b>down</b>. Your call reaches the kernel by being translated once per layer \u2014 " +
+            '<code data-t="netsocket">' + top + "</code> to a C++ object, to a libuv handle, to a system call. " +
+            "Nothing has arrived yet.",
+          meters: [
+            { k: "direction", v: "down" },
+            { k: "layers crossed", v: "5" },
+            { k: "your code", v: "running", c: "ok" },
+            { k: "bytes moved", v: "0" },
+          ],
+          html: stackSvg({
+            subs: subs,
+            lit: 0,
+            span: [0, 4],
+            dir: "down",
+            notes: { 0: "a method call", 1: "a binding", 2: "uv_read_start()", 3: "epoll_ctl()" },
+            cap: "REQUEST \u2014 you call down, and the call returns immediately",
+          }),
+        },
+        {
+          tab: "nothing runs",
+          cap:
+            "Then the interesting part: <b>nothing runs at all</b>. Your registration is a value in a table, " +
+            "the loop is parked in a system call, and no layer is polling any other layer.",
+          meters: [
+            { k: "direction", v: "\u2014" },
+            { k: "layers crossed", v: "0" },
+            { k: "your code", v: "returned" },
+            { k: "cpu", v: "0%", c: "hot" },
+          ],
+          html: stackSvg({
+            subs: subs,
+            lit: -1,
+            span: [-1, -1],
+            dir: "down",
+            notes: {},
+            cap: "IDLE \u2014 six layers, none of them doing anything",
+          }),
+        },
+        {
+          tab: "the event comes up",
+          cap:
+            "Completion travels <b>up</b>, and it is a different journey with different machinery: a hardware " +
+            "interrupt, then a native callback, then a crossing into V8, then a JavaScript emit, and only then " +
+            "<code>" + reg + "</code>. <b>Six handoffs, not one.</b>",
+          meters: [
+            { k: "direction", v: "up" },
+            { k: "layers crossed", v: "5" },
+            { k: "your code", v: "last", c: "ok" },
+            { k: "bytes moved", v: "5" },
+          ],
+          html: stackSvg({
+            subs: subs,
+            lit: 0,
+            span: [0, 4],
+            dir: "up",
+            notes: {
+              0: "EventEmitter dispatch",
+              1: "MakeCallback \u2192 V8",
+              2: "the native read callback",
+              3: "epoll says readable",
+              4: "IRQ",
+            },
+            cap: "COMPLETION \u2014 and your function is the LAST thing to happen, not the first",
+          }),
+        },
+      ];
+    },
+  };
+
+  /* ================================================================
+     FIG 02 — .on('data', h) is an array push and nothing else
+     ================================================================ */
+  var EVSHAPE = [
+    {
+      tab: "before",
+      n: 0,
+      cap:
+        "Before any listener, the object has no <code>_events</code> entry for the event at all. " +
+        "The property is <b>absent</b>, not empty \u2014 an empty array would cost memory on every emitter Node creates.",
+      shape: "_events = { __proto__: null }",
+      eff: "Nothing about the socket has changed and nothing native has been touched.",
+    },
+    {
+      tab: "one listener",
+      n: 1,
+      cap:
+        "The first listener is stored as <b>the function itself</b>, not an array of one. Node only pays for an " +
+        "array when there is more than one thing to hold \u2014 which is why logging <code>_events</code> shows you " +
+        "a different shape depending on how many listeners exist.",
+      shape: "_events = { data: h1 }",
+      eff:
+        "This is the listener that matters natively: it is the <b>first</b> one that flips the stream into " +
+        "flowing mode, which is what eventually reaches libuv. See the next figure.",
+    },
+    {
+      tab: "two listeners",
+      n: 2,
+      cap:
+        "The second listener promotes the slot to an array. Both will be called, in registration order, " +
+        "synchronously, with the same chunk.",
+      shape: "_events = { data: [h1, h2] }",
+      eff:
+        "Natively, <b>this call starts nothing</b>. The stream is already flowing; adding a second listener " +
+        "changes a JavaScript array and no more.",
+    },
+    {
+      tab: "eleven",
+      n: 11,
+      cap:
+        "At eleven listeners on one event you get the max-listeners warning. It is a leak heuristic, not a limit \u2014 " +
+        "and it fires per event name per emitter, which is why a long-lived server that adds a listener per request " +
+        "trips it and a short-lived script never does.",
+      shape: "_events = { data: [h1 \u2026 h11] }   \u2190 warning printed",
+      eff:
+        "Still nothing native. Every one of these figures is about the same fact: <b>registration is bookkeeping " +
+        "in your process, and it is cheap because it does nothing</b>.",
+    },
+  ];
+  SPECS.register = {
+    stages: function () {
+      var obj = A("socket", "req");
+      return EVSHAPE.map(function (st) {
+        var lines = [];
+        for (var i = 1; i <= Math.min(st.n, 2); i++)
+          lines.push(obj + ".on('data', h" + i + ");");
+        if (st.n > 2) lines.push("// \u2026 and " + (st.n - 2) + " more");
+        if (!lines.length) lines.push("// no listener yet");
+        return {
+          tab: st.tab,
+          cap: st.cap,
+          meters: [
+            { k: "listeners", v: String(st.n), c: st.n > 10 ? "bad" : "" },
+            { k: "stored as", v: st.n === 0 ? "\u2014" : st.n === 1 ? "a function" : "an array" },
+            { k: "native calls made", v: "0", c: "ok" },
+            { k: "bytes read", v: "0" },
+          ],
+          html:
+            '<div class="panes two">' +
+            pane("your code", code(lines, lines.length - 1)) +
+            pane(
+              "what " + obj + "._events actually holds",
+              card({
+                kind: "js",
+                sig: st.shape,
+                kv: [
+                  ["the key", "the event name, as a string. There is no registry of valid names \u2014 a typo registers a listener for an event nobody emits"],
+                  ["the value", st.n === 0 ? "absent" : st.n === 1 ? "your function, directly" : "an array, in registration order"],
+                  ["__proto__: null", "the table is a null-prototype object, so an event called \u201ctoString\u201d cannot collide with anything inherited"],
+                ],
+                eff: st.eff,
+                by: "<b>Node's JavaScript</b> \u2014 EventEmitter.prototype.on, in lib/events.js",
+              })
+            ) +
+            "</div>",
+        };
+      });
+    },
+  };
+
+  /* ================================================================
+     FIG 03 — who actually tells the socket to read
+     THE FIGURE THE TOGGLE EXISTS FOR: net and http answer differently.
+     ================================================================ */
+  var READ_NET = [
+    {
+      tab: "on('data')",
+      lit: 1,
+      cap:
+        "In <b>net</b>, your listener is the trigger. <code>on('data')</code> on a Readable does one extra thing " +
+        "beyond the array push: if the stream is paused, it resumes it.",
+      sig: "Readable.prototype.on = function (ev, fn) {\n  const res = Stream.prototype.on.call(this, ev, fn);\n  if (ev === 'data' && this._readableState.flowing !== false)\n    this.resume();\n  return res;\n};",
+      kind: "js",
+      kv: [
+        ["ev === 'data'", "only this event. Adding an 'error' or 'close' listener starts nothing"],
+        ["flowing !== false", "an explicit pause() sets flowing to false and this respects it. undefined means \u201cnot decided yet\u201d, which resumes"],
+        ["this.resume()", "the whole native chain hangs off this one line"],
+      ],
+      eff: "This is the seam where a JavaScript convenience becomes a system call.",
+      by: "<b>Node's JavaScript</b> \u2014 lib/internal/streams/readable.js",
+      m: ["paused", "0"],
+    },
+    {
+      tab: "resume()",
+      lit: 1,
+      cap:
+        "<code>resume()</code> does not read. It schedules a resume on the next tick, so that a handler registered " +
+        "on the line after yours still catches the first chunk.",
+      sig: "resume()  \u2192  process.nextTick(resume_, stream, state)",
+      kind: "js",
+      kv: [
+        ["why deferred", "so that socket.on('data', a); socket.on('data', b) both see chunk one. A synchronous read would deliver to `a` before `b` existed"],
+        ["state.flowing", "flips to true immediately; the read is what waits"],
+      ],
+      eff: "<b>Nothing native has happened yet</b>, one full step after your call.",
+      by: "<b>Node's JavaScript</b> \u2014 readable.resume()",
+      m: ["flowing", "0"],
+    },
+    {
+      tab: "read(0)",
+      lit: 1,
+      cap:
+        "On the next tick the stream calls <code>read(0)</code> \u2014 a read of nothing, whose only purpose is to " +
+        "reach <code>_read</code> and let the underlying resource start producing.",
+      sig: "stream.read(0)  \u2192  Socket.prototype._read()",
+      kind: "js",
+      kv: [
+        ["0", "asks for no bytes. It is a poke, not a request"],
+        ["_read", "the Readable contract: \u201cfill the buffer\u201d. net.Socket implements it by starting the handle"],
+      ],
+      eff: "Still inside JavaScript, still inside your process, still no descriptor touched.",
+      by: "<b>Node's JavaScript</b> \u2014 lib/net.js",
+      m: ["flowing", "0"],
+    },
+    {
+      tab: "readStart()",
+      lit: 2,
+      cap:
+        "<code>_read</code> calls into the C++ handle. <b>This is the boundary crossing.</b> Above it everything " +
+        "was arrays and ticks; below it is a native object.",
+      sig: "this._handle.readStart()   // TCPWrap \u2192 StreamBase::ReadStart",
+      kind: "js",
+      kv: [
+        ["this._handle", "the TCPWrap. The JS Socket has held it since the connection was accepted"],
+        ["readStart", "a method installed on the C++ object's JS-facing template, not a JavaScript function"],
+      ],
+      eff: "One line of JavaScript, and the next frame on the stack is C++.",
+      by: "<b>Node's C++</b> \u2014 StreamBase::ReadStartJS",
+      m: ["flowing", "0"],
+    },
+    {
+      tab: "uv_read_start",
+      lit: 3,
+      cap:
+        "And finally libuv. Note what is handed over: <b>two native callbacks</b> \u2014 one to allocate memory, one " +
+        "to receive bytes. Neither is your function, and libuv will never learn that your function exists.",
+      sig: "uv_read_start(handle, <b>alloc_cb</b>, <b>read_cb</b>)",
+      kind: "sys",
+      kv: [
+        ["handle", "the uv_tcp_t holding fd 42"],
+        ["alloc_cb", "called BEFORE every read to ask your process for somewhere to put the bytes. Figure 06"],
+        ["read_cb", "called after, with a count and that same buffer. Figure 07"],
+        ["returns", "0, immediately. Nothing has been read"],
+      ],
+      eff:
+        "libuv now registers interest with epoll and returns. <b>Five steps, and the only thing that has actually " +
+        "happened is that a struct has two more function pointers in it.</b>",
+      by: "<b>libuv</b> \u2014 uv_read_start(), which calls uv__io_start(EPOLLIN)",
+      m: ["reading", "1"],
+    },
+  ];
+  var READ_HTTP = [
+    {
+      tab: "on('data')",
+      lit: 1,
+      cap:
+        "In <b>http</b> the answer is different, and it is the most useful thing this toggle shows. " +
+        "<code>req.on('data')</code> resumes a Readable exactly as before \u2014 but <b>req is not the socket</b>.",
+      sig: "req.on('data', h)   // req is an http.IncomingMessage",
+      kind: "js",
+      kv: [
+        ["req", "a Readable whose source is the HTTP parser, not a descriptor"],
+        ["the socket", "a different Readable, one layer below, already being read by the server"],
+      ],
+      eff: "Two Readables, one descriptor. Which is why the answer to \u201cwho starts the read\u201d changes.",
+      by: "<b>Node's JavaScript</b> \u2014 lib/_http_incoming.js",
+      m: ["paused", "1"],
+    },
+    {
+      tab: "already reading",
+      lit: 3,
+      cap:
+        "The connection socket has been in flowing mode <b>since before your handler existed</b>. It has to be: " +
+        "the server cannot know there is a request until it has read and parsed the request line.",
+      sig: "// at accept time, long before your code runs:\nsocket.on('data', socketOnData)  \u2192  uv_read_start(\u2026)",
+      kind: "js",
+      kv: [
+        ["when", "inside connectionListener, the moment the connection was accepted"],
+        ["who", "Node's http server, not you"],
+        ["consequence", "by the time your handler runs, headers have already been read off the wire and parsed"],
+      ],
+      eff:
+        "<b>Your req.on('data') starts nothing at the libuv level.</b> The read was started for you, by machinery " +
+        "you did not write, before you were called.",
+      by: "<b>Node's JavaScript</b> \u2014 lib/_http_server.js",
+      m: ["reading", "1"],
+    },
+    {
+      tab: "the parser owns it",
+      lit: 1,
+      cap:
+        "The socket's <code>'data'</code> listener is the parser's, not yours. Every byte off the descriptor goes " +
+        "to llhttp first, and llhttp decides what is a header, what is body, and where one request ends.",
+      sig: "socketOnData(d)  \u2192  parser.execute(d)  \u2192  llhttp callbacks",
+      kind: "js",
+      kv: [
+        ["execute", "synchronous. It runs to the end of the chunk or to an error, inside the socket's data event"],
+        ["on_headers_complete", "where your handler is invoked from \u2014 mid-parse, with the body possibly still unread"],
+        ["on_body", "where req's chunks come from"],
+      ],
+      eff: "The socket has exactly one 'data' listener in a plain http server, and it belongs to Node.",
+      by: "<b>Node's JavaScript + C++</b> \u2014 lib/_http_server.js and the llhttp binding",
+      m: ["reading", "1"],
+    },
+    {
+      tab: "req.push()",
+      lit: 1,
+      cap:
+        "<code>on_body</code> pushes into <b>req</b>. So the chunk your listener receives has been through a second " +
+        "Readable, and its backpressure is req's, not the socket's.",
+      sig: "on_body(buf, at, len)  \u2192  req.push(buf.slice(at, at + len))",
+      kind: "js",
+      kv: [
+        ["slice", "a view into the SAME allocation the socket read into. No second copy is made"],
+        ["push", "req's own Readable machinery, with its own flowing state and its own queue"],
+        ["if you never read req", "the socket's own reading is paused, which is how HTTP backpressure actually reaches TCP"],
+      ],
+      eff:
+        "<b>Two Readables stacked on one descriptor</b>: the socket's, which Node drives, and req's, which you drive.",
+      by: "<b>Node's JavaScript</b> \u2014 lib/_http_server.js",
+      m: ["readables", "2"],
+    },
+    {
+      tab: "uv_read_start",
+      lit: 3,
+      cap:
+        "At the bottom it is the identical call, made earlier and by someone else. <b>Two native callbacks, " +
+        "neither of them yours</b> \u2014 and this part of the picture does not change between the two APIs at all.",
+      sig: "uv_read_start(handle, <b>alloc_cb</b>, <b>read_cb</b>)",
+      kind: "sys",
+      kv: [
+        ["handle", "the uv_tcp_t holding fd 42"],
+        ["alloc_cb", "called BEFORE every read to ask your process for somewhere to put the bytes. Figure 06"],
+        ["read_cb", "called after, with a count and that same buffer. Figure 07"],
+        ["difference from net", "when it was called, and by whom. Not what it does"],
+      ],
+      eff:
+        "Everything from here down is invariant. Flip the switch at the top of this page and the bottom four " +
+        "figures do not move.",
+      by: "<b>libuv</b> \u2014 uv_read_start(), which calls uv__io_start(EPOLLIN)",
+      m: ["reading", "1"],
+    },
+  ];
+  SPECS.readstart = {
+    stages: function () {
+      var L = isNet() ? READ_NET : READ_HTTP;
+      var obj = A("socket", "req");
+      return L.map(function (st, i) {
+        var lines = isNet()
+          ? [
+              "const server = net.createServer(socket => {",
+              "  socket.on('data', h);",
+              "});",
+            ]
+          : [
+              "const server = http.createServer((req, res) => {",
+              "  req.on('data', h);",
+              "});",
+            ];
+        return {
+          tab: st.tab,
+          cap: st.cap,
+          meters: [
+            { k: "step", v: i + 1 + " / 5" },
+            { k: "layer", v: LAY[st.lit][0].toLowerCase() },
+            { k: st.m[0], v: st.m[1], c: st.m[1] === "1" ? "ok" : "" },
+            { k: "who started it", v: A("you", "node"), c: isNet() ? "ok" : "hot" },
+          ],
+          html:
+            '<div class="panes wide">' +
+            pane(
+              "where this step happens",
+              stackSvg({
+                subs: [
+                  A("socket.on('data', h)", "req.on('data', h)"),
+                  A("Readable \u00b7 resume \u00b7 read(0)", "IncomingMessage \u00b7 llhttp \u00b7 net.Socket"),
+                  "TCPWrap \u00b7 StreamBase",
+                  "uv_tcp_t \u00b7 uv_read_start",
+                  "epoll \u00b7 the descriptor",
+                  "the NIC, idle",
+                ],
+                lit: st.lit,
+                span: [Math.min(0, st.lit - 1), st.lit - 1],
+                dir: "down",
+                notes: {},
+                cap: A(
+                  "net \u2014 YOUR listener is what reaches libuv",
+                  "http \u2014 the read was started before your handler ran"
+                ),
+                mini: true,
+              }),
+              "fig-scroll"
+            ) +
+            '<div class="rcol">' +
+            pane("your code", code(lines, 1)) +
+            pane("what this step actually is", card({ kind: st.kind, sig: st.sig, kv: st.kv, eff: st.eff, by: st.by })) +
+            "</div></div>",
+        };
+      });
+    },
+  };
+
+  /* ================================================================
+     FIG 04 — libuv registers interest, and then stops
+     ================================================================ */
+  var EPOLL = [
+    {
+      tab: "uv__io_start",
+      cap:
+        "libuv does not call <code data-t=\"epollctl\">epoll_ctl</code> here. It sets a bit in the handle's watcher " +
+        "and puts it on a pending queue \u2014 the syscall is batched to the top of the next loop turn.",
+      kind: "js",
+      sig: "uv__io_start(loop, &handle->io_watcher, POLLIN)",
+      kv: [
+        ["pevents", "the events libuv wants. Compared against `events`, what the kernel currently has, to decide ADD vs MOD"],
+        ["watcher_queue", "the pending list. Several starts in one tick collapse into one syscall each at the next poll"],
+      ],
+      eff: "A bit and a queue insertion. <b>No boundary crossed.</b>",
+      by: "<b>libuv</b> \u2014 src/unix/core.c",
+      m: ["syscalls", "0"],
+      lit: 3,
+    },
+    {
+      tab: "epoll_ctl",
+      cap:
+        "At the top of the poll phase libuv drains that queue. Now the kernel is told, once, what this process " +
+        "wants to hear about.",
+      kind: "sys",
+      sig: "epoll_ctl(epfd, EPOLL_CTL_ADD, <b>42</b>,\n          {events = EPOLLIN, data.fd = 42}) = <b>0</b>",
+      kv: [
+        ["EPOLL_CTL_ADD", "MOD if this descriptor is already in the set, which is why libuv tracks `events` separately from `pevents`"],
+        ["EPOLLIN", "\u201ca read would not block\u201d. On a connected socket that means the receive buffer is non-empty \u2014 or the peer has closed, which reads as readable and returns 0"],
+        ["data.fd", "an opaque cookie the kernel hands back untouched. libuv finds its own watcher through it"],
+      ],
+      eff:
+        "The kernel hangs a callback off the socket's wait queue. <b>Nothing is copied and nothing is scanned</b> \u2014 " +
+        "the socket will push itself onto a ready list when it becomes readable.",
+      by: "<b>libuv</b> \u2014 uv__io_poll(), before it blocks",
+      m: ["syscalls", "1"],
+      lit: 4,
+    },
+    {
+      tab: "and then nothing",
+      cap:
+        "The loop blocks. This is the state a Node server spends almost all of its life in: <b>one thread, asleep " +
+        "in one system call</b>, holding as many watched descriptors as you like.",
+      kind: "sys",
+      sig: "epoll_wait(epfd, events, 1024, -1)   <b>\u2190 blocks</b>",
+      kv: [
+        ["-1", "libuv passes the time to the nearest due timer, or -1 for \u201cforever\u201d when there is none"],
+        ["cost while idle", "zero. An epoll set is not polled; it is a list the kernel appends to"],
+        ["the trap", "a busy loop in your JavaScript never lets the loop reach this call, so nothing is ever noticed"],
+      ],
+      eff:
+        "<b>libuv is not asking the socket anything.</b> That is the single most common wrong picture of this " +
+        "system, and it is what makes ten thousand idle connections cost nothing.",
+      by: "<b>libuv</b> \u2014 uv__io_poll(), the poll phase",
+      m: ["cpu", "0%"],
+      lit: 4,
+    },
+  ];
+  SPECS.epoll = {
+    stages: function () {
+      return EPOLL.map(function (st, i) {
+        return {
+          tab: st.tab,
+          cap: st.cap,
+          meters: [
+            { k: "step", v: i + 1 + " / 3" },
+            { k: st.m[0], v: st.m[1], c: st.m[1] === "0%" ? "hot" : "" },
+            { k: "descriptor", v: "42" },
+            { k: "identical in net and http", v: "yes", c: "ok" },
+          ],
+          html:
+            '<div class="panes wide">' +
+            pane(
+              "where this step happens",
+              stackSvg({
+                mini: true,
+                subs: [
+                  "not running",
+                  "not running",
+                  "not running",
+                  "uv__io_start \u00b7 watcher_queue \u00b7 uv__io_poll",
+                  "epoll set \u00b7 fd 42 \u00b7 the wait queue",
+                  "the NIC, idle",
+                ],
+                lit: st.lit,
+                span: [2, 3],
+                dir: "down",
+                notes: {},
+                cap: "the two top layers are not involved in any of this",
+              }),
+              "fig-scroll"
+            ) +
+            pane("the call", card({ kind: st.kind, sig: st.sig, kv: st.kv, eff: st.eff, by: st.by })) +
+            "</div>",
+        };
+      });
+    },
+  };
+
+  /* ================================================================
+     FIG 05 — five bytes arrive, and the kernel does all of it
+     ================================================================ */
+  var ARRIVE = [
+    ["the wire", 5, "hw", "The peer's TCP stack has already split, numbered and sent the bytes. What reaches your machine is a frame on a cable, addressed to your NIC.", "Ethernet frame \u2192 IP packet \u2192 TCP segment \u2192 5 bytes of payload", "nothing in your process is running"],
+    ["DMA", 5, "hw", "The NIC writes the frame <b>directly into main memory</b> by DMA, without waking a CPU core, and only then raises an interrupt. The copy happens before anyone knows there is anything to copy.", "NIC \u2192 ring buffer in RAM, then IRQ", "still nothing in your process"],
+    ["the TCP stack", 4, "kernel", "The kernel's softirq handler walks the frame up: Ethernet, IP, TCP. It checks the sequence number, sends an ACK, and reassembles the byte stream. <b>None of this is Node.</b>", "checksum \u00b7 seq/ack \u00b7 reassembly \u00b7 window update", "the ACK goes out before your process learns anything"],
+    ["the receive buffer", 4, "kernel", "The payload lands in the socket's receive buffer \u2014 kernel memory, sized by tcp_rmem, that your process cannot address. The bytes now exist, and are still not yours.", "sk_receive_queue: 'hello'  (5 bytes)", "readable, from the kernel's point of view"],
+    ["the ready list", 4, "kernel", "Because fd 42 is in an epoll set, becoming readable does not merely change a flag: the socket's wait queue callback appends it to that epoll instance's <b>ready list</b>, and wakes the thread blocked on it.", "epoll ready list \u2190 fd 42 (EPOLLIN)", "epoll_wait is about to return 1"],
+  ];
+  SPECS.arrive = {
+    stages: function () {
+      return ARRIVE.map(function (st, i) {
+        return {
+          tab: st[0],
+          cap: st[3],
+          meters: [
+            { k: "step", v: i + 1 + " / 5" },
+            { k: "owner", v: st[2] === "hw" ? "hardware" : "kernel" },
+            { k: "node code run", v: "none", c: "hot" },
+            { k: "identical in net and http", v: "yes", c: "ok" },
+          ],
+          html:
+            '<div class="panes wide">' +
+            pane(
+              "the layers involved",
+              stackSvg({
+                mini: true,
+                subs: [
+                  "asleep",
+                  "asleep",
+                  "asleep",
+                  "blocked in epoll_wait",
+                  "TCP/IP \u00b7 sk_receive_queue \u00b7 epoll",
+                  "NIC \u00b7 DMA \u00b7 IRQ",
+                ],
+                lit: st[1],
+                span: [4, 4],
+                dir: "up",
+                notes: { 4: i >= 2 ? "the interrupt" : "" },
+                cap: "FOUR OF THE SIX LAYERS ARE ASLEEP throughout this figure",
+              }),
+              "fig-scroll"
+            ) +
+            pane(
+              "what happens",
+              card({
+                kind: "sys",
+                sig: st[4],
+                kv: [
+                  ["who runs", st[2] === "hw" ? "the network card, and then an interrupt handler" : "the kernel, in softirq context, on whichever core took the interrupt"],
+                  ["your process", "not scheduled. It has no idea any of this is happening"],
+                  ["node", "no Node code of any kind runs during this figure"],
+                ],
+                eff: st[5],
+                by: "<b>the kernel</b> \u2014 identical for Python, Go, nginx and Node",
+              })
+            ) +
+            "</div>",
+        };
+      });
+    },
+  };
+
+  /* ================================================================
+     FIG 06 — the allocation callback: where your Buffer comes from
+     The piece the source essay leaves out, and the answer to
+     "where does the `data` argument's memory come from".
+     ================================================================ */
+  function poolSvg(step) {
+    /* Redrawn top-to-bottom at the mini width so it sits beside its card.
+       Vertical also reads better here: the copy travels kernel -> process,
+       which is the same direction every other figure in this document uses. */
+    var W = 440,
+      BX = 8,
+      BW = 424;
+    var s = "";
+    s += S.text(BX, 16, "THE KERNEL", "mlbl");
+    s += S.box({
+      id: "krecv",
+      x: BX,
+      y: 26,
+      w: BW,
+      h: 44,
+      owner: "kernel",
+      cls: step === 2 ? "lit" : "",
+      sw: step === 2 ? 2 : 1,
+    });
+    s += S.text(BX + 14, 54, "sk_receive_queue \u2014 'hello'", "mono");
+
+    s += '<g class="svg-flow">' + S.vArrow(80, 70, 116, step >= 2 ? "flow" : "") + "</g>";
+    s += S.text(104, 97, "read(42, buf, len) \u2014 THE ONE COPY", "mono");
+
+    s += S.text(BX, 134, "YOUR PROCESS \u2014 THE BUFFER POOL", "mlbl");
+    s += S.box({ id: "pool", x: BX, y: 144, w: BW, h: 62, owner: "node" });
+    s += S.text(BX + 14, 163, "one ArrayBuffer, reused for every read", "mono");
+    if (step >= 1) {
+      s += S.box({
+        id: "slice",
+        x: BX + 14,
+        y: 171,
+        w: 206,
+        h: 26,
+        owner: "app",
+        cls: step === 1 ? "lit" : "",
+        sw: step === 1 ? 2 : 1,
+      });
+      s += S.text(BX + 24, 189, "the slice given to libuv", "mono");
+    }
+
+    if (step >= 3) {
+      s += '<g class="svg-flow">' + S.vArrow(80, 206, 240, "flow") + "</g>";
+      s += S.box({ id: "chunk", x: BX, y: 240, w: 212, h: 40, owner: "app", cls: "lit", sw: 2 });
+      s += S.text(BX + 14, 265, "the `data` Buffer", "lbl t-app");
+      s += S.text(232, 265, "a VIEW of that slice", "mono");
+    }
+    s += S.text(BX, 302, "two chunks can share one ArrayBuffer", "mono");
+    return S.svg("0 0 " + W + " 318", s);
+  }
+
+  var ALLOC = [
+    {
+      tab: "libuv asks",
+      cap:
+        "Before <b>every single read</b>, libuv calls back into Node to ask for memory. It does not allocate: " +
+        "it has no idea what a JavaScript Buffer is, and it must not decide how big your process's reads are.",
+      sig: "void alloc_cb(uv_handle_t* h, size_t suggested, <b>uv_buf_t* buf</b>)",
+      kind: "sys",
+      kv: [
+        ["suggested", "64 KB. A hint libuv passes; Node is free to ignore it and often does"],
+        ["buf", "an OUT parameter. Node fills in buf->base and buf->len \u2014 this is how memory travels the other way across the boundary"],
+        ["called", "once per read attempt, not once per uv_read_start"],
+      ],
+      eff: "<b>This callback runs before any bytes exist.</b> It is asking where to put something not yet read.",
+      by: "<b>libuv</b> \u2014 the first of the two callbacks handed to uv_read_start",
+      step: 0,
+      m: ["copies so far", "0"],
+    },
+    {
+      tab: "node answers",
+      cap:
+        "Node answers out of a <b>pool</b>: one 64 KB ArrayBuffer, sliced repeatedly. Allocating a fresh buffer per " +
+        "read would be a malloc and a GC object for every packet.",
+      sig: "buf->base = pool + poolOffset;\nbuf->len  = poolSize - poolOffset;",
+      kind: "js",
+      kv: [
+        ["the pool", "Buffer.poolSize, 8 KB by default for Buffer.allocUnsafe, larger for stream reads"],
+        ["the consequence", "the chunk you receive can be a view into memory shared with other chunks. Holding one 5-byte chunk can retain the whole allocation"],
+        ["buffer.slice vs copy", "this is exactly why Buffer.from(chunk) exists, and why keeping chunks around without copying is a real leak shape"],
+      ],
+      eff:
+        "Node has now handed libuv a pointer <b>into JavaScript's own heap</b>. The two worlds share this memory " +
+        "for the length of one read.",
+      by: "<b>Node's C++</b> \u2014 the StreamBase allocator, backed by the JS-side pool",
+      step: 1,
+      m: ["copies so far", "0"],
+    },
+    {
+      tab: "the read",
+      cap:
+        "Now libuv makes the actual call. This is the <b>one real copy</b> in the whole journey: kernel memory to " +
+        "your process's memory, by the CPU, in a system call.",
+      sig: "read(<b>42</b>, buf->base, buf->len) = <b>5</b>",
+      kind: "sys",
+      kv: [
+        ["42", "the descriptor"],
+        ["buf->base", "the pointer Node just supplied. The kernel writes into JavaScript's heap"],
+        ["= 5", "the number of bytes actually copied. It is not the number sent, and not the number that will arrive"],
+        ["EAGAIN", "if the buffer emptied between the epoll notification and this call, the read returns -EAGAIN and libuv stops for this turn"],
+      ],
+      eff:
+        "Everything before this figure moved <b>notifications</b>. This line is the only place bytes move.",
+      by: "<b>libuv</b> \u2014 uv__read(), which loops until EAGAIN or the allocator refuses",
+      step: 2,
+      m: ["copies so far", "1"],
+    },
+    {
+      tab: "your chunk",
+      cap:
+        "The Buffer your handler eventually receives is a <b>view of that same slice</b>. No copy is made on the way " +
+        "up through C++, V8, the stream and the emitter \u2014 all of that moves a pointer and a length.",
+      sig: "new FastBuffer(pool.buffer, byteOffset, <b>nread</b>)",
+      kind: "you",
+      kv: [
+        ["byteOffset", "where in the pool this read landed"],
+        ["nread", "5, not 65536. The Buffer is trimmed to what was actually read"],
+        ["identity", "chunk.buffer is the pool's ArrayBuffer, shared with other chunks. chunk.byteOffset is rarely 0"],
+      ],
+      eff:
+        "So the answer to \u201cwhere does <code>data</code> come from\u201d is: <b>Node asked libuv to write into a slice " +
+        "of a pool it already owned</b>, and then wrapped that slice in an object.",
+      by: "<b>Node</b> \u2014 and the pointer has not moved since the alloc callback",
+      step: 3,
+      m: ["copies so far", "1"],
+    },
+  ];
+  SPECS.alloc = {
+    stages: function () {
+      return ALLOC.map(function (st, i) {
+        return {
+          tab: st.tab,
+          cap: st.cap,
+          meters: [
+            { k: "step", v: i + 1 + " / 4" },
+            { k: st.m[0], v: st.m[1], c: st.m[1] === "1" ? "hot" : "ok" },
+            { k: "bytes", v: i >= 2 ? "5" : "0" },
+            { k: "identical in net and http", v: "yes", c: "ok" },
+          ],
+          html:
+            '<div class="panes wide">' +
+            pane("the pool, the slice, and the single copy", poolSvg(st.step), "fig-scroll") +
+            pane("what this step is", card({ kind: st.kind, sig: st.sig, kv: st.kv, eff: st.eff, by: st.by })) +
+            "</div>",
+        };
+      });
+    },
+  };
+})();
+
+</script>
+<script>
+(function () {
+  "use strict";
+  var S = window.S,
+    A = window.__A,
+    isNet = window.__isNet,
+    pane = window.__pane,
+    code = window.__code,
+    card = window.__card,
+    stackSvg = window.__stackSvg;
+  var SPECS = window.SPECS;
+
+  /* ================================================================
+     FIG 07 — one native callback, three different meanings
+     ================================================================ */
+  var NREAD = [
+    {
+      tab: "nread > 0",
+      v: "5",
+      cap:
+        "A positive <code>nread</code> is the normal case: that many bytes were written into the buffer you " +
+        "supplied. <b>Only the first nread bytes are meaningful</b> \u2014 the rest of the slice is whatever was there before.",
+      eff:
+        "Node trims the buffer to nread and pushes it into the stream. This is the only branch of the three that " +
+        "produces a chunk.",
+      to: A("socket.push(chunk)", "socketOnData(chunk) \u2192 parser.execute(chunk)"),
+      m: ["event produced", "'data'"],
+      c: "ok",
+    },
+    {
+      tab: "nread == 0",
+      v: "0",
+      cap:
+        "Zero is <b>not</b> end of file. It means the read would have blocked \u2014 EAGAIN \u2014 so libuv gives the " +
+        "allocated buffer straight back and stops reading for this turn of the loop.",
+      eff:
+        "No chunk, no event, nothing observable from JavaScript. It is the ordinary way a read loop terminates, " +
+        "and it happens after almost every successful read.",
+      to: "(nothing)",
+      m: ["event produced", "none"],
+      c: "",
+    },
+    {
+      tab: "nread == UV_EOF",
+      v: "UV_EOF",
+      cap:
+        "End of stream arrives as a <b>negative number through the same callback</b>. There is no separate " +
+        "close callback: the peer sending FIN is reported as an error code on the read path.",
+      eff:
+        A(
+          "Node pushes null, which ends the Readable and emits 'end' after the queue drains. Your 'data' listener is simply never called again.",
+          "Node pushes null into the socket, and the parser is told the stream finished \u2014 which is how a request with no Content-Length and no chunked encoding is terminated at all."
+        ),
+      to: A("socket.push(null)  \u2192  'end'", "parser.finish()  \u2192  req 'end'"),
+      m: ["event produced", "'end'"],
+      c: "hot",
+    },
+    {
+      tab: "nread < 0",
+      v: "ECONNRESET",
+      cap:
+        "Any other negative value is a real error, and it comes up the same path. <b>The same C function signature " +
+        "carries data, end of file and failure</b> \u2014 which is why Node's translation layer is where the three " +
+        "become three different JavaScript events.",
+      eff:
+        "Node maps the libuv error code to an Error object and emits 'error'. An unhandled 'error' on an emitter " +
+        "throws, which is why a reset connection can take down a process that only forgot one listener.",
+      to: "socket.destroy(err)  \u2192  'error'",
+      m: ["event produced", "'error'"],
+      c: "bad",
+    },
+  ];
+  function nreadSvg(i) {
+    /* Vertical at the mini width so it sits beside its card. The three
+       outcomes stack under the one callback, which is the point: one
+       signature, one integer, three different JavaScript events. */
+    var W = 440,
+      BX = 8,
+      BW = 424;
+    var s = "";
+    s += S.text(BX, 16, "ONE NATIVE CALLBACK", "mlbl");
+    s += S.box({ id: "cb", x: BX, y: 26, w: BW, h: 70, owner: "node", cls: "lit", sw: 2 });
+    s += S.text(BX + 14, 48, "read_cb(uv_stream_t*, ssize_t nread,", "mono");
+    s += S.text(BX + 14, 66, "        const uv_buf_t* buf)", "mono");
+    s += S.text(BX + 14, 88, "nread = " + NREAD[i].v, "mono");
+    s += S.text(BX, 120, "THE SIGN OF ONE INTEGER DECIDES", "mlbl");
+    var OUT = [
+      ["a chunk", 0],
+      ["end of stream", 2],
+      ["an error", 3],
+    ];
+    OUT.forEach(function (o, k) {
+      var y = 132 + k * 54,
+        on = o[1] === i;
+      s += '<g class="' + (on ? "" : "dim") + '">';
+      s += S.box({
+        id: "o" + k,
+        x: BX + 40,
+        y: y,
+        w: BW - 40,
+        h: 42,
+        owner: on ? "node" : null,
+        cls: on ? "lit" : "",
+        sw: on ? 2 : 1,
+      });
+      s += S.text(BX + 56, y + 26, o[0], "lbl " + (on ? "t-node" : ""));
+      s += "</g>";
+      s += '<g class="svg-flow">' + S.vArrow(BX + 24, y - 12, y + 20, on ? "flow" : "") + "</g>";
+    });
+    s += S.text(BX, 316, "libuv does not know any of these are JavaScript events", "mono");
+    return S.svg("0 0 " + W + " 332", s);
+  }
+
+  SPECS.nread = {
+    stages: function () {
+      return NREAD.map(function (st, i) {
+        return {
+          tab: st.tab,
+          cap: st.cap,
+          meters: [
+            { k: "nread", v: st.v, c: st.c },
+            { k: st.m[0], v: st.m[1], c: st.c },
+            { k: "native callbacks used", v: "1", c: "ok" },
+            { k: "your listener called", v: i === 0 ? "yes" : "no" },
+          ],
+          html:
+            '<div class="panes wide">' +
+            pane("one signature, three meanings", nreadSvg(i), "fig-scroll") +
+            pane(
+              "what node does with it",
+              card({
+                kind: "js",
+                sig: st.to,
+                kv: [
+                  ["the C signature", "ssize_t nread \u2014 signed, deliberately. Negative values are libuv error codes"],
+                  ["UV_EOF", "-4095. A constant, not a sentinel Node invented"],
+                  ["who decides", "Node's C++ layer. libuv reports a number; the meaning is Node's"],
+                ],
+                eff: st.eff,
+                by: "<b>Node's C++</b> \u2014 LibuvStreamWrap::OnUvRead, in stream_wrap.cc",
+              })
+            ) +
+            "</div>",
+        };
+      });
+    },
+  };
+
+  /* ================================================================
+     FIG 08 — how a native event finds a JavaScript object
+     ================================================================ */
+  function webSvg(step) {
+    /* Drawn bottom-to-top at the mini width: fd 42 at the bottom, the
+       JavaScript object at the top, matching the orientation every other
+       figure uses. Each link is labelled in BOTH directions, because both
+       are walked \u2014 up when an event arrives, down when you call a method. */
+    var W = 440,
+      BX = 8,
+      BW = 300,
+      H = 50,
+      P = 76,
+      Y0 = 34;
+    var NODES = [
+      ["net.Socket", "the JavaScript object", "node"],
+      ["TCPWrap", "node's C++ object", "node"],
+      ["uv_tcp_t", "libuv's handle struct", "node"],
+      ["fd 42", "an integer from the kernel", "kernel"],
+    ];
+    var LINK = [
+      ["socket._handle", "persistent handle"],
+      ["wrap->stream()", "handle->data"],
+      ["io_watcher.fd", "container_of"],
+    ];
+    var s = S.text(BX, 18, "UP \u2014 HOW A NATIVE EVENT FINDS ITS OBJECT", "mlbl");
+    NODES.forEach(function (nd, k) {
+      /* step counts from fd 42 upward, so node k is live when step >= 3 - k */
+      var on = step >= 3 - k,
+        lit = step === 3 - k,
+        y = Y0 + k * P;
+      s += '<g class="' + (on ? "" : "dim") + '">';
+      s += S.box({
+        id: "n" + (3 - k),
+        x: BX,
+        y: y,
+        w: BW,
+        h: H,
+        owner: on ? nd[2] : null,
+        cls: lit ? "lit" : "",
+        sw: lit ? 2 : 1,
+      });
+      s += S.text(BX + 14, y + 21, nd[0], "lbl " + (on ? "t-" + nd[2] : ""));
+      s += S.text(BX + 14, y + 39, nd[1], "mono");
+      s += "</g>";
+    });
+    for (var k = 0; k < 3; k++) {
+      var a = Y0 + k * P + H,
+        b = Y0 + (k + 1) * P;
+      var live = step > 2 - k;
+      s += '<g class="svg-flow">' + S.vArrow(BX + 40, b, a, live ? "flow" : "") + "</g>";
+      s += '<g class="svg-flow">' + S.vArrow(BX + 160, a, b, "") + "</g>";
+      s += S.text(BX + 316, (a + b) / 2 - 2, LINK[k][1], "mono");
+      s += S.text(BX + 316, (a + b) / 2 + 14, "\u2193 " + LINK[k][0], "mono");
+    }
+    s += S.text(BX, Y0 + 3 * P + H + 26, "every link is a stored pointer \u2014 nothing is searched for", "mono");
+    return S.svg("0 0 " + W + " " + (Y0 + 3 * P + H + 40), s);
+  }
+
+  var WEB = [
+    {
+      tab: "fd 42",
+      cap:
+        "The event arrives naming <b>a descriptor and nothing else</b>. There is no JavaScript in it, no object, " +
+        "no event name \u2014 the kernel has never heard of any of those.",
+      sig: "struct epoll_event ev = { .events = EPOLLIN, .data.fd = 42 }",
+      kind: "sys",
+      kv: [
+        ["data.fd", "the cookie libuv registered. The kernel returns it verbatim"],
+        ["what is missing", "everything else. An integer is the entire payload"],
+      ],
+      eff: "The next three steps are pointer-following, and each pointer was stored on the way down.",
+      by: "<b>the kernel</b> \u2014 epoll_wait's output array",
+    },
+    {
+      tab: "uv_tcp_t",
+      cap:
+        "libuv finds its watcher from the descriptor, and the watcher is embedded <b>inside</b> the handle struct, " +
+        "so the handle's address is a fixed offset away \u2014 " +
+        '<code data-t="containerof">container_of</code> is arithmetic, not a search.',
+      sig: "uv__io_t* w = loop->watchers[fd];\nuv_tcp_t* handle = container_of(w, uv_tcp_t, io_watcher);",
+      kind: "sys",
+      kv: [
+        ["loop->watchers", "an array indexed by fd. Direct, O(1), and the reason libuv grows it when descriptors get large"],
+        ["container_of", "the classic C trick: given a pointer to a member, compute the pointer to the struct that contains it"],
+      ],
+      eff: "Still entirely inside C. <b>libuv has now reached the end of what it knows.</b>",
+      by: "<b>libuv</b> \u2014 uv__io_poll()",
+    },
+    {
+      tab: "TCPWrap",
+      cap:
+        "Every libuv handle carries a free-form <code>void* data</code>. Node stores its own C++ wrapper there when " +
+        "it creates the handle \u2014 which is the entire mechanism by which a libuv event becomes a Node event.",
+      sig: "LibuvStreamWrap* wrap = static_cast<LibuvStreamWrap*>(handle-><b>data</b>);",
+      kind: "js",
+      kv: [
+        ["handle->data", "libuv's deliberate escape hatch. It never reads it and never writes it"],
+        ["the cast", "unchecked. Node knows what it put there because Node is the only thing that puts anything there"],
+        ["why it matters", "this single pointer is the seam between a general-purpose C library and a specific runtime"],
+      ],
+      eff:
+        "<b>This is the step the source diagram compresses.</b> libuv did not find a JavaScript object; it found a " +
+        "pointer Node had left for itself.",
+      by: "<b>Node's C++</b> \u2014 stream_wrap.cc",
+    },
+    {
+      tab: "the JS object",
+      cap:
+        "The C++ wrapper holds a <b>persistent V8 handle</b> to the JavaScript object, and the JavaScript object " +
+        "holds the wrapper as <code>_handle</code>. The link is two-way and both directions are used.",
+      sig: "Local<Object> obj = wrap->object();   // always the net.Socket",
+      kind: "js",
+      kv: [
+        ["persistent", "a reference V8's GC knows about, so the JS object cannot be collected while a native event might still name it"],
+        ["socket._handle", "the same edge, walked the other way, every time you call socket.write()"],
+        ["never req", "an http IncomingMessage is not on this chain at all. The wrapper reaches the socket; the parser reaches req"],
+      ],
+      eff:
+        "Four objects, three stored pointers, no search. <b>An event about an integer has become an event about " +
+        "an object</b>, and that translation is the whole job of Node's C++ layer.",
+      by: "<b>Node's C++</b> \u2014 BaseObject, holding a v8::Global",
+    },
+  ];
+  SPECS.web = {
+    stages: function () {
+      return WEB.map(function (st, i) {
+        return {
+          tab: st.tab,
+          cap: st.cap,
+          meters: [
+            { k: "step", v: i + 1 + " / 4" },
+            { k: "pointers followed", v: String(i) },
+            { k: "lookups by fd", v: i === 1 ? "1" : "0" },
+            { k: "in javascript yet", v: i === 3 ? "reachable" : "no", c: i === 3 ? "ok" : "" },
+          ],
+          html:
+            '<div class="panes wide">' +
+            pane("four objects, three stored pointers", webSvg(i), "fig-scroll") +
+            pane("the step", card({ kind: st.kind, sig: st.sig, kv: st.kv, eff: st.eff, by: st.by })) +
+            "</div>",
+        };
+      });
+    },
+  };
+
+  /* ================================================================
+     FIG 09 — crossing into V8, which is more than a function call
+     ================================================================ */
+  var MAKE = [
+    {
+      tab: "the scope opens",
+      cap:
+        "Node does not simply call a JavaScript function from C++. It opens an " +
+        "<b>InternalCallbackScope</b> first, because re-entering JavaScript from a native event has bookkeeping " +
+        "that a plain call would skip.",
+      sig: "InternalCallbackScope scope(env, object, asyncContext);",
+      kind: "js",
+      kv: [
+        ["why a scope", "async_hooks needs a before/after pair, and the tick queue needs to know whether this is the outermost entry"],
+        ["outermost", "the flag that decides whether microtasks get drained on the way out. Nested MakeCallbacks do not each drain"],
+      ],
+      eff: "<b>Nothing has run yet.</b> This step exists so the next one can be undone correctly.",
+      by: "<b>Node's C++</b> \u2014 api/callback.cc",
+      lit: 2,
+    },
+    {
+      tab: "before hooks",
+      cap:
+        "Any registered async_hooks <code>before</code> callbacks run, with the async id of this resource. This is " +
+        "what lets AsyncLocalStorage restore the right context for a chunk that arrived milliseconds later.",
+      sig: "AsyncWrap::EmitBefore(env, asyncContext.async_id)",
+      kind: "js",
+      kv: [
+        ["async id", "assigned when the socket was created, not when the byte arrived"],
+        ["consequence", "context propagation across I/O is implemented here, not in the promise machinery"],
+      ],
+      eff: "A cost paid on every single native-to-JS crossing, whether or not anything is listening.",
+      by: "<b>Node's C++</b> \u2014 AsyncWrap",
+      lit: 2,
+    },
+    {
+      tab: "the actual call",
+      cap:
+        "Now the crossing. V8 sets up a JavaScript frame and begins executing bytecode or compiled code. " +
+        "<b>This is the boundary the source essay is about</b> \u2014 and note what is being called: not your function.",
+      sig: "callback->Call(env->context(), recv, argc, argv)",
+      kind: "js",
+      kv: [
+        ["callback", A("onStreamRead \u2014 Node's own JavaScript", "onStreamRead \u2014 Node's own JavaScript, which will reach the parser")],
+        ["argv", "the stream and the trimmed Buffer. Two values, marshalled from C++ types into V8 values"],
+        ["your function", "not mentioned. It is several JavaScript frames away yet"],
+      ],
+      eff:
+        "The first JavaScript to run in this entire chain is <b>Node's</b>, not yours. There are still three or " +
+        "four frames to go.",
+      by: "<b>V8</b> \u2014 entering JS from C++",
+      lit: 1,
+    },
+    {
+      tab: "your code runs",
+      cap:
+        "Node's JavaScript reaches the emitter, the emitter reaches you, and your handler runs \u2014 " +
+        "<b>synchronously, inside the same native callback that started this figure</b>. The C++ frame is still on " +
+        "the stack underneath you.",
+      sig: A(
+        "onStreamRead \u2192 socket.push \u2192 emit('data') \u2192 <b>h(chunk)</b>",
+        "onStreamRead \u2192 parser.execute \u2192 on_body \u2192 req.push \u2192 emit('data') \u2192 <b>h(chunk)</b>"
+      ),
+      kind: "you",
+      kv: [
+        ["stack depth", A("about four JS frames above the C++ call", "about seven \u2014 the parser adds its own")],
+        ["a throw here", "unwinds through C++. Node has to catch it, which is what makes uncaughtException reachable from I/O"],
+        ["blocking here", "blocks the loop. Nothing else in the process runs, because there is nothing else running"],
+      ],
+      eff:
+        "Everything in this document has been leading to this one synchronous call, and it is <b>the last thing " +
+        "to happen, not the first</b>.",
+      by: "<b>your code</b> \u2014 with the whole chain still on the stack beneath it",
+      lit: 0,
+    },
+    {
+      tab: "the drain",
+      cap:
+        "Your handler returns, and the scope closes. <b>Now</b> the tick queue and the microtask queue are drained \u2014 " +
+        "which is why a promise you resolved inside the handler settles before the next chunk, and why " +
+        "<code>nextTick</code> beats it.",
+      sig: "scope.Close()  \u2192  runNextTicks()  \u2192  runMicrotasks()",
+      kind: "js",
+      kv: [
+        ["only if outermost", "a nested MakeCallback does not drain. The check is the flag from step one"],
+        ["ordering", "the entire nextTick queue first, then microtasks, then back to libuv"],
+        ["what this explains", "why await inside a 'data' handler resumes before the next 'data' event, even under load"],
+      ],
+      eff:
+        "libuv then continues its read loop. <b>The next chunk cannot arrive until this drain finishes</b>, because " +
+        "it is the same thread.",
+      by: "<b>Node's C++</b> \u2014 InternalCallbackScope::Close",
+      lit: 2,
+    },
+  ];
+  SPECS.makecallback = {
+    stages: function () {
+      return MAKE.map(function (st, i) {
+        return {
+          tab: st.tab,
+          cap: st.cap,
+          meters: [
+            { k: "step", v: i + 1 + " / 5" },
+            { k: "in javascript", v: i >= 2 && i <= 3 ? "yes" : "no", c: i >= 2 && i <= 3 ? "ok" : "" },
+            { k: "your code", v: i === 3 ? "running" : "not yet", c: i === 3 ? "ok" : "" },
+            { k: "js frames above c++", v: i < 2 ? "0" : i === 2 ? "1" : A("4", "7") },
+          ],
+          html:
+            '<div class="panes wide">' +
+            pane(
+              "where the stack is",
+              stackSvg({
+                mini: true,
+                subs: [
+                  A("h(chunk)", "h(chunk)"),
+                  A("onStreamRead \u00b7 push \u00b7 emit", "onStreamRead \u00b7 llhttp \u00b7 push \u00b7 emit"),
+                  "MakeCallback \u00b7 InternalCallbackScope",
+                  "the read callback, still on the stack",
+                  "returned already",
+                  "returned already",
+                ],
+                lit: st.lit,
+                span: [st.lit, 2],
+                dir: "up",
+                notes: { 2: i >= 2 ? "V8" : "" },
+                cap: "the C++ frame does not return until your handler has",
+              }),
+              "fig-scroll"
+            ) +
+            pane("the step", card({ kind: st.kind, sig: st.sig, kv: st.kv, eff: st.eff, by: st.by })) +
+            "</div>",
+        };
+      });
+    },
+  };
+
+  /* ================================================================
+     FIG 10 — the last few frames, where net and http finally differ
+     ================================================================ */
+  var EMIT_NET = [
+    ["onStreamRead", "stream.push(chunk)", "Node's JavaScript receives the chunk from C++ and pushes it into the socket's own Readable.", "one Readable, and it is the socket"],
+    ["flowing", "state.flowing === true", "Because the stream is flowing, the chunk is not queued. It goes straight out.", "no buffering \u2014 the queue is bypassed entirely"],
+    ["emit('data')", "socket.emit('data', chunk)", "The socket emits. This is a plain method call on a plain object.", "the emitter looks up _events.data"],
+    ["your handler", "h(chunk)", "Your function runs, with a Buffer that is a view into the pool from figure 06.", "the last frame in the chain"],
+  ];
+  var EMIT_HTTP = [
+    ["onStreamRead", "socketOnData(chunk)", "Node's JavaScript receives the chunk \u2014 and hands it to the parser, not to you. The socket's only 'data' listener belongs to the http server.", "one Readable so far, and it is not yours"],
+    ["llhttp", "parser.execute(chunk)", "The parser walks the bytes and fires its own callbacks: on_url, on_header_field, on_headers_complete, on_body. Synchronously, inside the socket's data event.", "your handler was invoked from on_headers_complete"],
+    ["req.push", "req.push(chunk.slice(at, at+len))", "The body bytes are pushed into req \u2014 a SECOND Readable, whose source is the parser rather than a descriptor.", "two Readables now, on one descriptor"],
+    ["your handler", "h(chunk)", "Your function runs, with a Buffer that is a view into the same pool allocation \u2014 sliced twice, copied never.", "the last frame in the chain"],
+  ];
+  SPECS.emit = {
+    stages: function () {
+      var L = isNet() ? EMIT_NET : EMIT_HTTP;
+      return L.map(function (st, i) {
+        return {
+          tab: st[0],
+          cap:
+            st[2] +
+            (i === L.length - 1
+              ? " <b>Nothing above this point knew your function existed.</b>"
+              : ""),
+          meters: [
+            { k: "step", v: i + 1 + " / 4" },
+            { k: "readables", v: isNet() ? "1" : i >= 2 ? "2" : "1", c: !isNet() && i >= 2 ? "hot" : "" },
+            { k: "copies made", v: "0", c: "ok" },
+            { k: "your code", v: i === 3 ? "running" : "not yet", c: i === 3 ? "ok" : "" },
+          ],
+          html:
+            '<div class="panes two">' +
+            pane(
+              A("net \u2014 the socket is the stream", "http \u2014 the parser sits in between"),
+              code(
+                isNet()
+                  ? [
+                      "// node's javascript, not yours:",
+                      "onStreamRead(stream, chunk)",
+                      "socket.push(chunk)",
+                      "socket.emit('data', chunk)",
+                      "// and only now:",
+                      "h(chunk)",
+                    ]
+                  : [
+                      "// node's javascript, not yours:",
+                      "onStreamRead(stream, chunk)",
+                      "socketOnData(chunk) \u2192 parser.execute(chunk)",
+                      "on_body(buf, at, len) \u2192 req.push(\u2026)",
+                      "req.emit('data', chunk)",
+                      "// and only now:",
+                      "h(chunk)",
+                    ],
+                isNet() ? [1, 2, 3, 5][i] : [1, 2, 3, 6][i]
+              )
+            ) +
+            pane(
+              "this step",
+              card({
+                kind: i === 3 ? "you" : "js",
+                sig: st[1],
+                kv: [
+                  ["layer", i === 3 ? "your code" : "node's javascript"],
+                  ["synchronous", "yes. Every frame in this figure is on one stack, inside one native callback"],
+                  ["note", st[3]],
+                ],
+                eff:
+                  i === 3
+                    ? "And that is the whole chain: <b>kernel \u2192 libuv \u2192 Node C++ \u2192 V8 \u2192 Node JS \u2192 EventEmitter \u2192 you</b>."
+                    : "Still Node's code, still not yours.",
+                by: "<b>Node's JavaScript</b> \u2014 " + A("lib/net.js", "lib/_http_server.js and the llhttp binding"),
+              })
+            ) +
+            "</div>",
+        };
+      });
+    },
+  };
+
+  /* ================================================================
+     FIG 11 — the two callback worlds, side by side
+     ================================================================ */
+  SPECS.worlds = {
+    stages: function () {
+      var mk = function (which) {
+        var native = which === "native";
+        return card({
+          kind: native ? "sys" : "you",
+          sig: native
+            ? "void on_read(uv_stream_t* stream,\n             ssize_t nread,\n             const uv_buf_t* buf);"
+            : A("(data) => { console.log(data) }", "(data) => { console.log(data) }"),
+          kv: native
+            ? [
+                ["written in", "C, compiled into the binary before your program existed"],
+                ["called by", "libuv, from inside uv__read()"],
+                ["arguments", "a struct pointer, a signed count, a raw memory pointer"],
+                ["knows about", "descriptors, buffers, error codes"],
+                ["does NOT know about", "EventEmitter, Readable, Buffer, 'data', or your function"],
+              ]
+            : [
+                ["written in", "JavaScript, by you, at runtime"],
+                ["called by", A("the socket's EventEmitter", "req's EventEmitter")],
+                ["arguments", "a Buffer object with a prototype and methods"],
+                ["knows about", "nothing below it. It sees an object and a name"],
+                ["does NOT know about", "fd 42, uv_tcp_t, nread, or that a copy happened"],
+              ],
+          eff: native
+            ? "This is what libuv means by \u201cthe read callback\u201d."
+            : "This is what you mean by \u201cmy callback\u201d.",
+          by: native ? "<b>libuv \u2194 Node's C++</b>" : "<b>Node's JavaScript \u2194 you</b>",
+        });
+      };
+      return [
+        {
+          tab: "two callbacks",
+          cap:
+            "Both of these are called \u201cthe callback\u201d, and they are not the same object, the same language, " +
+            "the same arguments, or the same caller. <b>Node is the translator between them</b>, and that translation " +
+            "is what the middle three figures of this document are.",
+          meters: [
+            { k: "callbacks", v: "2" },
+            { k: "languages", v: "2" },
+            { k: "shared arguments", v: "0", c: "bad" },
+            { k: "layers between them", v: "3" },
+          ],
+          html:
+            '<div class="worlds">' +
+            pane("the NATIVE callback", mk("native")) +
+            pane("YOUR callback", mk("js")) +
+            "</div>",
+        },
+        {
+          tab: "the sentence",
+          cap:
+            "Which makes the usual sentence wrong in a specific, fixable way. <b>libuv gets the native event to " +
+            "Node. Node turns that native event into JavaScript behaviour.</b> The middle is not a detail \u2014 it is " +
+            "the part that does the work.",
+          meters: [
+            { k: "hops", v: "6" },
+            { k: "boundary crossings", v: "2", c: "hot" },
+            { k: "copies", v: "1" },
+            { k: "identical in net and http", v: "below node's JS", c: "ok" },
+          ],
+          html:
+            '<div class="panes two">' +
+            pane(
+              "too direct",
+              '<div class="sysc"><div class="sysc-sig you">kernel\n  \u2192 libuv\n  \u2192 <b>your callback</b></div>' +
+                '<p class="sysc-eff">Three names, one of them wrong. It skips the two layers that do the ' +
+                "translation, and it credits libuv with knowing about JavaScript.</p></div>"
+            ) +
+            pane(
+              "what actually happens",
+              '<div class="sysc js"><div class="sysc-sig js">kernel\n  \u2192 libuv\n  \u2192 <b>node\u2019s C++ networking layer</b>\n  \u2192 <b>V8</b>\n  \u2192 node\u2019s JavaScript stream machinery\n  \u2192 EventEmitter\n  \u2192 your callback</div>' +
+                '<p class="sysc-eff">Seven names. The two in bold are the ones the short version drops, and they ' +
+                "are precisely the ones that make a native event into a JavaScript one.</p></div>"
+            ) +
+            "</div>",
+        },
+      ];
+    },
+  };
+
+  /* ================================================================
+     FIG 12 — the responsibility map: what each layer does NOT know
+     ================================================================ */
+  var MAP = [
+    {
+      tab: "kernel",
+      owner: "kernel",
+      does: ["TCP and IP, in full", "socket receive and send buffers", "epoll ready lists", "scheduling your thread"],
+      not: ["that a process called node exists", "what a JavaScript function is", "the difference between net and http"],
+      cap:
+        "The kernel implements networking. Everything above it is a way of asking. <b>Swap Node for Python and " +
+        "this layer does not change at all.</b>",
+    },
+    {
+      tab: "libuv",
+      owner: "node",
+      does: ["the event loop and its phases", "uv_tcp_t and the other handles", "epoll, kqueue, IOCP behind one API", "the thread pool, for the work epoll cannot do"],
+      not: ["EventEmitter", "Readable, or streams of any kind", "Buffer", "the string 'data'", "your function"],
+      cap:
+        "libuv coordinates native asynchronous I/O, for any C program that wants it. <b>It is not a Node component</b>, " +
+        "which is exactly why it cannot call your callback.",
+    },
+    {
+      tab: "node's C++",
+      owner: "node",
+      does: ["JS object \u2194 native object, through handle->data and a persistent", "native buffer \u2194 JS Buffer, without copying", "native callback \u2192 a call into V8", "async_hooks and the tick drain"],
+      not: ["how TCP works", "which of your listeners exist"],
+      cap:
+        "<b>This is the layer the short sentence leaves out</b>, and it is the only one whose entire job is " +
+        "translation. Remove it and the two halves cannot address each other.",
+    },
+    {
+      tab: "V8",
+      owner: "node",
+      does: ["executing JavaScript", "the heap your Buffers' backing stores live beside", "the microtask queue"],
+      not: ["sockets", "the event loop", "anything about I/O whatsoever"],
+      cap:
+        "V8 runs JavaScript and nothing else. It has no notion of a file, a socket, or a timer \u2014 every one of " +
+        "those reaches JavaScript through the layer below it.",
+    },
+    {
+      tab: "node's JS",
+      owner: "node",
+      does: [
+        A("net.Socket, and its Readable machinery", "http.IncomingMessage and llhttp, on top of net.Socket"),
+        "EventEmitter",
+        A("flowing mode, backpressure, 'data' and 'end'", "header parsing, chunked bodies, keep-alive"),
+      ],
+      not: ["descriptors", "system calls", "the copy in figure 06"],
+      cap:
+        "The ergonomic API \u2014 and <b>the only layer this page's switch changes</b>. Flip it and everything below " +
+        "this row stays exactly where it is.",
+    },
+    {
+      tab: "you",
+      owner: "app",
+      does: [A("socket.on('data', h)", "req.on('data', h)"), "deciding what the bytes mean"],
+      not: ["everything else in this document"],
+      cap:
+        "And your layer, which is one line long, and runs last. <b>The six figures above it are what that one " +
+        "line costs.</b>",
+    },
+  ];
+  SPECS.map = {
+    stages: function () {
+      return MAP.map(function (st, i) {
+        var rows = function (list, cls) {
+          return list
+            .map(function (t) {
+              return '<tr><td class="' + cls + '">' + t + "</td></tr>";
+            })
+            .join("");
+        };
+        return {
+          tab: st.tab,
+          cap: st.cap,
+          meters: [
+            { k: "layer", v: i + 1 + " / 6" },
+            { k: "owner", v: st.owner === "app" ? "you" : st.owner },
+            { k: "responsibilities", v: String(st.does.length) },
+            { k: "changes with the switch", v: i === 4 || i === 5 ? "yes" : "no", c: i >= 4 ? "hot" : "ok" },
+          ],
+          html:
+            '<div class="panes wide">' +
+            pane(
+              "where it sits",
+              stackSvg({
+                mini: true,
+                subs: [
+                  A("socket.on('data', h)", "req.on('data', h)"),
+                  A("net.Socket \u00b7 Readable \u00b7 EventEmitter", "IncomingMessage \u00b7 llhttp \u00b7 net.Socket"),
+                  "TCPWrap \u00b7 MakeCallback",
+                  "uv_tcp_t \u00b7 the loop",
+                  "TCP/IP \u00b7 epoll",
+                  "NIC \u00b7 DMA",
+                ],
+                lit: i === 5 ? 0 : i === 4 ? 1 : i === 3 ? 2 : i === 2 ? 2 : i === 1 ? 3 : 4,
+                span: [-1, -1],
+                dir: "down",
+                notes: {},
+                cap: "V8 has no band: it runs inside the two node rows",
+              }),
+              "fig-scroll"
+            ) +
+            '<div class="pane"><div class="pane-h">what it does, and what it cannot know</div>' +
+            '<div class="pane-b"><table class="knows"><thead><tr><th>implements</th></tr></thead>' +
+            "<tbody>" + rows(st.does, "") + "</tbody></table>" +
+            '<table class="knows" style="margin-top:12px"><thead><tr><th>has never heard of</th></tr></thead>' +
+            "<tbody>" + rows(st.not, "no") + "</tbody></table></div></div></div>",
+        };
+      });
+    },
+  };
+})();
+
+</script>
+<script>
+window.mountFigs(window.SPECS);
+</script>
+</body>
+</html>

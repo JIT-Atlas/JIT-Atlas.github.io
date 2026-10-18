@@ -1,0 +1,2227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Node.js Event Loop — Deep Internals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Space+Grotesk:wght@300;400;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #060910;
+    --bg2: #0c1118;
+    --bg3: #111820;
+    --panel: #0f1923;
+    --border: #1e2d3d;
+    --accent: #00d4ff;
+    --accent2: #ff6b35;
+    --accent3: #7fff6e;
+    --accent4: #c084fc;
+    --accent5: #fbbf24;
+    --accent6: #f472b6;
+    --text: #e2e8f0;
+    --text-dim: #64748b;
+    --text-muted: #334155;
+    --glow: rgba(0,212,255,0.15);
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-body: 'Space Grotesk', sans-serif;
+    --font-display: 'Bebas Neue', cursive;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    overflow-x: hidden;
+    line-height: 1.7;
+  }
+
+  /* GRID BACKGROUND */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ========= HERO ========= */
+  .hero {
+    position: relative;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 60px 20px;
+    overflow: hidden;
+  }
+
+  .hero-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    pointer-events: none;
+  }
+  .hero-orb-1 { width: 600px; height: 600px; background: rgba(0,212,255,0.08); top: -100px; left: -100px; }
+  .hero-orb-2 { width: 500px; height: 500px; background: rgba(255,107,53,0.07); bottom: -100px; right: -100px; }
+  .hero-orb-3 { width: 300px; height: 300px; background: rgba(127,255,110,0.05); top: 50%; left: 50%; transform: translate(-50%,-50%); }
+
+  .hero-badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid rgba(0,212,255,0.3);
+    padding: 6px 16px;
+    border-radius: 2px;
+    margin-bottom: 24px;
+    background: rgba(0,212,255,0.05);
+    animation: fadeUp 0.8s ease both;
+  }
+
+  .hero-title {
+    font-family: var(--font-display);
+    font-size: clamp(60px, 10vw, 140px);
+    letter-spacing: 4px;
+    line-height: 0.9;
+    color: #fff;
+    animation: fadeUp 0.8s ease 0.1s both;
+  }
+
+  .hero-title span {
+    background: linear-gradient(135deg, var(--accent), var(--accent4));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .hero-subtitle {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--text-dim);
+    max-width: 700px;
+    margin: 24px auto 0;
+    animation: fadeUp 0.8s ease 0.2s both;
+  }
+
+  .hero-scroll {
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+    animation: fadeIn 1s ease 1s both;
+  }
+
+  .scroll-line {
+    width: 1px;
+    height: 40px;
+    background: linear-gradient(to bottom, var(--accent), transparent);
+    animation: scrollPulse 2s ease infinite;
+  }
+
+  /* ========= SECTIONS ========= */
+  .section {
+    position: relative;
+    z-index: 1;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 80px 24px;
+  }
+
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .section-title {
+    font-family: var(--font-display);
+    font-size: clamp(36px, 5vw, 60px);
+    letter-spacing: 2px;
+    color: #fff;
+    margin-bottom: 20px;
+  }
+
+  .section-body {
+    font-size: 16px;
+    color: #94a3b8;
+    max-width: 800px;
+    line-height: 1.9;
+  }
+
+  .section-body strong { color: var(--accent); }
+  .section-body code {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    background: rgba(0,212,255,0.08);
+    border: 1px solid rgba(0,212,255,0.15);
+    padding: 2px 7px;
+    border-radius: 3px;
+    color: var(--accent3);
+  }
+
+  hr.divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 0;
+  }
+
+  /* ========= ARCHITECTURE DIAGRAM ========= */
+  .arch-diagram {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 40px;
+    margin: 48px 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .arch-diagram::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  }
+
+  .arch-grid {
+    display: grid;
+    grid-template-columns: 1fr 2px 1.5fr 2px 1fr;
+    gap: 0;
+    min-height: 500px;
+    align-items: start;
+  }
+
+  .arch-col-divider {
+    background: var(--border);
+    height: 100%;
+    min-height: 500px;
+  }
+
+  .arch-col {
+    padding: 0 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .arch-col-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+
+  /* ========= PHASE CARDS ========= */
+  .phase-card {
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 14px 16px;
+    background: var(--bg2);
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .phase-card:hover, .phase-card.active {
+    border-color: var(--card-color, var(--accent));
+    box-shadow: 0 0 20px rgba(0,212,255,0.1);
+  }
+
+  .phase-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--card-color, var(--accent));
+    border-radius: 3px 0 0 3px;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .phase-card:hover::before, .phase-card.active::before { opacity: 1; }
+
+  .phase-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+
+  .phase-num {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--card-color, var(--accent));
+    background: rgba(0,212,255,0.08);
+    padding: 2px 6px;
+    border-radius: 2px;
+    border: 1px solid rgba(0,212,255,0.2);
+    min-width: 28px;
+    text-align: center;
+  }
+
+  .phase-name {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  .phase-desc {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  /* ========= LIBUV COLUMN ========= */
+  .libuv-box {
+    border: 1px solid rgba(127,255,110,0.2);
+    background: rgba(127,255,110,0.03);
+    border-radius: 3px;
+    padding: 14px;
+    margin-top: 8px;
+  }
+
+  .libuv-title {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent3);
+    letter-spacing: 2px;
+    margin-bottom: 10px;
+  }
+
+  .libuv-item {
+    font-size: 12px;
+    color: #64748b;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(127,255,110,0.08);
+    font-family: var(--font-mono);
+  }
+
+  .libuv-item:last-child { border-bottom: none; }
+
+  /* ========= LIVE ANIMATION ========= */
+  .loop-animator {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 40px;
+    margin: 48px 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .loop-animator::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent2), transparent);
+  }
+
+  .animator-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 1px;
+    padding: 10px 20px;
+    border-radius: 3px;
+    border: 1px solid;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    background: transparent;
+  }
+
+  .btn-primary {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .btn-primary:hover { background: rgba(0,212,255,0.1); }
+
+  .btn-secondary {
+    border-color: var(--border);
+    color: var(--text-dim);
+  }
+  .btn-secondary:hover { border-color: var(--text-dim); color: var(--text); }
+
+  .btn-danger {
+    border-color: var(--accent2);
+    color: var(--accent2);
+  }
+  .btn-danger:hover { background: rgba(255,107,53,0.1); }
+
+  .speed-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .speed-control input[type=range] {
+    -webkit-appearance: none;
+    width: 100px;
+    height: 2px;
+    background: var(--border);
+    outline: none;
+    border-radius: 2px;
+  }
+  .speed-control input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+  }
+
+  /* ANIMATION CANVAS AREA */
+  .anim-layout {
+    display: grid;
+    grid-template-columns: 260px 1fr 260px;
+    gap: 20px;
+    align-items: start;
+  }
+
+  .anim-panel {
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .anim-panel-header {
+    background: var(--bg);
+    padding: 10px 14px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 2s ease infinite;
+  }
+
+  .anim-panel-body {
+    padding: 14px;
+    min-height: 320px;
+    background: var(--bg2);
+  }
+
+  /* CALL STACK */
+  .stack-container {
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 4px;
+    min-height: 280px;
+    justify-content: flex-start;
+  }
+
+  .stack-frame {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent4);
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: #c4b5fd;
+    border-radius: 2px;
+    animation: slideIn 0.3s ease;
+    position: relative;
+  }
+
+  .stack-frame.pop { animation: slideOut 0.3s ease forwards; }
+
+  /* CENTER LOOP VISUAL */
+  .loop-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  .loop-phases-visual {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+
+  .loop-phase-box {
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 10px 12px;
+    background: var(--bg2);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .loop-phase-box.lit {
+    border-color: var(--phase-color);
+    background: rgba(0,0,0,0.3);
+    box-shadow: 0 0 16px rgba(0,0,0,0.5), inset 0 0 20px rgba(255,255,255,0.03);
+  }
+
+  .loop-phase-box.lit::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--phase-color);
+    opacity: 0.05;
+  }
+
+  .loop-phase-box.lit .lp-name { color: var(--phase-color); }
+
+  .lp-name {
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 1px;
+    margin-bottom: 3px;
+    text-transform: uppercase;
+  }
+
+  .lp-queue {
+    color: var(--text-muted);
+    font-size: 11px;
+    min-height: 16px;
+  }
+
+  /* MICROTASK INDICATOR */
+  .micro-strip {
+    width: 100%;
+    padding: 8px 12px;
+    background: rgba(192,132,252,0.05);
+    border: 1px solid rgba(192,132,252,0.15);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent4);
+    margin-bottom: 6px;
+    min-height: 36px;
+  }
+
+  .micro-label {
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: rgba(192,132,252,0.5);
+    margin-bottom: 3px;
+  }
+
+  /* LOG */
+  .log-panel {
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 20px;
+  }
+
+  .log-header {
+    background: var(--bg);
+    padding: 8px 14px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .log-body {
+    background: var(--bg2);
+    padding: 12px;
+    height: 160px;
+    overflow-y: auto;
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+
+  .log-entry {
+    display: flex;
+    gap: 12px;
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.02);
+    animation: fadeIn 0.2s ease;
+  }
+
+  .log-time { color: var(--text-muted); min-width: 60px; }
+  .log-phase { min-width: 90px; }
+  .log-msg { color: var(--text-dim); }
+
+  /* CODE SNIPPETS */
+  .code-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 24px 0;
+  }
+
+  .code-header {
+    background: var(--bg2);
+    padding: 10px 16px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    letter-spacing: 1px;
+  }
+
+  .code-dots { display: flex; gap: 6px; }
+  .code-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .code-dot.r { background: #ff5f57; }
+  .code-dot.y { background: #ffbd2e; }
+  .code-dot.g { background: #28ca41; }
+
+  pre {
+    padding: 24px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.8;
+    color: #94a3b8;
+  }
+
+  .kw { color: #c084fc; }
+  .fn { color: #60a5fa; }
+  .str { color: #86efac; }
+  .num { color: #fbbf24; }
+  .cmt { color: #475569; font-style: italic; }
+  .hl { background: rgba(0,212,255,0.07); display: inline-block; width: 100%; border-left: 2px solid var(--accent); padding-left: 6px; margin-left: -8px; }
+
+  /* DEEP DIVES */
+  .deep-dive {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin: 32px 0;
+    overflow: hidden;
+  }
+
+  .deep-dive-header {
+    background: var(--bg2);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s;
+  }
+
+  .deep-dive-header:hover { border-bottom-color: var(--border); }
+
+  .deep-dive.open .deep-dive-header { border-bottom-color: var(--border); }
+
+  .deep-dive-icon {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--dd-color, var(--accent));
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--dd-color, var(--accent));
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+
+  .deep-dive.open .deep-dive-icon {
+    background: rgba(0,212,255,0.1);
+  }
+
+  .deep-dive-title {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: #fff;
+    flex: 1;
+  }
+
+  .deep-dive-subtitle {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-left: auto;
+    font-family: var(--font-mono);
+  }
+
+  .chevron {
+    color: var(--text-dim);
+    transition: transform 0.3s ease;
+    font-size: 18px;
+  }
+
+  .deep-dive.open .chevron { transform: rotate(180deg); }
+
+  .deep-dive-body {
+    display: none;
+    padding: 24px;
+    background: var(--panel);
+  }
+
+  .deep-dive.open .deep-dive-body { display: block; }
+
+  .deep-dive-body p {
+    color: #94a3b8;
+    font-size: 15px;
+    line-height: 1.85;
+    margin-bottom: 16px;
+  }
+
+  .deep-dive-body p strong { color: var(--accent); }
+  .deep-dive-body p code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background: rgba(0,212,255,0.08);
+    border: 1px solid rgba(0,212,255,0.15);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--accent3);
+  }
+
+  /* CALLOUT BOXES */
+  .callout {
+    border: 1px solid;
+    border-radius: 3px;
+    padding: 16px 20px;
+    margin: 20px 0;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+  }
+
+  .callout.warn { border-color: rgba(251,191,36,0.3); background: rgba(251,191,36,0.05); }
+  .callout.info { border-color: rgba(0,212,255,0.2); background: rgba(0,212,255,0.04); }
+  .callout.danger { border-color: rgba(255,107,53,0.3); background: rgba(255,107,53,0.05); }
+  .callout.success { border-color: rgba(127,255,110,0.2); background: rgba(127,255,110,0.04); }
+
+  .callout-icon { font-size: 18px; margin-top: 1px; flex-shrink: 0; }
+  .callout-content { font-size: 14px; color: #94a3b8; line-height: 1.7; }
+  .callout-content strong { color: var(--text); }
+
+  /* PHASE SEQUENCE DIAGRAM */
+  .phase-flow {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin: 32px 0;
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+
+  .pf-phase {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 110px;
+    position: relative;
+  }
+
+  .pf-box {
+    border: 1px solid var(--pf-color, var(--accent));
+    background: rgba(0,0,0,0.3);
+    border-radius: 3px;
+    padding: 12px 10px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-align: center;
+    color: var(--pf-color, var(--accent));
+    width: 100px;
+    transition: all 0.2s;
+  }
+
+  .pf-box-name { font-size: 9px; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 4px; text-transform: uppercase; }
+  .pf-box-queue { font-size: 10px; color: var(--text-dim); margin-top: 4px; }
+
+  .pf-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    margin-top: 35px;
+  }
+
+  .pf-arrow-line {
+    height: 1px;
+    width: 20px;
+    background: var(--border);
+    position: relative;
+  }
+
+  .pf-arrow-line::after {
+    content: '▶';
+    position: absolute;
+    right: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 8px;
+  }
+
+  .pf-micro {
+    border-top: 1px dashed rgba(192,132,252,0.3);
+    margin-top: 6px;
+    padding-top: 6px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: rgba(192,132,252,0.5);
+    text-align: center;
+    letter-spacing: 1px;
+  }
+
+  /* INTERNALS TABLE */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    margin: 24px 0;
+  }
+
+  .data-table th {
+    text-align: left;
+    padding: 10px 16px;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    text-transform: uppercase;
+  }
+
+  .data-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(30,45,61,0.5);
+    color: #94a3b8;
+    vertical-align: top;
+  }
+
+  .data-table tr:hover td { background: rgba(0,212,255,0.02); }
+
+  .data-table td:first-child { color: var(--accent3); }
+
+  /* UV THREADPOOL VISUAL */
+  .threadpool {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin: 20px 0;
+  }
+
+  .thread-box {
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 12px 8px;
+    background: var(--bg2);
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    transition: all 0.3s ease;
+  }
+
+  .thread-box.busy {
+    border-color: var(--accent2);
+    background: rgba(255,107,53,0.05);
+    color: var(--accent2);
+    animation: threadPulse 0.8s ease infinite alternate;
+  }
+
+  .thread-box.idle {
+    border-color: rgba(127,255,110,0.2);
+    color: var(--accent3);
+    background: rgba(127,255,110,0.03);
+  }
+
+  .thread-icon { font-size: 20px; margin-bottom: 6px; }
+  .thread-label { letter-spacing: 1px; }
+  .thread-task { color: var(--text-muted); font-size: 9px; margin-top: 4px; }
+
+  /* METRICS BAR */
+  .metric-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+
+  .metric-label { color: var(--text-dim); min-width: 180px; }
+
+  .metric-bar-track {
+    flex: 1;
+    height: 4px;
+    background: var(--bg);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .metric-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--m-color, var(--accent));
+    transition: width 0.5s ease;
+  }
+
+  .metric-val { color: var(--m-color, var(--accent)); min-width: 50px; text-align: right; }
+
+  /* SCENARIOS */
+  .scenario-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+
+  .scenario-tab {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 12px 20px;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: all 0.15s;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+  }
+
+  .scenario-tab:hover { color: var(--text); }
+  .scenario-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .scenario-content { display: none; }
+  .scenario-content.active { display: block; }
+
+  /* QUIZ */
+  .quiz-section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 40px;
+    margin: 48px 0;
+  }
+
+  .quiz-q {
+    margin-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 32px;
+  }
+
+  .quiz-q:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+  .quiz-question {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: #fff;
+    margin-bottom: 16px;
+  }
+
+  .quiz-options { display: flex; flex-direction: column; gap: 8px; }
+
+  .quiz-opt {
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 10px 16px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+    background: var(--bg2);
+    text-align: left;
+    width: 100%;
+  }
+
+  .quiz-opt:hover { border-color: var(--accent); color: var(--accent); }
+  .quiz-opt.correct { border-color: var(--accent3); color: var(--accent3); background: rgba(127,255,110,0.05); }
+  .quiz-opt.wrong { border-color: var(--accent2); color: var(--accent2); background: rgba(255,107,53,0.05); }
+
+  .quiz-feedback {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-dim);
+    display: none;
+    font-family: var(--font-mono);
+    line-height: 1.6;
+  }
+
+  .quiz-feedback.show { display: block; }
+
+  /* FOOTER */
+  .footer {
+    border-top: 1px solid var(--border);
+    padding: 40px 24px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 2px;
+  }
+
+  /* ANIMATIONS */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-20px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  @keyframes slideOut {
+    from { opacity: 1; transform: translateX(0); }
+    to { opacity: 0; transform: translateX(20px); }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  @keyframes scrollPulse {
+    0% { transform: scaleY(0); transform-origin: top; }
+    50% { transform: scaleY(1); transform-origin: top; }
+    51% { transform: scaleY(1); transform-origin: bottom; }
+    100% { transform: scaleY(0); transform-origin: bottom; }
+  }
+
+  @keyframes threadPulse {
+    from { box-shadow: 0 0 0px rgba(255,107,53,0); }
+    to { box-shadow: 0 0 12px rgba(255,107,53,0.2); }
+  }
+
+  @keyframes rotateOrbit {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes token-flow {
+    0% { left: 0; opacity: 1; }
+    100% { left: calc(100% - 12px); opacity: 0; }
+  }
+
+  /* FLOW ARROW ANIMATION */
+  .flow-line {
+    height: 2px;
+    background: var(--border);
+    position: relative;
+    overflow: hidden;
+    border-radius: 1px;
+  }
+
+  .flow-line::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 60px;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: flowAnim 2s linear infinite;
+  }
+
+  @keyframes flowAnim {
+    from { left: -100%; }
+    to { left: 200%; }
+  }
+
+  /* HIGHLIGHT ROWS ON SCROLL */
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .reveal.visible { opacity: 1; transform: none; }
+
+  /* RESPONSIVE */
+  @media (max-width: 900px) {
+    .arch-grid { grid-template-columns: 1fr; }
+    .arch-col-divider { display: none; }
+    .anim-layout { grid-template-columns: 1fr; }
+    .threadpool { grid-template-columns: repeat(2,1fr); }
+    .phase-flow { gap: 4px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-orb hero-orb-1"></div>
+  <div class="hero-orb hero-orb-2"></div>
+  <div class="hero-orb hero-orb-3"></div>
+
+  <div style="position:relative; z-index:1;">
+    <div class="hero-badge">Node.js Internals — Master Reference</div>
+    <h1 class="hero-title">THE<br><span>EVENT</span><br>LOOP</h1>
+    <p class="hero-subtitle">
+      A byte-level, phase-by-phase dissection of how Node.js processes asynchronous I/O,
+      timers, microtasks, and native callbacks — from V8 heap to libuv epoll, with zero hand-waving.
+    </p>
+  </div>
+
+  <div class="hero-scroll">
+    <div class="scroll-line"></div>
+    SCROLL TO EXPLORE
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- SECTION 1: THE BIG PICTURE -->
+<section class="section reveal">
+  <div class="section-label">01 — Architecture Overview</div>
+  <h2 class="section-title">WHAT DRIVES THE LOOP</h2>
+  <p class="section-body">
+    Node.js is a <strong>single-threaded, non-blocking I/O runtime</strong> built on two pillars:
+    <strong>V8</strong> (Google's JavaScript engine, handling parsing, compilation via Ignition/TurboFan, and garbage collection)
+    and <strong>libuv</strong> (a cross-platform async I/O library written in C, providing the event loop, thread pool, and OS abstraction).
+    Between them sits the Node.js binding layer — a set of C++ addons that expose libuv handles and V8 callbacks.
+  </p>
+  <p class="section-body" style="margin-top:16px;">
+    When you write <code>fs.readFile()</code>, Node calls into C++, which calls libuv, which issues an OS syscall (e.g. <code>io_uring_submit</code> on Linux or <code>kqueue</code> on macOS), and parks the request. The JavaScript thread is <em>immediately free</em>.
+    When the OS signals completion, libuv queues a callback, and the event loop picks it up on its next relevant tick.
+  </p>
+
+  <div class="arch-diagram reveal">
+    <div class="arch-grid">
+      <!-- COL 1: JS Layer -->
+      <div class="arch-col">
+        <div class="arch-col-title">⬡ JavaScript / V8</div>
+        <div class="phase-card" style="--card-color: #c084fc">
+          <div class="phase-card-header">
+            <span class="phase-num" style="background: rgba(192,132,252,0.1); border-color: rgba(192,132,252,0.3); color:#c084fc;">V8</span>
+            <span class="phase-name">Ignition Bytecode</span>
+          </div>
+          <p class="phase-desc">Interprets JS → bytecode. Profiles hot paths for TurboFan JIT compilation. Manages hidden classes, inline caches.</p>
+        </div>
+        <div class="phase-card" style="--card-color: #c084fc">
+          <div class="phase-card-header">
+            <span class="phase-num" style="background: rgba(192,132,252,0.1); border-color: rgba(192,132,252,0.3); color:#c084fc;">V8</span>
+            <span class="phase-name">TurboFan JIT</span>
+          </div>
+          <p class="phase-desc">Compiles hot bytecode → optimized machine code using speculative deoptimization. Deopt triggers re-entry to Ignition.</p>
+        </div>
+        <div class="phase-card" style="--card-color: #c084fc">
+          <div class="phase-card-header">
+            <span class="phase-num" style="background: rgba(192,132,252,0.1); border-color: rgba(192,132,252,0.3); color:#c084fc;">V8</span>
+            <span class="phase-name">Orinoco GC</span>
+          </div>
+          <p class="phase-desc">Generational, tri-color mark-sweep. New-space (32MB) uses Scavenger. Old-space uses concurrent incremental marking to minimize stop-the-world pauses.</p>
+        </div>
+        <div class="phase-card" style="--card-color: #60a5fa">
+          <div class="phase-card-header">
+            <span class="phase-num" style="background: rgba(96,165,250,0.1); border-color: rgba(96,165,250,0.3); color:#60a5fa;">NODE</span>
+            <span class="phase-name">Bindings Layer</span>
+          </div>
+          <p class="phase-desc">C++ code (e.g. <code>node_file.cc</code>) using the V8 C++ API to expose native capabilities. <code>process.binding()</code> is the old path; <code>internalBinding()</code> is the modern one.</p>
+        </div>
+      </div>
+
+      <div class="arch-col-divider"></div>
+
+      <!-- COL 2: EVENT LOOP -->
+      <div class="arch-col">
+        <div class="arch-col-title">⟲ libuv Event Loop Phases</div>
+        <p style="font-size:12px; color: var(--text-muted); font-family: var(--font-mono); margin-bottom:12px;">Executed in strict sequential order per iteration ("tick")</p>
+        <div class="phase-card" style="--card-color: #fbbf24">
+          <div class="phase-card-header">
+            <span class="phase-num" style="background: rgba(251,191,36,0.1); border-color: rgba(251,191,36,0.3); color:#fbbf24;">01</span>
+            <span class="phase-name">timers</span>
+          </div>
+          <p class="phase-desc">Executes <code>setTimeout</code> / <code>setInterval</code> callbacks whose threshold has expired. Checks libuv's min-heap of timers. The delay is a <em>minimum</em>, not a guarantee — depends on system load and prior phase duration.</p>
+        </div>
+        <div class="flow-line" style="margin: 2px 0 2px 40px; width: calc(100% - 40px);"></div>
+        <div class="phase-card" style="--card-color: #fb923c">
+          <div class="phase-card-header">
+            <span class="phase-num" style="background: rgba(251,146,60,0.1); border-color: rgba(251,146,60,0.3); color:#fb923c;">02</span>
+            <span class="phase-name">pending callbacks</span>
+          </div>
+          <p class="phase-desc">Executes I/O callbacks deferred from the previous iteration — specifically, TCP errors from <code>ECONNREFUSED</code> and similar system-level errors that libuv couldn't report immediately.</p>
+        </div>
+        <div class="flow-line" style="margin: 2px 0 2px 40px; width: calc(100% - 40px);"></div>
+        <div class="phase-card" style="--card-color: #64748b">
+          <div class="phase-card-header">
+            <span class="phase-num" style="background: rgba(100,116,139,0.1); border-color: rgba(100,116,139,0.3); color:#64748b;">03</span>
+            <span class="phase-name">idle / prepare</span>
+          </div>
+          <p class="phase-desc">Internal libuv housekeeping. <code>uv__run_idle</code> handles are invoked. These run on every loop tick and are used internally by Node.js (e.g. to keep the loop alive). Not directly accessible from JS.</p>
+        </div>
+        <div class="flow-line" style="margin: 2px 0 2px 40px; width: calc(100% - 40px);"></div>
+        <div class="phase-card" style="--card-color: #00d4ff">
+          <div class="phase-card-header">
+            <span class="phase-num" style="background: rgba(0,212,255,0.1); border-color: rgba(0,212,255,0.3); color:#00d4ff;">04</span>
+            <span class="phase-name">poll</span>
+          </div>
+          <p class="phase-desc">The most critical phase. Calls into the OS I/O multiplexer (<code>epoll_wait</code> / <code>kqueue</code> / <code>IOCP</code>). Blocks if no other phases have work, up to a calculated timeout. New I/O callbacks are executed <em>here</em>.</p>
+        </div>
+        <div class="flow-line" style="margin: 2px 0 2px 40px; width: calc(100% - 40px);"></div>
+        <div class="phase-card" style="--card-color: #7fff6e">
+          <div class="phase-card-header">
+            <span class="phase-num" style="background: rgba(127,255,110,0.1); border-color: rgba(127,255,110,0.3); color:#7fff6e;">05</span>
+            <span class="phase-name">check</span>
+          </div>
+          <p class="phase-desc"><code>setImmediate()</code> callbacks fire here. Always runs after poll, even if poll phase was blocked. libuv uses a <code>uv__io_check</code> handle for this. Preferred over <code>setTimeout(fn, 0)</code> for post-I/O scheduling.</p>
+        </div>
+        <div class="flow-line" style="margin: 2px 0 2px 40px; width: calc(100% - 40px);"></div>
+        <div class="phase-card" style="--card-color: #f472b6">
+          <div class="phase-card-header">
+            <span class="phase-num" style="background: rgba(244,114,182,0.1); border-color: rgba(244,114,182,0.3); color:#f472b6;">06</span>
+            <span class="phase-name">close callbacks</span>
+          </div>
+          <p class="phase-desc">Fires <code>close</code> events for handles that were closed abruptly — e.g. <code>socket.destroy()</code>. Emits <code>'close'</code> events on streams and sockets. Final phase before the loop re-evaluates whether to continue.</p>
+        </div>
+      </div>
+
+      <div class="arch-col-divider"></div>
+
+      <!-- COL 3: libuv / OS -->
+      <div class="arch-col">
+        <div class="arch-col-title">⚙ libuv + OS Kernel</div>
+        <div class="libuv-box">
+          <div class="libuv-title">// I/O DEMULTIPLEXER</div>
+          <div class="libuv-item">Linux → epoll (io_uring in newer)</div>
+          <div class="libuv-item">macOS / BSD → kqueue</div>
+          <div class="libuv-item">Windows → IOCP (completion ports)</div>
+          <div class="libuv-item">Solaris → Event ports</div>
+        </div>
+        <div class="libuv-box" style="margin-top:12px; border-color: rgba(255,107,53,0.2); background: rgba(255,107,53,0.03);">
+          <div class="libuv-title" style="color: var(--accent2);">// THREAD POOL (default: 4)</div>
+          <div class="libuv-item">fs.* blocking calls</div>
+          <div class="libuv-item">crypto (pbkdf2, randomBytes)</div>
+          <div class="libuv-item">dns.lookup() (not resolve)</div>
+          <div class="libuv-item">zlib (compression ops)</div>
+          <div class="libuv-item">user native addons</div>
+        </div>
+        <div class="libuv-box" style="margin-top:12px; border-color: rgba(192,132,252,0.2); background: rgba(192,132,252,0.03);">
+          <div class="libuv-title" style="color: var(--accent4);">// MICROTASK QUEUES (V8, not libuv)</div>
+          <div class="libuv-item">process.nextTick queue</div>
+          <div class="libuv-item">Promise microtask queue</div>
+          <div class="libuv-item" style="font-size: 10px; color: var(--text-muted);">⚠ Drain completely between each phase transition</div>
+        </div>
+        <div class="libuv-box" style="margin-top:12px; border-color: rgba(96,165,250,0.2); background: rgba(96,165,250,0.03);">
+          <div class="libuv-title" style="color: #60a5fa;">// HANDLE TYPES</div>
+          <div class="libuv-item">uv_tcp_t — TCP sockets</div>
+          <div class="libuv-item">uv_udp_t — UDP sockets</div>
+          <div class="libuv-item">uv_timer_t — timers</div>
+          <div class="libuv-item">uv_fs_event_t — file watch</div>
+          <div class="libuv-item">uv_process_t — child procs</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- SECTION 2: MICROTASKS -->
+<section class="section reveal">
+  <div class="section-label">02 — Microtask Queues</div>
+  <h2 class="section-title">THE INVISIBLE QUEUES</h2>
+  <p class="section-body">
+    <strong>Microtasks do not belong to the event loop phases</strong> — they are a V8-level concept drained by the runtime after <em>every</em> C++ → JS boundary transition, i.e., between each phase transition and after each individual macro callback completes.
+    There are two microtask queues, and they have strict priority ordering.
+  </p>
+
+  <div class="phase-flow reveal">
+    <!-- Each phase with microtask drain indicator -->
+    <div class="pf-phase">
+      <div class="pf-box" style="--pf-color: #fbbf24">
+        <div class="pf-box-name">timers</div>
+        setTimeout<br>setInterval
+        <div class="pf-box-queue">min-heap</div>
+      </div>
+      <div class="pf-micro">nextTick<br>Promise</div>
+    </div>
+    <div class="pf-arrow"><div class="pf-arrow-line"></div></div>
+    <div class="pf-phase">
+      <div class="pf-box" style="--pf-color: #fb923c">
+        <div class="pf-box-name">pending cbs</div>
+        deferred<br>I/O errs
+        <div class="pf-box-queue">linked list</div>
+      </div>
+      <div class="pf-micro">nextTick<br>Promise</div>
+    </div>
+    <div class="pf-arrow"><div class="pf-arrow-line"></div></div>
+    <div class="pf-phase">
+      <div class="pf-box" style="--pf-color: #475569">
+        <div class="pf-box-name">idle/prepare</div>
+        internal<br>handles
+        <div class="pf-box-queue">uv handles</div>
+      </div>
+      <div class="pf-micro">nextTick<br>Promise</div>
+    </div>
+    <div class="pf-arrow"><div class="pf-arrow-line"></div></div>
+    <div class="pf-phase">
+      <div class="pf-box" style="--pf-color: #00d4ff">
+        <div class="pf-box-name">poll</div>
+        I/O events<br>OS notify
+        <div class="pf-box-queue">epoll/kqueue</div>
+      </div>
+      <div class="pf-micro">nextTick<br>Promise</div>
+    </div>
+    <div class="pf-arrow"><div class="pf-arrow-line"></div></div>
+    <div class="pf-phase">
+      <div class="pf-box" style="--pf-color: #7fff6e">
+        <div class="pf-box-name">check</div>
+        setImmediate
+        <div class="pf-box-queue">uv_check_t</div>
+      </div>
+      <div class="pf-micro">nextTick<br>Promise</div>
+    </div>
+    <div class="pf-arrow"><div class="pf-arrow-line"></div></div>
+    <div class="pf-phase">
+      <div class="pf-box" style="--pf-color: #f472b6">
+        <div class="pf-box-name">close cbs</div>
+        socket.close<br>stream end
+        <div class="pf-box-queue">linked list</div>
+      </div>
+      <div class="pf-micro">nextTick<br>Promise</div>
+    </div>
+  </div>
+
+  <div class="callout warn reveal">
+    <div class="callout-icon">⚠</div>
+    <div class="callout-content">
+      <strong>Starvation Risk:</strong> <code>process.nextTick()</code> callbacks can starve the event loop. If a nextTick callback schedules another nextTick, the entire queue must drain before moving to any phase — including I/O. This is why Node.js added a <code>--max-listeners</code> style warning via <code>process.maxTickDepth</code> (now removed, but the issue remains). Use <code>setImmediate()</code> for recursive deferred work to yield to I/O.
+    </div>
+  </div>
+
+  <div class="code-block reveal">
+    <div class="code-header">
+      <div class="code-dots"><div class="code-dot r"></div><div class="code-dot y"></div><div class="code-dot g"></div></div>
+      microtask-priority.js — predict the output
+    </div>
+    <pre><span class="cmt">// Execution order quiz — a senior engineer's litmus test</span>
+console.log(<span class="str">'1 — sync'</span>);
+
+setTimeout(<span class="fn">() =></span> console.log(<span class="str">'2 — setTimeout'</span>), <span class="num">0</span>);
+
+Promise.resolve().then(<span class="fn">() =></span> {
+  console.log(<span class="str">'3 — promise microtask'</span>);
+  process.nextTick(<span class="fn">() =></span> console.log(<span class="str">'4 — nextTick inside promise'</span>));
+});
+
+process.nextTick(<span class="fn">() =></span> {
+  console.log(<span class="str">'5 — nextTick'</span>);
+  Promise.resolve().then(<span class="fn">() =></span> console.log(<span class="str">'6 — promise inside nextTick'</span>));
+});
+
+setImmediate(<span class="fn">() =></span> console.log(<span class="str">'7 — setImmediate'</span>));
+
+console.log(<span class="str">'8 — sync end'</span>);</pre>
+  </div>
+
+  <div class="callout success reveal">
+    <div class="callout-icon">✓</div>
+    <div class="callout-content">
+      <strong>Output:</strong> 1 → 8 → 5 → 6 → 3 → 4 → 2 → 7
+      <br><br>
+      <strong>Why:</strong> Sync completes (1, 8). Then microtasks drain: nextTick queue runs first → prints 5, schedules a Promise. Then Promise queue runs: the Promise from line 3 → prints 3, schedules a nextTick. nextTick queue is <em>not empty again</em> — it now has two items. Priority flips back to nextTick: prints 4. Then Promise from inside nextTick: prints 6. All microtasks exhausted. Event loop enters timers phase (setTimeout → 2). Then check phase (setImmediate → 7).
+      <br><br>
+      Note: Prior to Node.js 11, nextTick and Promise queues were drained only between <em>phases</em>, not after each individual callback. Node 11+ changed this to match browser behavior.
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- SECTION 3: LIVE ANIMATOR -->
+<section class="section reveal">
+  <div class="section-label">03 — Interactive Simulation</div>
+  <h2 class="section-title">LOOP IN MOTION</h2>
+  <p class="section-body">
+    Step through a simulated event loop iteration. Watch callbacks queue up, microtasks drain between phases,
+    and the call stack grow and shrink in real time.
+  </p>
+</section>
+
+<div style="max-width: 1200px; margin: 0 auto; padding: 0 24px 80px;">
+  <div class="loop-animator reveal">
+    <div class="animator-controls">
+      <button class="btn btn-primary" id="btn-play">▶ PLAY</button>
+      <button class="btn btn-secondary" id="btn-step">STEP →</button>
+      <button class="btn btn-danger" id="btn-reset">↺ RESET</button>
+      <div class="speed-control">
+        SPEED <input type="range" id="speed-range" min="1" max="5" value="2"> <span id="speed-label">2x</span>
+      </div>
+      <div style="margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--text-dim);">
+        Tick: <span id="tick-count" style="color: var(--accent);">0</span> &nbsp;|&nbsp; Phase: <span id="phase-label" style="color: var(--accent4);">—</span>
+      </div>
+    </div>
+
+    <div class="anim-layout">
+      <!-- LEFT: CALL STACK -->
+      <div>
+        <div class="anim-panel">
+          <div class="anim-panel-header"><div class="dot"></div> CALL STACK (V8)</div>
+          <div class="anim-panel-body">
+            <div class="stack-container" id="call-stack"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CENTER: LOOP PHASES -->
+      <div class="loop-center">
+        <div style="width:100%; margin-bottom:8px;">
+          <div class="micro-strip">
+            <div class="micro-label">NEXTTICK QUEUE (priority 1)</div>
+            <div id="nexttick-queue">—</div>
+          </div>
+          <div class="micro-strip" style="border-color: rgba(96,165,250,0.2); background: rgba(96,165,250,0.04); color: #60a5fa;">
+            <div class="micro-label" style="color: rgba(96,165,250,0.5);">PROMISE MICROTASK QUEUE (priority 2)</div>
+            <div id="promise-queue">—</div>
+          </div>
+        </div>
+        <div class="loop-phases-visual" id="loop-phases-grid">
+          <div class="loop-phase-box" data-phase="timers" style="--phase-color: #fbbf24">
+            <div class="lp-name">01 TIMERS</div>
+            <div class="lp-queue" id="phase-q-timers">empty</div>
+          </div>
+          <div class="loop-phase-box" data-phase="pending" style="--phase-color: #fb923c">
+            <div class="lp-name">02 PENDING CBS</div>
+            <div class="lp-queue" id="phase-q-pending">empty</div>
+          </div>
+          <div class="loop-phase-box" data-phase="idle" style="--phase-color: #475569">
+            <div class="lp-name">03 IDLE/PREPARE</div>
+            <div class="lp-queue" id="phase-q-idle">internal</div>
+          </div>
+          <div class="loop-phase-box" data-phase="poll" style="--phase-color: #00d4ff">
+            <div class="lp-name">04 POLL</div>
+            <div class="lp-queue" id="phase-q-poll">waiting...</div>
+          </div>
+          <div class="loop-phase-box" data-phase="check" style="--phase-color: #7fff6e">
+            <div class="lp-name">05 CHECK</div>
+            <div class="lp-queue" id="phase-q-check">empty</div>
+          </div>
+          <div class="loop-phase-box" data-phase="close" style="--phase-color: #f472b6">
+            <div class="lp-name">06 CLOSE CBS</div>
+            <div class="lp-queue" id="phase-q-close">empty</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: QUEUES -->
+      <div>
+        <div class="anim-panel">
+          <div class="anim-panel-header"><div class="dot" style="background: var(--accent2)"></div> MACRO QUEUE OVERVIEW</div>
+          <div class="anim-panel-body" style="padding: 12px;">
+            <div id="macro-queues" style="font-family: var(--font-mono); font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="color: var(--text-muted); font-size: 10px; letter-spacing: 1px; margin-bottom: 4px;">TIMER HEAP</div>
+              <div id="macro-timers" style="min-height:40px; background: rgba(251,191,36,0.05); border: 1px solid rgba(251,191,36,0.15); border-radius:2px; padding:8px; color: #fbbf24;"></div>
+              <div style="color: var(--text-muted); font-size: 10px; letter-spacing: 1px; margin-top:4px; margin-bottom: 4px;">I/O CALLBACKS</div>
+              <div id="macro-io" style="min-height:40px; background: rgba(0,212,255,0.05); border: 1px solid rgba(0,212,255,0.15); border-radius:2px; padding:8px; color: var(--accent);"></div>
+              <div style="color: var(--text-muted); font-size: 10px; letter-spacing: 1px; margin-top:4px; margin-bottom: 4px;">IMMEDIATES</div>
+              <div id="macro-imm" style="min-height:40px; background: rgba(127,255,110,0.05); border: 1px solid rgba(127,255,110,0.15); border-radius:2px; padding:8px; color: var(--accent3);"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOG -->
+    <div class="log-panel">
+      <div class="log-header">
+        <span>// EXECUTION LOG</span>
+        <button class="btn btn-secondary" onclick="document.getElementById('log-body').innerHTML=''" style="padding: 4px 10px; font-size: 10px;">CLEAR</button>
+      </div>
+      <div class="log-body" id="log-body"></div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- SECTION 4: DEEP DIVES -->
+<section class="section reveal">
+  <div class="section-label">04 — Phase Deep Dives</div>
+  <h2 class="section-title">PHASE INTERNALS</h2>
+  <p class="section-body">
+    Each phase of the event loop has specific internal mechanics that affect how and when your callbacks execute.
+    Understanding these at the C-level unlocks the ability to reason about performance pathology.
+  </p>
+
+  <!-- TIMERS -->
+  <div class="deep-dive open reveal" style="--dd-color: #fbbf24">
+    <div class="deep-dive-header" onclick="this.parentElement.classList.toggle('open')">
+      <div class="deep-dive-icon" style="--dd-color: #fbbf24">01</div>
+      <div class="deep-dive-title">Timers Phase — <code>uv__run_timers()</code></div>
+      <div class="deep-dive-subtitle">min-heap, threshold semantics</div>
+      <span class="chevron">⌄</span>
+    </div>
+    <div class="deep-dive-body">
+      <p>libuv stores all pending timers in a <strong>min-heap keyed by expiry time</strong> (<code>uv_timer_t.timeout</code> in milliseconds since loop start). On each loop iteration, the timers phase calls <code>uv__run_timers(loop)</code>, which peeks at the heap root. If <code>loop->time >= timer->timeout</code>, the timer fires and is removed or rescheduled (for intervals).</p>
+
+      <p>The critical insight is that <code>loop->time</code> is <strong>NOT updated continuously</strong>. It is updated once per loop iteration by <code>uv__update_time(loop)</code>, which calls <code>uv_hrtime()</code> (a wrapper around <code>clock_gettime(CLOCK_MONOTONIC)</code> on Linux). This means all timers that expire during a single poll phase wakeup will share the same <code>loop->time</code> value, and the timer firing order within a single "batch" depends purely on heap order.</p>
+
+      <p>The <strong>1ms drift</strong> you've probably observed: Node.js applies a <code>Math.max(1, delay)</code> on timer registration. So <code>setTimeout(fn, 0)</code> becomes <code>setTimeout(fn, 1)</code> internally. If the event loop iteration takes longer than 1ms to start (likely on a loaded system), the timer fires. If it starts within 1ms, it doesn't. This is why <code>setTimeout(fn, 0)</code> vs <code>setImmediate(fn)</code> ordering is <em>non-deterministic</em> outside of I/O callbacks.</p>
+
+      <div class="callout info">
+        <div class="callout-icon">ℹ</div>
+        <div class="callout-content"><strong>Timer coalescing:</strong> Multiple <code>setTimeout</code> calls with the same delay share the same min-heap node. libuv will fire them all in the same timers phase pass, in insertion order.</div>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header"><div class="code-dots"><div class="code-dot r"></div><div class="code-dot y"></div><div class="code-dot g"></div></div>deps/uv/src/timer.c (simplified)</div>
+        <pre><span class="cmt">// libuv timer heap check — simplified</span>
+<span class="kw">void</span> <span class="fn">uv__run_timers</span>(uv_loop_t* loop) {
+  <span class="kw">struct</span> heap_node* heap_node;
+  uv_timer_t* handle;
+
+  <span class="kw">for</span> (;;) {
+    heap_node = heap_min(timer_heap(loop));  <span class="cmt">// O(1) peek</span>
+    <span class="kw">if</span> (heap_node == NULL) <span class="kw">break</span>;
+
+    handle = QUEUE_DATA(heap_node, uv_timer_t, heap_node);
+    <span class="hl"><span class="kw">if</span> (handle-&gt;timeout &gt; loop-&gt;time) <span class="kw">break</span>;  <span class="cmt">// Not expired yet</span></span>
+
+    uv_timer_stop(handle);       <span class="cmt">// O(log n) heap removal</span>
+    uv_timer_again(handle);      <span class="cmt">// Reschedule if interval</span>
+    handle-&gt;timer_cb(handle);   <span class="cmt">// Fire callback → back to JS</span>
+  }
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- POLL -->
+  <div class="deep-dive reveal" style="--dd-color: #00d4ff">
+    <div class="deep-dive-header" onclick="this.parentElement.classList.toggle('open')">
+      <div class="deep-dive-icon">04</div>
+      <div class="deep-dive-title">Poll Phase — <code>uv__io_poll()</code></div>
+      <div class="deep-dive-subtitle">epoll, blocking timeout, wakeup mechanics</div>
+      <span class="chevron">⌄</span>
+    </div>
+    <div class="deep-dive-body">
+      <p>The poll phase is where Node.js <strong>actually waits for I/O</strong>. It calls <code>uv__io_poll(loop, timeout)</code> where <code>timeout</code> is computed as the minimum time until the next timer expires (or 0 if there are pending callbacks, or -1 to block indefinitely).</p>
+
+      <p>On Linux, this translates to <code>epoll_pwait(loop-&gt;backend_fd, events, ARRAY_SIZE(events), timeout, sigmask)</code>. The kernel will block the thread until: (1) a file descriptor becomes readable/writable/has an error, (2) the timeout expires, or (3) a signal interrupts the syscall. When events arrive, the kernel copies up to <code>ARRAY_SIZE(events)</code> (1024 in libuv) event structs to userspace, and libuv iterates them, invoking the registered callbacks.</p>
+
+      <p>On macOS, <code>kevent</code> with a timeout is used. On Windows, <code>GetQueuedCompletionStatusEx</code> pulls from the I/O Completion Port. Despite the platform differences, the semantics are identical: <strong>the main thread blocks here and only here</strong>.</p>
+
+      <div class="callout danger">
+        <div class="callout-icon">🚨</div>
+        <div class="callout-content">
+          <strong>Blocking the poll phase:</strong> Any synchronous CPU-intensive work in a callback blocks poll from calling back into the kernel. During this time, no I/O events can be processed — this is the source of "blocking the event loop." Profiling with <code>--prof</code> or <code>clinic.js</code> identifies these hot spots.
+        </div>
+      </div>
+
+      <p>The poll phase also has a subtle interaction with <strong>handle reference counting</strong>. libuv maintains a count of "active" and "referenced" handles. The loop exits when there are no more referenced handles with pending I/O and no pending timers. This is why calling <code>timer.unref()</code> lets Node exit even if a timer is pending — it decrements the ref count.</p>
+
+      <div class="code-block">
+        <div class="code-header"><div class="code-dots"><div class="code-dot r"></div><div class="code-dot y"></div><div class="code-dot g"></div></div>Timeout Calculation (simplified from uv/src/unix/core.c)</div>
+        <pre><span class="kw">static int</span> <span class="fn">uv__backend_timeout</span>(uv_loop_t* loop) {
+  <span class="kw">if</span> (loop-&gt;stop_flag != <span class="num">0</span>) <span class="kw">return</span> <span class="num">0</span>;
+  <span class="kw">if</span> (!uv__has_active_handles(loop) && !uv__has_active_reqs(loop))
+    <span class="kw">return</span> <span class="num">0</span>;  <span class="cmt">// Loop should exit</span>
+  <span class="kw">if</span> (!QUEUE_EMPTY(&loop-&gt;idle_handles)) <span class="kw">return</span> <span class="num">0</span>;  <span class="cmt">// Idle handles → don't block</span>
+  <span class="kw">if</span> (!QUEUE_EMPTY(&loop-&gt;pending_queue)) <span class="kw">return</span> <span class="num">0</span>;
+  <span class="kw">if</span> (loop-&gt;closing_handles) <span class="kw">return</span> <span class="num">0</span>;
+
+  <span class="hl"><span class="kw">return</span> <span class="fn">uv__next_timeout</span>(loop);  <span class="cmt">// ms until next timer, or -1 (block forever)</span></span>
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- THREAD POOL -->
+  <div class="deep-dive reveal" style="--dd-color: #fb923c">
+    <div class="deep-dive-header" onclick="this.parentElement.classList.toggle('open')">
+      <div class="deep-dive-icon" style="--dd-color: #fb923c">⊕</div>
+      <div class="deep-dive-title">Thread Pool — <code>libuv work queue</code></div>
+      <div class="deep-dive-subtitle">UV_THREADPOOL_SIZE, work/done queue, ENOBUFS</div>
+      <span class="chevron">⌄</span>
+    </div>
+    <div class="deep-dive-body">
+      <p>For operations that cannot be made non-blocking by the OS (like filesystem operations — <code>open()</code>, <code>stat()</code>, <code>read()</code> on local disk, and <code>dns.lookup()</code> which calls <code>getaddrinfo()</code>), libuv dispatches the work to its <strong>internal thread pool</strong> via <code>uv_queue_work()</code>.</p>
+
+      <p>The pool has <code>UV_THREADPOOL_SIZE</code> threads (default: 4, max: 1024 via env var). Work items are pushed onto a shared <code>wq</code> (work queue) protected by a mutex. Idle threads wait on a condition variable. When work is submitted, a thread is woken, picks up the work, executes the <strong>blocking C call</strong> (e.g. <code>pread64()</code>), then pushes the result onto the <code>done</code> queue and writes one byte to the loop's <code>wakeup_fd</code> — an internal pipe that libuv uses to interrupt the poll phase's <code>epoll_wait</code>.</p>
+
+      <p>This means every <code>fs.readFile()</code> involves: one async request allocation, one work queue push, one thread wakeup, one blocking syscall on a pool thread, one byte written to the wakeup pipe, one epoll event fired, and one callback scheduled into the poll phase. Understanding this overhead is why <strong>using streams instead of readFile for large files</strong> is significant.</p>
+
+      <div style="margin: 24px 0;">
+        <div style="font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); letter-spacing: 2px; margin-bottom: 12px;">THREAD POOL STATE SIMULATION</div>
+        <div class="threadpool" id="threadpool-display">
+          <div class="thread-box idle"><div class="thread-icon">🟢</div><div class="thread-label">THREAD 0</div><div class="thread-task">idle</div></div>
+          <div class="thread-box busy"><div class="thread-icon">🔴</div><div class="thread-label">THREAD 1</div><div class="thread-task">fs.stat()</div></div>
+          <div class="thread-box busy"><div class="thread-icon">🔴</div><div class="thread-label">THREAD 2</div><div class="thread-task">dns.lookup()</div></div>
+          <div class="thread-box busy"><div class="thread-icon">🔴</div><div class="thread-label">THREAD 3</div><div class="thread-task">crypto.pbkdf2()</div></div>
+        </div>
+        <p style="font-size: 12px; color: var(--text-dim); font-family: var(--font-mono); margin-top: 8px;">⚠ With only 4 threads, a 5th blocking request queues behind — causing latency spikes. Set UV_THREADPOOL_SIZE=16 for I/O-heavy servers, but watch memory: each thread has an 8MB stack.</p>
+      </div>
+
+      <div class="callout warn">
+        <div class="callout-icon">⚡</div>
+        <div class="callout-content">
+          <strong>The dns.lookup() trap:</strong> <code>dns.resolve()</code> uses the kernel's async resolver (c-ares) and is truly non-blocking. <code>dns.lookup()</code> calls <code>getaddrinfo()</code> which is blocking — it goes to the thread pool. Under concurrent load, all 4 threads can be consumed by DNS lookups alone, blocking all other filesystem operations. Use <code>dns.resolve()</code> or increase <code>UV_THREADPOOL_SIZE</code> when doing high-concurrency DNS.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEXTTICK INTERNALS -->
+  <div class="deep-dive reveal" style="--dd-color: #c084fc">
+    <div class="deep-dive-header" onclick="this.parentElement.classList.toggle('open')">
+      <div class="deep-dive-icon" style="--dd-color: #c084fc">μ</div>
+      <div class="deep-dive-title">process.nextTick() — Node.js Internals</div>
+      <div class="deep-dive-subtitle">nextTickQueue, tickInfo, C++ boundary</div>
+      <span class="chevron">⌄</span>
+    </div>
+    <div class="deep-dive-body">
+      <p><code>process.nextTick()</code> is <strong>not part of the event loop specification</strong>. It is implemented in Node.js itself via <code>lib/internal/process/task_queues.js</code>. The queue is drained in <code>node::InternalCallbackScope</code> every time Node transitions from C++ back to JavaScript — which happens at every phase boundary and after every individual callback completes.</p>
+
+      <p>Internally, Node maintains a <code>tickInfo</code> object shared between C++ and JS (via a shared ArrayBuffer). The JS side pushes to a linked list (<code>nextTickQueue</code>) and sets <code>tickInfo[kHasTickScheduled] = 1</code>. The C++ side checks this flag at every C++ → JS re-entry point and calls <code>env-&gt;tick_callback_function()</code> to drain the queue.</p>
+
+      <p>This is why <code>process.nextTick()</code> is described as firing "before" the next event loop phase — it fires at the boundary between the current JS frame returning to C++ and C++ re-entering JS for the next item. Conceptually it's like: current callback finishes → C++ sees kHasTickScheduled → runs all nextTick callbacks → re-checks → if empty, continues to next phase item or phase itself.</p>
+
+      <div class="code-block">
+        <div class="code-header"><div class="code-dots"><div class="code-dot r"></div><div class="code-dot y"></div><div class="code-dot g"></div></div>lib/internal/process/task_queues.js (simplified)</div>
+        <pre><span class="cmt">// Simplified nextTick queue drain</span>
+<span class="kw">function</span> <span class="fn">processTicksAndRejections</span>() {
+  <span class="kw">let</span> tock;
+  <span class="kw">do</span> {
+    <span class="kw">while</span> (tock = queue.shift()) {
+      <span class="hl">  <span class="fn">Reflect.apply</span>(tock.callback, tock.domain, tock.args);</span>
+      <span class="cmt">  // If callback added more nextTicks, they're in queue now</span>
+    }
+    <span class="cmt">// After nextTick queue empty, drain Promise microtasks</span>
+    <span class="fn">runMicrotasks</span>();  <span class="cmt">// V8's internal microtask checkpoint</span>
+    <span class="cmt">// If Promise handlers added nextTick, loop again</span>
+  } <span class="kw">while</span> (!queue.isEmpty() || <span class="fn">hasRejections</span>());
+}</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- SECTION 5: SCENARIOS -->
+<section class="section reveal">
+  <div class="section-label">05 — Real-World Scenarios</div>
+  <h2 class="section-title">PATHOLOGICAL PATTERNS</h2>
+  <p class="section-body">
+    Understanding the event loop theoretically is one thing. Recognizing how it manifests in production bugs, latency spikes, and incorrect ordering is another.
+  </p>
+
+  <div class="scenario-tabs">
+    <button class="scenario-tab active" onclick="showScenario('s1', this)">Starved Event Loop</button>
+    <button class="scenario-tab" onclick="showScenario('s2', this)">setTimeout vs setImmediate</button>
+    <button class="scenario-tab" onclick="showScenario('s3', this)">Promise Microtask Flood</button>
+    <button class="scenario-tab" onclick="showScenario('s4', this)">Threadpool Saturation</button>
+    <button class="scenario-tab" onclick="showScenario('s5', this)">ref() / unref() Exit</button>
+  </div>
+
+  <div class="scenario-content active" id="s1">
+    <div class="code-block">
+      <div class="code-header"><div class="code-dots"><div class="code-dot r"></div><div class="code-dot y"></div><div class="code-dot g"></div></div>Scenario: Starved Event Loop via synchronous CPU work</div>
+      <pre><span class="cmt">// ANTI-PATTERN: Synchronous JSON parse on large payload</span>
+app.post(<span class="str">'/process'</span>, (req, res) => {
+  <span class="kw">const</span> data = req.body;  <span class="cmt">// 50MB parsed synchronously by body-parser</span>
+  <span class="hl">  <span class="kw">const</span> result = <span class="fn">heavyTransform</span>(data);  <span class="cmt">// 800ms sync CPU — BLOCKS ALL I/O</span></span>
+  res.json(result);
+});
+
+<span class="cmt">// During the 800ms, every other request, timer, socket event is frozen.
+// Node.js process.hrtime() during this period shows monotonic time advancing
+// but loop->time is NOT updated — timers may fire "late" in a burst.</span>
+
+<span class="cmt">// FIX: Offload to worker threads</span>
+<span class="kw">const</span> { Worker, isMainThread, parentPort, workerData } = <span class="fn">require</span>(<span class="str">'worker_threads'</span>);
+
+<span class="kw">if</span> (isMainThread) {
+  app.post(<span class="str">'/process'</span>, (req, res) => {
+    <span class="kw">const</span> worker = <span class="kw">new</span> <span class="fn">Worker</span>(__filename, { workerData: req.body });
+    worker.on(<span class="str">'message'</span>, result => res.json(result));
+  });
+} <span class="kw">else</span> {
+  <span class="cmt">// Worker thread: has its own event loop, V8 instance, and GC</span>
+  parentPort.postMessage(<span class="fn">heavyTransform</span>(workerData));
+}</pre>
+    </div>
+    <div class="callout danger">
+      <div class="callout-icon">🔴</div>
+      <div class="callout-content"><strong>Diagnosis:</strong> Use <code>--trace-event-categories node.async_hooks</code> or <code>clinic.js flame</code> (autocannon + clinic flame your-server.js) to identify synchronous hot paths consuming wall-clock time in the main thread. Event loop lag metrics via <code>perf_hooks.monitorEventLoopDelay()</code> will show mean/p99 delay skyrocketing.</div>
+    </div>
+  </div>
+
+  <div class="scenario-content" id="s2">
+    <div class="code-block">
+      <div class="code-header"><div class="code-dots"><div class="code-dot r"></div><div class="code-dot y"></div><div class="code-dot g"></div></div>setTimeout(fn,0) vs setImmediate(fn) — non-deterministic outside I/O</div>
+      <pre><span class="cmt">// CASE 1: Top-level — NON-DETERMINISTIC</span>
+<span class="fn">setTimeout</span>(() => console.log(<span class="str">'timeout'</span>), <span class="num">0</span>);
+<span class="fn">setImmediate</span>(() => console.log(<span class="str">'immediate'</span>));
+<span class="cmt">// Output: either "timeout, immediate" OR "immediate, timeout"
+// Depends on time taken to enter first loop iteration</span>
+
+<span class="cmt">// CASE 2: Inside an I/O callback — ALWAYS DETERMINISTIC</span>
+fs.<span class="fn">readFile</span>(<span class="str">'/etc/hosts'</span>, () => {
+  <span class="fn">setTimeout</span>(() => console.log(<span class="str">'timeout'</span>), <span class="num">0</span>);
+  <span class="hl">  <span class="fn">setImmediate</span>(() => console.log(<span class="str">'immediate'</span>));  <span class="cmt">// ALWAYS first</span></span>
+});
+<span class="cmt">// Output: ALWAYS "immediate, timeout"
+// WHY: I/O callback runs in poll phase. After poll completes,
+// the loop goes to CHECK phase (setImmediate) BEFORE cycling
+// back to TIMERS phase. Timer hasn't expired yet at this point.</span>
+
+<span class="cmt">// PRACTICAL RULE: Use setImmediate() when you want to execute
+// "after the current I/O event but before any timers"
+// Use setTimeout(fn, 0) only when semantically correct (e.g., testing)</span></pre>
+    </div>
+  </div>
+
+  <div class="scenario-content" id="s3">
+    <div class="code-block">
+      <div class="code-header"><div class="code-dots"><div class="code-dot r"></div><div class="code-dot y"></div><div class="code-dot g"></div></div>Promise Microtask Flood — Starving I/O with recursive Promises</div>
+      <pre><span class="cmt">// ANTI-PATTERN: Unbounded recursive Promise chain</span>
+<span class="kw">function</span> <span class="fn">endlessChain</span>() {
+  <span class="hl">  <span class="kw">return</span> Promise.resolve().<span class="fn">then</span>(<span class="fn">endlessChain</span>);  <span class="cmt">// NEVER yields to I/O</span></span>
+}
+<span class="fn">endlessChain</span>();  <span class="cmt">// The event loop will never process I/O again</span>
+
+<span class="cmt">// The microtask queue keeps refilling itself before the loop
+// can advance to the poll phase. All TCP connections queue up,
+// all timers are delayed indefinitely.
+
+// CORRECT: Yield with setImmediate for long-running iteration</span>
+<span class="kw">async function</span> <span class="fn">processItems</span>(items) {
+  <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i < items.length; i++) {
+    <span class="kw">await</span> <span class="fn">processOne</span>(items[i]);
+    <span class="kw">if</span> (i % <span class="num">100</span> === <span class="num">0</span>) {
+      <span class="hl">      <span class="kw">await new</span> Promise(r => <span class="fn">setImmediate</span>(r));  <span class="cmt">// Yield to event loop</span></span>
+    }
+  }
+}</pre>
+    </div>
+  </div>
+
+  <div class="scenario-content" id="s4">
+    <div class="code-block">
+      <div class="code-header"><div class="code-dots"><div class="code-dot r"></div><div class="code-dot y"></div><div class="code-dot g"></div></div>Thread Pool Saturation — All 4 threads blocked</div>
+      <pre><span class="cmt">// Scenario: 4 concurrent heavy bcrypt hashes + incoming fs.readFile
+// Result: readFile queues behind crypto, adds 2-3s latency spike</span>
+
+<span class="kw">const</span> bcrypt = <span class="fn">require</span>(<span class="str">'bcrypt'</span>);
+
+<span class="cmt">// 4 simultaneous bcrypt operations → consumes ALL thread pool threads</span>
+[<span class="num">1</span>,<span class="num">2</span>,<span class="num">3</span>,<span class="num">4</span>].<span class="fn">forEach</span>(i =>
+  bcrypt.<span class="fn">hash</span>(<span class="str">`pass${i}`</span>, <span class="num">12</span>, () => console.log(<span class="str">`hash ${i} done`</span>))
+);
+
+<span class="cmt">// This fs.readFile WAITS until a pool thread is free</span>
+<span class="hl">fs.<span class="fn">readFile</span>(<span class="str">'./config.json'</span>, () => console.log(<span class="str">'config loaded'</span>));</span>
+
+<span class="cmt">// SOLUTION 1: Increase pool size (before any I/O)</span>
+process.env.UV_THREADPOOL_SIZE = <span class="str">'16'</span>;  <span class="cmt">// Must be set BEFORE require('crypto')</span>
+
+<span class="cmt">// SOLUTION 2: Move bcrypt to worker threads
+// SOLUTION 3: Use argon2 with worker_threads support natively
+// SOLUTION 4: Implement a crypto queue with concurrency limit</span>
+<span class="kw">const</span> pLimit = <span class="fn">require</span>(<span class="str">'p-limit'</span>);
+<span class="kw">const</span> limit = <span class="fn">pLimit</span>(<span class="num">2</span>);  <span class="cmt">// Max 2 concurrent hash ops, leaving threads for I/O</span></pre>
+    </div>
+  </div>
+
+  <div class="scenario-content" id="s5">
+    <div class="code-block">
+      <div class="code-header"><div class="code-dots"><div class="code-dot r"></div><div class="code-dot y"></div><div class="code-dot g"></div></div>Handle ref() / unref() — Controlling process lifecycle</div>
+      <pre><span class="cmt">// Node exits when NO referenced handles remain active
+// Understanding this is critical for graceful shutdown</span>
+
+<span class="kw">const</span> timer = <span class="fn">setTimeout</span>(() => {}, <span class="num">1000000</span>);
+<span class="cmt">// Node would otherwise wait 1000 seconds before exiting</span>
+<span class="hl">timer.<span class="fn">unref</span>();  <span class="cmt">// Decrements loop's ref count → process can exit</span></span>
+
+<span class="cmt">// Common pattern: keepalive timer that doesn't block exit</span>
+<span class="kw">const</span> keepAlive = <span class="fn">setInterval</span>(() => {
+  connection.<span class="fn">ping</span>();
+}, <span class="num">30000</span>);
+keepAlive.<span class="fn">unref</span>();  <span class="cmt">// Ping continues but won't prevent exit</span>
+
+<span class="cmt">// Server handles: servers are referenced by default
+// You must explicitly close them for graceful shutdown</span>
+process.on(<span class="str">'SIGTERM'</span>, () => {
+  server.<span class="fn">close</span>(() => {           <span class="cmt">// Stop accepting new connections</span>
+    db.<span class="fn">disconnect</span>(() => {        <span class="cmt">// Release db handle</span>
+      process.<span class="fn">exit</span>(<span class="num">0</span>);           <span class="cmt">// All handles released → exits cleanly</span>
+    });
+  });
+});</pre>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- SECTION 6: PERFORMANCE METRICS -->
+<section class="section reveal">
+  <div class="section-label">06 — Observability</div>
+  <h2 class="section-title">MEASURING THE LOOP</h2>
+  <p class="section-body">
+    Instrumenting the event loop is essential for diagnosing latency. Node.js provides first-class APIs for this.
+  </p>
+
+  <div class="code-block reveal">
+    <div class="code-header"><div class="code-dots"><div class="code-dot r"></div><div class="code-dot y"></div><div class="code-dot g"></div></div>Event Loop Lag Monitor — production-grade instrumentation</div>
+    <pre><span class="kw">const</span> { monitorEventLoopDelay } = <span class="fn">require</span>(<span class="str">'perf_hooks'</span>);
+
+<span class="cmt">// High-resolution histogram — samples every 10ms using uv_timer internally</span>
+<span class="kw">const</span> histogram = <span class="fn">monitorEventLoopDelay</span>({ resolution: <span class="num">10</span> });
+histogram.<span class="fn">enable</span>();
+
+<span class="fn">setInterval</span>(() => {
+  <span class="kw">const</span> stats = {
+    min:  histogram.min / <span class="num">1e6</span>,   <span class="cmt">// nanoseconds → ms</span>
+    max:  histogram.max / <span class="num">1e6</span>,
+    mean: histogram.mean / <span class="num">1e6</span>,
+    <span class="hl">    p50:  histogram.<span class="fn">percentile</span>(<span class="num">50</span>)  / <span class="num">1e6</span>,</span>
+    <span class="hl">    p99:  histogram.<span class="fn">percentile</span>(<span class="num">99</span>)  / <span class="num">1e6</span>,  <span class="cmt">// Most important for SLOs</span></span>
+    p999: histogram.<span class="fn">percentile</span>(<span class="num">999</span>) / <span class="num">1e6</span>,
+  };
+  <span class="cmt">// Emit to Prometheus, Datadog, etc.</span>
+  histogram.<span class="fn">reset</span>();
+  <span class="kw">return</span> stats;
+}, <span class="num">5000</span>);
+
+<span class="cmt">// Also useful: async_hooks for tracking async resource lifetimes</span>
+<span class="kw">const</span> ah = <span class="fn">require</span>(<span class="str">'async_hooks'</span>);
+<span class="kw">const</span> hook = ah.<span class="fn">createHook</span>({
+  init(asyncId, type, triggerAsyncId) {
+    <span class="cmt">// type: 'PROMISE', 'TCPWRAP', 'TIMERWRAP', 'FSREQCALLBACK', etc.</span>
+  },
+  before(asyncId) { <span class="cmt">/* about to enter callback */</span> },
+  after(asyncId)  { <span class="cmt">/* just left callback */</span> },
+  destroy(asyncId){ <span class="cmt">/* resource collected */</span> }
+});</pre>
+  </div>
+
+  <table class="data-table reveal">
+    <thead>
+      <tr>
+        <th>Async Resource Type</th>
+        <th>Phase Executed In</th>
+        <th>Underlying Mechanism</th>
+        <th>Thread Pool?</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>TIMERWRAP</td><td>timers</td><td>uv_timer_t min-heap</td><td>No</td></tr>
+      <tr><td>IMMEDIATE</td><td>check</td><td>uv_check_t handle</td><td>No</td></tr>
+      <tr><td>PROMISE</td><td>between phases (microtask)</td><td>V8 microtask queue</td><td>No</td></tr>
+      <tr><td>TickObject</td><td>between phases (microtask)</td><td>Node.js nextTickQueue</td><td>No</td></tr>
+      <tr><td>TCPWRAP</td><td>poll</td><td>epoll/kqueue on socket fd</td><td>No</td></tr>
+      <tr><td>FSREQCALLBACK</td><td>poll (via wakeup pipe)</td><td>Thread pool → wakeup pipe</td><td>Yes</td></tr>
+      <tr><td>CRYPTO</td><td>poll (via wakeup pipe)</td><td>Thread pool → wakeup pipe</td><td>Yes</td></tr>
+      <tr><td>DNSCALLBACK</td><td>poll (via wakeup pipe)</td><td>Thread pool → getaddrinfo</td><td>Yes</td></tr>
+      <tr><td>GETADDRINFOREQWRAP</td><td>poll</td><td>c-ares (async resolver)</td><td>No</td></tr>
+      <tr><td>SHUTDOWNWRAP</td><td>pending callbacks</td><td>Deferred OS shutdown ACK</td><td>No</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<hr class="divider">
+
+<!-- SECTION 7: QUIZ -->
+<section class="section reveal">
+  <div class="section-label">07 — Mastery Check</div>
+  <h2 class="section-title">TEST YOUR KNOWLEDGE</h2>
+  <p class="section-body">These questions separate engineers who know Node.js from those who <em>master</em> it.</p>
+</section>
+
+<div style="max-width: 1200px; margin: 0 auto; padding: 0 24px 80px;">
+  <div class="quiz-section reveal">
+    <div class="quiz-q" id="q1">
+      <div class="quiz-question">Q1: You call setTimeout(fn, 0) and setImmediate(fn) from within a net.createServer() connection callback. What is the guaranteed execution order?</div>
+      <div class="quiz-options">
+        <button class="quiz-opt" onclick="answer(this, 'q1', false)">A) setTimeout always fires first (lower phase number)</button>
+        <button class="quiz-opt" onclick="answer(this, 'q1', true)">B) setImmediate always fires first (poll → check before cycling to timers)</button>
+        <button class="quiz-opt" onclick="answer(this, 'q1', false)">C) Non-deterministic — same as top-level</button>
+        <button class="quiz-opt" onclick="answer(this, 'q1', false)">D) Depends on the Node.js version</button>
+      </div>
+      <div class="quiz-feedback" id="q1-fb">✓ Correct. Inside any I/O callback (poll phase), after the callback completes, the loop proceeds to <strong>check phase</strong> (setImmediate) before cycling back to timers. The setTimeout(fn, 0) timer can only fire in the NEXT loop iteration's timers phase — by which time setImmediate has already executed.</div>
+    </div>
+
+    <div class="quiz-q" id="q2">
+      <div class="quiz-question">Q2: You have a Promise chain where each .then() schedules another .then(). Meanwhile, a pending setTimeout(fn, 1) should be ready to fire. When does the setTimeout callback execute?</div>
+      <div class="quiz-options">
+        <button class="quiz-opt" onclick="answer(this, 'q2', false)">A) After each individual .then() in the Promise chain</button>
+        <button class="quiz-opt" onclick="answer(this, 'q2', true)">B) Only after the entire Promise microtask queue is exhausted</button>
+        <button class="quiz-opt" onclick="answer(this, 'q2', false)">C) It fires immediately because 1ms has elapsed</button>
+        <button class="quiz-opt" onclick="answer(this, 'q2', false)">D) It depends on whether the chain was started in an I/O callback</button>
+      </div>
+      <div class="quiz-feedback" id="q2-fb">✓ Correct. The microtask queue (Promise callbacks) is drained completely before the event loop can advance to any new phase. A self-replenishing Promise chain starves the timers phase entirely. This is the Promise equivalent of <code>process.nextTick</code> starvation — both microtask queues must be fully empty for the macrotask loop to continue.</div>
+    </div>
+
+    <div class="quiz-q" id="q3">
+      <div class="quiz-question">Q3: You set UV_THREADPOOL_SIZE=4 (default). You fire 5 concurrent fs.readFile() calls simultaneously. What happens to the 5th call at the OS level?</div>
+      <div class="quiz-options">
+        <button class="quiz-opt" onclick="answer(this, 'q3', false)">A) It fails immediately with ENOBUFS</button>
+        <button class="quiz-opt" onclick="answer(this, 'q3', false)">B) Node.js queues it in JavaScript and retries every 10ms</button>
+        <button class="quiz-opt" onclick="answer(this, 'q3', true)">C) libuv enqueues it in its work queue; it blocks until a pool thread is free</button>
+        <button class="quiz-opt" onclick="answer(this, 'q3', false)">D) Node.js spawns a 5th thread automatically</button>
+      </div>
+      <div class="quiz-feedback" id="q3-fb">✓ Correct. libuv's work queue is unbounded (it's a linked list). The 5th request is placed on the queue and will be picked up by the first thread that finishes. No ENOBUFS, no automatic thread spawning. This can cause cascading latency: if threads are busy with slow operations (like bcrypt or slow disk), queue depth grows and all subsequent I/O latency increases proportionally.</div>
+    </div>
+
+    <div class="quiz-q" id="q4">
+      <div class="quiz-question">Q4: What does process.nextTick() registered inside another process.nextTick() do?</div>
+      <div class="quiz-options">
+        <button class="quiz-opt" onclick="answer(this, 'q4', false)">A) The inner nextTick runs in the next event loop iteration</button>
+        <button class="quiz-opt" onclick="answer(this, 'q4', false)">B) It's ignored — you can't nest nextTick calls</button>
+        <button class="quiz-opt" onclick="answer(this, 'q4', true)">C) It runs in the SAME nextTick drain cycle, before any Promise callbacks</button>
+        <button class="quiz-opt" onclick="answer(this, 'q4', false)">D) It runs after all Promise microtasks in the current drain cycle</button>
+      </div>
+      <div class="quiz-feedback" id="q4-fb">✓ Correct. The nextTick queue is processed in FIFO order, and new entries added during processing are appended to the same queue and drained in the same cycle. The drain loop is: while(nextTickQueue.length) { run one; }. This is why recursive nextTick can starve the event loop — the queue never becomes empty.</div>
+    </div>
+
+    <div class="quiz-q" id="q5">
+      <div class="quiz-question">Q5: A Node.js process is running a single setInterval(fn, 1000) with no other code. Under what condition does the process NOT exit after the interval fires?</div>
+      <div class="quiz-options">
+        <button class="quiz-opt" onclick="answer(this, 'q5', true)">A) Always — setInterval creates a persistent referenced handle that keeps the loop alive until clearInterval() is called</button>
+        <button class="quiz-opt" onclick="answer(this, 'q5', false)">B) Only if the callback schedules additional async work</button>
+        <button class="quiz-opt" onclick="answer(this, 'q5', false)">C) Never — process exits automatically after the first interval fires</button>
+        <button class="quiz-opt" onclick="answer(this, 'q5', false)">D) Only if UV_THREADPOOL_SIZE > 1</button>
+      </div>
+      <div class="quiz-feedback" id="q5-fb">✓ Correct. <code>setInterval</code> is implemented via a <code>uv_timer_t</code> handle that is "active" and "referenced" by default. As long as there is at least one referenced, active handle or request, the loop continues. The process only exits when <code>clearInterval()</code> is called (which calls <code>uv_timer_stop()</code> and decrements active handle count) or when <code>timer.unref()</code> is called to make the handle "unreferenced".</div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- FOOTER -->
+<div class="footer">
+  NODE.JS INTERNALS — COMPILED FROM libuv SOURCE, NODE.JS CORE, AND V8 DOCUMENTATION
+  <br><br>
+  <span style="font-size: 9px; color: var(--text-muted);">
+    References: deps/uv/src/ · lib/internal/process/ · src/node_file.cc · v8/src/execution/microtask-queue.cc
+  </span>
+</div>
+
+<script>
+// ========== SCROLL REVEAL ==========
+const reveals = document.querySelectorAll('.reveal');
+const obs = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); } });
+}, { threshold: 0.1 });
+reveals.forEach(el => obs.observe(el));
+
+// ========== DEEP DIVE TOGGLE ==========
+// Already handled via onclick
+
+// ========== SCENARIO TABS ==========
+function showScenario(id, btn) {
+  document.querySelectorAll('.scenario-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.scenario-tab').forEach(el => el.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ========== QUIZ ==========
+function answer(btn, qId, correct) {
+  const q = document.getElementById(qId);
+  if (q.dataset.answered) return;
+  q.dataset.answered = 'true';
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  document.getElementById(qId + '-fb').classList.add('show');
+  if (!correct) {
+    q.querySelectorAll('.quiz-opt').forEach(opt => {
+      if (opt.onclick.toString().includes('true')) opt.classList.add('correct');
+    });
+  }
+}
+
+// ========== EVENT LOOP ANIMATOR ==========
+const PHASES = [
+  { id: 'timers',  color: '#fbbf24', name: 'TIMERS', desc: 'Processing timer callbacks' },
+  { id: 'pending', color: '#fb923c', name: 'PENDING CBS', desc: 'Deferred I/O error callbacks' },
+  { id: 'idle',    color: '#475569', name: 'IDLE/PREPARE', desc: 'Internal libuv housekeeping' },
+  { id: 'poll',    color: '#00d4ff', name: 'POLL', desc: 'Blocking on epoll_wait() / kqueue' },
+  { id: 'check',   color: '#7fff6e', name: 'CHECK', desc: 'setImmediate() callbacks' },
+  { id: 'close',   color: '#f472b6', name: 'CLOSE CBS', desc: 'socket/stream close events' },
+];
+
+let animState = {
+  running: false,
+  phaseIdx: -1,
+  tick: 0,
+  interval: null,
+  speed: 2,
+  callStack: [],
+  nextTick: [],
+  promises: [],
+  timers: ['setTimeout(fn, 0)', 'setInterval(fn, 1000)'],
+  io: ['fs.readFile callback', 'net.socket data'],
+  immediates: ['setImmediate(fn)'],
+  stepQueue: [],
+};
+
+function buildStepQueue() {
+  animState.stepQueue = [
+    { type: 'sync', frame: 'main()', msg: 'Script starts executing', phase: 'SYNC' },
+    { type: 'sync', frame: 'require()', msg: 'Modules loaded synchronously', phase: 'SYNC' },
+    { type: 'sync', frame: 'setTimeout(fn, 0)', msg: 'Timer registered → min-heap push', phase: 'SYNC' },
+    { type: 'sync', frame: 'setImmediate(fn)', msg: 'Immediate registered → check queue', phase: 'SYNC' },
+    { type: 'sync', frame: 'fs.readFile()', msg: 'I/O req dispatched → thread pool', phase: 'SYNC' },
+    { type: 'pop', msg: 'Sync execution complete, call stack empty', phase: 'SYNC' },
+    { type: 'micro', nt: 'nextTick(cb)', msg: 'nextTick queue drains — priority 1', phase: 'μTASK' },
+    { type: 'micro', p: 'Promise.then(cb)', msg: 'Promise queue drains — priority 2', phase: 'μTASK' },
+    { type: 'phase', phaseIdx: 0, msg: 'TIMERS: Checking min-heap, threshold elapsed?', phase: 'TIMERS' },
+    { type: 'callback', frame: 'timerCb()', msg: 'setTimeout callback fires', phase: 'TIMERS' },
+    { type: 'pop', msg: 'Timer callback complete', phase: 'TIMERS' },
+    { type: 'micro', nt: '', p: '', msg: 'Microtask queues drain after timer cb', phase: 'μTASK' },
+    { type: 'phase', phaseIdx: 1, msg: 'PENDING: No deferred error callbacks', phase: 'PENDING' },
+    { type: 'phase', phaseIdx: 2, msg: 'IDLE: Internal handles processed', phase: 'IDLE' },
+    { type: 'phase', phaseIdx: 3, msg: 'POLL: epoll_wait() — blocking for I/O...', phase: 'POLL' },
+    { type: 'callback', frame: 'fsCallback()', msg: 'Thread pool completed → wakeup pipe → callback', phase: 'POLL' },
+    { type: 'pop', msg: 'I/O callback complete', phase: 'POLL' },
+    { type: 'micro', nt: 'nextTick(cb)', p: 'Promise.then()', msg: 'Microtasks drain after I/O callback', phase: 'μTASK' },
+    { type: 'phase', phaseIdx: 4, msg: 'CHECK: setImmediate callbacks execute', phase: 'CHECK' },
+    { type: 'callback', frame: 'immediateCallback()', msg: 'setImmediate fires — after poll phase', phase: 'CHECK' },
+    { type: 'pop', msg: 'Immediate complete', phase: 'CHECK' },
+    { type: 'phase', phaseIdx: 5, msg: 'CLOSE: socket.destroy() close events', phase: 'CLOSE' },
+    { type: 'newTick', msg: 'Loop iteration complete — checking for more work...', phase: 'LOOP' },
+  ];
+}
+
+buildStepQueue();
+let stepIdx = 0;
+
+function clearAllPhases() {
+  document.querySelectorAll('.loop-phase-box').forEach(box => {
+    box.classList.remove('lit');
+    box.style.removeProperty('--phase-color');
+  });
+}
+
+function lightPhase(phaseIdx) {
+  clearAllPhases();
+  const phases = document.querySelectorAll('.loop-phase-box');
+  if (phases[phaseIdx]) {
+    const p = PHASES[phaseIdx];
+    phases[phaseIdx].style.setProperty('--phase-color', p.color);
+    phases[phaseIdx].classList.add('lit');
+  }
+}
+
+function pushStack(frame) {
+  animState.callStack.push(frame);
+  const container = document.getElementById('call-stack');
+  const div = document.createElement('div');
+  div.className = 'stack-frame';
+  div.textContent = frame;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function popStack() {
+  animState.callStack.pop();
+  const container = document.getElementById('call-stack');
+  const frames = container.querySelectorAll('.stack-frame');
+  if (frames.length > 0) {
+    const last = frames[frames.length - 1];
+    last.classList.add('pop');
+    setTimeout(() => last.remove(), 300);
+  }
+}
+
+function clearStack() {
+  const container = document.getElementById('call-stack');
+  container.innerHTML = '';
+  animState.callStack = [];
+}
+
+function addLog(msg, phase, color) {
+  const body = document.getElementById('log-body');
+  const time = (performance.now() / 1000).toFixed(3);
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-time">${time}s</span><span class="log-phase" style="color:${color || 'var(--accent)'}">${phase}</span><span class="log-msg">${msg}</span>`;
+  body.appendChild(entry);
+  body.scrollTop = body.scrollHeight;
+}
+
+function updateMicro(nt, p) {
+  document.getElementById('nexttick-queue').textContent = nt || '—';
+  document.getElementById('promise-queue').textContent = p || '—';
+}
+
+function updateQueues() {
+  const t = animState.timers.join(', ') || 'empty';
+  const io = animState.io.join(', ') || 'empty';
+  const im = animState.immediates.join(', ') || 'empty';
+  document.getElementById('macro-timers').textContent = t;
+  document.getElementById('macro-io').textContent = io;
+  document.getElementById('macro-imm').textContent = im;
+}
+
+function executeStep() {
+  if (stepIdx >= animState.stepQueue.length) {
+    stepIdx = 0;
+    animState.tick++;
+    document.getElementById('tick-count').textContent = animState.tick;
+    addLog('━━━ New loop iteration ━━━', 'LOOP', '#475569');
+    return;
+  }
+
+  const step = animState.stepQueue[stepIdx++];
+  document.getElementById('phase-label').textContent = step.phase;
+
+  switch (step.type) {
+    case 'sync':
+      pushStack(step.frame);
+      addLog(step.msg, step.phase, '#c084fc');
+      break;
+    case 'pop':
+      popStack();
+      addLog(step.msg, step.phase, '#475569');
+      break;
+    case 'micro':
+      clearAllPhases();
+      updateMicro(step.nt, step.p);
+      addLog(step.msg, step.phase, '#c084fc');
+      setTimeout(() => updateMicro('', ''), 600);
+      break;
+    case 'phase':
+      lightPhase(step.phaseIdx);
+      addLog(step.msg, step.phase, PHASES[step.phaseIdx].color);
+      break;
+    case 'callback':
+      pushStack(step.frame);
+      addLog(step.msg, step.phase, '#60a5fa');
+      break;
+    case 'newTick':
+      clearAllPhases();
+      clearStack();
+      updateMicro('', '');
+      updateQueues();
+      addLog(step.msg, step.phase, '#475569');
+      break;
+  }
+}
+
+document.getElementById('btn-step').onclick = () => executeStep();
+
+document.getElementById('btn-play').onclick = function() {
+  animState.running = !animState.running;
+  this.textContent = animState.running ? '⏸ PAUSE' : '▶ PLAY';
+  if (animState.running) {
+    const delay = () => Math.round(1200 / animState.speed);
+    const run = () => {
+      if (!animState.running) return;
+      executeStep();
+      animState.interval = setTimeout(run, delay());
+    };
+    run();
+  } else {
+    clearTimeout(animState.interval);
+  }
+};
+
+document.getElementById('btn-reset').onclick = function() {
+  animState.running = false;
+  document.getElementById('btn-play').textContent = '▶ PLAY';
+  clearTimeout(animState.interval);
+  stepIdx = 0;
+  animState.tick = 0;
+  document.getElementById('tick-count').textContent = '0';
+  document.getElementById('phase-label').textContent = '—';
+  clearStack();
+  clearAllPhases();
+  updateMicro('', '');
+  document.getElementById('log-body').innerHTML = '';
+  animState.timers = ['setTimeout(fn, 0)', 'setInterval(fn, 1000)'];
+  animState.io = ['fs.readFile callback', 'net.socket data'];
+  animState.immediates = ['setImmediate(fn)'];
+  updateQueues();
+};
+
+document.getElementById('speed-range').oninput = function() {
+  animState.speed = +this.value;
+  document.getElementById('speed-label').textContent = this.value + 'x';
+};
+
+updateQueues();
+
+// ========== THREADPOOL ANIMATION ==========
+const threadTasks = [
+  ['idle', 'idle'],
+  ['fs.stat()', 'busy'],
+  ['dns.lookup()', 'busy'],
+  ['crypto.pbkdf2()', 'busy'],
+];
+
+setInterval(() => {
+  const pool = document.getElementById('threadpool-display');
+  const boxes = pool.querySelectorAll('.thread-box');
+  const i = Math.floor(Math.random() * 4);
+  const tasks = ['idle', 'fs.readFile()', 'dns.lookup()', 'crypto.pbkdf2()', 'zlib.deflate()', 'fs.stat()'];
+  const task = tasks[Math.floor(Math.random() * tasks.length)];
+  const busy = task !== 'idle';
+  boxes[i].className = 'thread-box ' + (busy ? 'busy' : 'idle');
+  boxes[i].querySelector('.thread-icon').textContent = busy ? '🔴' : '🟢';
+  boxes[i].querySelector('.thread-task').textContent = task;
+}, 1800);
+
+</script>
+</body>
+</html>

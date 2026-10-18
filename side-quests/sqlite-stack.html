@@ -1,0 +1,1387 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The SQLite stack — from db.prepare() to NAND flash</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root, html[data-theme="dark"]{
+  --bg:#04060D;--bg-1:#0A0E1A;--bg-1-top:#0F1528;--bg-2:#11172A;--bg-3:#1A2138;
+  --tx:#ECF0FA;--tx-2:#8B95B0;--tx-3:#555E7C;--tx-4:#353D5A;
+  --bd:rgba(140,170,255,0.06);--bd-2:rgba(140,170,255,0.14);--bd-3:rgba(140,170,255,0.28);
+  --rule:rgba(140,170,255,0.06);
+  --l1:#C4B5FD;--l2:#A78BFA;--l3:#60A5FA;--l4:#38BDF8;--l5:#22D3EE;--l6:#94A3B8;
+  --l1-soft:rgba(196,181,253,0.10);--l2-soft:rgba(167,139,250,0.10);
+  --l3-soft:rgba(96,165,250,0.10);--l4-soft:rgba(56,189,248,0.10);
+  --l5-soft:rgba(34,211,238,0.10);--l6-soft:rgba(148,163,184,0.10);
+  --term-bg:rgba(96,165,250,0.10);--term-bd:rgba(96,165,250,0.45);--term-active:rgba(96,165,250,0.22);
+  --term-color:#7AA2F7;
+  --code-bg:#0D1226;--code-bd:rgba(140,170,255,0.12);--code-color:#9DCEFF;
+  --tk-com:#565F89;--tk-str:#9ECE6A;--tk-num:#FF9E64;
+  --tk-kw:#BB9AF7;--tk-kw-sql:#7DCFFF;--tk-fn:#7AA2F7;--tk-ty:#E0AF68;--tk-const:#F7768E;
+  --shadow:0 30px 80px -10px rgba(0,0,0,0.85), 0 0 0 0.5px rgba(140,170,255,0.06);
+  --gloss:linear-gradient(180deg, rgba(140,170,255,0.030) 0%, transparent 30%);
+}
+html[data-theme="light"]{
+  --bg:#f7f5ee;--bg-1:#ffffff;--bg-1-top:#fdfbf5;--bg-2:#f0ede2;--bg-3:#e7e3d4;
+  --tx:#14130f;--tx-2:#4a4843;--tx-3:#807e76;--tx-4:#a8a69d;
+  --bd:rgba(20,19,15,0.08);--bd-2:rgba(20,19,15,0.16);--bd-3:rgba(20,19,15,0.32);
+  --rule:rgba(20,19,15,0.07);
+  --l1:#6D5BD0;--l2:#4F46E5;--l3:#1D4ED8;--l4:#0369A1;--l5:#0E7490;--l6:#475569;
+  --l1-soft:rgba(109,91,208,0.06);--l2-soft:rgba(79,70,229,0.06);
+  --l3-soft:rgba(29,78,216,0.06);--l4-soft:rgba(3,105,161,0.06);
+  --l5-soft:rgba(14,116,144,0.06);--l6-soft:rgba(71,85,105,0.06);
+  --term-bg:rgba(29,78,216,0.08);--term-bd:rgba(29,78,216,0.40);--term-active:rgba(29,78,216,0.20);
+  --term-color:#1D4ED8;
+  --code-bg:#f0ede2;--code-bd:rgba(20,19,15,0.10);--code-color:#1D4ED8;
+  --tk-com:#94A3B8;--tk-str:#15803D;--tk-num:#C2410C;
+  --tk-kw:#7E22CE;--tk-kw-sql:#0E7490;--tk-fn:#1D4ED8;--tk-ty:#B45309;--tk-const:#BE185D;
+  --shadow:0 18px 48px -10px rgba(40,30,15,0.18);
+  --gloss:linear-gradient(180deg, rgba(20,19,15,0.012) 0%, transparent 25%);
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+*::selection{background:var(--term-active);color:var(--tx)}
+html{font-size:16px;scroll-behavior:smooth}
+body{font-family:'Geist',-apple-system,ui-sans-serif,sans-serif;background:var(--bg);color:var(--tx);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;font-feature-settings:"ss01","ss02","cv11";line-height:1.55;min-height:100vh;overflow-x:hidden;transition:background .3s ease,color .3s ease}
+body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(to right,var(--rule) 1px,transparent 1px),linear-gradient(to bottom,var(--rule) 1px,transparent 1px);background-size:80px 80px;pointer-events:none;opacity:.55;z-index:0;mask-image:radial-gradient(ellipse at top,black 30%,transparent 75%);-webkit-mask-image:radial-gradient(ellipse at top,black 30%,transparent 75%)}
+html[data-theme="dark"] body::after{content:"";position:fixed;inset:0;background:radial-gradient(ellipse 800px 500px at 30% 0%, rgba(96,165,250,0.07), transparent 70%),radial-gradient(ellipse 700px 400px at 75% 10%, rgba(167,139,250,0.05), transparent 70%);pointer-events:none;z-index:0}
+main,.nav,.modal,.term-popover{position:relative;z-index:1}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-feature-settings:"calt","ss01"}
+
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:14px 36px;background:color-mix(in srgb,var(--bg) 80%,transparent);backdrop-filter:saturate(180%) blur(16px);-webkit-backdrop-filter:saturate(180%) blur(16px);border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;gap:24px;transform:translateY(0);transition:transform .35s cubic-bezier(.4,0,.2,1),background .3s,border-color .3s}
+.nav.hidden{transform:translateY(-110%)}
+.nav-brand{display:flex;align-items:center;gap:10px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:500;letter-spacing:-0.01em;color:var(--tx)}
+.nav-mark{width:18px;height:18px;border:1.5px solid var(--l3);border-radius:3px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 8px -2px var(--l3)}
+.nav-mark::before{content:"";width:6px;height:6px;background:var(--l3);border-radius:1px}
+.nav-mid{display:flex;gap:22px;align-items:center}
+.nav-link{color:var(--tx-2);text-decoration:none;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.01em;transition:color .18s;padding:4px 0;position:relative}
+.nav-link:hover{color:var(--tx)}
+.nav-link::after{content:"";position:absolute;left:0;bottom:0;width:0;height:1px;background:var(--l3);transition:width .25s ease}
+.nav-link:hover::after{width:100%}
+
+.theme-toggle{background:transparent;border:0.5px solid var(--bd-2);border-radius:999px;padding:6px 14px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--tx);cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:8px;text-transform:uppercase;letter-spacing:.06em}
+.theme-toggle:hover{border-color:var(--bd-3);background:var(--bg-1);box-shadow:0 0 16px -4px var(--l3-soft)}
+.theme-toggle .dot{width:7px;height:7px;border-radius:50%;background:var(--l3);display:inline-block;box-shadow:0 0 6px var(--l3)}
+
+.hero{padding:140px 36px 64px;max-width:1500px;margin:0 auto;position:relative}
+.hero-eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--tx-3);letter-spacing:.10em;text-transform:uppercase;margin-bottom:28px;display:flex;align-items:center;gap:14px}
+.hero-eyebrow::after{content:"";flex:1;height:1px;background:var(--bd)}
+.hero h1{font-family:'Geist',sans-serif;font-size:clamp(40px,6vw,78px);font-weight:300;letter-spacing:-0.04em;line-height:.97;margin-bottom:28px}
+.hero h1 em{font-style:italic;font-weight:400;background:linear-gradient(135deg,var(--l1) 0%,var(--l3) 50%,var(--l5) 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+.hero-lead{max-width:720px;font-size:18px;line-height:1.55;color:var(--tx-2)}
+.hero-lead strong{color:var(--tx);font-weight:500}
+.hero-meta{margin-top:48px;display:flex;gap:36px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--tx-3);letter-spacing:.04em;text-transform:uppercase;flex-wrap:wrap}
+.hero-meta span strong{color:var(--tx);font-weight:500}
+
+.stack-section{padding:56px 36px 96px;max-width:1500px;margin:0 auto}
+.stack-head{display:flex;align-items:baseline;justify-content:space-between;border-bottom:0.5px solid var(--bd);padding-bottom:14px;margin-bottom:28px;flex-wrap:wrap;gap:12px}
+.stack-title{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--tx-2);letter-spacing:.10em;text-transform:uppercase}
+.stack-hint{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--tx-3);letter-spacing:.04em}
+.stack-hint kbd{display:inline-block;padding:1px 7px;margin:0 2px;border:0.5px solid var(--bd-2);border-radius:3px;font-size:10px;color:var(--tx-2);background:var(--bg-1)}
+
+.stack{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;align-items:stretch}
+.layer{background:linear-gradient(180deg,var(--bg-1-top) 0%,var(--bg-1) 60%);border:0.5px solid var(--bd);border-top:2px solid var(--lc);border-radius:8px;padding:18px 14px 14px;display:flex;flex-direction:column;gap:10px;position:relative;transition:background .25s ease;box-shadow:inset 0 1px 0 rgba(255,255,255,0.02)}
+.layer::before{content:"";position:absolute;inset:0;border-radius:8px;background:var(--gloss);pointer-events:none}
+.layer-num{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--lc);letter-spacing:.10em;font-weight:500;text-shadow:0 0 12px color-mix(in srgb,var(--lc) 35%,transparent)}
+.layer-name{font-size:14px;font-weight:500;line-height:1.2;letter-spacing:-0.01em;color:var(--tx)}
+.layer-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--tx-3);line-height:1.4;margin-bottom:4px}
+
+.card{background:linear-gradient(180deg,color-mix(in srgb,var(--lc) 8%,var(--bg-2)) 0%,color-mix(in srgb,var(--lc) 4%,var(--bg-1)) 100%);border:0.5px solid color-mix(in srgb,var(--lc) 22%,transparent);border-radius:5px;padding:9px 11px;cursor:pointer;transition:all .18s cubic-bezier(.4,0,.2,1);position:relative}
+.card:hover{border-color:var(--lc);background:linear-gradient(180deg,color-mix(in srgb,var(--lc) 14%,var(--bg-3)) 0%,color-mix(in srgb,var(--lc) 8%,var(--bg-2)) 100%);transform:translateX(2px);box-shadow:0 0 24px -6px color-mix(in srgb,var(--lc) 45%,transparent)}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--lc);border-radius:5px 0 0 5px;opacity:.55;transition:opacity .18s;box-shadow:0 0 6px color-mix(in srgb,var(--lc) 60%,transparent)}
+.card:hover::before{opacity:1}
+.card-name{font-size:12.5px;font-weight:500;color:var(--tx);letter-spacing:-0.005em;line-height:1.25}
+.card-tag{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:color-mix(in srgb,var(--lc) 70%,var(--tx-3));letter-spacing:.02em;margin-top:3px}
+.card.linked{border-color:var(--lc);border-style:dashed;box-shadow:0 0 0 1px color-mix(in srgb,var(--lc) 18%,transparent),0 0 16px -6px color-mix(in srgb,var(--lc) 35%,transparent)}
+.card.linked::before{opacity:1}
+.card.dim{opacity:.32}
+.card.active{background:linear-gradient(180deg,var(--lc) 0%,color-mix(in srgb,var(--lc) 80%,#000) 100%);border-color:var(--lc);box-shadow:0 0 32px -4px color-mix(in srgb,var(--lc) 55%,transparent)}
+.card.active .card-name,.card.active .card-tag{color:#04060D}
+.card.active::before{opacity:0}
+
+.legend{margin-top:36px;padding:24px 28px;background:linear-gradient(180deg,var(--bg-1-top) 0%,var(--bg-1) 60%);border:0.5px solid var(--bd);border-radius:10px;display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative}
+.legend::before{content:"";position:absolute;inset:0;border-radius:10px;background:var(--gloss);pointer-events:none}
+.legend h3{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--l3);letter-spacing:.10em;text-transform:uppercase;margin-bottom:14px;font-weight:500}
+.legend-row{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:13px;color:var(--tx)}
+.legend-row + .legend-row{border-top:0.5px solid var(--bd)}
+.legend-key{width:22px;height:22px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:10px;flex-shrink:0}
+.legend-row .desc{font-size:12px;color:var(--tx-2)}
+
+.modal-backdrop{position:fixed;inset:0;background:color-mix(in srgb,#000 70%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:200;opacity:0;pointer-events:none;transition:opacity .28s}
+.modal-backdrop.open{opacity:1;pointer-events:auto}
+.modal{position:fixed;top:50%;left:50%;width:min(760px,94vw);max-height:min(86vh,900px);background:linear-gradient(180deg,var(--bg-1-top) 0%,var(--bg-1) 18%);border:0.5px solid var(--bd-2);border-radius:14px;z-index:201;transform:translate(-50%,-46%) scale(.97);opacity:0;pointer-events:none;transition:transform .32s cubic-bezier(.32,.72,.24,1),opacity .24s ease;display:flex;flex-direction:column;box-shadow:var(--shadow);overflow:hidden}
+.modal.open{transform:translate(-50%,-50%) scale(1);opacity:1;pointer-events:auto}
+.modal-scroll{flex:1;overflow-y:auto;overflow-x:hidden}
+.modal-scroll::-webkit-scrollbar{width:6px}
+.modal-scroll::-webkit-scrollbar-track{background:transparent}
+.modal-scroll::-webkit-scrollbar-thumb{background:var(--bd-2);border-radius:3px}
+.modal-header{position:sticky;top:0;background:color-mix(in srgb,var(--bg-1-top) 92%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:0.5px solid var(--bd);padding:24px 36px 20px;z-index:1;border-radius:14px 14px 0 0}
+.modal-close{position:absolute;top:22px;right:28px;background:transparent;border:0.5px solid var(--bd-2);width:34px;height:34px;border-radius:50%;cursor:pointer;color:var(--tx-2);display:inline-flex;align-items:center;justify-content:center;transition:all .2s;font-size:16px;line-height:1}
+.modal-close::before{content:"×";font-size:22px;line-height:1}
+.modal-close:hover{color:var(--tx);border-color:var(--mc);box-shadow:0 0 12px -3px var(--mc)}
+.modal-tag{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.10em;text-transform:uppercase;color:var(--mc);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.modal-tag::before{content:"";width:14px;height:1px;background:var(--mc);box-shadow:0 0 4px var(--mc)}
+.modal h2{font-family:'Geist',sans-serif;font-size:clamp(28px,3vw,40px);font-weight:400;letter-spacing:-0.025em;line-height:1.05;margin-bottom:10px;color:var(--mc);text-shadow:0 0 32px color-mix(in srgb,var(--mc) 35%,transparent)}
+.modal-tagline{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--tx-2)}
+.modal-body{padding:28px 36px 80px;font-size:15px;line-height:1.68;color:var(--tx)}
+.modal-body section + section{margin-top:28px}
+.modal-body h3{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;color:var(--mc);letter-spacing:.10em;text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;gap:8px}
+.modal-body h3::before{content:"";width:5px;height:5px;background:var(--mc);border-radius:50%;box-shadow:0 0 8px var(--mc)}
+.modal-body p{margin-bottom:14px;color:var(--tx)}
+.modal-body p:last-child{margin-bottom:0}
+.modal-body strong{font-weight:500;color:var(--tx)}
+.modal-body em{font-style:italic;color:var(--tx-2)}
+.modal-body ul,.modal-body ol{padding-left:22px;margin:6px 0 14px;color:var(--tx)}
+.modal-body li{margin-bottom:6px}
+.verbatim{border-left:2px solid var(--mc);padding:6px 0 6px 16px;margin:4px 0 14px;font-size:14.5px;color:var(--tx);font-weight:400;line-height:1.6;background:linear-gradient(90deg,color-mix(in srgb,var(--mc) 6%,transparent),transparent 60%);border-radius:0 4px 4px 0}
+
+.modal-body code,.ic{font-family:'JetBrains Mono',monospace;font-size:.84em;background:var(--code-bg);border:0.5px solid var(--code-bd);padding:1px 6px;border-radius:3px;color:var(--code-color);letter-spacing:-0.01em}
+.modal-body pre{background:var(--code-bg);border:0.5px solid var(--code-bd);border-left:2px solid var(--mc);padding:14px 18px;border-radius:6px;overflow-x:auto;margin:14px 0;font-size:12.5px;line-height:1.6;font-family:'JetBrains Mono',monospace;box-shadow:0 4px 24px -8px rgba(0,0,0,0.3)}
+.modal-body pre code{background:transparent;border:none;padding:0;color:var(--tx);font-size:inherit}
+.tk-com{color:var(--tk-com);font-style:italic}
+.tk-str{color:var(--tk-str)}
+.tk-num{color:var(--tk-num)}
+.tk-kw{color:var(--tk-kw);font-weight:500}
+.tk-kw-sql{color:var(--tk-kw-sql);font-weight:500}
+.tk-fn{color:var(--tk-fn)}
+.tk-ty{color:var(--tk-ty)}
+.tk-const{color:var(--tk-const)}
+
+.conn-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.conn-chip{background:transparent;border:0.5px solid var(--bd-2);padding:6px 12px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;transition:all .18s;color:var(--tx-2);display:inline-flex;align-items:center;gap:7px}
+.conn-chip:hover{border-color:var(--cc);color:var(--cc);box-shadow:0 0 12px -3px var(--cc)}
+.conn-chip .dot{width:5px;height:5px;border-radius:50%;background:var(--cc);box-shadow:0 0 4px var(--cc)}
+
+.term{cursor:help;border-bottom:1px dotted color-mix(in srgb,var(--term-color) 50%,transparent);transition:all .15s;padding:0 1px;position:relative;color:var(--tx)}
+.term:hover{background:var(--term-bg);border-bottom-color:var(--term-bd);border-bottom-style:solid;color:var(--term-color)}
+.term.lit{background:var(--term-active);border-bottom-color:var(--term-bd);border-bottom-style:solid;color:var(--term-color)}
+
+.term-popover{position:absolute;z-index:300;max-width:380px;background:linear-gradient(180deg,var(--bg-1-top) 0%,var(--bg-1) 50%);border:0.5px solid var(--bd-3);border-radius:10px;padding:16px 18px;font-size:13px;line-height:1.6;color:var(--tx);box-shadow:var(--shadow);opacity:0;pointer-events:none;transform:translateY(6px) scale(.98);transition:opacity .18s,transform .18s}
+.term-popover.open{opacity:1;pointer-events:auto;transform:translateY(0) scale(1)}
+.term-popover-head{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--l3);letter-spacing:.10em;text-transform:uppercase;font-weight:500;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.term-popover-head::before{content:"";width:5px;height:5px;background:var(--l3);border-radius:50%;box-shadow:0 0 6px var(--l3)}
+.term-popover-body{color:var(--tx)}
+.term-popover-body code{font-family:'JetBrains Mono',monospace;background:var(--code-bg);border:0.5px solid var(--code-bd);padding:1px 5px;border-radius:3px;font-size:.86em;color:var(--code-color)}
+
+footer{border-top:0.5px solid var(--bd);padding:56px 36px 80px;margin-top:80px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--tx-3);letter-spacing:.05em;text-align:center}
+footer .credit{margin-top:12px;color:var(--tx-4)}
+
+@media (max-width:1200px){
+  .stack-section{padding:40px 0 80px;overflow-x:auto}
+  .stack-section > .stack-head,.stack-section > .legend{margin-left:36px;margin-right:36px}
+  .stack{grid-template-columns:repeat(6,220px);padding:0 36px;width:max-content}
+}
+@media (max-width:720px){
+  .nav{padding:12px 20px}
+  .nav-mid{display:none}
+  .hero{padding:110px 24px 48px}
+  .legend{grid-template-columns:1fr}
+  .modal{width:96vw;max-height:92vh;border-radius:10px}
+  .modal-header{border-radius:10px 10px 0 0}
+  .modal-header,.modal-body{padding-left:24px;padding-right:24px}
+}
+</style>
+</head>
+<body>
+<nav class="nav" id="nav">
+  <div class="nav-brand"><span class="nav-mark"></span><span>sqlite/stack</span></div>
+  <div class="nav-mid">
+    <a class="nav-link" href="#hero">overview</a>
+    <a class="nav-link" href="#stack">stack</a>
+    <a class="nav-link" href="#legend">legend</a>
+  </div>
+  <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+    <span class="dot"></span><span id="theme-label">dark</span>
+  </button>
+</nav>
+
+<main>
+  <section class="hero" id="hero">
+    <div class="hero-eyebrow"><span>A systems-engineering walkthrough</span><span class="mono" style="color:var(--tx-2)">v1 · 6 layers · 26 components</span></div>
+    <h1>The SQLite stack —<br><em>from db.prepare() to NAND flash.</em></h1>
+    <p class="hero-lead">Every call from your TypeScript code traverses six layers of indirection before bytes hit silicon. This is each layer, each component, each interface — fully clickable. <strong>Click any term</strong> to highlight it; <strong>hover</strong> to read its definition. Click any card in the stack to open the deep-dive.</p>
+    <div class="hero-meta">
+      <span><strong>L1</strong> · application</span>
+      <span><strong>L2</strong> · better-sqlite3</span>
+      <span><strong>L3</strong> · libsqlite3</span>
+      <span><strong>L4</strong> · syscalls</span>
+      <span><strong>L5</strong> · kernel</span>
+      <span><strong>L6</strong> · hardware</span>
+    </div>
+  </section>
+
+  <section class="stack-section" id="stack">
+    <div class="stack-head">
+      <div class="stack-title">— The stack, layer by layer →</div>
+      <div class="stack-hint">click a card · <kbd>esc</kbd> closes the panel · <kbd>hover</kbd> a term for definition</div>
+    </div>
+    <div class="stack" id="stack-grid"></div>
+    <div class="legend" id="legend">
+      <div>
+        <h3>How to read this page</h3>
+        <div class="legend-row"><span class="legend-key" style="background:var(--l3-soft);color:var(--l3);border:0.5px dashed var(--l3)">▣</span><div>Hovered card highlights<div class="desc">Cards connected to it gain a dashed border in the same colour</div></div></div>
+        <div class="legend-row"><span class="legend-key" style="background:var(--l4);color:var(--bg)">●</span><div>Active card<div class="desc">The card you opened the modal for</div></div></div>
+        <div class="legend-row"><span class="legend-key" style="background:var(--bg-2);color:var(--l3);border:0.5px solid var(--term-bd)">T</span><div>Glossary term<div class="desc">Click = highlight · hover = definition popover</div></div></div>
+      </div>
+      <div>
+        <h3>Layer colour code</h3>
+        <div class="legend-row"><span class="legend-key" style="background:var(--l1)"></span><div>L1 application<div class="desc">Your TS, V8, N-API</div></div></div>
+        <div class="legend-row"><span class="legend-key" style="background:var(--l2)"></span><div>L2 better-sqlite3<div class="desc">Native module, handles, C++ wrapper</div></div></div>
+        <div class="legend-row"><span class="legend-key" style="background:var(--l3)"></span><div>L3 SQLite library<div class="desc">Compiler, VDBE, B-tree, Pager, VFS</div></div></div>
+        <div class="legend-row"><span class="legend-key" style="background:var(--l4)"></span><div>L4 syscall boundary<div class="desc">Userspace ↔ kernel transitions</div></div></div>
+        <div class="legend-row"><span class="legend-key" style="background:var(--l5)"></span><div>L5 kernel<div class="desc">VFS, fs driver, page cache, block I/O, NVMe</div></div></div>
+        <div class="legend-row"><span class="legend-key" style="background:var(--l6)"></span><div>L6 hardware<div class="desc">CPU, RAM, SSD</div></div></div>
+      </div>
+    </div>
+  </section>
+  <footer>
+    <div>The data path :: js → c++ → vdbe → btree → pager → vfs → syscall → kernel vfs → fs → page cache → block i/o → nvme → ssd</div>
+    <div class="credit">Source verbatim. Click anywhere outside a popover to dismiss.</div>
+  </footer>
+</main>
+
+<div class="modal-backdrop" id="backdrop"></div>
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="m-name">
+  <div class="modal-header">
+    <div class="modal-tag" id="m-layer">L? · Layer</div>
+    <h2 id="m-name">Component</h2>
+    <div class="modal-tagline" id="m-tag">tagline</div>
+    <button class="modal-close" id="m-close" aria-label="Close panel"></button>
+  </div>
+  <div class="modal-scroll"><div class="modal-body" id="m-body"></div></div>
+</div>
+
+<div class="term-popover" id="popover" role="tooltip">
+  <div class="term-popover-head" id="pop-head">term</div>
+  <div class="term-popover-body" id="pop-body"></div>
+</div>
+
+<script>
+"use strict";
+const LAYERS=[
+{n:1,name:"Application",sub:"Node.js / V8 user space",color:"var(--l1)",iface:"JS \u2194 C boundary  (N-API)"},
+{n:2,name:"better-sqlite3",sub:"Native module \u2014 better_sqlite3.node",color:"var(--l2)",iface:"C function calls  (sqlite3_*)"},
+{n:3,name:"SQLite library",sub:"libsqlite3 \u2014 embedded engine",color:"var(--l3)",iface:"POSIX / Win32 syscalls"},
+{n:4,name:"OS \u2014 userspace \u2194 kernel",sub:"Syscall boundary, FDs, processes",color:"var(--l4)",iface:"Trap into kernel mode  (sysenter / svc)"},
+{n:5,name:"Kernel",sub:"VFS, filesystem, I/O scheduler, drivers",color:"var(--l5)",iface:"PCIe / DMA / MSI-X interrupts"},
+{n:6,name:"Hardware",sub:"CPU, RAM, SSD",color:"var(--l6)",iface:null}
+];
+const T=(k,l)=>'<span class="term" data-term="'+k+'">'+(l||k)+'</span>';
+const COMPONENTS=[];
+const GLOSSARY={};
+const _COMPS_1=[
+{id:"tsapp",ly:0,name:"Your TS code",tag:"calls into the database",
+ role:"Your application code calling db.prepare('SELECT * FROM users WHERE id = ?').get(42). Pure JavaScript executing in V8. The Database and Statement objects you hold are JS proxies \u2014 every method call crosses into native code.",
+ iface:"Loaded via require('better-sqlite3'). Each method invocation traverses the JS\u2194C++ boundary using N-API.",
+ deep:`<p>The first layer is your own code. From the runtime's point of view it is ordinary ${T('js','JavaScript')} running inside the ${T('v8','V8 engine')} \u2014 <code>db</code> and <code>stmt</code> are nothing more than ${T('js-object','JS objects')} whose methods, under the hood, call into a compiled <code>.node</code> binary.</p>
+<pre><code>import Database from 'better-sqlite3';
+const db = new Database('app.db');
+const stmt = db.prepare('SELECT * FROM users WHERE id = ?');
+const row = stmt.get(42);   // synchronous \u2014 blocks until done</code></pre>
+<p>The synchronous call is the design point. Where ${T('node-sqlite3','node-sqlite3')} dispatches every query to ${T('libuv','libuv')}'s ${T('threadpool','threadpool')} and returns a promise, ${T('better-sqlite3','better-sqlite3')} runs the query on the calling thread. For local SQLite \u2014 sub-millisecond per query \u2014 the dispatch overhead exceeds the work, so synchronous wins. The cost is that a <em>slow</em> query blocks the entire ${T('event-loop','event loop')}: no incoming HTTP requests, no <code>setTimeout</code> firing, nothing.</p>
+<p>The <code>db.prepare()</code> result is a ${T('prepared-statement','prepared statement')} \u2014 compiled once, executed many times. Re-preparing on every call is the single most common performance mistake.</p>`,
+ to:["napi"]},
+{id:"napi",ly:0,name:"N-API binding",tag:"stable C ABI for native modules",
+ role:"Node's stable C ABI for native modules. Translates between JS values (strings, numbers, BigInts, Buffers, Dates) and the C types SQLite expects. Returns results back as JS objects.",
+ iface:"Sits on top of V8 internally, but its surface is version-stable \u2014 better-sqlite3 compiled against Node 18 keeps working on Node 20+ without recompiling.",
+ deep:`<p>${T('napi','N-API')} is the boundary contract. It is a thin C ${T('abi','ABI')} layer that gives native modules a stable, versioned surface: <code>napi_value</code>, <code>napi_env</code>, <code>napi_create_string_utf8</code>, and so on. Inside the runtime these resolve to ${T('v8','V8')} types and handles, but the binary you ship doesn't see V8 directly.</p>
+<p>That decoupling is why a ${T('better-sqlite3','better-sqlite3')} prebuilt binary compiled against Node 18 still loads on Node 20 and 22 \u2014 V8's internal C++ classes change every release; ${T('napi','N-API')} does not. Without ${T('napi','N-API')} (the old ${T('nan','Nan/V8 API')} world) every Node major version meant a recompile.</p>
+<p>Concretely, when you call <code>stmt.get(42)</code>:</p>
+<ol>
+<li><code>42</code> arrives as a <code>napi_value</code> wrapping a ${T('v8','V8')} <code>Number</code>.</li>
+<li>The C++ wrapper calls <code>napi_get_value_int64</code> to extract a plain <code>int64_t</code>.</li>
+<li>It calls <code>sqlite3_bind_int64(stmt, 1, 42)</code> \u2014 pure C, no JS in sight.</li>
+<li>After ${T('step','sqlite3_step')} returns a row, columns come back via <code>sqlite3_column_*</code>, get re-wrapped via <code>napi_create_*</code>, and assembled into a JS object.</li>
+</ol>
+<p>The marshalling cost is real but small \u2014 measured in low microseconds per call \u2014 which is why ${T('better-sqlite3','better-sqlite3')} keeps it synchronous: there is no thread-hop to amortise it against.</p>`,
+ to:["tsapp","cpp"]},
+{id:"cpp",ly:1,name:"C++ wrapper",tag:"ObjectWrap classes over sqlite3*",
+ role:"ObjectWrap classes \u2014 DatabaseImpl, StatementImpl, Iterator \u2014 that hold raw sqlite3* pointers and expose them as JS objects. Synchronous on purpose: no callbacks, no promises, blocks the event loop until the call returns.",
+ iface:"Calls SQLite's C API: sqlite3_open_v2, sqlite3_prepare_v2, sqlite3_step, sqlite3_column_*, sqlite3_bind_*, sqlite3_finalize.",
+ deep:`<p>This is the actual code you <code>npm install</code>. The package ships C++ source that gets compiled (or downloaded as a prebuilt binary) into <code>better_sqlite3.node</code> \u2014 a shared library that Node loads with <code>dlopen</code>.</p>
+<p>Internally, three ${T('objectwrap','ObjectWrap')} classes do the work:</p>
+<ul>
+<li><code>DatabaseImpl</code> \u2014 wraps a ${T('sqlite3-ptr','sqlite3*')} connection handle. Owns the file lock, the ${T('pager','Pager')}, and the per-connection cache.</li>
+<li><code>StatementImpl</code> \u2014 wraps a ${T('sqlite3-stmt-ptr','sqlite3_stmt*')}. One per <code>db.prepare()</code> call. Reusable.</li>
+<li><code>Iterator</code> \u2014 produced by <code>stmt.iterate()</code>. Yields rows lazily by calling ${T('step','sqlite3_step')} on demand.</li>
+</ul>
+<p>The synchronous design isn't laziness \u2014 it's measured. ${T('libuv','libuv')}'s ${T('threadpool','threadpool')} dispatch costs roughly 30-50\u00b5s for the round trip. A typical SQLite query on a warm cache is faster than that. So ${T('better-sqlite3','better-sqlite3')} runs the query on the V8 thread directly: no thread hop, no promise allocation, no microtask queue.</p>
+<p>The trade-off: a long-running query (a heavy aggregate, a missing index, a 5-second migration) freezes the entire ${T('event-loop','Node event loop')}. The fix is ${T('worker-threads','worker_threads')} \u2014 open one ${T('better-sqlite3','better-sqlite3')} <code>Database</code> per worker, and let the worker block while the main loop stays responsive.</p>
+<pre><code>// main thread stays responsive
+const w = new Worker('./db-worker.js');
+w.postMessage({ type: 'heavy-aggregate' });
+w.on('message', (rows) =&gt; render(rows));</code></pre>`,
+ to:["napi","db","stmt"]},
+{id:"db",ly:1,name:"Database handle",tag:"opaque sqlite3* \u2014 one per .db file",
+ role:"The opaque sqlite3* pointer returned by sqlite3_open_v2(). Represents one open connection to one .db file. Holds the page cache, prepared-statement list, and locking state for that connection.",
+ iface:"Owned by the JS Database object. When the JS object is garbage collected or you call .close(), sqlite3_close() runs and the underlying file descriptor is closed.",
+ deep:`<p>${T('sqlite3-ptr','sqlite3*')} is an ${T('opaque-pointer','opaque pointer')} \u2014 the C struct it points to is private to the library; you can only manipulate it through the SQLite API. From the outside it is a single 8-byte value identifying one open connection.</p>
+<p>Per connection, this struct privately owns:</p>
+<ul>
+<li>A pointer to the ${T('pager','Pager')}, which owns the in-memory page cache and the ${T('fd','file descriptor')}.</li>
+<li>A linked list of every ${T('sqlite3-stmt-ptr','sqlite3_stmt*')} prepared on this connection \u2014 finalised when the connection closes.</li>
+<li>The current ${T('lock-state','lock state')} (UNLOCKED, SHARED, RESERVED, PENDING, EXCLUSIVE).</li>
+<li>Compile-time configuration: busy-timeout, default ${T('journal-mode','journal_mode')}, registered ${T('user-functions','user functions')} (<code>db.function()</code>), virtual tables, collations.</li>
+</ul>
+<p>When the JS <code>Database</code> object goes out of scope \u2014 or you call <code>db.close()</code> \u2014 the C++ destructor runs <code>sqlite3_close()</code>, which finalises every open statement, releases the lock, flushes the WAL, and closes the underlying ${T('fd','file descriptor')}. Forgetting to close a database <em>does</em> eventually clean up at process exit, but in long-lived processes it leaks ${T('fd','file descriptors')} (every call to <code>new Database()</code> consumes one).</p>
+<p>One practical note: ${T('sqlite3-ptr','sqlite3*')} is not free to share across threads. SQLite's default build mode is <em>serialized</em> (an internal mutex protects every API call), but moving a ${T('sqlite3-ptr','sqlite3*')} to a ${T('worker-threads','worker_thread')} via <code>SharedArrayBuffer</code> is unsupported \u2014 instead, open one Database per worker.</p>`,
+ to:["cpp","pager"]},
+{id:"stmt",ly:1,name:"Statement handle",tag:"compiled SQL \u2014 a tiny VDBE program",
+ role:"An opaque sqlite3_stmt* \u2014 a compiled SQL statement, which is really a small VDBE bytecode program. Lives across calls so you don't recompile on every execution. Prepared statements are the main perf win.",
+ iface:"sqlite3_bind_* writes parameters into its registers; sqlite3_step runs it; sqlite3_reset rewinds; sqlite3_finalize frees it.",
+ deep:`<p>A ${T('sqlite3-stmt-ptr','sqlite3_stmt*')} is, internally, a small ${T('vdbe-program','VDBE program')}: a header, an array of ${T('opcodes','opcodes')}, an array of registers, and a parameter map. <code>db.prepare(sql)</code> returns one; you can keep it for the lifetime of the connection and run it thousands of times.</p>
+<p>The lifecycle:</p>
+<pre><code>// 1. compile once
+const stmt = db.prepare('SELECT name FROM users WHERE id = ?');
+
+// 2. for each call:
+//    bind  \u2014 write '42' into register 1
+//    step  \u2014 run the VDBE program until first row
+//    column\u2014 read 'name' out of the result registers
+//    reset \u2014 rewind program counter, keep bindings
+const row = stmt.get(42);   // wraps bind + step + column + reset
+
+// 3. once, before close:
+//    finalize \u2014 free registers, opcodes, parameter map
+// (better-sqlite3 does this automatically when the JS object is GC'd)</code></pre>
+<p>The reason ${T('prepared-statement','prepared statements')} are dramatically faster than re-executing SQL strings: every call to ${T('prepare','sqlite3_prepare_v2')} runs the full ${T('sql-compiler','SQL compiler')} pipeline (${T('tokenizer','tokenizer')} \u2192 ${T('parser','parser')} \u2192 ${T('codegen','codegen')}) and reads the schema from ${T('sqlite-schema','sqlite_schema')}. Reusing a ${T('sqlite3-stmt-ptr','sqlite3_stmt*')} skips all of it \u2014 you're just running the bytecode.</p>
+<p>If you ever wonder what the program looks like, ${T('explain','EXPLAIN')} prints the VDBE opcodes in order: <code>Init</code>, <code>OpenRead</code>, <code>SeekRowid</code>, <code>Column</code>, <code>ResultRow</code>, <code>Halt</code>. ${T('explain-query-plan','EXPLAIN QUERY PLAN')} gives a higher-level summary (which indexes are used, scan vs seek).</p>`,
+ to:["cpp","vdbe"]}
+];
+
+const _COMPS_2=[
+{id:"sqlc",ly:2,name:"SQL compiler",tag:"tokenizer \u2192 parser \u2192 codegen",
+ role:"Tokenizer (lex) \u2192 Parser (Lemon-generated LALR) \u2192 Code generator. Converts your SQL text into a list of VDBE opcodes. This runs once per prepare(), then is reused for every execution.",
+ iface:"Reads the schema from sqlite_schema to resolve table and column names. Output is a sqlite3_stmt. Run EXPLAIN <sql> in sqlite3 CLI to see the bytecode.",
+ deep:`<p>SQLite's compiler is a textbook three-stage front-end:</p>
+<ol>
+<li><strong>Tokenizer</strong> \u2014 hand-written in C (<code>tokenize.c</code>). Turns the input string <code>SELECT name FROM users WHERE id=?</code> into a stream of tokens: <code>SELECT</code>, <code>ID</code>, <code>FROM</code>, <code>ID</code>, <code>WHERE</code>, <code>ID</code>, <code>EQ</code>, <code>VARIABLE</code>.</li>
+<li><strong>Parser</strong> \u2014 generated by ${T('lemon','Lemon')}, a parser generator written specifically for SQLite (an alternative to <code>yacc</code>/<code>bison</code> with a cleaner re-entrant API). Produces an ${T('ast','AST')} of <code>Select</code>, <code>Expr</code>, <code>SrcList</code> nodes.</li>
+<li><strong>Code generator</strong> \u2014 walks the AST and emits ${T('vdbe','VDBE')} opcodes. Resolves table and column names against the schema cached from ${T('sqlite-schema','sqlite_schema')}. Picks indexes via the ${T('query-planner','query planner')} (NGQP \u2014 Next Generation Query Planner).</li>
+</ol>
+<p>The compiler runs <em>only once</em> per ${T('prepare','sqlite3_prepare_v2')} call. Repeated executions of the same statement re-use the bytecode. This is why preparing a statement once outside a loop and calling it many times inside is the fundamental SQLite performance pattern.</p>
+<p>You can inspect the compiler's output:</p>
+<pre><code>$ sqlite3 app.db
+sqlite&gt; EXPLAIN SELECT name FROM users WHERE id = ?;
+addr  opcode         p1    p2    p3    p4
+----  -------------  ----  ----  ----  ----
+0     Init           0     7     0
+1     OpenRead       0     2     0     1
+2     Variable       1     1     0
+3     SeekRowid      0     6     1
+4     Column         0     1     2     name
+5     ResultRow      2     1     0
+6     Halt           0     0     0
+7     Goto           0     1     0</code></pre>
+<p>Reading top-to-bottom: open the table for reading, fetch the bound parameter into register 1, seek to that rowid, read the name column into register 2, emit the result row, halt.</p>`,
+ to:["vdbe"]},
+{id:"vdbe",ly:2,name:"VDBE",tag:"register-based bytecode interpreter",
+ role:"Virtual Database Engine \u2014 a register-based bytecode interpreter. Every prepared statement is a tiny program with opcodes like OpenRead, Rewind, Column, ResultRow, Next, Halt. The interpreter loop is the hottest CPU code in SQLite.",
+ iface:"Calls into the B-tree to read and write rows. Uses the Pager for pages. The interpreter loop is the hottest CPU code in SQLite.",
+ deep:`<p>${T('vdbe','VDBE')} \u2014 Virtual Database Engine \u2014 is a small ${T('register-machine','register machine')} that runs SQL bytecode. It is the actual <em>execution</em> half of SQLite; everything above (compiler, parser) is just translation, everything below (B-tree, pager) is just storage.</p>
+<p>Each statement is a sequence of fixed-format instructions:</p>
+<pre><code>struct VdbeOp {
+    u8  opcode;     /* OpenRead, Column, ResultRow, etc. */
+    i32 p1, p2, p3; /* register numbers / addresses / counts */
+    char *p4;       /* string operand if needed */
+    u8  p5;         /* small flags */
+};</code></pre>
+<p>The interpreter is a giant <code>switch(op-&gt;opcode)</code> loop in <code>vdbe.c</code>. Some compilers extend GCC's computed-goto to turn it into a ${T('threaded-interpreter','threaded interpreter')} (one indirect jump per opcode instead of two). It is the hottest code in the whole SQLite library \u2014 anywhere from 30%-70% of CPU time on read-heavy workloads.</p>
+<p>Important opcodes you'll see in ${T('explain','EXPLAIN')}:</p>
+<ul>
+<li><code>OpenRead / OpenWrite</code> \u2014 open a cursor on a B-tree (a table or an index).</li>
+<li><code>Rewind / Last</code> \u2014 position the cursor at the first or last row.</li>
+<li><code>Next / Prev</code> \u2014 advance the cursor; jumps to a different address when exhausted.</li>
+<li><code>Column</code> \u2014 read column N from the current row into a register.</li>
+<li><code>SeekRowid / SeekGE</code> \u2014 seek the cursor by primary key.</li>
+<li><code>ResultRow</code> \u2014 emit registers R..R+N as one output row to the caller.</li>
+</ul>
+<p>The control-flow ${T('opcodes','opcodes')} (<code>Goto</code>, <code>If</code>, <code>IfNot</code>) are why SQL \u2014 a declarative language \u2014 ends up running on top of an imperative VM. Every <code>WHERE</code> clause, every <code>JOIN</code>, every subquery, gets lowered into branches and cursor moves.</p>`,
+ to:["stmt","sqlc","btree"]},
+{id:"btree",ly:2,name:"B-tree",tag:"tables & indexes as page-trees",
+ role:"Stores tables and indexes as B-trees of fixed-size pages (default 4096 bytes). Handles inserts, deletes, range scans, key lookup. Each table is one B-tree; each index is another. Without rowid \u2192 uses a clustered B-tree on the key.",
+ iface:"Asks the Pager for page N; modifies it; marks it dirty. Doesn't know about disk \u2014 only pages.",
+ deep:`<p>SQLite stores everything \u2014 tables, indexes, the schema itself \u2014 as ${T('btree','B-trees')} of ${T('page','pages')}. The page size is fixed per database (the default is 4096 bytes; can be set with <code>PRAGMA page_size</code> before the first table is created and is then locked in).</p>
+<p>Two flavours of B-tree exist in the codebase:</p>
+<ul>
+<li><strong>Table B-tree</strong> \u2014 keys are 64-bit integer ${T('rowid','rowids')}. Leaves carry the row data. Used by every <code>CREATE TABLE</code> that is not <code>WITHOUT ROWID</code>.</li>
+<li><strong>Index B-tree</strong> \u2014 keys are the indexed columns; the value is the rowid pointing back into the table B-tree. ${T('without-rowid','WITHOUT ROWID')} tables use a clustered variant where the leaves carry the row data directly.</li>
+</ul>
+<p>Branching factor depends on row size and page size. With 4KB pages, an internal node typically holds 200-1000 child pointers, giving you a tree that's only 3-4 levels deep for billions of rows. Every lookup is therefore O(log N) <em>page reads</em>, where the log base is the branching factor \u2014 usually 1-3 reads in practice.</p>
+<p>The B-tree code talks only to the ${T('pager','Pager')}: <code>btreeGetPage(N)</code> returns a pointer to a 4KB buffer, you mutate it, you mark it dirty, and the Pager handles eventually persisting it. The B-tree has no concept of disk \u2014 only of pages.</p>
+<p>Some practical implications:</p>
+<ul>
+<li>A <code>SELECT * FROM t WHERE id = ?</code> is one ${T('btree','B-tree')} traversal: 3-4 page fetches.</li>
+<li>A range scan with no index becomes a leaf-walk \u2014 sequential reads of every leaf page.</li>
+<li>An <code>INSERT</code> sometimes triggers a page split; that bumps the page count and dirties parents up the tree.</li>
+<li><code>VACUUM</code> rebuilds the entire database, defragmenting B-trees and reclaiming free pages.</li>
+</ul>`,
+ to:["vdbe","pager"]},
+{id:"pager",ly:2,name:"Pager",tag:"page cache + transactions + WAL",
+ role:"Page cache plus transaction manager. Implements rollback journal (default) or WAL mode (PRAGMA journal_mode=WAL). Owns the A, C, I, D of ACID \u2014 atomicity, consistency, isolation, durability all live here.",
+ iface:"Calls VFS methods xRead, xWrite, xSync, xLock, xUnlock. Caches dirty pages in user-space RAM (PRAGMA cache_size).",
+ deep:`<p>The ${T('pager','Pager')} is the most important module in SQLite. It owns ${T('acid','ACID')}: every guarantee about atomic commits, durable writes, and crash recovery lives here.</p>
+<p>Three responsibilities, layered:</p>
+<ol>
+<li><strong>Page cache</strong>. A user-space LRU cache of recently-used pages, sized by ${T('cache-size','PRAGMA cache_size')} (default ~2MB). When ${T('btree','B-tree')} asks for page N, the Pager either returns it from cache or issues an <code>xRead</code> to the ${T('vfs','VFS')}.</li>
+<li><strong>Transaction manager</strong>. Decides when to take ${T('reserved-lock','RESERVED')} / ${T('exclusive-lock','EXCLUSIVE')} ${T('locks','locks')}, when to write to the journal, when to rollback. Implements savepoints, nested transactions.</li>
+<li><strong>Recovery</strong>. On every <code>open()</code>, looks for a leftover ${T('rollback-journal','rollback journal')} or ${T('wal-file','WAL file')} from a crashed process and replays/rolls back as appropriate.</li>
+</ol>
+<p>Two journaling modes:</p>
+<ul>
+<li><strong>${T('rollback-journal','Rollback journal')}</strong> (default). Before modifying a page, copy the original to <code>app.db-journal</code>. On commit: ${T('fsync','fsync')} the journal, write the new pages to the database, ${T('fsync','fsync')} the database, delete the journal. Crash anywhere \u2192 on next open, the journal is replayed in reverse to restore the original pages.</li>
+<li><strong>${T('wal','WAL mode')}</strong> (<code>PRAGMA journal_mode=WAL</code>). New writes go to <code>app.db-wal</code>; the main database file is read-only during normal operation. Readers see a consistent snapshot via <code>app.db-shm</code> (the WAL index, an mmap'd shared file). Writers don't block readers; readers don't block writers. Periodic ${T('checkpoint','checkpoints')} fold WAL pages back into the main file. Almost always faster \u2014 turn it on.</li>
+</ul>
+<p>The Pager is also where ${T('mmap-size','PRAGMA mmap_size')} matters. With ${T('mmap','mmap')} enabled, page reads bypass the user-space cache entirely and the file is mapped into the address space \u2014 page faults bring 4KB pages in lazily from the kernel ${T('page-cache','page cache')}.</p>`,
+ to:["btree","db","vfs"]},
+{id:"vfs",ly:2,name:"VFS",tag:"SQLite's internal OS abstraction",
+ role:"SQLite's internal OS abstraction. Default unix-vfs on Linux/macOS, win32-vfs on Windows. You can register your own (in-memory, encrypted, network-backed) \u2014 this is how :memory: works, and how libSQL adds remote storage.",
+ iface:"Translates xRead/xWrite/xLock/xSync/xFileSize calls into actual pread/pwrite/fcntl/fsync syscalls.",
+ deep:`<p>${T('vfs','VFS')} stands for <em>Virtual File System</em> \u2014 but this is <strong>not</strong> the kernel's VFS (that's ${T('kernel-vfs','one layer down')}). It's a pure-userspace abstraction inside SQLite, defined by a struct of function pointers: <code>sqlite3_vfs</code>.</p>
+<pre><code>struct sqlite3_io_methods {
+    int (*xClose)(sqlite3_file*);
+    int (*xRead)(sqlite3_file*, void*, int iAmt, sqlite3_int64 iOfst);
+    int (*xWrite)(sqlite3_file*, const void*, int iAmt, sqlite3_int64 iOfst);
+    int (*xTruncate)(sqlite3_file*, sqlite3_int64 size);
+    int (*xSync)(sqlite3_file*, int flags);
+    int (*xFileSize)(sqlite3_file*, sqlite3_int64 *pSize);
+    int (*xLock)(sqlite3_file*, int);
+    int (*xUnlock)(sqlite3_file*, int);
+    int (*xCheckReservedLock)(sqlite3_file*, int *pResOut);
+    int (*xFileControl)(sqlite3_file*, int op, void *pArg);
+    /* \u2026memory-mapping, shared-memory for WAL, deviceCharacteristics\u2026 */
+};</code></pre>
+<p>SQLite ships several built-in VFS implementations:</p>
+<ul>
+<li><code>unix</code> \u2014 the default on Linux/macOS/BSD. Calls ${T('pread','pread')}/${T('pwrite','pwrite')}/${T('fcntl','fcntl')}/${T('fsync','fsync')} directly.</li>
+<li><code>win32</code> \u2014 the default on Windows. Calls <code>ReadFile</code>, <code>WriteFile</code>, <code>LockFileEx</code>.</li>
+<li><code>memdb</code> \u2014 backs <code>:memory:</code> databases with <code>malloc</code>'d buffers; no syscalls at all.</li>
+<li><code>unix-excl</code>, <code>unix-dotfile</code>, <code>unix-none</code> \u2014 variants for filesystems with broken locking (some NFS mounts, FAT32).</li>
+</ul>
+<p>You can <strong>register your own</strong> with <code>sqlite3_vfs_register()</code>. This is how ${T('libsql','libSQL')} ships a network-backed SQLite (the VFS reads pages over HTTP), how ${T('sqlite-wasm','sqlite-wasm')} runs in the browser (the VFS uses ${T('opfs','OPFS')}), and how encrypted forks like ${T('sqlcipher','SQLCipher')} layer AES on top of <code>xRead</code>/<code>xWrite</code>.</p>`,
+ to:["pager","sio","ssync","slock","smmap"]}
+];
+
+const _COMPS_3=[
+{id:"sio",ly:3,name:"open / read / write",tag:"the file I/O syscalls",
+ role:"File I/O syscalls. open() returns a file descriptor. pread/pwrite do positional I/O without sharing the file's seek offset \u2014 thread-safe and what SQLite uses on Unix.",
+ iface:"Each call traps from user space into the kernel via the syscall instruction (sysenter on x86, svc on ARM). Returns bytes transferred or -errno.",
+ deep:`<p>The actual ${T('syscall','syscalls')} that move bytes:</p>
+<ul>
+<li><code>${T('open','open(path, flags, mode)')}</code> \u2014 returns a small ${T('fd','file descriptor')} (e.g. <code>7</code>). Flags include <code>O_RDWR</code>, <code>O_CREAT</code>, <code>O_NOFOLLOW</code>. SQLite uses <code>O_NOATIME</code> on Linux to avoid bumping the access timestamp on every read.</li>
+<li><code>${T('pread','pread(fd, buf, n, offset)')}</code> \u2014 read <code>n</code> bytes starting at byte <code>offset</code>. Crucially, ${T('pread','pread')} does <em>not</em> share or modify the file's seek offset, which makes it safe to call concurrently from multiple threads on the same FD.</li>
+<li><code>${T('pwrite','pwrite(fd, buf, n, offset)')}</code> \u2014 write <code>n</code> bytes at <code>offset</code>. Same property as ${T('pread','pread')}.</li>
+<li><code>close(fd)</code> \u2014 release the FD. May fail (returning <code>-EIO</code>) if the kernel had buffered errors from earlier writes that surface only now \u2014 yes, ignoring <code>close()</code>'s return value is a real bug.</li>
+</ul>
+<p>Each call is a ${T('syscall','syscall')} \u2014 a hardware-supported transition from ${T('user-mode','user mode')} (CPU ring 3) into ${T('kernel-mode','kernel mode')} (ring 0). The actual instruction depends on the architecture:</p>
+<ul>
+<li><code>${T('syscall-instr','syscall')}</code> on x86-64 (the modern fast path).</li>
+<li><code>${T('sysenter','sysenter')}</code> on 32-bit x86 (older).</li>
+<li><code>${T('svc','svc #0')}</code> on ARM/AArch64.</li>
+<li><code>int 0x80</code> \u2014 ancient, slow, still works on Linux for backwards compatibility.</li>
+</ul>
+<p>The transition costs ~100-300 cycles on a modern CPU plus whatever the actual kernel work takes. The kernel saves user-space registers, switches the page table protection bits, runs the syscall handler in ${T('kernel-mode','ring 0')}, and on return restores everything. Modern mitigations (${T('meltdown','Meltdown/Spectre')}) added page-table-isolation costs on top.</p>
+<p>Return value convention: a non-negative integer is a result (bytes transferred, FD number); a negative value is the negation of an ${T('errno','errno')} like <code>EINTR</code>, <code>EAGAIN</code>, <code>EBADF</code>, <code>ENOSPC</code>. ${T('libc','libc')} wraps the raw syscall and turns the negative value into a returned <code>-1</code> with <code>errno</code> set globally.</p>`,
+ to:["vfs","fd","kvfs"]},
+{id:"ssync",ly:3,name:"fsync",tag:"the durability syscall",
+ role:"Flushes dirty pages from the kernel page cache to the storage device. Without this, a crash or power loss between the write and the flush silently loses committed data \u2014 which would break the D in ACID.",
+ iface:"Blocks until the device acknowledges durability. On macOS, true durability requires F_FULLFSYNC via fcntl \u2014 plain fsync only flushes to the disk's volatile cache.",
+ deep:`<p>${T('fsync','fsync')} is where ${T('acid','durability')} gets bought. Every successful <code>${T('pwrite','pwrite')}()</code> only puts data into the kernel's ${T('page-cache','page cache')} \u2014 RAM. If power dies between the <code>pwrite</code> and the next ${T('fsync','fsync')}, that data is gone, even though the syscall returned <code>0</code>.</p>
+<p>${T('fsync','fsync(fd)')} blocks until the storage device confirms that all previously-written data <em>and metadata</em> for that file is in non-volatile media. SQLite issues at least one ${T('fsync','fsync')} per <code>COMMIT</code> \u2014 sometimes two, depending on journaling mode and the <code>PRAGMA synchronous</code> setting:</p>
+<ul>
+<li><code>synchronous = OFF</code> \u2014 no fsync. Fast, unsafe. A power loss during commit can corrupt the database.</li>
+<li><code>synchronous = NORMAL</code> \u2014 fsync at critical moments. Default for WAL mode. Crash-safe but a power loss can lose the last transaction.</li>
+<li><code>synchronous = FULL</code> \u2014 fsync everywhere. Default for rollback journal. Maximum safety, slowest.</li>
+<li><code>synchronous = EXTRA</code> \u2014 fsync the directory entry too, not just the file content. Belt-and-braces.</li>
+</ul>
+<p><strong>The macOS gotcha</strong>: Apple's ${T('fsync','fsync')} only flushes to the disk's volatile cache. The disk acknowledges <em>"yes, I have it"</em> while the bytes still sit in DRAM on the SSD itself; pull the plug and they're gone. To get true durability, SQLite calls <code>${T('f-fullfsync','fcntl(fd, F_FULLFSYNC)')}</code>, which forces the SSD's controller to flush its own cache to NAND. ${T('f-fullfsync','F_FULLFSYNC')} is dramatically slower than ${T('fsync','fsync')} \u2014 typically 10\u00d7 \u2014 which is one reason SQLite-on-macOS benchmarks differ so much from SQLite-on-Linux.</p>
+<p>On Linux, ${T('fsync','fsync')} <em>does</em> issue the FUA (Force Unit Access) or barrier commands necessary to flush the device cache. <code>fdatasync</code> is a faster variant that skips metadata fsync; SQLite uses it where safe.</p>`,
+ to:["vfs","fd","pgcache","blkio"]},
+{id:"slock",ly:3,name:"fcntl locks",tag:"POSIX advisory file locking",
+ role:"POSIX advisory file locks (or OFD locks on newer Linux). SQLite uses them to coordinate readers and writers across multiple processes opening the same .db file. Without them, two processes writing concurrently would corrupt the file.",
+ iface:"fcntl(fd, F_SETLK, &flock). Replaced on Windows by LockFileEx. Plain POSIX locks don't survive dup() \u2014 OFD locks fix that.",
+ deep:`<p>Many processes can open the same <code>.db</code> file simultaneously. Without coordination, two of them writing at once would corrupt the B-tree. SQLite's correctness model relies on ${T('posix-locks','POSIX file locks')} \u2014 specifically <code>${T('f-setlk','F_SETLK')}</code> via ${T('fcntl','fcntl')}.</p>
+<pre><code>struct flock fl = {
+    .l_type   = F_WRLCK,    /* or F_RDLCK / F_UNLCK */
+    .l_whence = SEEK_SET,
+    .l_start  = 1073741824, /* PENDING_BYTE */
+    .l_len    = 1
+};
+fcntl(fd, F_SETLK, &fl);    /* try-lock; F_SETLKW would block */</code></pre>
+<p>SQLite uses lock <em>regions</em> \u2014 specific byte ranges in the file that nobody actually reads \u2014 as semaphore-like rendezvous points: PENDING_BYTE, RESERVED_BYTE, SHARED_FIRST, SHARED_SIZE. The lock state machine progresses UNLOCKED \u2192 SHARED \u2192 RESERVED \u2192 PENDING \u2192 EXCLUSIVE during a transaction.</p>
+<p><strong>${T('posix-locks','POSIX locks')} have a famous design defect</strong>: they are tracked per <em>process</em>, not per ${T('fd','file descriptor')}. If you <code>open()</code> the same file twice in one process and <code>close()</code> one of them, <strong>all</strong> locks held by that process on that file are dropped \u2014 even the ones held by the other FD. This bites multi-threaded apps badly.</p>
+<p>Linux added ${T('ofd-locks','OFD (Open File Description) locks')} via <code>F_OFD_SETLK</code> in 3.15 to fix this: locks are tied to the <em>open file description</em>, not the process. SQLite uses OFD locks where available.</p>
+<p>Networked filesystems are a separate minefield. ${T('posix-locks','POSIX locks')} on ${T('nfs','NFS')} go via <code>lockd</code> and have historically been buggy \u2014 running a SQLite database on NFS is officially discouraged. ${T('fuse','FUSE')} mounts often punt on locking entirely. The compile-time option <code>SQLITE_ENABLE_LOCKING_STYLE</code> lets you choose <code>unix-dotfile</code> (lock via a sentinel file) for these cases.</p>
+<p>On Windows, <code>${T('lockfileex','LockFileEx')}</code> replaces ${T('fcntl','fcntl')} entirely. Mandatory rather than advisory: the kernel actually refuses conflicting reads/writes.</p>`,
+ to:["vfs","fd"]},
+{id:"smmap",ly:3,name:"mmap",tag:"memory-mapped file I/O",
+ role:"Maps the .db file's contents directly into the process address space. SQLite supports this for reads via PRAGMA mmap_size=<bytes> \u2014 page faults bring 4KB pages in lazily on first access.",
+ iface:"Avoids the read() syscall on hot pages; the cost moves to page faults. Risk: SIGBUS if the file is truncated under you. Off by default for safety.",
+ deep:`<p>${T('mmap','mmap')} is a different model for reading files: instead of <code>${T('pread','pread')}()</code>-ing bytes into a userspace buffer, you ask the kernel to make the file appear as a region of your process's ${T('virtual-memory','virtual address space')}. Then you simply dereference pointers.</p>
+<pre><code>void *map = mmap(
+    NULL,                /* let kernel pick address */
+    1024 * 1024 * 256,   /* mmap_size = 256 MB */
+    PROT_READ,           /* read-only mapping */
+    MAP_SHARED,
+    fd,
+    0                    /* offset in file */
+);
+char first_byte = ((char*)map)[0];   /* page fault \u2192 kernel reads page from disk */</code></pre>
+<p>The first dereference of a not-yet-resident page triggers a ${T('page-fault','page fault')}: the CPU traps to the kernel, the kernel reads the relevant 4KB ${T('page','page')} from the SSD into the ${T('page-cache','page cache')}, fixes up the process page tables, and resumes. Subsequent accesses to the same page hit RAM directly \u2014 no syscall, no copy.</p>
+<p>SQLite supports this via <code>${T('mmap-size','PRAGMA mmap_size = N')}</code>. When set, the ${T('vfs','VFS')} maps up to <code>N</code> bytes of the database; reads check the mapping first and fall back to ${T('pread','pread')} only past the boundary.</p>
+<p><strong>Why it's off by default</strong>: ${T('mmap','mmap')} trades reliability for speed. With <code>${T('pread','pread')}</code>, a read error gives you an <code>${T('errno','errno')}</code> you can handle. With ${T('mmap','mmap')}, an I/O error during a page fault delivers a <code>SIGBUS</code> signal \u2014 by default, that kills the process. If another process truncates the database file under you, the next dereference into the truncated region is also <code>SIGBUS</code>. Wrapping every database access in a signal handler isn't realistic.</p>
+<p><strong>When to enable it</strong>: large, mostly-read databases on local SSD. Read-heavy benchmarks see real improvements (2-5\u00d7 on cache-cold workloads) because the per-page cost drops from <em>syscall + copy</em> to just <em>page-fault + zero-copy</em>.</p>`,
+ to:["vfs","ram","pgcache"]}
+];
+
+const _COMPS_4=[
+{id:"fd",ly:3,name:"File descriptor",tag:"small int into the kernel file table",
+ role:"A small non-negative integer (e.g. 7) that indexes into your process's file table inside the kernel. Every open .db file gets one. Inherited across fork(); listable via lsof -p $PID or ls /proc/$PID/fd.",
+ iface:"The kernel translates an FD into the actual file object on every syscall entry. Limited per-process by ulimit -n.",
+ deep:`<p>A ${T('fd','file descriptor')} is the most ubiquitous handle type on Unix. It is just a small non-negative <code>int</code> \u2014 typically <code>0</code>, <code>1</code>, <code>2</code> for stdin/stdout/stderr, then <code>3, 4, 5\u2026</code> for everything you ${T('open','open')}.</p>
+<p>Internally, the kernel maintains a per-process <strong>FD table</strong>: an array indexed by FD number, where each entry points to a <em>file description</em> (the kernel's <code>struct file</code>) that holds the seek offset, open flags, and a back-pointer to the inode. Two FDs in the same process can share one description (after <code>${T('dup','dup')}()</code>); two processes can share one description (after <code>${T('fork','fork')}()</code>).</p>
+<p>For SQLite, every open <code>.db</code> consumes 1-3 FDs:</p>
+<ul>
+<li>1 for the main database file.</li>
+<li>1 for the ${T('rollback-journal','rollback journal')} (lazily \u2014 only when a transaction starts).</li>
+<li>2 more in ${T('wal','WAL mode')}: one for <code>app.db-wal</code>, one for <code>app.db-shm</code>.</li>
+</ul>
+<p>You can list them at runtime:</p>
+<pre><code>$ ls -l /proc/$(pgrep -f 'node.*server')/fd
+lr-x------ 1 user user 64 Aug  1 12:00 0 -&gt; /dev/null
+lrwx------ 1 user user 64 Aug  1 12:00 1 -&gt; 'pipe:[1234567]'
+lrwx------ 1 user user 64 Aug  1 12:00 7 -&gt; /home/user/app.db
+lrwx------ 1 user user 64 Aug  1 12:00 8 -&gt; /home/user/app.db-wal
+lrwx------ 1 user user 64 Aug  1 12:00 9 -&gt; /home/user/app.db-shm</code></pre>
+<p>Or <code>lsof -p $PID</code> for the same view.</p>
+<p>The maximum FD count per process is set by <code>ulimit -n</code> (often 1024 by default, 65k on modern systems). Open too many SQLite databases and you'll get <code>EMFILE: too many open files</code>. Servers typically raise this to 65535 or higher.</p>`,
+ to:["sio","slock","ssync","proc","kvfs"]},
+{id:"proc",ly:3,name:"Node process",tag:"single PID, single event loop",
+ role:"A single OS process \u2014 one PID, one address space, one V8 isolate, one event loop. better-sqlite3 calls block this loop, which is fine for fast queries but disastrous for long ones.",
+ iface:"Owns the FD table, the heap, and all child threads. Visible to the kernel scheduler as a single schedulable entity (until you spawn workers).",
+ deep:`<p>To the kernel, your Node app is a single ${T('process','process')} \u2014 one ${T('pid','PID')}, one ${T('virtual-memory','virtual address space')}, one ${T('fd-table','FD table')}, and (in the simplest case) one main thread. <code>node server.js</code> creates this process; <code>fork()</code> from the kernel's perspective doesn't happen unless you use ${T('child-process','child_process')} or ${T('cluster','cluster')}.</p>
+<p>Inside the process:</p>
+<ul>
+<li>A single ${T('v8-isolate','V8 isolate')} \u2014 V8's term for an independent JavaScript universe with its own heap, garbage collector, and global object.</li>
+<li>A single ${T('event-loop','event loop')} (technically: ${T('libuv','libuv')}'s event loop, of which V8 is one of several event sources).</li>
+<li>${T('libuv','libuv')}'s ${T('threadpool','threadpool')} \u2014 typically 4 worker threads \u2014 used by <code>fs</code>, <code>crypto.pbkdf2</code>, DNS lookups, and a few other slow operations. Configurable via <code>UV_THREADPOOL_SIZE</code>.</li>
+<li>Optional ${T('worker-threads','worker_threads')} \u2014 true OS threads, each with its <em>own</em> V8 isolate, used for parallel JS computation.</li>
+</ul>
+<p>The critical fact for ${T('better-sqlite3','better-sqlite3')}: it runs synchronously on the calling thread. If you call <code>stmt.all()</code> on the main thread and it takes 800ms, every HTTP request, every timer, every callback queued in the ${T('event-loop','event loop')} waits 800ms.</p>
+<p>The fix is one of:</p>
+<ol>
+<li>Make the query faster (indexes, prepared statements, ${T('wal','WAL mode')}). Often enough.</li>
+<li>Use a ${T('worker-threads','worker_thread')} \u2014 open the database there, run queries there, post results back. The main loop stays free.</li>
+<li>Use <code>${T('cluster','cluster')}</code> for horizontal scaling \u2014 multiple processes sharing the same listening socket. Each process opens its own database connection.</li>
+</ol>`,
+ to:["fd","thr"]},
+{id:"thr",ly:3,name:"Threads",tag:"libuv pool \u00b7 worker_threads",
+ role:"Node uses libuv's threadpool (default 4) for fs and crypto, and worker_threads for true JS parallelism. SQLite is thread-safe in serialized or multi-thread mode (compile-time flag).",
+ iface:"Each worker_thread should open its own Database \u2014 sharing one sqlite3* across threads is permitted but serializes internally and kills concurrency.",
+ deep:`<p>Node has two distinct thread mechanisms, often confused:</p>
+<ol>
+<li><strong>${T('libuv','libuv')} ${T('threadpool','threadpool')}</strong> \u2014 internal, default 4 OS threads. Used by built-in async APIs (<code>fs.readFile</code>, <code>crypto.pbkdf2</code>, <code>dns.lookup</code>) to run blocking C calls without freezing the event loop. JS code never runs on these threads. Resize with <code>process.env.UV_THREADPOOL_SIZE = '16'</code> <em>before</em> any <code>require</code>.</li>
+<li><strong>${T('worker-threads','worker_threads')}</strong> \u2014 added in Node 10.5 (stable in 12). True OS threads, each running its own ${T('v8-isolate','V8 isolate')}. Real parallel JavaScript. Communicate via <code>postMessage</code> + structured cloning, or share memory via <code>SharedArrayBuffer</code>.</li>
+</ol>
+<p>SQLite itself has three thread-safety modes, picked at compile time:</p>
+<ul>
+<li><strong>Single-thread</strong> (<code>SQLITE_THREADSAFE=0</code>) \u2014 no mutexes anywhere. Fastest, but the same connection cannot cross threads.</li>
+<li><strong>Multi-thread</strong> (<code>SQLITE_THREADSAFE=2</code>) \u2014 different connections can be used concurrently from different threads, but a single connection is single-thread.</li>
+<li><strong>Serialized</strong> (<code>SQLITE_THREADSAFE=1</code>, default) \u2014 every API call takes a per-connection mutex. A single connection is safe to share across threads, but calls are serialised internally \u2014 no real parallelism.</li>
+</ul>
+<p>${T('better-sqlite3','better-sqlite3')} ships with <strong>serialized</strong>. The practical recommendation: <strong>open one Database per ${T('worker-threads','worker_thread')}</strong>. Sharing a single <code>sqlite3*</code> across workers technically works but defeats the point \u2014 every call queues on the connection's mutex.</p>
+<pre><code>// db-worker.js
+const Database = require('better-sqlite3');
+const { parentPort } = require('worker_threads');
+const db = new Database('app.db');         // this worker's own connection
+const stmt = db.prepare('SELECT name FROM users WHERE id = ?');
+
+parentPort.on('message', ({ id }) =&gt; {
+    parentPort.postMessage(stmt.get(id));
+});</code></pre>
+<p>${T('wal','WAL mode')} pairs especially well with workers: many readers can run in parallel against a single writer, and each worker's reads don't block any other worker.</p>`,
+ to:["proc"]},
+{id:"sock",ly:3,name:"Sockets / ports",tag:"networking \u2014 NOT used by SQLite",
+ role:"TCP/UDP endpoints used for network I/O. SQLite is an embedded library, not a server \u2014 it does not use sockets and does not listen on a port. Postgres and MySQL do; SQLite reads the .db file directly.",
+ iface:"Listed here for contrast \u2014 knowing what SQLite skips clarifies why it's so fast for local workloads and why there's no connection pool to manage.",
+ deep:`<p>This box is in the diagram for what it <em>doesn't</em> do.</p>
+<p>${T('postgres','PostgreSQL')}, ${T('mysql','MySQL')}, ${T('redis','Redis')} \u2014 every client-server database \u2014 has the entire networking stack between your application and the actual storage engine. Every query becomes:</p>
+<ol>
+<li>Encode query in the wire protocol (PostgreSQL frontend protocol, MySQL binary protocol, RESP).</li>
+<li>${T('write','write')} bytes to a ${T('tcp-socket','TCP socket')} (or ${T('unix-socket','unix domain socket')} for local connections).</li>
+<li>Wait for the kernel to push them through the ${T('tcp-stack','TCP stack')}, across the wire (or loopback), into the server's receive buffer.</li>
+<li>The server <code>${T('read','read')}</code>s, parses, queues, executes, encodes the response.</li>
+<li>Reverse trip back.</li>
+</ol>
+<p>Even on localhost over a unix socket the round-trip costs ~30-100\u00b5s. Connection pools exist precisely to amortise the cost of <em>opening</em> these sockets, which is even worse.</p>
+<p>SQLite skips all of it. Your process opens the file directly with <code>${T('open','open')}()</code>. ${T('reads','Reads')} are <code>${T('pread','pread')}</code> on an FD \u2014 no protocol, no encoding, no remote process. A point query that's a few microseconds in SQLite would be tens to hundreds of microseconds in any client-server DB just from network framing.</p>
+<p>The trade-off is real: no network = no remote clients, no horizontal scale-out, no connection pooling, and writes from multiple processes coordinate through ${T('fcntl','fcntl')} ${T('locks','locks')} on the file rather than through a single arbiter process. For local apps, the trade is overwhelmingly worth it; for distributed systems, it's why projects like ${T('libsql','libSQL')}, ${T('rqlite','rqlite')}, and ${T('cr-sqlite','cr-sqlite')} exist \u2014 they put a network layer back in front of SQLite when you actually need one.</p>`,
+ to:[]}
+];
+
+const _COMPS_5=[
+{id:"kvfs",ly:4,name:"Kernel VFS",tag:"the kernel's filesystem dispatcher",
+ role:"The kernel's own virtual filesystem. Routes a syscall on FD 7 to whichever filesystem driver owns the mount point that file lives on. Same syscall API works on ext4, APFS, NTFS, tmpfs, NFS, FUSE.",
+ iface:"Dispatches via a function table per filesystem (struct file_operations on Linux). This is the layer that makes everything-is-a-file feel uniform.",
+ deep:`<p>The ${T('kernel-vfs','kernel VFS')} is a different beast from ${T('vfs','SQLite\u2019s VFS')} \u2014 they share a name and a goal (abstract over different file backends) but live in different worlds.</p>
+<p>When you call <code>${T('pread','pread')}(7, buf, 4096, 0)</code>, the kernel does:</p>
+<ol>
+<li>Look up FD <code>7</code> in your process's FD table \u2192 finds a <code>struct file</code>.</li>
+<li>The <code>struct file</code> has a pointer to <code>${T('file-operations','struct file_operations')}</code> \u2014 a table of function pointers (<code>read</code>, <code>write</code>, <code>llseek</code>, <code>mmap</code>, \u2026).</li>
+<li>That table is <em>filled in by whichever filesystem owns the mount</em> \u2014 ${T('ext4','ext4')} sets <code>read = ext4_file_read_iter</code>; ${T('tmpfs','tmpfs')} sets <code>read = generic_file_read_iter</code>; ${T('fuse','FUSE')} sets <code>read = fuse_file_read_iter</code>.</li>
+<li>The kernel calls that function pointer, and the filesystem-specific code runs.</li>
+</ol>
+<p>This is the layer that makes Unix's ${T('everything-is-a-file','everything-is-a-file')} feel uniform. The same <code>${T('pread','pread')}()</code> works whether the FD points to:</p>
+<ul>
+<li>A real file on ${T('ext4','ext4')} or ${T('apfs','APFS')}.</li>
+<li>A pipe (<code>pipe()</code>).</li>
+<li>A socket (with caveats \u2014 <code>recv</code>/<code>send</code> have richer semantics).</li>
+<li>A character device like <code>/dev/null</code> or <code>/dev/urandom</code>.</li>
+<li>A pseudo-file in <code>/proc</code> or <code>/sys</code>.</li>
+<li>A ${T('fuse','FUSE')} userspace filesystem.</li>
+</ul>
+<p>The VFS holds the path lookup cache (the <em>dentry cache</em>), the inode cache, and the mount table. <code>cat /proc/mounts</code> shows you which filesystem driver owns which mount point. SQLite doesn't think about any of this \u2014 it just calls ${T('pread','pread')} and trusts the kernel to dispatch.</p>`,
+ to:["fd","sio","fsdrv"]},
+{id:"fsdrv",ly:4,name:"Filesystem driver",tag:"ext4 \u00b7 APFS \u00b7 NTFS \u00b7 btrfs",
+ role:"ext4 on Linux, APFS on macOS, NTFS on Windows, btrfs/zfs/xfs as alternatives. Translates file offsets to block numbers, manages inodes, handles its own journaling. Each has subtly different fsync semantics.",
+ iface:"ext4 with data=ordered vs data=journal changes durability and performance. SQLite WAL interacts with the fs journal \u2014 both ultimately hit the same SSD.",
+ deep:`<p>The filesystem driver is where <em>byte offsets become block numbers</em>. When SQLite asks for bytes <code>4096..8191</code> of <code>app.db</code>, the filesystem walks the file's metadata (the ${T('inode','inode')}, possibly extents or a B-tree of block pointers) to find the actual physical blocks on the underlying device.</p>
+<p>The major filesystems differ in their guarantees:</p>
+<ul>
+<li><strong>${T('ext4','ext4')}</strong> (default Linux). Three journaling modes via the <code>data=</code> mount option:
+  <ul>
+    <li><code>${T('data-writeback','data=writeback')}</code> \u2014 only metadata journalled. Fastest, weakest crash semantics.</li>
+    <li><code>${T('data-ordered','data=ordered')}</code> \u2014 default. Data written before metadata commit; metadata journalled. Crash leaves the file in a consistent state but may lose recent data.</li>
+    <li><code>${T('data-journal','data=journal')}</code> \u2014 full data + metadata journal. Strongest, slowest.</li>
+  </ul>
+</li>
+<li><strong>${T('apfs','APFS')}</strong> (macOS). Copy-on-write. ${T('fsync','fsync')} flushes only to the disk's volatile cache \u2014 true durability requires ${T('f-fullfsync','F_FULLFSYNC')}.</li>
+<li><strong>${T('ntfs','NTFS')}</strong> (Windows). Metadata journalling. <code>FlushFileBuffers</code> is the equivalent of ${T('fsync','fsync')}.</li>
+<li><strong>${T('btrfs','btrfs')} / ${T('zfs','ZFS')} / ${T('xfs','XFS')}</strong> \u2014 all copy-on-write or journalling. ZFS in particular has very strong fsync semantics and per-block checksums.</li>
+</ul>
+<p>This matters because <strong>every SQLite write goes through two journals</strong>: SQLite's own ${T('wal','WAL')} or ${T('rollback-journal','rollback journal')}, plus the filesystem's metadata journal. They're independent, both ultimately hit the same storage device, and on commit each issues its own ${T('fsync','fsync')}-equivalent to drive its journal entries to durable media.</p>
+<p>One subtle effect: in <code>data=writeback</code> mode on ext4, a freshly-allocated block in <code>app.db</code> can be marked allocated in the metadata journal but never actually filled from your <code>${T('pwrite','pwrite')}</code>. After a crash you can read the block back as garbage from a previous file. SQLite's WAL design works around this \u2014 but it's why the default <code>data=ordered</code> exists.</p>`,
+ to:["kvfs","pgcache","blkio"]},
+{id:"pgcache",ly:4,name:"Page cache",tag:"kernel's RAM cache for disk pages",
+ role:"The kernel caches recently-read disk pages in RAM. A read() may not touch the SSD at all \u2014 it can be served entirely from cache. This sits above SQLite's own page cache, so you have two layers of caching.",
+ iface:"Shared across all processes on the host. fsync drives dirty pages to disk; posix_fadvise(POSIX_FADV_DONTNEED) evicts; echo 3 > /proc/sys/vm/drop_caches force-drops everything.",
+ deep:`<p>The kernel ${T('page-cache','page cache')} is the single most important reason file I/O is fast. It's a ${T('lru','LRU')}-ish cache of file-backed memory: any page that's been read or written recently lives in RAM, indexed by <code>(inode, offset)</code>.</p>
+<p>Practical consequences:</p>
+<ul>
+<li>A second <code>${T('pread','pread')}</code> of the same offset is essentially free \u2014 it never touches the SSD. The bytes are <code>memcpy</code>'d out of RAM directly.</li>
+<li>A <code>${T('pwrite','pwrite')}</code> only marks the page as dirty in the cache. The actual disk write is asynchronous; SQLite triggers it explicitly with ${T('fsync','fsync')}.</li>
+<li>${T('mmap','mmap')} is <em>direct access</em> to the page cache \u2014 no copy. That's why mmap reads beat ${T('pread','pread')} reads on hot data.</li>
+<li>Cache size = whatever RAM the kernel chooses to lend out. Watch <code>cached</code> in <code>free -h</code>; it grows to consume idle memory and shrinks under pressure.</li>
+</ul>
+<p>This sits <em>above</em> SQLite's own user-space page cache (configured by ${T('cache-size','PRAGMA cache_size')}), which means hot data is cached <strong>twice</strong> \u2014 once in SQLite's own buffer, once in the kernel page cache. The kernel cache is shared across processes; SQLite's is per connection. Together they make warm SQLite essentially RAM-fast.</p>
+<p>You can prod it from userspace:</p>
+<ul>
+<li><code>${T('posix-fadvise','posix_fadvise')}(fd, 0, 0, POSIX_FADV_DONTNEED)</code> \u2014 hint the kernel to drop pages from the cache.</li>
+<li><code>${T('posix-fadvise','posix_fadvise')}(fd, 0, 0, POSIX_FADV_WILLNEED)</code> \u2014 hint that you'll read this soon; trigger ${T('readahead','readahead')}.</li>
+<li><code>echo 3 &gt; /proc/sys/vm/${T('drop-caches','drop_caches')}</code> \u2014 root-only, drop every clean page. Useful for benchmarks; never in production.</li>
+<li><code>${T('madvise','madvise')}(MADV_RANDOM)</code> on an mmap region \u2014 disables readahead, useful for random-access workloads like SQLite.</li>
+</ul>`,
+ to:["ssync","smmap","fsdrv","ram","blkio"]},
+{id:"blkio",ly:4,name:"Block I/O",tag:"request scheduler, queue depth, bio",
+ role:"Schedules and merges block requests, applies the I/O scheduler (mq-deadline, kyber, or none for NVMe), submits them to the device driver. This is where bio structs live on Linux.",
+ iface:"iostat and blktrace observe this layer. Queue depth, especially on NVMe, dominates throughput far more than scheduler choice.",
+ deep:`<p>The block I/O layer is where the kernel turns a "read 4KB at offset X" decision into actual hardware work. Each pending I/O is a <code>${T('bio','struct bio')}</code> \u2014 a description of <em>which device, which sector, how many sectors, where in memory</em>.</p>
+<p>Two stages:</p>
+<ol>
+<li><strong>Request queue</strong>. The block layer maintains a per-device queue of pending bios. Adjacent requests get merged (two reads of contiguous sectors become one). This was hugely important on rotating disks where seeks dominated; on NVMe it matters less.</li>
+<li><strong>I/O scheduler</strong>. Decides the order in which queued requests are submitted to the device. On Linux 5.x+ with multi-queue (<code>blk-mq</code>):
+  <ul>
+    <li><code>${T('mq-deadline','mq-deadline')}</code> \u2014 guarantees a deadline per request, prevents starvation. Good default for HDDs.</li>
+    <li><code>${T('kyber','kyber')}</code> \u2014 token-bucket fairness, low latency. Good for SSDs.</li>
+    <li><code>${T('bfq','bfq')}</code> \u2014 budget fair queueing, per-process fairness.</li>
+    <li><code>none</code> \u2014 no scheduler, FIFO. Recommended for fast NVMe where the device itself reorders better than the kernel can.</li>
+  </ul>
+</li>
+</ol>
+<p>For SQLite on a modern NVMe SSD, the scheduler choice is largely irrelevant \u2014 what matters is ${T('queue-depth','queue depth')}. NVMe devices saturate at queue depths of 16-64; ${T('better-sqlite3','better-sqlite3')}'s synchronous design submits one request at a time per connection, so queue depth from a single thread is exactly 1. Throughput-bound workloads need parallelism (${T('worker-threads','worker_threads')}, multiple connections) to fill the queue.</p>
+<p>Observability tools sit at this layer:</p>
+<ul>
+<li><code>${T('iostat','iostat -x 1')}</code> \u2014 average queue depth, IOPS, throughput, <code>%util</code> per device.</li>
+<li><code>${T('blktrace','blktrace')}</code> / <code>blkparse</code> \u2014 every individual bio: queue, merge, dispatch, complete.</li>
+<li><code>biolatency</code> (BPF) \u2014 histogram of per-request latency.</li>
+<li><code>fio</code> \u2014 synthetic benchmark, the canonical tool for figuring out what your storage can actually do.</li>
+</ul>`,
+ to:["ssync","fsdrv","pgcache","nvme"]},
+{id:"nvme",ly:4,name:"NVMe driver",tag:"NVMe protocol over PCIe",
+ role:"Speaks the NVMe protocol over PCIe. Submits commands via submission queues, reaps completions from completion queues, handles MSI-X interrupts. Replaces the older AHCI/SATA driver path.",
+ iface:"Modern NVMe supports up to 64K queues \u00d7 64K depth \u2014 typical SQLite workloads use a single-digit fraction of that.",
+ deep:`<p>${T('nvme','NVMe')} (Non-Volatile Memory Express) is the protocol modern SSDs speak \u2014 designed from scratch for flash and the kind of parallelism SSDs offer. It replaced the <code>${T('ahci','AHCI')}</code>/<code>${T('sata','SATA')}</code> stack that came from the spinning-disk era.</p>
+<p>The protocol's design point: SSDs are massively parallel internally \u2014 dozens of NAND chips, each capable of independent operation. NVMe exposes this with up to <strong>65,535 submission queues \u00d7 65,535 entries per queue</strong>. Compare to AHCI's single 32-deep queue.</p>
+<p>How a request flows:</p>
+<ol>
+<li>Block layer hands the driver a <code>${T('bio','bio')}</code>.</li>
+<li>Driver builds an NVMe command (read sector range, write sector range, flush, \u2026) and writes it to a submission queue in shared DMA-mapped memory.</li>
+<li>Driver writes the queue's tail doorbell register (a single PCIe MMIO write) to notify the device.</li>
+<li>SSD controller picks up the command, performs ${T('dma','DMA')} directly to/from your buffer in RAM, posts a completion entry to the completion queue.</li>
+<li>SSD raises an ${T('msi-x','MSI-X interrupt')}; the kernel ISR (or a poll loop, in <code>${T('io-uring','io_uring')}</code> with polling) reaps completions and signals the bio.</li>
+</ol>
+<p>The result: <strong>tens of microseconds of latency per request</strong> versus tens of milliseconds for HDDs \u2014 a 1000\u00d7 speedup. SQLite workloads see this most acutely on commit (every <code>fsync</code> blocks until the SSD acks durability) and on cache-cold reads.</p>
+<p>One under-used capability: NVMe supports <strong>per-CPU queue pairs</strong>. Each CPU has its own submission and completion queue, so there's no cross-core lock contention even at millions of IOPS. SQLite under ${T('better-sqlite3','better-sqlite3')} doesn't exploit this beyond what the kernel does for it \u2014 but parallel readers across ${T('worker-threads','worker_threads')} get separate queue pairs for free.</p>
+<p>Userspace can also <em>bypass</em> the kernel entirely: ${T('spdk','SPDK')} (Storage Performance Development Kit) gives you raw NVMe queues from a userspace process. SQLite isn't built for this \u2014 but it's where databases like ${T('rocksdb','RocksDB')} go for ultra-low-latency setups.</p>`,
+ to:["blkio","ssd"]}
+];
+
+const _COMPS_6=[
+{id:"cpu",ly:5,name:"CPU",tag:"executes the entire stack above",
+ role:"Executes everything above \u2014 V8 JIT-compiled JS, the C++ wrapper, the VDBE interpreter loop, the kernel itself. L1/L2/L3 caches matter for the hot working set; a cache miss to DRAM costs ~80ns vs ~1ns for L1.",
+ iface:"Issues memory loads/stores to RAM and PCIe ops to the SSD. SQLite is mostly CPU-bound for in-memory or warm-cache workloads \u2014 the bottleneck is the VDBE loop, not the disk.",
+ deep:`<p>Everything above runs on the CPU \u2014 your TS code (after V8 ${T('jit','JIT')}-compiles it), the ${T('cpp-wrapper','C++ wrapper')}, the ${T('vdbe','VDBE')} interpreter loop, the kernel's ${T('syscall','syscall')} handlers, even the filesystem driver. The SSD only enters the picture on cold reads or commit ${T('fsync','fsync')}s.</p>
+<p>The cache hierarchy dominates real-world performance:</p>
+<ul>
+<li><strong>${T('l1-cache','L1')}</strong> \u2014 32-64 KB per core, ~4 cycles (~1 ns).</li>
+<li><strong>L2</strong> \u2014 256 KB - 2 MB per core, ~10-15 cycles (~3-5 ns).</li>
+<li><strong>L3 / LLC</strong> \u2014 8-256 MB shared, ~40 cycles (~12-20 ns).</li>
+<li><strong>${T('dram','DRAM')}</strong> \u2014 ~80-200 cycles (~25-80 ns) on a hit.</li>
+<li><strong>${T('ssd','NVMe SSD')}</strong> \u2014 ~20-100 \u00b5s. <em>20,000-100,000\u00d7 slower than L1.</em></li>
+</ul>
+<p>This is why SQLite is often <em>CPU-bound</em>, not disk-bound, once the working set fits in the page cache. The VDBE interpreter loop, the ${T('btree','B-tree')} traversal, the bind/column type-checking \u2014 all of it runs hot in L1/L2 once it's been hit a few times. Profiling SQLite on an in-memory workload typically shows the top hotspots as <code>sqlite3VdbeExec</code> and a handful of opcode handlers.</p>
+<p>Consequences for tuning:</p>
+<ul>
+<li>${T('prepared-statement','Prepared statements')} stay hot in icache. Re-preparing on every call cold-launches the compiler every time.</li>
+<li>A 10-byte row keeps more rows per cache line than a 200-byte row \u2014 schema design touches L1 hit rate.</li>
+<li>${T('wal','WAL mode')} reduces ${T('fsync','fsync')} pressure, which means fewer pipeline stalls waiting on the SSD.</li>
+<li>Profiling tools like <code>perf record -g</code> or <code>flamegraph</code> show the actual hot opcodes \u2014 useful when you have a query that's mysteriously slow on warm cache.</li>
+</ul>`,
+ to:["ram"]},
+{id:"ram",ly:5,name:"RAM",tag:"kernel cache + user heap + V8 heap",
+ role:"Holds the kernel page cache, SQLite's user-space page cache, the V8 heap, your application data, and the stack. Total SQLite footprint = PRAGMA cache_size \u00d7 page_size + mmap region.",
+ iface:"DRAM modules over the memory bus. ECC matters for production. Latency ~80ns vs SSD's ~20\u00b5s \u2014 RAM is roughly 250\u00d7 faster than even a fast SSD.",
+ deep:`<p>${T('ram','RAM')} \u2014 physical ${T('dram','DRAM')} on the memory bus \u2014 is where everything that's "in memory" actually lives. For a Node + SQLite process, that includes:</p>
+<ul>
+<li>The ${T('v8-isolate','V8 heap')} \u2014 your JS objects, strings, buffers, the ${T('event-loop','event loop')} state.</li>
+<li>${T('better-sqlite3','better-sqlite3')}'s C++ structs \u2014 wrappers, the ${T('sqlite3-ptr','sqlite3*')} struct itself.</li>
+<li>SQLite's user-space ${T('page-cache','page cache')} \u2014 sized by <code>${T('cache-size','PRAGMA cache_size')}</code>, holds recently-accessed database pages.</li>
+<li>The ${T('mmap','mmap')} region (if enabled) \u2014 direct view into the kernel page cache.</li>
+<li>The kernel's ${T('page-cache','page cache')} itself, separately accounted in the kernel's address space.</li>
+<li>Stacks \u2014 main thread, ${T('libuv','libuv')} pool, every ${T('worker-threads','worker_thread')}.</li>
+</ul>
+<p>Approximate per-connection SQLite memory footprint:</p>
+<pre><code>SQLite cache    = PRAGMA cache_size \u00d7 PRAGMA page_size
+                \u2248 2000           \u00d7 4096           = 8 MB (default)
+
+mmap region     = PRAGMA mmap_size
+                \u2248 0 (off by default)
+
+WAL bookkeeping = ~few hundred KB (the .db-shm region)
+
+Per-statement   = ~few KB (registers + opcodes)</code></pre>
+<p><strong>${T('ecc','ECC RAM')}</strong> matters for production. A single bit-flip in a page being written to disk corrupts that page on the SSD. Bit-flips happen \u2014 cosmic rays, marginal voltages, manufacturing defects. ECC catches single-bit errors and detects most double-bit errors. Cloud VMs (AWS EC2, GCP, Azure) all use ECC; consumer desktops typically don't.</p>
+<p>Latency: a load from DRAM is ~25-80 ns. Compared to L1's ~1 ns and SSD's ~20 \u00b5s, RAM sits 250-1000\u00d7 faster than the SSD and 25-80\u00d7 slower than L1. That gap is why SQLite's user-space cache pays off \u2014 it keeps hot pages in DRAM rather than re-fetching them from the kernel cache (still fast, but with syscall overhead) or worse, the SSD.</p>`,
+ to:["cpu","smmap","pgcache","ssd"]},
+{id:"ssd",ly:5,name:"SSD",tag:"NAND flash \u00b7 the persistent endpoint",
+ role:"Persistent storage. NAND flash with a controller doing wear-leveling and garbage collection. Writes happen at the page level (4-16KB), erases at the block level (megabytes).",
+ iface:"Speaks NVMe over PCIe. Latency ~20\u00b5s vs HDD's ~10ms \u2014 SQLite on SSD is dramatically faster than on spinning rust, especially for fsync-heavy workloads like every COMMIT.",
+ deep:`<p>${T('ssd','SSDs')} are the persistent endpoint of the entire stack \u2014 and they have surprising internal structure that affects how SQLite behaves.</p>
+<p>${T('nand','NAND flash')} has three layers of physical hierarchy:</p>
+<ul>
+<li><strong>Page</strong> \u2014 4-16 KB. Smallest unit you can <em>write</em>. Modern SSDs use 16 KB pages internally.</li>
+<li><strong>Block</strong> \u2014 typically 256 pages, so 4 MB. Smallest unit you can <em>erase</em>. NAND can only flip bits in one direction; to rewrite a page you must erase its whole block first.</li>
+<li><strong>Plane / die</strong> \u2014 many blocks, operated in parallel. This is where SSD parallelism comes from.</li>
+</ul>
+<p>This write-page / erase-block asymmetry is the source of all SSD complexity. The controller solves it with the <strong>${T('ftl','Flash Translation Layer')}</strong> \u2014 a translation table from logical block addresses (what the OS sees) to physical NAND locations. Plus background processes:</p>
+<ul>
+<li><strong>${T('wear-leveling','Wear leveling')}</strong> \u2014 distributing writes across blocks since each NAND block has limited erase cycles (TLC: ~3000, QLC: ~1000).</li>
+<li><strong>${T('garbage-collection','Garbage collection')}</strong> \u2014 when blocks contain a mix of valid and invalid pages, copy out the valid ones, erase the block, return it to the free pool.</li>
+<li><strong>${T('over-provisioning','Over-provisioning')}</strong> \u2014 the SSD reserves some capacity (7-30%) so GC always has free blocks to work with.</li>
+</ul>
+<p>Consequences for SQLite:</p>
+<ul>
+<li><strong>Write amplification</strong>. A single 4 KB SQLite page write doesn't directly correspond to a single NAND write \u2014 GC may rewrite that page many times in its lifetime. Heavy ${T('wal','WAL')} workloads can have WAF (write amplification factor) of 2-10\u00d7.</li>
+<li><strong>Latency variance</strong>. A read is fast (~50\u00b5s); a write that triggers GC can stall for milliseconds. Tail latency on a SQLite ${T('fsync','fsync')} is dominated by whether the device happened to be GC'ing.</li>
+<li><strong>Power-loss protection</strong>. Enterprise SSDs have capacitors that flush the write cache on power loss. Consumer SSDs don't \u2014 which is why ${T('f-fullfsync','F_FULLFSYNC')} on macOS exists.</li>
+<li><strong>${T('trim','TRIM')}</strong> \u2014 when you delete a SQLite database, the filesystem tells the SSD which logical blocks are no longer in use. The SSD can skip them in GC. <code>fstrim</code> runs this manually.</li>
+</ul>
+<p>And as the punchline of the whole stack: a SQLite ${T('commit','COMMIT')} eventually issues an NVMe FLUSH command that forces these capacitors (or controller cache) to push every dirty page to NAND before the SSD acknowledges. <em>That</em> is where the bytes finally rest.</p>`,
+ to:["nvme","ram"]}
+];
+
+
+COMPONENTS.push(..._COMPS_1, ..._COMPS_2, ..._COMPS_3, ..._COMPS_4, ..._COMPS_5, ..._COMPS_6);
+
+const _GLOSS_1={
+"js":{title:"JavaScript",body:"Dynamic, prototype-based programming language. Standardised as ECMAScript. In Node.js it runs inside <code>V8</code>, Google's open-source JS engine, which JIT-compiles hot functions to native machine code."},
+"v8":{title:"V8 Engine",body:"Google's JavaScript engine, written in C++. Powers Chrome and Node.js. Includes Ignition (a bytecode interpreter), Sparkplug (a baseline JIT), and TurboFan (an optimising JIT). Manages its own garbage-collected heap separate from the OS heap."},
+"v8-isolate":{title:"V8 isolate",body:"An independent instance of the V8 engine \u2014 separate heap, separate GC, separate global object. A Node process has one main isolate; each <code>worker_thread</code> creates its own. Isolates can't directly share JS objects."},
+"js-object":{title:"JS object",body:"A heap-allocated value in V8. Internally a hidden-class + property array. The <code>db</code> and <code>stmt</code> objects you hold are JS objects that wrap underlying C++ resources via N-API."},
+"jit":{title:"JIT \u2014 Just-In-Time compilation",body:"Compilation of code at runtime instead of ahead of time. V8 starts interpreting bytecode (Ignition) and promotes hot functions to optimised machine code (TurboFan). Can de-optimise back if assumptions break."},
+"napi":{title:"N-API (now Node-API)",body:"Stable C API for writing native Node.js modules. Replaced the old V8-coupled approach where every Node major version broke binary compatibility. ABI-stable across Node versions: a module compiled against Node 18 keeps working on Node 22."},
+"napi-call":{title:"N-API call",body:"An invocation that crosses from JS into compiled C/C++ code via the Node-API. Marshals arguments, runs the native function, marshals the return value back into V8 types."},
+"abi":{title:"ABI",body:"Application Binary Interface. The contract between compiled binaries \u2014 calling conventions, struct layouts, name mangling. A stable ABI means you can mix binaries compiled at different times. N-API is an ABI-stable layer; raw V8 is not."},
+"nan":{title:"Nan",body:"Native Abstractions for Node.js \u2014 the V8-coupled compatibility shim that predates N-API. Required recompilation on every Node major version. Mostly retired now in favour of N-API."},
+"objectwrap":{title:"ObjectWrap",body:"A Node-API helper class for wrapping C++ objects so they can be exposed to JavaScript. The C++ object's lifetime is tied to the JS object's GC. <code>better-sqlite3</code>'s <code>DatabaseImpl</code> and <code>StatementImpl</code> are <code>ObjectWrap</code> subclasses."},
+"better-sqlite3":{title:"better-sqlite3",body:"A Node.js native module that wraps SQLite. Synchronous API (no callbacks), prepared statements as first-class objects, much faster than <code>node-sqlite3</code> for typical local workloads. Maintained by JoshuaWise / WiseLibs."},
+"node-sqlite3":{title:"node-sqlite3",body:"An older async Node binding for SQLite. Dispatches every query to libuv's threadpool and returns a callback/promise. Slower per-query than <code>better-sqlite3</code> for local SQLite due to dispatch overhead."},
+"libuv":{title:"libuv",body:"A multi-platform C library that provides Node.js's event loop, async I/O, and threadpool. Originally written for Node, now used by other projects. The platform abstraction Node sits on top of."},
+"threadpool":{title:"libuv threadpool",body:"A pool of (default 4) OS threads inside libuv used to run blocking C operations off the main thread \u2014 <code>fs</code>, <code>crypto.pbkdf2</code>, <code>dns.lookup</code>. Resize via <code>UV_THREADPOOL_SIZE</code> env var, before any require()."},
+"event-loop":{title:"Event loop",body:"Node's central scheduler. A while-true loop that polls libuv for ready I/O, runs callbacks, advances timers, drains microtasks (promises, queueMicrotask). Single-threaded. Synchronous code blocks it."},
+"worker-threads":{title:"worker_threads",body:"Node's true-parallelism mechanism. Each worker is an OS thread with its own V8 isolate, event loop, and module graph. Stable since Node 12. Communicate via <code>postMessage</code> + structured cloning, or share <code>SharedArrayBuffer</code> for raw memory."},
+"child-process":{title:"child_process",body:"Node module for spawning separate OS processes. Heavier than worker_threads (full Node startup, no shared memory) but full isolation. Used for shelling out and for the <code>cluster</code> module."},
+"cluster":{title:"cluster module",body:"Node API for spawning N worker processes that share a listening TCP socket \u2014 the kernel load-balances accepts across them. Common pattern for using all CPU cores in a single Node service."},
+"cpp-wrapper":{title:"C++ wrapper (better-sqlite3)",body:"The compiled native part of better-sqlite3 \u2014 the <code>better_sqlite3.node</code> shared library. Implements the <code>DatabaseImpl</code>, <code>StatementImpl</code>, and <code>Iterator</code> ObjectWrap classes."},
+"sqlite3-ptr":{title:"sqlite3 *",body:"An opaque C pointer to a struct private to the SQLite library. Returned by <code>sqlite3_open()</code>. Represents one open connection to one .db file. Holds the page cache, prepared statement list, lock state, and per-connection configuration."},
+"sqlite3-stmt-ptr":{title:"sqlite3_stmt *",body:"An opaque C pointer to a compiled SQL statement \u2014 internally a small VDBE bytecode program plus its registers and parameter map. Created by <code>sqlite3_prepare_v2</code>, run with <code>sqlite3_step</code>, freed with <code>sqlite3_finalize</code>."},
+"opaque-pointer":{title:"Opaque pointer",body:"A pointer whose pointed-to type is a forward-declared struct \u2014 the caller can't see its fields. Used for ABI stability: the library can change the struct's layout without breaking callers, since callers only ever pass the pointer back to library functions."},
+"prepared-statement":{title:"Prepared statement",body:"A SQL statement that has been compiled to bytecode once and can be executed many times with different parameter values. Skips the tokenize/parse/codegen overhead per call. The dominant SQLite performance pattern."},
+"vdbe":{title:"VDBE \u2014 Virtual Database Engine",body:"A register-based bytecode VM internal to SQLite. Every prepared statement is a small VDBE program. The interpreter loop is the hottest CPU code in SQLite. <code>EXPLAIN</code> shows you the VDBE opcodes for a query."},
+"vdbe-program":{title:"VDBE program",body:"An array of opcodes plus a register file. Compiled from a SQL statement. Runs deterministically \u2014 each opcode reads/writes specific registers and may jump to another opcode by address."},
+"register-machine":{title:"Register machine",body:"A virtual machine architecture where opcodes operate on numbered registers (vs a stack machine where they operate on a stack). Closer to real CPUs, easier to compile to. SQLite's VDBE is register-based; the JVM is stack-based."},
+"opcodes":{title:"Opcodes",body:"Single-byte (or single-word) instruction codes interpreted by a VM. SQLite's VDBE has ~150 opcodes \u2014 <code>OpenRead</code>, <code>Column</code>, <code>SeekRowid</code>, <code>ResultRow</code>, <code>Goto</code>, <code>Halt</code>, etc."},
+"threaded-interpreter":{title:"Threaded interpreter",body:"An interpreter optimisation: instead of one giant <code>switch</code> with a back-edge after each opcode, each opcode handler ends with a computed-goto to the next handler. Reduces branch mispredictions. GCC supports it via labels-as-values."},
+"btree":{title:"B-tree",body:"A self-balancing tree with high branching factor \u2014 internal nodes have hundreds of children \u2014 making it ideal for disk-backed storage where each level costs a page read. SQLite stores every table and every index as a B-tree of fixed-size pages."},
+"page":{title:"Page (database)",body:"A fixed-size block of the database file (default 4096 bytes; settable via <code>PRAGMA page_size</code> before any tables exist). The unit of caching, locking, and journalling. Every B-tree node lives in exactly one page."},
+"rowid":{title:"rowid",body:"A 64-bit integer that uniquely identifies a row in a SQLite table. By default the rowid is the primary key (in the table B-tree). Tables declared <code>WITHOUT ROWID</code> use a clustered B-tree on the actual primary key instead."},
+"without-rowid":{title:"WITHOUT ROWID",body:"A table option that uses a clustered B-tree on the primary key rather than a rowid B-tree. The primary key columns become the table's actual storage. More compact for small rows or wide composite keys."},
+"sql-compiler":{title:"SQL compiler (SQLite)",body:"Three stages: <code>tokenize.c</code> (lexer, hand-written), the Lemon-generated parser, and <code>vdbeaux.c</code> + <code>build.c</code> (codegen \u2192 VDBE bytecode). Runs once per <code>sqlite3_prepare_v2</code>."},
+"tokenizer":{title:"Tokenizer",body:"Lexer. Converts SQL source text into a stream of tokens (keywords, identifiers, literals, operators). SQLite's is hand-written in C in <code>tokenize.c</code>."},
+"parser":{title:"Parser",body:"Reads a token stream and builds an AST. SQLite uses a parser generated by Lemon from a grammar in <code>parse.y</code>."},
+"lemon":{title:"Lemon parser generator",body:"A parser generator written by D. Richard Hipp specifically for SQLite. Generates LALR(1) parsers. Reentrant by design (yacc historically wasn't), small footprint, public domain."},
+"ast":{title:"AST",body:"Abstract syntax tree. The structured representation of a parsed program. Walked by codegen to emit instructions."},
+"codegen":{title:"Codegen",body:"Code generation. Walks the AST and emits VDBE opcodes. Resolves table/column names against the schema, picks indexes via the query planner, decides join order."},
+"query-planner":{title:"Query planner",body:"The component that decides how to execute a query: which indexes to use, which join order, whether to scan or seek. SQLite's is called NGQP (Next Generation Query Planner). <code>EXPLAIN QUERY PLAN</code> shows its decisions."},
+"explain":{title:"EXPLAIN",body:"SQL command that prints the VDBE bytecode for a statement instead of running it. Pair with <code>EXPLAIN QUERY PLAN</code> for a higher-level picture (which indexes, scan vs seek)."},
+"explain-query-plan":{title:"EXPLAIN QUERY PLAN",body:"Higher-level analysis of a query: which indexes are used, table scans, join order. Doesn't show the VDBE \u2014 for that, use plain <code>EXPLAIN</code>."},
+"sqlite-schema":{title:"sqlite_schema",body:"The system catalog. A regular SQLite table named <code>sqlite_schema</code> (or <code>sqlite_master</code> in older versions) that holds the SQL definitions of every table, index, view, and trigger. Loaded into memory on connection open."},
+"prepare":{title:"sqlite3_prepare_v2",body:"Compiles a SQL string into a <code>sqlite3_stmt*</code>. Runs the tokenizer, parser, and codegen. Returns a reusable handle. The <code>_v2</code> suffix means it returns extended error codes."},
+"step":{title:"sqlite3_step",body:"Runs a prepared statement until it produces a row, finishes, or errors. Returns <code>SQLITE_ROW</code>, <code>SQLITE_DONE</code>, <code>SQLITE_BUSY</code>, etc. Called once for INSERT/UPDATE/DELETE; in a loop for SELECT."},
+"finalize":{title:"sqlite3_finalize",body:"Frees a prepared statement. Releases its registers, opcodes, and parameter map. Statements should be finalised before closing the connection (better-sqlite3 handles this automatically when the JS object is GC'd)."},
+"bind":{title:"sqlite3_bind_*",body:"Family of functions (<code>_int</code>, <code>_int64</code>, <code>_text</code>, <code>_blob</code>, <code>_null</code>, \u2026) that write values into a prepared statement's parameter slots. Replaces the <code>?</code> placeholders or <code>:name</code> named parameters."},
+"user-functions":{title:"User-defined functions",body:"C or JS callbacks that you register with the connection (via <code>db.function()</code> in better-sqlite3) and then invoke from SQL. Useful for custom hashing, math, JSON helpers."},
+"pager":{title:"Pager",body:"SQLite's transaction manager and page cache. Owns ACID. Implements rollback journal or WAL. Calls VFS methods to read/write/lock pages."},
+"acid":{title:"ACID",body:"Atomicity, Consistency, Isolation, Durability \u2014 the four properties of a robust transaction. SQLite's Pager + journal/WAL implements all four. The 'D' is bought by fsync."},
+"lock-state":{title:"SQLite lock states",body:"Five states a connection can be in for a given database: UNLOCKED, SHARED (multiple readers), RESERVED (one writer pending), PENDING (writer waiting for readers to drain), EXCLUSIVE (writer active). Implemented via fcntl byte-range locks."},
+"reserved-lock":{title:"RESERVED lock",body:"A writer's intent-to-write lock. Other readers can still proceed; other writers cannot. Held until the writer is ready to actually modify pages, when it upgrades to PENDING then EXCLUSIVE."},
+"exclusive-lock":{title:"EXCLUSIVE lock",body:"The strongest SQLite lock. No other reader or writer can hold any lock. Required to actually write pages back to the database file. Held briefly during commit."},
+"locks":{title:"File locks (SQLite usage)",body:"SQLite coordinates concurrent access through fcntl byte-range locks on specific 'rendezvous' bytes in the file (PENDING_BYTE, RESERVED_BYTE, etc.). The bytes themselves are never read \u2014 they're just coordination points."},
+"rollback-journal":{title:"Rollback journal",body:"SQLite's default journaling mode. Before writing a page, copy the original to <code>app.db-journal</code>. On commit: fsync journal, write new pages, fsync database, delete journal. On crash: replay the journal in reverse to restore."},
+"wal":{title:"WAL \u2014 Write-Ahead Log",body:"Alternative journaling mode (<code>PRAGMA journal_mode=WAL</code>). Writes go to <code>app.db-wal</code>; readers see consistent snapshots via <code>app.db-shm</code> (shared-memory index). Readers don't block writers; writers don't block readers. Almost always faster \u2014 turn it on."},
+"wal-file":{title:".db-wal file",body:"The append-only log for WAL-mode SQLite. New pages are written here first; periodic checkpoints fold them back into the main database file."},
+"checkpoint":{title:"Checkpoint",body:"The operation that copies pages from the WAL back into the main database file. Happens automatically when the WAL exceeds the threshold (~1000 pages by default), or manually via <code>PRAGMA wal_checkpoint</code>."},
+"cache-size":{title:"PRAGMA cache_size",body:"Number of pages SQLite holds in its user-space cache per connection. Default ~2000 (8 MB at 4KB pages). Bigger cache = fewer reads of the kernel page cache. Set negative to express in KB instead of pages."},
+"mmap-size":{title:"PRAGMA mmap_size",body:"Bytes of the database file to mmap. When > 0, page reads check the mapping first and fall back to pread past the boundary. Trades reliability (SIGBUS on truncate) for speed (no syscall on cache hit)."},
+"journal-mode":{title:"PRAGMA journal_mode",body:"Controls how SQLite journals writes: <code>DELETE</code> (default rollback), <code>WAL</code>, <code>TRUNCATE</code>, <code>PERSIST</code>, <code>MEMORY</code>, <code>OFF</code>. WAL is the recommended default for most apps."},
+"vfs":{title:"SQLite VFS",body:"SQLite's internal OS abstraction. A struct of function pointers (<code>xRead</code>, <code>xWrite</code>, <code>xLock</code>, <code>xSync</code>) that wrap the actual syscalls. Pluggable \u2014 register custom ones for in-memory, encrypted, or network-backed databases."},
+"libsql":{title:"libSQL",body:"A fork of SQLite by Turso. Adds a remote-storage VFS so the database can live on a server while the SQLite engine runs in the client. WAL replication, primary/replica setups."},
+"sqlite-wasm":{title:"sqlite-wasm",body:"Official WebAssembly build of SQLite. Runs in the browser. Uses an OPFS-backed VFS for persistent storage in a sandboxed origin-private filesystem."},
+"opfs":{title:"OPFS",body:"Origin Private File System \u2014 a browser API that gives a web origin a private, persistent filesystem. SQLite-WASM uses it to back databases that survive page reload."},
+"sqlcipher":{title:"SQLCipher",body:"A SQLite fork that adds AES encryption at the page level via a custom VFS. Pages are encrypted on the way to disk and decrypted on read, transparently to SQL."},
+"rqlite":{title:"rqlite",body:"Distributed relational database built on top of SQLite. Each node runs SQLite; a Raft consensus log replicates writes across nodes."},
+"cr-sqlite":{title:"cr-sqlite",body:"SQLite extension that adds CRDT semantics \u2014 conflict-free merging of writes from multiple clients. Used for local-first sync."}
+};
+
+const _GLOSS_2={
+"syscall":{title:"syscall",body:"A request from a userspace process to the kernel. Implemented as a hardware-supported transition: the CPU saves user state, switches to ring 0, runs the kernel handler, restores user state on return. Costs ~100-300 cycles plus the work itself."},
+"syscall-instr":{title:"syscall instruction",body:"x86-64 instruction that traps into the kernel. Replaces the older <code>int 0x80</code> for performance. The kernel's entry point (<code>entry_SYSCALL_64</code>) reads the syscall number from <code>rax</code>, args from registers."},
+"sysenter":{title:"sysenter",body:"Older 32-bit x86 fast-syscall instruction. Predates <code>syscall</code>. Still works on x86-32 Linux for backwards compat."},
+"svc":{title:"svc",body:"ARM/AArch64's supervisor-call instruction. The equivalent of x86's <code>syscall</code> \u2014 traps into EL1 (kernel) from EL0 (userspace)."},
+"user-mode":{title:"User mode",body:"x86 ring 3 (or AArch64 EL0). Restricted CPU privilege: can't access kernel memory, can't issue I/O port instructions, can't disable interrupts. Userspace processes always run in user mode."},
+"kernel-mode":{title:"Kernel mode",body:"x86 ring 0 (or AArch64 EL1). Full CPU privilege: any memory, any instruction. Only the kernel runs in kernel mode. The transition between user and kernel mode is the syscall."},
+"meltdown":{title:"Meltdown / Spectre",body:"Speculative-execution side-channel attacks (2018). Exploited the CPU's speculative reads across privilege boundaries to leak kernel memory. Mitigations (KPTI, retpolines) added measurable cost to every syscall."},
+"errno":{title:"errno",body:"A thread-local integer set by libc when a syscall fails. <code>EINTR</code> (interrupted), <code>EAGAIN</code> (would block), <code>EBADF</code> (bad fd), <code>ENOSPC</code> (out of space), <code>EIO</code> (device error). Translate with <code>strerror()</code>."},
+"libc":{title:"libc",body:"The standard C library. Wraps raw syscalls into POSIX-friendly functions (<code>read</code>, <code>open</code>, <code>fopen</code>). On Linux: glibc, musl, bionic. SQLite calls through libc; better-sqlite3 calls through the same libc transitively."},
+"open":{title:"open()",body:"POSIX syscall: <code>open(path, flags, mode)</code>. Returns a file descriptor. Flags include <code>O_RDONLY</code>, <code>O_RDWR</code>, <code>O_CREAT</code>, <code>O_NOATIME</code>, <code>O_DIRECT</code>, <code>O_NOFOLLOW</code>."},
+"pread":{title:"pread()",body:"POSIX syscall: <code>pread(fd, buf, count, offset)</code>. Reads <code>count</code> bytes at <code>offset</code> into <code>buf</code>. Doesn't share or modify the file's seek offset, making it thread-safe on the same FD."},
+"pwrite":{title:"pwrite()",body:"POSIX syscall: <code>pwrite(fd, buf, count, offset)</code>. Writes <code>count</code> bytes at <code>offset</code>. Like <code>pread</code>, doesn't touch the seek offset."},
+"read":{title:"read()",body:"POSIX syscall: <code>read(fd, buf, count)</code>. Uses and advances the file's seek offset, which makes it racy across threads sharing one FD. SQLite prefers <code>pread</code>."},
+"write":{title:"write()",body:"POSIX syscall: <code>write(fd, buf, count)</code>. Same caveat as <code>read</code> \u2014 uses the file's seek offset. SQLite uses <code>pwrite</code>."},
+"reads":{title:"Reads",body:"In SQLite's hot path, every read of database data is a <code>pread()</code> on the database FD into a 4KB page buffer in the Pager's cache."},
+"fsync":{title:"fsync()",body:"POSIX syscall: <code>fsync(fd)</code>. Blocks until all dirty data and metadata for the file is durable on the storage device. Required for ACID durability. <code>fdatasync</code> skips metadata for speed."},
+"f-fullfsync":{title:"F_FULLFSYNC",body:"Apple-specific <code>fcntl</code> command. Forces the SSD's internal cache to flush to NAND, not just to volatile DRAM on the device. Plain <code>fsync</code> on macOS only flushes to the device cache. Significantly slower (~10\u00d7) than fsync; required for true durability."},
+"fcntl":{title:"fcntl()",body:"POSIX syscall: <code>fcntl(fd, cmd, ...)</code>. Multi-purpose. Used by SQLite for byte-range locking (<code>F_SETLK</code>), and on macOS for <code>F_FULLFSYNC</code>."},
+"f-setlk":{title:"F_SETLK",body:"<code>fcntl</code> command for non-blocking byte-range lock acquisition. Try-lock semantics \u2014 fails immediately with <code>EAGAIN</code> if conflicting. <code>F_SETLKW</code> is the blocking version."},
+"ofd-locks":{title:"OFD locks",body:"Open File Description locks. A Linux extension (<code>F_OFD_SETLK</code>, kernel 3.15+) that fixes POSIX-locks' per-process semantics \u2014 OFD locks are tied to the open file description, not the process, and so they survive other FDs being closed."},
+"posix-locks":{title:"POSIX file locks",body:"The original <code>fcntl(F_SETLK)</code> locks. Tracked per-process not per-FD, so closing any FD drops every lock that process holds on that file. A long-standing API mistake; OFD locks fix it."},
+"lockfileex":{title:"LockFileEx",body:"Windows API for byte-range file locking. Mandatory locks (the kernel actively blocks conflicting access), unlike POSIX advisory locks. SQLite's win32 VFS uses it."},
+"mmap":{title:"mmap()",body:"POSIX syscall: maps a file's contents into the process's virtual address space. First access to each page triggers a page fault; the kernel pages it in. Subsequent accesses are direct memory reads \u2014 no syscall, no copy. Trades reliability for speed: I/O errors deliver SIGBUS."},
+"page-fault":{title:"Page fault",body:"A CPU exception raised when a virtual address is dereferenced but no physical page is mapped. The kernel's page fault handler decides what to do \u2014 for an mmap'd file, it reads the page from disk and fixes up the page tables."},
+"virtual-memory":{title:"Virtual memory",body:"The illusion that each process has its own contiguous address space. Implemented via per-process page tables that map virtual addresses to physical RAM. Enables mmap, demand paging, and process isolation."},
+"madvise":{title:"madvise()",body:"POSIX syscall to give the kernel hints about how a memory region will be used. <code>MADV_RANDOM</code> disables readahead; <code>MADV_SEQUENTIAL</code> enables aggressive readahead; <code>MADV_DONTNEED</code> evicts."},
+"posix-fadvise":{title:"posix_fadvise()",body:"POSIX syscall to give the kernel hints about file access patterns. <code>POSIX_FADV_DONTNEED</code> drops cached pages; <code>POSIX_FADV_WILLNEED</code> triggers readahead; <code>POSIX_FADV_RANDOM</code> disables readahead."},
+"readahead":{title:"Readahead",body:"The kernel's heuristic prefetch of future file pages based on access patterns. Helpful for sequential reads, harmful for random reads (SQLite). <code>posix_fadvise</code> can disable it on a per-FD basis."},
+"drop-caches":{title:"drop_caches",body:"Linux pseudo-file (<code>/proc/sys/vm/drop_caches</code>) that, when written, drops clean cached pages. Used to reset the page cache between benchmarks. Should never be used in production."},
+"fd":{title:"File descriptor",body:"A small non-negative integer (e.g. 7) that indexes into a per-process file table in the kernel. Returned by <code>open</code>, <code>socket</code>, <code>pipe</code>, etc. Inherited across <code>fork</code>; closed with <code>close</code>."},
+"fd-table":{title:"FD table",body:"Per-process kernel array indexed by FD number. Each entry points to a <code>struct file</code> (the open file description). FDs 0/1/2 are stdin/stdout/stderr by convention."},
+"dup":{title:"dup()",body:"POSIX syscall that duplicates a file descriptor. Both old and new FDs point to the same kernel <code>struct file</code> \u2014 same seek offset, same flags. Used for redirecting stdin/stdout."},
+"fork":{title:"fork()",body:"POSIX syscall that creates a new process by cloning the calling process. Child inherits FD table, memory (copy-on-write), signal handlers. Followed by <code>exec</code> to run a new program."},
+"process":{title:"Process",body:"A schedulable execution context with its own virtual address space, FD table, signal handlers, and PID. Created by <code>fork</code>; runs until it calls <code>exit</code> or is killed."},
+"pid":{title:"PID",body:"Process ID. A small integer assigned by the kernel to identify a process. Listed in <code>/proc/&lt;pid&gt;</code>. Recycled after the process exits."},
+"tcp-socket":{title:"TCP socket",body:"A bidirectional, ordered, reliable byte stream over IP. Uses syscalls <code>socket</code>, <code>bind</code>, <code>listen</code>, <code>accept</code>, <code>connect</code>, <code>send</code>, <code>recv</code>. The substrate for HTTP, postgres, mysql wire protocols."},
+"unix-socket":{title:"Unix domain socket",body:"A socket that lives in the local filesystem (or abstract namespace), not over the network. Faster than TCP for local IPC \u2014 no checksums, no fragmentation, no TCP state machine."},
+"tcp-stack":{title:"TCP stack",body:"The kernel's implementation of TCP/IP: connection state machines, congestion control (CUBIC, BBR), packet reassembly. Adds latency and CPU cost to every packet."},
+"postgres":{title:"PostgreSQL",body:"Open-source relational database. Client-server. Uses a custom binary wire protocol over TCP or unix sockets. Per-connection postmaster process."},
+"mysql":{title:"MySQL",body:"Open-source relational database. Client-server. Custom binary wire protocol. Connection pool typically required for performance."},
+"redis":{title:"Redis",body:"In-memory key-value store. Client-server. RESP wire protocol. Single-threaded for command execution."},
+"kernel-vfs":{title:"Kernel VFS",body:"The kernel's virtual filesystem layer. Dispatches syscalls to the appropriate filesystem driver via <code>struct file_operations</code>. Source of Unix's everything-is-a-file abstraction."},
+"file-operations":{title:"struct file_operations",body:"Linux kernel struct holding function pointers per filesystem (<code>read</code>, <code>write</code>, <code>llseek</code>, <code>mmap</code>, <code>fsync</code>, \u2026). Filled in by each filesystem driver; the VFS calls through it."},
+"everything-is-a-file":{title:"Everything is a file",body:"Unix design principle: files, directories, devices, sockets, pipes, processes (<code>/proc</code>) all expose a uniform <code>read/write/seek/close</code> interface. Made possible by the kernel VFS dispatching to per-type implementations."},
+"ext4":{title:"ext4",body:"Default Linux filesystem. Journalling. Extent-based allocation. Three data-mode options: <code>writeback</code>, <code>ordered</code> (default), <code>journal</code>. Mature and stable."},
+"data-ordered":{title:"data=ordered",body:"ext4 default mode: file data is forced out to disk before its metadata commit hits the journal. Crash recovery never reveals stale data in newly-allocated blocks."},
+"data-writeback":{title:"data=writeback",body:"ext4 mode where only metadata is journalled and data writes are unordered. Fastest. After a crash, freshly-allocated blocks may contain stale data from previous files."},
+"data-journal":{title:"data=journal",body:"ext4 mode where both data and metadata go through the journal. Slowest, safest. Every write is effectively duplicated on the storage device."},
+"apfs":{title:"APFS",body:"Apple File System. Default on macOS, iOS, watchOS. Copy-on-write, atomic safe-save, snapshots, native encryption. fsync flushes only to device cache; F_FULLFSYNC needed for true durability."},
+"ntfs":{title:"NTFS",body:"Default Windows filesystem. Metadata journalling. Mandatory locks. <code>FlushFileBuffers</code> is the equivalent of <code>fsync</code>."},
+"btrfs":{title:"btrfs",body:"Linux copy-on-write filesystem. Snapshots, RAID, online compression, checksums on every block. Younger than ext4; some workloads see tail-latency issues."},
+"zfs":{title:"ZFS",body:"Copy-on-write filesystem from Sun (now OpenZFS). Per-block checksums, snapshots, send/receive, RAID-Z, deduplication. Strong fsync semantics. The gold standard for data integrity."},
+"xfs":{title:"XFS",body:"Linux journalling filesystem. Designed for large files, high concurrency. Default on RHEL. Strong fsync."},
+"fuse":{title:"FUSE",body:"Filesystem in Userspace. A kernel-userspace bridge that lets you implement filesystems as ordinary processes. Used by sshfs, encfs, gocryptfs. Locking semantics are weaker than native filesystems."},
+"nfs":{title:"NFS",body:"Network File System. Mounts remote files over the network. POSIX lock support is buggy and platform-dependent. SQLite databases on NFS are officially discouraged."},
+"tmpfs":{title:"tmpfs",body:"In-memory filesystem on Linux. <code>/tmp</code> is often tmpfs. Files exist only in RAM; gone after reboot. Useful for testing SQLite without disk."},
+"inode":{title:"Inode",body:"On-disk filesystem metadata struct describing one file: size, owner, permissions, timestamps, pointers to data blocks. Identified by inode number (the numeric part of <code>ls -i</code>)."},
+"page-cache":{title:"Page cache (kernel)",body:"The kernel's RAM cache of file-backed pages. Indexed by <code>(inode, offset)</code>. Shared across processes. Read-served if hit; populated on read miss; flushed by <code>fsync</code> or kernel writeback."},
+"lru":{title:"LRU",body:"Least Recently Used \u2014 a cache replacement policy. Evicts the item that hasn't been touched in the longest time. The kernel page cache uses an active/inactive variant of LRU."},
+"bio":{title:"struct bio",body:"Linux kernel struct describing a single block I/O request: device, sector, length, target buffer. The unit the block layer schedules and the device driver consumes."},
+"mq-deadline":{title:"mq-deadline",body:"Multi-queue I/O scheduler. Deadline-based: each request has a deadline by which it must be issued, preventing starvation under heavy load. Good default for HDDs and slow SSDs."},
+"kyber":{title:"kyber",body:"Token-bucket I/O scheduler. Targets low latency on fast SSDs. Limits the number of in-flight requests to keep tail latency predictable."},
+"bfq":{title:"BFQ",body:"Budget Fair Queueing scheduler. Allocates I/O time fairly across processes. Good for desktop interactivity, less so for throughput."},
+"queue-depth":{title:"Queue depth",body:"Number of in-flight I/O requests at the device. NVMe SSDs need 16-64 to saturate. A single synchronous thread submits queue-depth 1; parallelism is required to fill the queue."},
+"iostat":{title:"iostat",body:"Linux tool that reports per-device I/O statistics: throughput, IOPS, average queue depth, %util. <code>iostat -x 1</code> shows one-second updates."},
+"blktrace":{title:"blktrace",body:"Linux tool that traces every block I/O event: queue, merge, dispatch, complete. Pair with <code>blkparse</code> for human-readable output."},
+"nvme":{title:"NVMe",body:"Non-Volatile Memory Express. Protocol designed for SSDs over PCIe. Up to 65535 queues \u00d7 65535 entries. Replaces AHCI/SATA for fast storage. Commands include READ, WRITE, FLUSH, TRIM."},
+"pcie":{title:"PCIe",body:"Peripheral Component Interconnect Express. The high-speed serial bus modern devices use to talk to the CPU. NVMe SSDs typically run at PCIe 3.0 \u00d74 (~3.5 GB/s) or PCIe 4.0 \u00d74 (~7 GB/s)."},
+"dma":{title:"DMA",body:"Direct Memory Access. Lets a device read or write RAM without involving the CPU. NVMe SSDs use DMA to move data between their controller and the buffers SQLite gave to <code>pread</code>/<code>pwrite</code>."},
+"msi-x":{title:"MSI-X",body:"Message Signaled Interrupts \u2014 Extended. The mechanism modern PCIe devices use to interrupt the CPU. Replaces legacy edge-triggered IRQ lines. Each NVMe queue can have its own interrupt vector pinned to a specific CPU."},
+"ahci":{title:"AHCI",body:"Advanced Host Controller Interface. The pre-NVMe standard for talking to SATA devices. Single command queue, depth 32. Designed for spinning disks; bottleneck on modern SSDs."},
+"sata":{title:"SATA",body:"Serial ATA. The bus connecting hard drives and SATA SSDs to the host. Speed-limited to 6 Gbit/s (~600 MB/s). Replaced by NVMe for high-performance SSDs."},
+"io-uring":{title:"io_uring",body:"Linux's modern async I/O interface (kernel 5.1+). A pair of submission/completion ring buffers shared between user and kernel. Higher throughput, lower syscall overhead. SQLite has experimental support."},
+"spdk":{title:"SPDK",body:"Storage Performance Development Kit. Userspace NVMe driver. Bypasses the kernel entirely for raw storage access. Microseconds-per-IOP. Used by ultra-low-latency databases."},
+"rocksdb":{title:"RocksDB",body:"Embedded key-value store from Meta. LSM-tree based, optimised for fast writes. Different storage engine from SQLite \u2014 logs every write, periodically compacts."},
+"l1-cache":{title:"L1 cache",body:"The CPU's first-level cache. 32-64 KB per core, ~1 ns latency. Split into L1d (data) and L1i (instructions). The fastest tier of memory in the system."},
+"dram":{title:"DRAM",body:"Dynamic Random Access Memory. The bulk of system RAM. ~25-80 ns latency. Volatile (loses contents on power off). Modern systems run DDR4 or DDR5 modules."},
+"ram":{title:"RAM",body:"Random Access Memory. The general term for working memory \u2014 today, this is DRAM. Holds your process's heap, stack, and (via the kernel) the page cache."},
+"ecc":{title:"ECC",body:"Error-Correcting Code memory. Adds extra bits per word to detect and correct single-bit errors and detect double-bit errors. Standard in servers and cloud VMs; rare in consumer desktops."},
+"ssd":{title:"SSD",body:"Solid State Drive. NAND flash with a controller doing wear-leveling, GC, and FTL. Speaks NVMe (over PCIe) or SATA (older). ~20-100\u00b5s read latency vs HDD's ~10ms."},
+"nand":{title:"NAND flash",body:"The non-volatile memory technology SSDs use. Cells store charge representing bits. Page-level write (4-16 KB), block-level erase (~MB). Limited erase cycles per cell."},
+"ftl":{title:"FTL \u2014 Flash Translation Layer",body:"The SSD controller's firmware that maps logical block addresses (what the OS sees) to physical NAND locations. Hides erase-before-write asymmetry, manages wear-leveling and GC."},
+"wear-leveling":{title:"Wear leveling",body:"SSD controller technique that distributes writes evenly across NAND blocks so no single block wears out early. Each block has a limited number of erase cycles (TLC: ~3000, QLC: ~1000)."},
+"garbage-collection":{title:"Garbage collection (SSD)",body:"Background work the SSD does to reclaim partially-invalidated blocks. Reads the still-valid pages out, erases the block, returns it to the free pool. Can stall foreground I/O during heavy writes."},
+"over-provisioning":{title:"Over-provisioning",body:"SSD reserve capacity not exposed to the OS (typically 7-30%). Gives garbage collection room to operate without invalidating user data. Higher OP \u2192 more consistent performance."},
+"trim":{title:"TRIM",body:"ATA / NVMe command telling the SSD which logical blocks the OS no longer needs. The SSD can skip them in GC. Sent automatically by ext4/APFS on file delete; <code>fstrim</code> runs it manually."},
+"commit":{title:"COMMIT",body:"SQL statement that ends a transaction, making its changes durable. In SQLite this triggers fsync (and on macOS, F_FULLFSYNC) on the journal or WAL, plus the database file."}
+};
+
+const _GLOSS_3={
+promise:{title:"Promise",m:["Promise","promise"],body:"A JS object representing the eventual completion of an async operation. Has three states (pending, fulfilled, rejected) and chainable <code>.then()</code> handlers. Better-sqlite3 famously rejects this model in favour of synchronous calls — async DB I/O on a single hot connection actually slows you down."},
+'microtask-queue':{title:"Microtask queue",m:["microtask queue","microtask"],body:"A JS-engine queue of callbacks (promise reactions, queueMicrotask, MutationObserver) that run after the current task and before the next macrotask. Each <code>.then</code> callback enqueues here, which is why naive promise-per-row APIs blow up the event loop."},
+'structured-cloning':{title:"Structured cloning",m:["structured cloning","structured clone"],body:"The deep-copy algorithm used by <code>postMessage</code>, web workers and IndexedDB. Copies most JS values (Map, Set, Date, ArrayBuffer) but rejects functions and DOM nodes. Crossing a worker boundary with SQLite results means cloning every row — which is why workers don't actually help throughput here."},
+'shared-array-buffer':{title:"SharedArrayBuffer",m:["SharedArrayBuffer","shared memory"],body:"A typed-array buffer whose backing memory is shared across workers — the only true shared-memory primitive in JS. Requires HTTPS + COOP/COEP headers on the web. Used with <code>Atomics</code> for cross-worker synchronisation."},
+'garbage-collector':{title:"Garbage collector",m:["garbage collector","garbage collected","GC pause","V8 GC"],body:"V8's automatic memory manager — generational, incremental, with a young (Scavenger) and old (Mark-Sweep-Compact) heap. Allocating millions of small objects (e.g. one per query result row) triggers GC pauses that show up as P99 spikes."},
+mutex:{title:"Mutex (mutual exclusion)",m:["mutex"],body:"A synchronisation primitive that lets at most one thread enter a critical section. SQLite uses pthread mutexes internally to serialise access to its in-memory structures even in serialised mode; that's why a multi-threaded app sees no speedup on writes."},
+'shared-library':{title:"Shared library (.so / .dylib / .dll)",m:["shared library","shared object",".node",".so",".dylib"],body:"A binary linked at runtime via <code>dlopen</code>. The <code>.node</code> files Node.js loads are shared libraries with a Node-specific entry point. Multiple processes can map the same .so and share its read-only code pages — which is part of why fork() is so cheap."},
+dlopen:{title:"dlopen()",m:["dlopen","dlopen()"],body:"The POSIX API to load a shared library at runtime and resolve its symbols (<code>dlsym</code>). Node calls it under the hood for every native module. The corresponding Windows API is <code>LoadLibrary</code>; the corresponding macOS API is also <code>dlopen</code> (Mach-O via dyld)."},
+savepoint:{title:"SAVEPOINT",m:["SAVEPOINT","savepoint","savepoints","nested transaction"],body:"A SQLite/SQL statement that marks a named position inside a transaction. <code>ROLLBACK TO sp</code> undoes everything since the savepoint without aborting the outer transaction. better-sqlite3's <code>db.transaction()</code> uses savepoints to nest cleanly."},
+vacuum:{title:"VACUUM",m:["VACUUM"],body:"A SQL command that rebuilds the entire SQLite database file, reclaiming space from deleted rows and defragmenting B-trees. Requires roughly 2× the database size in temporary disk and is wholly synchronous — typically run during off-hours maintenance windows."},
+transaction:{title:"Transaction",m:["transaction","BEGIN","COMMIT"],body:"A unit of work bracketed by <code>BEGIN</code>…<code>COMMIT</code> that satisfies ACID: atomic, consistent, isolated, durable. SQLite implements isolation via locks (rollback journal) or MVCC-lite snapshots (WAL). Without an explicit transaction, every statement is its own auto-commit transaction with full fsync overhead."},
+rollback:{title:"ROLLBACK",m:["ROLLBACK","rollback"],body:"Undoes the current transaction by replaying the rollback journal pages back into the main DB file. In WAL mode, ROLLBACK just truncates the WAL. SQLite must complete a ROLLBACK to a known consistent point even if the process crashed mid-transaction — that's the entire job of journal replay on the next open."},
+icache:{title:"Instruction cache (I-cache)",m:["icache","I-cache","instruction cache","i-cache"],body:"The CPU's per-core cache for fetched instructions, typically 32 KB L1. Tight, hot loops fit; cold paths through 100s of KB of generated code thrash. VDBE's switch-based interpreter has poor I-cache locality, which is why JIT'd queries (e.g. on Postgres) can be ~3× faster on hot CPU-bound workloads."},
+'branch-prediction':{title:"Branch prediction",m:["branch prediction","branch predictor","branch mispredict","branch mispredictions","mispredict"],body:"The CPU's hardware guess at which side of a conditional will be taken, allowing speculative execution. A mispredicted branch typically costs 15–20 cycles of pipeline flush. VDBE's giant <code>switch(opcode)</code> defeats most predictors; computed-goto dispatch (one indirect branch per opcode site) gives the predictor more local history to work with."},
+'computed-goto':{title:"Computed goto",m:["computed goto","computed-goto","labels-as-values"],body:"A GCC/Clang extension where you can take the address of a label (<code>&&label</code>) and jump to it via <code>goto *ptr</code>. Used in interpreters (CPython, VDBE, Lua) to dispatch one instruction per indirect branch instead of one per <code>switch</code> — improving branch-prediction locality dramatically."},
+cursor:{title:"Cursor (B-tree cursor)",m:["cursor","B-tree cursor","cursors"],body:"A SQLite handle pointing at a specific row in a B-tree. The VDBE manipulates several cursors per query (one per table or index in the plan). Stepping a cursor walks the B-tree leaves; rewinding it seeks back to the start. Per-statement; doesn't survive <code>finalize</code>."},
+subquery:{title:"Subquery",m:["subquery","sub-query","subqueries"],body:"A SELECT nested inside another query — either correlated (references outer columns) or uncorrelated. SQLite's planner sometimes flattens these into joins, sometimes evaluates them eagerly into a temp table. The choice shows up in <code>EXPLAIN QUERY PLAN</code>."},
+'where-clause':{title:"WHERE clause",m:["WHERE clause","WHERE","where clause"],body:"The filter portion of a SQL query. The SQLite query planner uses index information, sqlite_stat1 statistics, and a search of join orders to decide which indexes serve which WHERE terms. A WHERE on a non-indexed column always becomes a full table scan."},
+join:{title:"JOIN",m:["JOIN","INNER JOIN","LEFT JOIN","CROSS JOIN"],body:"A SQL operation that combines rows from two or more tables. SQLite implements joins as nested loops — pick a join order, drive the outer table, look up matches in the inner via index. There's no hash-join or merge-join; the planner picks the table order that minimises rows × index lookups."},
+pragma:{title:"PRAGMA",m:["PRAGMA"],body:"A SQLite-specific statement that queries or modifies engine settings: <code>PRAGMA journal_mode</code>, <code>PRAGMA synchronous</code>, <code>PRAGMA cache_size</code>, etc. Some PRAGMAs are read-only, some are persistent (stored in the file header), some are per-connection. Production apps configure them right after opening."},
+'inode-cache':{title:"Inode cache",m:["inode cache","inode caching"],body:"A kernel cache mapping resolved paths to in-memory <code>struct inode</code> entries — file metadata (size, owner, block list). Stat-heavy workloads (find, ls -laR) live almost entirely here. Purgeable under memory pressure but typically hot."},
+'dentry-cache':{title:"Dentry cache",m:["dentry cache","dentries","dcache"],body:"The kernel's path-component cache: each directory entry (<code>foo</code>, <code>bar</code>, <code>baz</code> in <code>/foo/bar/baz</code>) caches the parent inode → child inode lookup. Path resolution would otherwise read the directory off disk every time. Hot dentries make second-and-later opens of the same file effectively free."},
+extents:{title:"Extents",m:["extent","extents","extent map"],body:"A contiguous range of physical blocks belonging to a single file, recorded as <code>(start_block, length)</code>. ext4, XFS and btrfs all use extents instead of per-block pointers — a 1 GB file might be one extent record instead of 256 K block pointers, dramatically reducing metadata overhead."},
+'copy-on-write':{title:"Copy-on-write (CoW)",m:["copy-on-write","CoW","copy on write"],body:"A strategy where modifying a shared resource first copies it. Used in fork() (page tables), btrfs/ZFS (filesystem), and overlay-fs (containers). Cheap reads; writes amplify. SQLite's WAL is a CoW-style mechanism for database pages."},
+writeback:{title:"Writeback",m:["writeback"],body:"The kernel's lazy flush of dirty page-cache pages back to disk. Triggered by background timers, dirty-ratio thresholds, or explicit fsync. Without writeback, writes appear instant but vanish on power loss; with eager writeback, writes are slow but durable. The bdi-writeback worker manages this."},
+'mount-table':{title:"Mount table",m:["mount table","mount points","mount namespace"],body:"The kernel's per-namespace table of mounted filesystems: each entry maps a path (<code>/var/data</code>) to a backing filesystem instance. Container runtimes give each container a private mount namespace; <code>cat /proc/mounts</code> shows the active table."},
+ulimit:{title:"ulimit / RLIMIT_NOFILE",m:["ulimit","RLIMIT_NOFILE","FD limit"],body:"Per-process resource limits enforced by the kernel. <code>ulimit -n</code> caps the number of simultaneous open file descriptors (default 1024 on most distros). When a Node server hits this, every <code>open</code>, <code>socket</code> and <code>pipe</code> fails with EMFILE."},
+emfile:{title:"EMFILE",m:["EMFILE"],body:"<code>errno 24 — too many open files</code>. Returned when a process exceeds its <code>RLIMIT_NOFILE</code>. Common in long-running Node servers that leak file descriptors (forgotten streams, connection pools without bounds). Diagnose with <code>lsof -p &lt;pid&gt;</code>."},
+lsof:{title:"lsof",m:["lsof"],body:"A userspace tool that lists every open file descriptor in the system or for a given PID. Reads <code>/proc/&lt;pid&gt;/fd/</code> entries. Indispensable for debugging fd leaks, locked files, and zombie connections."},
+'proc-fs':{title:"/proc filesystem",m:["/proc","procfs","/proc filesystem"],body:"A pseudo-filesystem the kernel exposes at <code>/proc/</code> — every file is generated on demand and reflects live kernel state. <code>/proc/&lt;pid&gt;/maps</code>, <code>/proc/&lt;pid&gt;/fd/</code>, <code>/proc/cpuinfo</code>, <code>/proc/meminfo</code>. Reading from procfs never touches a disk."},
+'sys-fs':{title:"/sys filesystem (sysfs)",m:["/sys","sysfs","/sys filesystem"],body:"A pseudo-filesystem at <code>/sys/</code> exposing kernel device-model objects: PCI devices, block devices, kernel modules. Driver knobs live here (<code>/sys/block/nvme0n1/queue/scheduler</code>). Like procfs, all reads are synthesised in-kernel."},
+sigbus:{title:"SIGBUS",m:["SIGBUS"],body:"A signal raised when a process touches an mmap'd region beyond the file's actual end, or to an invalidly aligned access. Particularly nasty with mmap'd SQLite files: if the file is truncated underneath you, the next read of the mapping kills the process unless you've installed a SIGBUS handler."},
+'signal-handler':{title:"Signal handler",m:["signal handler","signal handlers"],body:"A user-installed function the kernel jumps to in response to a signal (SIGSEGV, SIGBUS, SIGTERM, …). Signal handlers run in the context of the interrupted thread on a (possibly alternate) signal stack and may only call async-signal-safe functions. Foundational for graceful shutdown and crash reporting."},
+'demand-paging':{title:"Demand paging",m:["demand paging","demand-paged","page fault"],body:"The kernel's strategy of mapping pages lazily — when you mmap a 1 GB file, no I/O happens until you touch a page. The first read triggers a page fault; the kernel reads that page (and possibly some readahead neighbours) and resumes the faulting instruction transparently."},
+'map-shared':{title:"MAP_SHARED",m:["MAP_SHARED"],body:"<code>mmap()</code> flag indicating modifications are written back to the underlying file and visible to other processes mapping the same file. The opposite is <code>MAP_PRIVATE</code> (CoW — writes are local). SQLite's mmap mode uses MAP_SHARED so the OS page cache and the in-memory database stay coherent."},
+'prot-read':{title:"PROT_READ / PROT_WRITE",m:["PROT_READ","PROT_WRITE","PROT_EXEC"],body:"<code>mmap()</code> flags controlling page protection — read, write, execute respectively. The hardware MMU enforces them via the page-table entry; a write to a PROT_READ page traps as SIGSEGV. SQLite mmaps the database PROT_READ by default and switches to PROT_WRITE only as needed."},
+fua:{title:"Force Unit Access (FUA)",m:["FUA","Force Unit Access","force unit access"],body:"An NVMe / SATA flag on a write command that tells the device: don't ack until this is durable in non-volatile media (or PLP-protected DRAM). Lets the OS issue durable writes without a separate flush command. Linux's REQ_FUA bit eventually becomes an FUA in the NVMe write."},
+fdatasync:{title:"fdatasync()",m:["fdatasync","fdatasync()"],body:"Like <code>fsync()</code> but skips flushing inode metadata that doesn't affect data integrity (mtime, ctime). About 2× faster than fsync on ext4 for most workloads, and what SQLite uses by default in WAL mode."},
+lockd:{title:"lockd / NLM",m:["lockd","NLM","NFS lock"],body:"The kernel daemon that handles NFS file locks via the Network Lock Manager protocol. NFS locks have to round-trip across the network and recover after server reboots — which is why SQLite-on-NFS is officially advised against and why <code>flock</code> on NFS may silently no-op on older configs."},
+'mandatory-lock':{title:"Mandatory vs. advisory locking",m:["mandatory lock","advisory lock","mandatory locking"],body:"POSIX file locks are <em>advisory</em> by default: cooperating processes check them, but the kernel doesn't enforce on the read/write syscalls. Linux supports <em>mandatory</em> locks (mount option + sgid bit) where the kernel does enforce, but they're rarely used; SQLite assumes advisory."},
+'byte-range-lock':{title:"Byte-range lock",m:["byte-range lock","byte-range locks","byte range lock"],body:"A POSIX lock (<code>fcntl F_SETLK</code>) on a specific [start,length) byte range of a file rather than the whole file. SQLite uses two pretend byte-range locks at offsets in its file (the PENDING and RESERVED bytes — they don't contain data) to coordinate readers and writers."},
+'blk-mq':{title:"blk-mq",m:["blk-mq"],body:"Linux's multi-queue block layer, replacing the older single-request-queue model. Each CPU gets its own software submission queue mapped to one or more device hardware queues. Essential for getting NVMe's million-IOPS potential — the old single queue was a global mutex hot-spot."},
+mmio:{title:"Memory-mapped I/O (MMIO)",m:["MMIO","memory-mapped I/O","memory-mapped IO"],body:"Hardware registers mapped into the CPU's physical address space — a normal load/store touches the device. NVMe doorbell registers, PCI BARs and APIC pages are MMIO. Often paired with strong memory ordering (<code>wmb()</code>) to avoid the CPU reordering writes around the device."},
+isr:{title:"ISR — interrupt service routine",m:["ISR","interrupt service routine","interrupt handler"],body:"The kernel function the CPU jumps to when a hardware interrupt fires. Runs in interrupt context — preemption-disabled, may not sleep. NVMe completions arrive via MSI-X interrupts; the ISR pulls completion entries off the queue and wakes the waiting threads."},
+'doorbell-reg':{title:"NVMe doorbell register",m:["doorbell register","doorbell","NVMe doorbell"],body:"An MMIO register the host writes to tell the NVMe controller \"there are new commands in this queue at index N\". One per submission/completion queue. Cheap to write but does cross PCIe — high-IOPS code-paths batch submissions to amortise the doorbell cost."},
+bpf:{title:"BPF / eBPF",m:["BPF","eBPF"],body:"In-kernel sandboxed bytecode VM. Originally for packet filtering (Berkeley Packet Filter), now used for tracing (bcc, bpftrace), networking (XDP), security (seccomp). <code>biolatency</code>, <code>opensnoop</code> and friends are eBPF programs attached to kernel tracepoints."},
+'tlc-nand':{title:"TLC / QLC NAND",m:["TLC","QLC","TLC NAND","QLC NAND"],body:"NAND flash variants storing 3 (TLC) or 4 (QLC) bits per cell. Higher density but slower writes, fewer P/E cycles, more error-prone. SLC caches in front of TLC/QLC absorb burst writes; sustained writes drop to native speed once the cache fills."},
+plp:{title:"Power-loss protection (PLP)",m:["PLP","power-loss protection","power loss protection"],body:"Capacitors on enterprise SSDs that hold enough charge to flush the controller's DRAM cache to NAND on sudden power loss. Consumer SSDs lack PLP — which is why a fsync on a consumer drive must wait for actual NAND, while enterprise drives can ack as soon as bytes hit DRAM."},
+ddr:{title:"DDR (Double Data Rate) memory",m:["DDR","DDR4","DDR5"],body:"The mainstream DRAM standard for the last 25 years; transfers data on both clock edges (hence \"double data rate\"). DDR4 ~25 GB/s/channel; DDR5 ~50 GB/s/channel. SQLite's working-set (page cache) lives in DDR — every B-tree probe is a few DDR accesses."},
+'cosmic-rays':{title:"Cosmic rays / soft errors",m:["cosmic ray","cosmic rays","soft error","bit flip"],body:"High-energy particles (cosmic rays, alpha decay) ionising silicon and flipping a memory bit. Rare per chip but inevitable across a fleet. ECC RAM detects/corrects single-bit flips; without it, a bit flip in a page-cache page becomes a silently corrupt write to disk."},
+ignition:{title:"V8 Ignition",m:["Ignition","V8 Ignition"],body:"V8's bytecode interpreter — the first tier of execution. Compiles JS to a register-based bytecode and runs it. Hot functions are then promoted to TurboFan (the optimising compiler). Sparkplug sits in between as a baseline JIT."},
+turbofan:{title:"V8 TurboFan",m:["TurboFan","V8 TurboFan"],body:"V8's optimising compiler. Takes hot functions from Ignition, type-specialises based on observed feedback, applies inlining/escape-analysis/SROA, and emits machine code. Deoptimises (\"bails out\") if assumptions are violated, falling back to Ignition."},
+sparkplug:{title:"V8 Sparkplug",m:["Sparkplug","V8 Sparkplug"],body:"V8's non-optimising baseline JIT (added 2021). One-pass-walks-the-bytecode-and-emits-machine-code. Trades little optimisation for fast compile times — gets functions out of the interpreter quickly while TurboFan is still profiling."},
+'pipe-syscall':{title:"pipe()",m:["pipe()","pipe(2)"],body:"The syscall that creates a unidirectional in-kernel byte-stream with a pair of FDs (read end, write end). Used by shell pipelines, child-process IPC, and Node's libuv for cross-thread wakeups. Capacity is 64 KB by default on Linux."},
+recv:{title:"recv() / read() on a socket",m:["recv","recv()","recvfrom"],body:"Receives data from a connected socket. Pulls from the kernel's per-socket receive buffer; blocks (or returns EAGAIN in non-blocking mode) when empty. Bytes were placed there by a softirq running the TCP stack on incoming packets."},
+send:{title:"send() / write() on a socket",m:["send","send()","sendto"],body:"Submits data to the kernel's per-socket send buffer. The TCP stack will (eventually) segment, sequence, and transmit it. Returns immediately if buffer space is available — this is a userspace → kernel copy, not a wire transmission."},
+'tcp-loopback':{title:"Loopback / 127.0.0.1",m:["loopback","127.0.0.1","localhost","tcp loopback"],body:"The virtual network interface that routes packets to the same machine without ever touching wire or NIC. Still goes through the full TCP/IP stack (segmentation, checksums, sockbufs) — which is why a loopback DB connection is dramatically slower than embedded SQLite, even on the same box."},
+fio:{title:"fio",m:["fio"],body:"A benchmark tool that issues configurable I/O patterns (random/sequential, read/write, sync/async, varying block size) against files or block devices. The de-facto storage benchmark; results published in IOPS, throughput and latency percentiles."},
+'io-scheduler':{title:"I/O scheduler",m:["I/O scheduler","IO scheduler","io scheduler","Kyber","mq-deadline","BFQ"],body:"The kernel module that orders queued block I/O before submitting to the device. On NVMe, options are typically <code>none</code>, <code>mq-deadline</code>, <code>kyber</code>, or <code>bfq</code>. <code>none</code> is fastest on NVMe; <code>bfq</code> gives fairness on rotational/desktop workloads."},
+durability:{title:"Durability (the D in ACID)",m:["durability"],body:"The guarantee that a committed transaction survives power loss / crash. Achieved via fsync + journal/WAL replay. Without an honest fsync, the database appears durable but loses recently-committed data on power loss. Cheap consumer SSDs and lying virtualisation layers are common offenders."},
+isolation:{title:"Isolation (the I in ACID)",m:["isolation","serialisable","serializable"],body:"The guarantee that concurrent transactions don't see each others' uncommitted state. SQLite is serialisable by default — the strongest isolation level. WAL allows readers to proceed against a snapshot while a single writer commits."},
+};
+
+
+Object.assign(GLOSSARY, _GLOSS_1, _GLOSS_2, _GLOSS_3);
+
+
+/* ============== ALIAS OVERRIDES ============== */
+/* Inject explicit match phrases for entries from gloss1/gloss2 whose titles
+   don't lead with the common-text spelling, OR which have important alternate
+   forms in the running prose. */
+const _ALIAS={
+napi:["N-API","Node-API"],
+v8:["V8"],
+wal:["WAL","WAL mode"],
+'wal-file':["WAL file","-wal file"],
+'shm-file':["SHM file","-shm file"],
+vdbe:["VDBE","Virtual Database Engine"],
+'vdbe-program':["VDBE program","bytecode program"],
+btree:["B-tree","B-trees","b-tree"],
+'b-tree':["B-tree","B-trees","b-tree"],
+pager:["pager"],
+vfs:["VFS"],
+'kernel-vfs':["kernel VFS","Linux VFS","VFS layer"],
+fd:["file descriptor","file descriptors","fd"],
+'fd-table':["FD table","file-descriptor table"],
+mmap:["mmap","mmap()"],
+fsync:["fsync","fsync()"],
+fcntl:["fcntl","fcntl()"],
+flock:["flock","flock()"],
+pread:["pread","pread()","pwrite","pwrite()"],
+'syscall':["syscall","syscalls","system call","system calls"],
+'page-cache':["page cache"],
+'block-io':["block I/O","block layer"],
+nvme:["NVMe","NVMe-PCIe"],
+'pcie':["PCIe","PCI Express"],
+dma:["DMA"],
+ssd:["SSD"],
+'wear-leveling':["wear-leveling","wear levelling"],
+'ftl':["FTL","Flash Translation Layer"],
+'gc-ssd':["garbage collection (SSD)","SSD GC"],
+'msi-x':["MSI-X","MSI"],
+meltdown:["Meltdown","Spectre","Meltdown/Spectre"],
+'context-switch':["context switch","context-switch"],
+'opcode':["opcode","opcodes"],
+'bind':["sqlite3_bind","sqlite3_bind_*","bind","binding"],
+'sqlite3-ptr':["sqlite3*","sqlite3 pointer"],
+'sqlite3-stmt':["sqlite3_stmt*","prepared statement"],
+'objectwrap':["ObjectWrap","Napi::ObjectWrap"],
+'event-loop':["event loop"],
+'libuv':["libuv"],
+'p99':["P99","p99","tail latency"],
+};
+
+/* ============== AUTOLINKER ============== */
+const _PHRASES=[];
+function _buildPhrases(){
+  for(const[k,d]of Object.entries(GLOSSARY)){
+    let phrases=d.m||_ALIAS[k]||null;
+    if(!phrases){
+      let t=d.title.replace(/\s*\([^)]*\)\s*$/,'').replace(/\s+[\u2014\u2013-]\s+.*$/,'').trim();
+      if(t)phrases=[t];
+    }
+    if(!phrases)continue;
+    for(const p of phrases){
+      if(!p||p.length<2)continue;
+      _PHRASES.push({phrase:p,key:k,len:p.length});
+    }
+  }
+  _PHRASES.sort((a,b)=>b.len-a.len);
+}
+const _ESC=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+function _phraseRegex(p){
+  /* match the phrase only when surrounded by non-word chars (or string edges) */
+  return new RegExp('(?:^|[^A-Za-z0-9_])('+_ESC(p)+')(?=[^A-Za-z0-9_]|$)','i');
+}
+function autoLink(rootEl){
+  const seen=new Set();
+  rootEl.querySelectorAll('.term').forEach(t=>seen.add(t.dataset.term));
+  const SKIP={CODE:1,PRE:1,KBD:1};
+
+  function processText(node){
+    const txt=node.nodeValue;
+    if(!txt||txt.length<3)return;
+    let best=null;
+    for(const p of _PHRASES){
+      if(seen.has(p.key))continue;
+      const re=_phraseRegex(p.phrase);
+      const m=re.exec(txt);
+      if(m){
+        const at=m.index+m[0].indexOf(m[1]);
+        if(!best||at<best.at){best={at,phrase:m[1],key:p.key};if(at===0)break;}
+      }
+    }
+    if(!best)return;
+    seen.add(best.key);
+    const before=txt.slice(0,best.at);
+    const after=txt.slice(best.at+best.phrase.length);
+    const parent=node.parentNode;
+    if(before)parent.insertBefore(document.createTextNode(before),node);
+    const span=document.createElement('span');
+    span.className='term';span.dataset.term=best.key;span.textContent=best.phrase;
+    parent.insertBefore(span,node);
+    if(after){
+      const af=document.createTextNode(after);
+      parent.insertBefore(af,node);
+      parent.removeChild(node);
+      processText(af);
+    }else parent.removeChild(node);
+  }
+  function walk(n){
+    if(!n)return;
+    if(n.nodeType===3){processText(n);return;}
+    if(n.nodeType!==1)return;
+    if(SKIP[n.tagName])return;
+    if(n.classList&&n.classList.contains('term'))return;
+    const kids=Array.from(n.childNodes);
+    for(const k of kids)walk(k);
+  }
+  walk(rootEl);
+}
+
+/* ============== SYNTAX HIGHLIGHTER ============== */
+const _KW_JS=new Set(["const","let","var","function","return","if","else","for","while","do","new","class","extends","import","from","export","default","async","await","throw","catch","try","finally","true","false","null","undefined","this","typeof","instanceof","of","in","void","delete","yield","static","get","set","super","break","continue","switch","case","interface","type","as","satisfies","public","private","protected","readonly","enum"]);
+const _KW_C=new Set(["struct","int","char","short","long","unsigned","signed","float","double","void","static","const","extern","sizeof","return","if","else","for","while","switch","case","break","continue","typedef","enum","union","do","goto","volatile","register","auto","inline","restrict","_Bool","NULL"]);
+const _TY_C=new Set(["u8","u16","u32","u64","i8","i16","i32","i64","int8_t","int16_t","int32_t","int64_t","uint8_t","uint16_t","uint32_t","uint64_t","size_t","ssize_t","off_t","time_t","sqlite3_int64","sqlite3_uint64","sqlite3","sqlite3_file","sqlite3_io_methods","sqlite3_stmt","sqlite3_vfs","VdbeOp","Op","bool","FILE","pthread_mutex_t","pthread_t"]);
+const _KW_SQL=new Set(["SELECT","FROM","WHERE","INSERT","UPDATE","DELETE","JOIN","LEFT","RIGHT","INNER","OUTER","GROUP","ORDER","BY","LIMIT","OFFSET","HAVING","CREATE","TABLE","INDEX","PRAGMA","EXPLAIN","QUERY","PLAN","AS","AND","OR","NOT","NULL","IS","IN","LIKE","VACUUM","COMMIT","BEGIN","END","TRANSACTION","VIEW","TRIGGER","VALUES","INTO","DEFAULT","PRIMARY","KEY","UNIQUE","REFERENCES","FOREIGN","WITHOUT","ROWID","SAVEPOINT","RELEASE","ROLLBACK","WITH","RECURSIVE","UNION","EXCEPT","INTERSECT","DISTINCT","ALL","ON","USING"]);
+const _esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function highlight(code){
+  /* one master regex; iterate matches in order */
+  const RE=/(\/\*[\s\S]*?\*\/)|(\/\/[^\n]*)|("(?:\\.|[^"\\\n])*")|('(?:\\.|[^'\\\n])*')|(`(?:\\.|[^`\\])*`)|(\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b)|(\b[A-Za-z_][A-Za-z0-9_]*\b)|([^\w\s])|(\s+)/g;
+  let out='',m;
+  RE.lastIndex=0;
+  while((m=RE.exec(code))!==null){
+    if(m[1]||m[2])out+='<span class="tk-com">'+_esc(m[0])+'</span>';
+    else if(m[3]||m[4]||m[5])out+='<span class="tk-str">'+_esc(m[0])+'</span>';
+    else if(m[6])out+='<span class="tk-num">'+_esc(m[0])+'</span>';
+    else if(m[7]){
+      const w=m[7];let cls=null;
+      if(w===w.toUpperCase()&&w.length>=2&&_KW_SQL.has(w))cls='tk-kw-sql';
+      else if(_KW_JS.has(w))cls='tk-kw';
+      else if(_KW_C.has(w))cls='tk-kw';
+      else if(_TY_C.has(w))cls='tk-ty';
+      else if(/^[A-Z][A-Z0-9_]+$/.test(w)&&w.length>=2)cls='tk-const';
+      else{
+        /* peek ahead for `(` to identify function call */
+        let j=m.index+w.length;
+        while(j<code.length&&code[j]===' ')j++;
+        if(code[j]==='(')cls='tk-fn';
+      }
+      out+=cls?'<span class="'+cls+'">'+_esc(w)+'</span>':_esc(w);
+    }
+    else out+=_esc(m[0]);
+  }
+  return out;
+}
+function applyHighlighting(rootEl){
+  rootEl.querySelectorAll('pre code, pre').forEach(el=>{
+    /* only highlight <pre><code>; if pre has no code child, treat pre as the code */
+    const target=el.tagName==='PRE'?(el.querySelector('code')?null:el):el;
+    if(!target)return;
+    if(target.dataset.hl)return;
+    target.dataset.hl='1';
+    const raw=target.textContent;
+    target.innerHTML=highlight(raw);
+  });
+}
+
+/* ============== STATE ============== */
+const stackEl=document.getElementById('stack-grid');
+const modal=document.getElementById('modal');
+const backdrop=document.getElementById('backdrop');
+const popover=document.getElementById('popover');
+const popHead=document.getElementById('pop-head');
+const popBody=document.getElementById('pop-body');
+const mLayer=document.getElementById('m-layer');
+const mName=document.getElementById('m-name');
+const mTag=document.getElementById('m-tag');
+const mBody=document.getElementById('m-body');
+const COMP_BY_ID={};
+COMPONENTS.forEach(c=>COMP_BY_ID[c.id]=c);
+
+/* ============== RENDER STACK ============== */
+function render(){
+  const groups={};
+  COMPONENTS.forEach(c=>{(groups[c.ly]=groups[c.ly]||[]).push(c)});
+  stackEl.innerHTML=LAYERS.map(L=>{
+    const cs=groups[L.n-1]||[];
+    return '<div class="layer" style="--lc:'+L.color+'">'
+      +'<div class="layer-num">L'+L.n+(L.iface?' \u2192':'')+'</div>'
+      +'<div class="layer-name">'+L.name+'</div>'
+      +'<div class="layer-sub">'+L.sub+'</div>'
+      +cs.map(c=>'<div class="card" data-id="'+c.id+'" style="--lc:'+L.color+'"><div class="card-name">'+c.name+'</div><div class="card-tag">'+c.tag+'</div></div>').join('')
+      +'</div>';
+  }).join('');
+  document.querySelectorAll('.card').forEach(card=>{
+    card.addEventListener('click',e=>{e.stopPropagation();openModal(card.dataset.id);});
+    card.addEventListener('mouseenter',()=>highlightConnections(card.dataset.id));
+    card.addEventListener('mouseleave',clearConnections);
+  });
+}
+function highlightConnections(id){
+  const c=COMP_BY_ID[id];if(!c)return;
+  const linked=new Set(c.to||[]);
+  document.querySelectorAll('.card').forEach(el=>{
+    const cid=el.dataset.id;
+    if(cid===id){el.classList.remove('linked','dim');return;}
+    if(linked.has(cid)){el.classList.add('linked');el.classList.remove('dim');}
+    else{el.classList.add('dim');el.classList.remove('linked');}
+  });
+}
+function clearConnections(){
+  document.querySelectorAll('.card').forEach(el=>el.classList.remove('linked','dim'));
+}
+
+/* ============== MODAL ============== */
+function openModal(id){
+  const c=COMP_BY_ID[id];if(!c)return;
+  const L=LAYERS[c.ly];
+  mLayer.textContent='L'+L.n+' \u00b7 '+L.name;
+  mName.textContent=c.name;
+  mTag.textContent=c.tag;
+  document.documentElement.style.setProperty('--mc',L.color);
+  let html='<section><h3>Role</h3><div class="verbatim">'+c.role+'</div></section>';
+  html+='<section><h3>Interfaces with</h3><div class="verbatim">'+c.iface+'</div></section>';
+  if(c.to&&c.to.length){
+    html+='<section><h3>Connects to</h3><div class="conn-list">';
+    c.to.forEach(cid=>{
+      const cc=COMP_BY_ID[cid];if(!cc)return;
+      const ll=LAYERS[cc.ly];
+      html+='<button class="conn-chip" data-go="'+cid+'" style="--cc:'+ll.color+'"><span class="dot"></span>'+cc.name+'</button>';
+    });
+    html+='</div></section>';
+  }
+  if(c.deep){html+='<section><h3>Deep dive</h3>'+c.deep+'</section>';}
+  mBody.innerHTML=html;
+
+  /* enrich modal body */
+  autoLink(mBody);
+  applyHighlighting(mBody);
+
+  /* wire conn-chip nav */
+  mBody.querySelectorAll('.conn-chip').forEach(b=>{
+    b.addEventListener('click',e=>{e.stopPropagation();openModal(b.dataset.go);});
+  });
+
+  modal.classList.add('open');
+  backdrop.classList.add('open');
+  document.body.style.overflow='hidden';
+  document.querySelectorAll('.card').forEach(el=>{
+    el.classList.toggle('active',el.dataset.id===id);
+    el.classList.remove('linked','dim');
+  });
+}
+function closeModal(){
+  modal.classList.remove('open');
+  backdrop.classList.remove('open');
+  document.body.style.overflow='';
+  document.querySelectorAll('.card').forEach(el=>el.classList.remove('active'));
+  closePopover();
+}
+backdrop.addEventListener('click',closeModal);
+document.getElementById('m-close').addEventListener('click',closeModal);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
+
+/* ============== TERM POPOVER (HOVER) ============== */
+let _showTimer=null,_hideTimer=null,_activeTerm=null,_inPop=false;
+function showPopover(termEl){
+  const k=termEl.dataset.term;
+  const def=GLOSSARY[k];
+  if(!def){
+    popHead.textContent=k;
+    popBody.innerHTML='<em style="color:var(--tx-3)">No definition.</em>';
+  }else{
+    popHead.textContent=def.title;
+    popBody.innerHTML=def.body;
+  }
+  popover.style.left='-9999px';popover.style.top='0';
+  popover.classList.add('open');
+  /* position next frame so we can measure */
+  requestAnimationFrame(()=>{
+    const r=termEl.getBoundingClientRect();
+    const pw=popover.offsetWidth,ph=popover.offsetHeight;
+    let left=r.left+r.width/2-pw/2;
+    let top=r.bottom+8;
+    if(top+ph>window.innerHeight-12)top=r.top-ph-8;
+    left=Math.max(12,Math.min(left,window.innerWidth-pw-12));
+    popover.style.left=(left+window.scrollX)+'px';
+    popover.style.top=(top+window.scrollY)+'px';
+  });
+}
+function closePopover(){
+  popover.classList.remove('open');
+  _activeTerm=null;
+  _inPop=false;
+}
+document.addEventListener('mouseover',e=>{
+  const t=e.target.closest&&e.target.closest('.term');
+  if(!t)return;
+  if(t===_activeTerm){clearTimeout(_hideTimer);return;}
+  clearTimeout(_hideTimer);
+  if(_showTimer)clearTimeout(_showTimer);
+  _showTimer=setTimeout(()=>{_activeTerm=t;showPopover(t);},120);
+});
+document.addEventListener('mouseout',e=>{
+  const t=e.target.closest&&e.target.closest('.term');
+  if(!t)return;
+  const to=e.relatedTarget;
+  if(to&&(to.closest('.term')===t||to.closest('.term-popover')))return;
+  if(_showTimer){clearTimeout(_showTimer);_showTimer=null;}
+  _hideTimer=setTimeout(()=>{if(!_inPop)closePopover();},200);
+});
+popover.addEventListener('mouseenter',()=>{_inPop=true;clearTimeout(_hideTimer);});
+popover.addEventListener('mouseleave',()=>{_inPop=false;_hideTimer=setTimeout(closePopover,120);});
+/* click on term toggles "lit" highlighting (separate from popover) */
+document.addEventListener('click',e=>{
+  const t=e.target.closest&&e.target.closest('.term');
+  if(t){e.stopPropagation();t.classList.toggle('lit');return;}
+  if(!e.target.closest('.term-popover')&&!_inPop)closePopover();
+});
+
+/* ============== THEME TOGGLE ============== */
+const themeToggle=document.getElementById('theme-toggle');
+const themeLabel=document.getElementById('theme-label');
+function setTheme(t){
+  document.documentElement.setAttribute('data-theme',t);
+  themeLabel.textContent=t;
+  try{localStorage.setItem('theme',t);}catch(e){}
+}
+const savedTheme=(()=>{try{return localStorage.getItem('theme');}catch(e){return null;}})();
+if(savedTheme)setTheme(savedTheme);
+themeToggle.addEventListener('click',()=>{
+  const cur=document.documentElement.getAttribute('data-theme');
+  setTheme(cur==='dark'?'light':'dark');
+});
+
+/* ============== RETRACTABLE NAV ============== */
+const nav=document.getElementById('nav');
+let lastY=window.scrollY,navTicking=false;
+window.addEventListener('scroll',()=>{
+  if(navTicking)return;
+  navTicking=true;
+  requestAnimationFrame(()=>{
+    const y=window.scrollY;
+    if(y>120&&y>lastY+4)nav.classList.add('hidden');
+    else if(y<lastY-4||y<120)nav.classList.remove('hidden');
+    lastY=y;navTicking=false;
+  });
+},{passive:true});
+
+/* ============== GO ============== */
+_buildPhrases();
+render();
+
+</script>
+</body>
+</html>

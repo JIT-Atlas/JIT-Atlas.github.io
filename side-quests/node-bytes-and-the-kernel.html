@@ -1,0 +1,1385 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bytes ↔ the kernel · Node binary internals II</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800;1,400;1,500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --js:#e6a93c; --js-soft:rgba(230,169,60,.16);
+  --engine:#36d6c3; --engine-soft:rgba(54,214,195,.14);
+  --native:#b48cff; --native-soft:rgba(180,140,255,.16);
+  --danger:#f0735f; --danger-soft:rgba(240,115,95,.16);
+  --r:14px; --maxw:1180px;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --serif:'JetBrains Mono',ui-monospace,monospace;
+}
+html[data-theme="dark"]{
+  --bg:#0a0e13; --bg2:#0d1219; --panel:#10161f; --panel2:#141c27;
+  --ink:#e9e7df; --ink2:#aab2bf; --ink3:#6b7482;
+  --line:rgba(150,170,195,.14); --line2:rgba(150,170,195,.26);
+  --grid:rgba(120,150,185,.05); --grid2:rgba(120,150,185,.09);
+  --shadow:0 24px 60px -20px rgba(0,0,0,.7);
+}
+html[data-theme="light"]{
+  --bg:#ece7da; --bg2:#f0ece1; --panel:#f6f2e8; --panel2:#fbf8f0;
+  --ink:#171c22; --ink2:#4c5560; --ink3:#8a8e84;
+  --line:rgba(30,42,58,.16); --line2:rgba(30,42,58,.32);
+  --grid:rgba(40,60,85,.05); --grid2:rgba(40,60,85,.1);
+  --js:#b3711a; --engine:#0a8c7d; --native:#6d49c4; --danger:#c1422e;
+  --js-soft:rgba(179,113,26,.14); --engine-soft:rgba(10,140,125,.12);
+  --native-soft:rgba(109,73,196,.13); --danger-soft:rgba(193,66,46,.12);
+  --shadow:0 24px 50px -22px rgba(40,50,70,.4);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);font-family:var(--serif);
+  font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;letter-spacing:-.01em;
+  background-image:
+    linear-gradient(var(--grid) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid) 1px,transparent 1px),
+    linear-gradient(var(--grid2) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid2) 1px,transparent 1px);
+  background-size:28px 28px,28px 28px,140px 140px,140px 140px;
+  transition:background-color .4s,color .4s;
+}
+body.fs-lock{overflow:hidden}
+::selection{background:var(--js-soft);color:var(--ink)}
+.mono{font-family:var(--mono)}
+code,pre{font-family:var(--mono)}
+
+/* ===== CUSTOM SCROLLBARS ===== */
+*{scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+*::-webkit-scrollbar{width:11px;height:11px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{
+  background:linear-gradient(var(--line2),var(--line2)) padding-box;
+  border:3px solid transparent;border-radius:99px;background-clip:padding-box;
+}
+*::-webkit-scrollbar-thumb:hover{background:var(--engine);background-clip:padding-box;border:3px solid transparent}
+*::-webkit-scrollbar-corner{background:transparent}
+html::-webkit-scrollbar{width:13px}
+html::-webkit-scrollbar-thumb{background:var(--line2);background-clip:padding-box;border:4px solid transparent;border-radius:99px}
+html::-webkit-scrollbar-thumb:hover{background:var(--js);background-clip:padding-box;border:4px solid transparent}
+
+/* ===== RETRACTABLE TOP NAV ===== */
+header.top{position:fixed;top:0;left:0;right:0;z-index:60;backdrop-filter:blur(14px);
+  background:color-mix(in srgb,var(--bg) 80%,transparent);border-bottom:1px solid var(--line);
+  transform:translateY(0);transition:transform .38s cubic-bezier(.4,0,.2,1)}
+header.top.hidden{transform:translateY(-104%)}
+.top-inner{max-width:var(--maxw);margin:0 auto;padding:13px 24px;display:flex;align-items:center;gap:18px}
+.brand{font-family:var(--mono);font-weight:800;letter-spacing:.04em;font-size:14px;display:flex;align-items:center;gap:10px}
+.brand .dot{width:10px;height:10px;border-radius:50%;background:var(--engine);box-shadow:0 0 0 4px var(--engine-soft);animation:pulse 3s infinite}
+.brand .arr{color:var(--ink3)} .brand .k{color:var(--engine)} .brand .v{color:var(--js)}
+@keyframes pulse{50%{box-shadow:0 0 0 9px transparent}}
+.vol{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--ink3);border:1px solid var(--line);border-radius:999px;padding:3px 9px;text-transform:uppercase}
+.top-spacer{flex:1}
+.scrollprog{position:absolute;left:0;bottom:-1px;height:2px;background:linear-gradient(90deg,var(--js),var(--engine),var(--native));width:0%;transition:width .1s linear}
+.theme-btn{font-family:var(--mono);font-size:12px;letter-spacing:.05em;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);padding:8px 14px;border-radius:999px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:.2s}
+.theme-btn:hover{color:var(--ink);border-color:var(--engine)}
+.theme-btn svg{width:15px;height:15px}
+
+/* layout shell */
+.shell{max-width:860px;margin:0 auto;padding:0 24px;transition:max-width .4s}
+
+/* ===== RETRACTABLE SIDE NAV ===== */
+nav.toc{display:none;position:fixed;top:96px;left:max(20px,calc(50% - 620px));width:194px;
+  height:calc(100vh - 130px);font-family:var(--mono);font-size:12.5px;overflow:auto;
+  transition:transform .4s cubic-bezier(.4,0,.2,1),opacity .3s;z-index:40}
+nav.toc.collapsed{transform:translateX(-128%);opacity:0;pointer-events:none}
+.toc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-left:14px}
+.toc-head .tt{font-size:10px;letter-spacing:.18em;color:var(--ink3);text-transform:uppercase}
+.toc-retract{width:26px;height:26px;border-radius:7px;border:1px solid var(--line2);background:var(--panel);
+  color:var(--ink2);cursor:pointer;display:grid;place-items:center;transition:.18s;flex-shrink:0}
+.toc-retract:hover{color:var(--ink);border-color:var(--engine)}
+.toc-retract svg{width:14px;height:14px}
+nav.toc a{display:flex;gap:10px;align-items:baseline;color:var(--ink3);text-decoration:none;padding:7px 0;border-left:2px solid transparent;padding-left:14px;margin-left:-2px;transition:.2s;letter-spacing:.02em}
+nav.toc a .num{color:var(--ink3);font-weight:700;font-size:11px}
+nav.toc a:hover{color:var(--ink)}
+nav.toc a.active{color:var(--ink);border-left-color:var(--engine)}
+nav.toc a.active .num{color:var(--engine)}
+/* the show-tab when collapsed */
+.toc-show{position:fixed;top:50%;left:0;transform:translateY(-50%);z-index:41;display:none;
+  align-items:center;gap:8px;writing-mode:vertical-rl;font-family:var(--mono);font-size:11px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);background:var(--panel2);
+  border:1px solid var(--line2);border-left:none;border-radius:0 10px 10px 0;padding:14px 7px;cursor:pointer;transition:.2s}
+.toc-show:hover{color:var(--engine);border-color:var(--engine)}
+.toc-show.show{display:flex}
+.toc-show svg{width:13px;height:13px;transform:rotate(0)}
+main{padding:96px 0 140px;min-width:0}
+
+.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--engine);display:flex;align-items:center;gap:12px;margin:0 0 14px}
+.kicker .ix{color:var(--js);font-weight:800}
+.kicker::after{content:"";flex:1;height:1px;background:var(--line)}
+h1.hero-h{font-weight:800;font-size:clamp(27px,4.2vw,46px);line-height:1.1;letter-spacing:-.03em;margin:0 0 18px}
+h1.hero-h .a{color:var(--js)} h1.hero-h .b{color:var(--engine)} h1.hero-h .c{color:var(--native)}
+h2{font-weight:700;font-size:clamp(21px,2.8vw,30px);letter-spacing:-.02em;margin:0 0 16px;line-height:1.18}
+h2 em{font-style:italic;color:var(--engine)}
+h3{font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2);margin:30px 0 10px}
+.lead{font-size:17px;line-height:1.55;color:var(--ink2);max-width:70ch}
+.prose{max-width:68ch}
+.prose p{margin:0 0 16px} .prose strong{color:var(--ink);font-weight:600}
+.prose em{color:var(--ink);font-style:italic}
+section.block{padding:70px 0;border-bottom:1px solid var(--line);scroll-margin-top:96px}
+section.block:first-of-type{padding-top:18px}
+
+/* tooltip terms */
+.term{cursor:help;border-bottom:1.5px dotted var(--engine);position:relative;color:inherit;transition:background .15s}
+.term:hover{background:var(--engine-soft)}
+#tip{position:fixed;z-index:1200;max-width:330px;background:var(--panel2);border:1px solid var(--line2);border-radius:12px;padding:13px 15px;box-shadow:var(--shadow);font-size:14.5px;line-height:1.5;color:var(--ink2);pointer-events:none;opacity:0;transform:translateY(4px);transition:opacity .14s,transform .14s;font-family:var(--serif)}
+#tip.show{opacity:1;transform:translateY(0)}
+#tip .t-name{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--engine);text-transform:uppercase;display:block;margin-bottom:5px}
+#tip .t-kind{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--js);text-transform:uppercase;float:right}
+#tip.kind-native .t-name{color:var(--native)} #tip.kind-native .t-kind{color:var(--native)}
+#tip::after{content:"";position:absolute;left:var(--ax,20px);bottom:-7px;width:12px;height:12px;background:var(--panel2);border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);transform:rotate(45deg)}
+#tip.flip::after{bottom:auto;top:-7px;transform:rotate(225deg)}
+
+/* callouts */
+.callout{border:1px solid var(--line);border-left:3px solid var(--js);background:var(--panel);border-radius:0 var(--r) var(--r) 0;padding:20px 24px;margin:26px 0;font-size:17px}
+.callout.eng{border-left-color:var(--engine)}
+.callout.nat{border-left-color:var(--native)}
+.callout.dgr{border-left-color:var(--danger)}
+.callout .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--js);display:block;margin-bottom:8px}
+.callout.eng .lbl{color:var(--engine)} .callout.nat .lbl{color:var(--native)} .callout.dgr .lbl{color:var(--danger)}
+
+pre.wire{font-family:var(--mono);font-size:13.5px;line-height:1.7;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow:auto;color:var(--ink2);margin:22px 0}
+pre.wire .k{color:var(--js)} pre.wire .v{color:var(--engine)} pre.wire .c{color:var(--ink3)} pre.wire .d{color:var(--danger)} pre.wire .n{color:var(--native)}
+
+table.spec{width:100%;border-collapse:collapse;font-size:15px;margin:8px 0 4px;font-family:var(--mono)}
+table.spec th{text-align:left;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line2)}
+table.spec td{padding:11px 14px;border-bottom:1px solid var(--line);color:var(--ink2);vertical-align:top}
+table.spec td:first-child{color:var(--ink);font-weight:500;white-space:nowrap}
+table.spec tr:hover td{background:color-mix(in srgb,var(--panel) 60%,transparent)}
+.pill{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;padding:2px 8px;border-radius:999px;border:1px solid currentColor}
+.pill.js{color:var(--js);background:var(--js-soft)} .pill.eng{color:var(--engine);background:var(--engine-soft)} .pill.nat{color:var(--native);background:var(--native-soft)} .pill.os{color:var(--ink3)} .pill.dgr{color:var(--danger);background:var(--danger-soft)}
+
+/* figure / canvas / inspect */
+.figure{margin:30px 0;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);overflow:hidden;box-shadow:var(--shadow)}
+.figure.fs{position:fixed;inset:12px;z-index:400;margin:0;max-width:none;display:flex;flex-direction:column}
+.fig-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.fig-bar .title{font-family:var(--mono);font-size:12px;letter-spacing:.05em;color:var(--ink2);text-transform:uppercase}
+.fig-bar .grow{flex:1}
+.fbtn{font-family:var(--mono);font-size:11px;letter-spacing:.03em;border:1px solid var(--line2);background:transparent;color:var(--ink2);padding:6px 11px;border-radius:8px;cursor:pointer;transition:.18s;display:inline-flex;align-items:center;gap:6px}
+.fbtn:hover{color:var(--ink);border-color:var(--engine)}
+.fbtn.on{color:var(--bg);background:var(--engine);border-color:var(--engine)}
+.fbtn.on.js{background:var(--js);border-color:var(--js)}
+.fbtn svg{width:13px;height:13px}
+.canvas{position:relative;background:radial-gradient(circle at 1px 1px,var(--grid2) 1px,transparent 0) 0 0/22px 22px}
+.figure.fs .canvas{flex:1;min-height:0}
+.figure:not(.fs) .canvas{cursor:zoom-in}
+.figure:not(.fs) .canvas .node{cursor:pointer}
+.figure.fs .canvas{cursor:grab}
+.figure.fs .canvas:active{cursor:grabbing}
+.figure.fs .canvas .node{cursor:pointer}
+svg.diagram{display:block;width:100%;height:auto;touch-action:auto}
+.figure.fs svg.diagram{height:100%;touch-action:none}
+.zoomctl{position:absolute;right:12px;bottom:12px;display:none;flex-direction:column;gap:6px;z-index:5}
+.figure.fs .zoomctl{display:flex}
+.zoomctl button{width:34px;height:34px;border-radius:8px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);font-family:var(--mono);font-size:15px;cursor:pointer;line-height:1;transition:.15s;display:grid;place-items:center}
+.zoomctl button:hover{color:var(--ink);border-color:var(--engine)}
+.zlevel{position:absolute;left:12px;bottom:12px;display:none;font-family:var(--mono);font-size:11px;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:5;user-select:none}
+.figure.fs .zlevel{display:block}
+.zhint{position:absolute;left:12px;top:12px;display:none;font-family:var(--mono);font-size:10px;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:5;opacity:.85;pointer-events:none}
+.figure.fs .zhint{display:block}
+.inspect-hint{position:absolute;right:12px;top:12px;font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:4;pointer-events:none;opacity:0;transition:opacity .2s}
+.figure:not(.fs) .canvas:hover .inspect-hint{opacity:.9}
+.figure.fs .inspect-hint{display:none}
+
+.node{cursor:pointer}
+.node .nbox{transition:transform .35s cubic-bezier(.4,1.3,.5,1),filter .25s}
+.node:hover .nbox{filter:brightness(1.12)}
+.node.active .nbox{filter:drop-shadow(0 0 12px var(--engine))}
+
+/* player */
+.player{display:flex;align-items:center;gap:10px;padding:14px 16px;border-top:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.pbtn{width:40px;height:40px;border-radius:50%;border:1px solid var(--line2);background:var(--panel);color:var(--ink);cursor:pointer;display:grid;place-items:center;transition:.18s}
+.pbtn:hover{border-color:var(--engine);color:var(--engine)}
+.pbtn.play{background:var(--engine);border-color:var(--engine);color:var(--bg);width:46px;height:46px}
+.pbtn.play:hover{filter:brightness(1.08);color:var(--bg)}
+.pbtn svg{width:18px;height:18px}
+.scrub{flex:1;min-width:160px;height:6px;border-radius:999px;background:var(--line);position:relative;cursor:pointer}
+.scrub .fill{position:absolute;left:0;top:0;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--js),var(--engine));width:0%}
+.scrub .ticks{position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center;padding:0 1px}
+.scrub .tk{width:2px;height:2px;border-radius:50%;background:var(--ink3)}
+.stepno{font-family:var(--mono);font-size:12px;color:var(--ink3);min-width:62px;text-align:right}
+.caption{padding:18px 22px;border-top:1px solid var(--line);min-height:104px}
+.caption .cn{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--js);display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.caption .cn .lane{color:var(--engine)}
+.caption .ch{font-size:21px;font-weight:600;margin:0 0 4px;letter-spacing:-.01em}
+.caption .cb{color:var(--ink2);font-size:16px;margin:0;max-width:78ch}
+.caption .more{font-family:var(--mono);font-size:11px;color:var(--engine);background:none;border:none;cursor:pointer;padding:0;margin-top:8px;border-bottom:1px dotted var(--engine)}
+
+/* cards */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(236px,1fr));gap:14px;margin:24px 0}
+.card{border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:var(--panel);cursor:pointer;transition:.2s;position:relative;overflow:hidden}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--js);opacity:.6}
+.card.eng::before{background:var(--engine)} .card.nat::before{background:var(--native)} .card.dgr::before{background:var(--danger)}
+.card:hover{transform:translateY(-3px);border-color:var(--line2);box-shadow:var(--shadow)}
+.card .fn{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--ink3);text-transform:uppercase;margin-bottom:6px;display:flex;justify-content:space-between;gap:8px}
+.card .ft{font-family:var(--mono);font-weight:700;font-size:15px;line-height:1.25;margin-bottom:5px;color:var(--ink)}
+.card .fs2{font-size:14.5px;color:var(--ink2);font-family:var(--serif)}
+.card .deepchip{font-family:var(--mono);font-size:9px;letter-spacing:.06em;color:var(--engine);border:1px solid var(--engine);border-radius:999px;padding:1px 6px;margin-top:9px;display:inline-block}
+
+/* modal */
+.scrim{position:fixed;inset:0;z-index:600;background:rgba(5,8,12,.62);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;pointer-events:none;transition:opacity .25s}
+.scrim.open{opacity:1;pointer-events:auto}
+.modal{background:var(--panel2);border:1px solid var(--line2);border-radius:18px;max-width:660px;width:100%;max-height:88vh;overflow:auto;box-shadow:var(--shadow);transform:translateY(16px) scale(.98);transition:transform .3s cubic-bezier(.3,1.2,.4,1);position:relative}
+.scrim.open .modal{transform:none}
+.modal .mhead{padding:24px 26px 0}
+.modal .mtag{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--js);display:flex;gap:10px;align-items:center}
+.modal .mtag .lane{color:var(--engine)}
+.modal h4{font-size:25px;font-weight:600;margin:8px 0 0;letter-spacing:-.01em;font-family:var(--mono)}
+.modal .mbody{padding:16px 26px 26px;color:var(--ink2);font-size:16.5px}
+.modal .mbody p{margin:0 0 14px}
+.modal .mbody code{background:var(--panel);padding:1px 5px;border-radius:5px;font-size:14px;color:var(--ink)}
+.mclose{position:absolute;right:18px;top:18px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);cursor:pointer;font-size:18px;line-height:1;z-index:2}
+.mclose:hover{color:var(--ink);border-color:var(--danger)}
+.why{border-left:3px solid var(--engine);background:var(--engine-soft);padding:12px 16px;border-radius:0 10px 10px 0;font-size:15px;margin-top:8px}
+.why .wl{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--engine);display:block;margin-bottom:5px}
+.deephd{margin-top:22px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--native);display:flex;align-items:center;gap:9px}
+.deephd::after{content:"";flex:1;height:1px;background:var(--line)}
+.deep{display:grid;margin-top:12px;gap:12px;grid-template-columns:1fr 1fr}
+.deep .dcol{border:1px solid var(--line);border-radius:10px;padding:13px 15px;background:var(--bg2)}
+.deep .dcol p{font-size:14px;margin:0;line-height:1.55}
+.deep .dl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:8px}
+.deep .dl.os{color:var(--engine)} .deep .dl.spec{color:var(--js)}
+.deep code{font-size:12.5px;color:var(--ink);background:var(--panel);padding:1px 4px;border-radius:4px}
+@media(max-width:560px){.deep{grid-template-columns:1fr}}
+
+footer{max-width:var(--maxw);margin:0 auto;padding:40px 24px 80px;font-family:var(--mono);font-size:12px;color:var(--ink3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;border-top:1px solid var(--line)}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;color:var(--ink2);margin:18px 0 0}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+@media(min-width:1280px){ nav.toc{display:block} }
+@media(max-width:920px){ body{font-size:17px} main{padding:84px 0 100px} }
+</style>
+</head>
+<body>
+
+<header class="top" id="topNav">
+  <div class="top-inner">
+    <div class="brand"><span class="dot"></span><span class="v">bytes</span><span class="arr">⇄</span><span class="k">kernel</span></div>
+    <span class="vol">Vol. II · memory &amp; syscalls</span>
+    <div class="top-spacer"></div>
+    <button class="theme-btn" id="themeBtn" aria-label="toggle theme">
+      <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>
+      <span id="themeTxt">DARK</span>
+    </button>
+  </div>
+  <div class="scrollprog" id="scrollProg"></div>
+</header>
+
+<!-- collapsed-state show tab -->
+<div class="toc-show" id="tocShow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg> contents</div>
+
+<div class="shell">
+  <nav class="toc" id="toc">
+    <div class="toc-head">
+      <span class="tt">Contents</span>
+      <button class="toc-retract" id="tocRetract" title="retract sidebar" aria-label="retract sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+    </div>
+    <a href="#worlds"><span class="num">00</span> Two worlds</a>
+    <a href="#problem"><span class="num">01</span> The root problem</a>
+    <a href="#standard"><span class="num">02</span> The standard layer</a>
+    <a href="#matrix"><span class="num">03</span> The accessor matrix</a>
+    <a href="#pool"><span class="num">04</span> Buffer &amp; the pool</a>
+    <a href="#fs"><span class="num">05</span> fs is a syscall</a>
+    <a href="#loop"><span class="num">06</span> The event loop</a>
+    <a href="#backpressure"><span class="num">07</span> Backpressure</a>
+    <a href="#net"><span class="num">08</span> net · dgram · http</a>
+    <a href="#decoder"><span class="num">09</span> StringDecoder</a>
+    <a href="#crypto"><span class="num">10</span> crypto &amp; zlib</a>
+    <a href="#napi"><span class="num">11</span> Node-API bridge</a>
+    <a href="#close"><span class="num">12</span> The one sentence</a>
+  </nav>
+
+  <main>
+
+    <!-- ===== HERO / 00 WORLDS ===== -->
+    <section class="block" id="worlds" style="border-bottom:none">
+      <p class="kicker"><span class="ix">00</span> Explorable explanation · Node binary internals, Vol. II</p>
+      <h1 class="hero-h">Why a <span class="a">Buffer's</span> bytes live <span class="b">outside</span> the garbage collector — and how that lets the <span class="c">kernel</span> hold a pointer.</h1>
+      <p class="lead">Node lives in two memory worlds at once. V8's heap is a <em>moving</em> world: the garbage collector relocates objects to defragment, so no JS object has a stable address. The kernel's world is the opposite: <code>read(2)</code> wants a fixed pointer it can write bytes into. A server runtime has to bridge them — and almost every binary API in Node is a consequence of that one tension. Press play to watch a GC compaction run while a syscall holds a pointer, and see why the bytes have to live off-heap.</p>
+
+      <div class="figure" id="worldsFig">
+        <div class="fig-bar">
+          <span class="title">▶ V8 heap (moving) · off-heap backing store (stable) · kernel</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-inspect="worldsSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="worldsSvg">
+          <svg class="diagram" id="worldsSvg" viewBox="0 0 1320 640" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="worldsVP"></g></svg>
+        </div>
+        <div class="player">
+          <button class="pbtn" id="wPrev" title="step back"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17V7l-7 5zM8 7h-2v10h2z"/></svg></button>
+          <button class="pbtn play" id="wPlay" title="play/pause"><svg id="wPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg></button>
+          <button class="pbtn" id="wNext" title="step forward"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 7v10l7-5zM16 7h2v10h-2z"/></svg></button>
+          <div class="scrub" id="wScrub"><div class="fill" id="wFill"></div><div class="ticks" id="wTicks"></div></div>
+          <span class="stepno" id="wStepNo">00 / 08</span>
+        </div>
+        <div class="caption">
+          <div class="cn"><span id="wCapN">FRAME 00</span> · <span class="lane" id="wCapLane">—</span></div>
+          <p class="ch" id="wCapH">Press play to run a garbage collection</p>
+          <p class="cb" id="wCapB">Amber objects live on V8's managed heap. The teal block is the off-heap backing store. Watch which addresses change when the collector compacts.</p>
+          <button class="more" id="wCapMore" style="display:none">Open full detail ↗</button>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--js)"></i> V8 managed heap (moves)</span>
+        <span><i style="background:var(--engine)"></i> off-heap backing store (stable)</span>
+        <span><i style="background:var(--native)"></i> kernel / native pointer</span>
+        <span><i style="background:var(--danger)"></i> dangling / invalid</span>
+      </div>
+    </section>
+
+    <!-- ===== 01 PROBLEM ===== -->
+    <section class="block" id="problem">
+      <p class="kicker"><span class="ix">01</span> The root problem · two worlds that don't trust each other</p>
+      <h2>One tension generates the entire API surface.</h2>
+      <div class="prose">
+        <p>JavaScript grew up in the browser. Its only sequence-of-data type was the <strong>UTF-16 string</strong>, and every object lives on V8's garbage-collected heap — a <em>moving, compacting</em> collector that relocates live objects to defragment. The address of a normal JS object is therefore not stable across a GC cycle.</p>
+        <p>The operating system is the opposite. <span class="term" data-term="pread">read(2)</span> wants a pointer and a length and writes bytes there. <code>write(2)</code> wants a stable pointer it can hand to the NIC or disk controller. Bytes are bytes — no encoding, no UTF-16.</p>
+        <p>A server runtime must live in both worlds simultaneously, and that creates three hard constraints. Every API in this volume answers some part of them.</p>
+      </div>
+      <div class="cards" id="constraintCards"></div>
+      <div class="callout eng">
+        <span class="lbl">the unifying question</span>
+        Throughout, the single question is always the same: <strong>where do these bytes physically live, and who holds the stable pointer to them?</strong> Hold that and the rest is derivable.
+      </div>
+    </section>
+
+    <!-- ===== 02 STANDARD LAYER ===== -->
+    <section class="block" id="standard">
+      <p class="kicker"><span class="ix">02</span> The standard layer · ArrayBuffer · TypedArray · DataView</p>
+      <h2>The wrapper is on the heap. The bytes are not.</h2>
+      <div class="prose">
+        <p>These three are the ECMAScript primitives Node inherits, and they already encode the copy-vs-view distinction that recurs everywhere later. An <code>ArrayBuffer</code> is a fixed-length region of raw bytes — deliberately opaque, you cannot index it. The V8 detail that matters: the small <strong>wrapper object</strong> sits on the GC heap, but the <span class="term" data-term="backing store">backing store</span> — the actual bytes — is allocated <strong>off-heap</strong> with a stable address. V8 tracks it as external memory for collection pressure, but never moves or scans the payload. That stable backing store is exactly what makes <code>ArrayBuffer</code> the foundation for talking to the kernel.</p>
+      </div>
+      <table class="spec">
+        <thead><tr><th>Primitive</th><th>What it is</th><th>Endianness</th><th>Speed</th></tr></thead>
+        <tbody>
+          <tr><td>ArrayBuffer</td><td>The memory. Opaque, fixed-length, off-heap backing store.</td><td>—</td><td>storage only</td></tr>
+          <tr><td>TypedArray</td><td>A <em>typed lens</em> — interprets bytes as <code>Uint8</code>/<code>Int32</code>/<code>Float64</code>…</td><td><span class="pill dgr">native only</span></td><td>JIT-fast indexed load</td></tr>
+          <tr><td>DataView</td><td>A lens with <em>explicit endianness</em> at any byte offset</td><td><span class="pill eng">you state it</span></td><td>real method call</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <span class="lbl">the recurring tradeoff</span>
+        <code>typedArray[i]</code> is a plain indexed load the JIT can inline, but it reads in <strong>host byte order</strong> — non-portable the instant you serialize it. <code>view.getInt32(off, false)</code> is portable and alignment-agnostic, but each access is a real call doing bounds + endian work. Fast-and-native versus explicit-and-portable: the same fork appears again in Buffer's <code>readInt32BE</code> vs <code>readInt32LE</code>.
+      </div>
+      <pre class="wire"><span class="c">// same 8 bytes, three different lenses — the bytes never move</span>
+<span class="k">const</span> ab = <span class="k">new</span> ArrayBuffer(8);        <span class="c">// off-heap region, opaque</span>
+<span class="k">const</span> u8 = <span class="k">new</span> Uint8Array(ab);        <span class="c">// lens: bytes,  native-endian</span>
+<span class="k">const</span> f64= <span class="k">new</span> Float64Array(ab);      <span class="c">// lens: 1 double, native-endian</span>
+<span class="k">const</span> dv = <span class="k">new</span> DataView(ab);          <span class="c">// lens: any type, explicit-endian</span>
+dv.getInt32(<span class="v">0</span>, <span class="d">false</span>);              <span class="c">// big-endian (network order)</span></pre>
+    </section>
+
+
+    <!-- ===== 03 ACCESSOR MATRIX ===== -->
+    <section class="block" id="matrix">
+      <p class="kicker"><span class="ix">03</span> The accessor matrix · struct packing, made tangible</p>
+      <h2>Fifty methods are really one generated grid.</h2>
+      <div class="prose">
+        <p>Buffer's sprawl of numeric accessors looks intimidating until you see the pattern that generates it: <strong>{read | write} × {UInt | Int | Float | Double | BigInt} × width × {BE | LE}</strong>. Pick a method, pick an offset, and you are doing exactly what a C struct parser does — choose offset, width, signedness, byte order, then twiddle. Below is a live 8-byte buffer wrapped by a real <code>DataView</code>. Change the lens and watch which bytes are consumed and what value falls out. The bytes never change; only the reading does.</p>
+      </div>
+      <div class="figure" id="matrixFig">
+        <div class="fig-bar">
+          <span class="title">⊞ 8 bytes · pick a lens, read a value</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-preset="pi">π as Float64BE</button>
+          <button class="fbtn" data-preset="ascii">ASCII "Node8964"</button>
+          <button class="fbtn" data-preset="rand">randomize</button>
+        </div>
+        <div class="canvas" style="cursor:default">
+          <div id="matrixUI" style="padding:22px 20px"></div>
+        </div>
+      </div>
+      <div class="callout dgr">
+        <span class="lbl">the silent lens</span>
+        A plain <code>new Int32Array(buf.buffer)[0]</code> uses the <strong>platform's</strong> byte order with no annotation — almost always little-endian. Read a big-endian wire format that way and you get a plausible, totally wrong integer with no error. State <code>BE</code>/<code>LE</code> explicitly, every time.
+      </div>
+    </section>
+
+    <!-- ===== 04 POOL ===== -->
+    <section class="block" id="pool">
+      <p class="kicker"><span class="ix">04</span> Buffer · a Uint8Array with a slab allocator bolted on</p>
+      <h2>alloc, allocUnsafe, allocUnsafeSlow — one safety/speed curve.</h2>
+      <div class="prose">
+        <p>When V8 shipped real typed arrays, Node rebased <code>Buffer</code> to be a <strong>subclass of <code>Uint8Array</code></strong> — the single most clarifying fact about it. Everything from the standard layer applies; the extra methods are a struct-packing toolkit and a set of encodings. The three allocators are points on one curve. Click the buttons to allocate into a real <span class="term" data-term="Buffer pool">8 KiB pool</span> and watch where the bytes land.</p>
+      </div>
+      <div class="figure" id="poolFig">
+        <div class="fig-bar">
+          <span class="title">⬡ the shared pool · slabs &amp; standalone blocks</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-alloc="unsafe-small">allocUnsafe(1024)</button>
+          <button class="fbtn js" data-alloc="alloc-small">alloc(1024)</button>
+          <button class="fbtn" data-alloc="slow">allocUnsafeSlow(512)</button>
+          <button class="fbtn" data-alloc="big">allocUnsafe(8&nbsp;KiB)</button>
+          <button class="fbtn" data-alloc="reset">⟲ reset</button>
+        </div>
+        <div class="canvas" style="cursor:default">
+          <div id="poolUI" style="padding:20px"></div>
+        </div>
+      </div>
+      <div class="callout dgr">
+        <span class="lbl">two footguns, one pool</span>
+        <strong>(1) The leak:</strong> <code>allocUnsafe</code> skips the zero-fill, so a fresh buffer holds whatever was last in that slab — old request bodies, freed key material. Send it before overwriting every byte and you have disclosed heap memory. <strong>(2) The pin:</strong> a small <code>allocUnsafe</code> buffer is a <em>view into the shared 8 KiB pool</em>, so keeping one reference alive pins the entire pool. For long-lived tiny buffers, reach for <code>allocUnsafeSlow</code>.
+      </div>
+      <h3>The from() inconsistency — copy or share?</h3>
+      <div class="prose"><p>The copy-vs-view fork bites here too, and it is inconsistent by design. Tap each to see what actually happens to the memory.</p></div>
+      <div class="cards" id="fromCards"></div>
+    </section>
+
+    <!-- ===== 05 FS ===== -->
+    <section class="block" id="fs">
+      <p class="kicker"><span class="ix">05</span> fs · the thinnest possible wrapper over the syscall</p>
+      <h2>You manage the buffers and offsets, exactly as in C.</h2>
+      <div class="prose">
+        <p><code>fs.open()</code> returns an integer <span class="term" data-term="file descriptor">file descriptor</span> — the same fd from <code>open(2)</code>. <code>fs.read(fd, buffer, offset, length, position)</code> maps almost 1:1 onto <span class="term" data-term="pread">pread(2)</span>: <em>you</em> supply the Buffer, the kernel fills <code>length</code> bytes at <code>position</code> into your buffer at <code>offset</code>. There is essentially no abstraction tax — you are handing the kernel your stable off-heap pointer. The encoding, if any, is a post-processing step applied to bytes that were always read as binary.</p>
+      </div>
+      <table class="spec">
+        <thead><tr><th>Node call</th><th>Maps to</th><th>What it does with your bytes</th></tr></thead>
+        <tbody>
+          <tr><td>fs.open()</td><td><span class="pill os">open(2)</span></td><td>returns an integer fd; <code>flags</code> are the O_* flags</td></tr>
+          <tr><td>fs.read()</td><td><span class="pill os">pread(2)</span></td><td>kernel fills <em>your</em> Buffer at <code>position</code></td></tr>
+          <tr><td>fs.write()</td><td><span class="pill os">pwrite(2)</span></td><td>hands your stable pointer to the kernel</td></tr>
+          <tr><td>fs.readv / writev</td><td><span class="pill os">readv/writev(2)</span></td><td><span class="term" data-term="vectored I/O">scatter-gather</span>: many buffers, one syscall</td></tr>
+          <tr><td>fs.readFile()</td><td>open+read+close</td><td>whole file as one Buffer (string only if you pass an encoding)</td></tr>
+          <tr><td>fs.createReadStream()</td><td>chunked read loop</td><td>64 KiB Buffer chunks with full backpressure</td></tr>
+        </tbody>
+      </table>
+      <div class="callout eng">
+        <span class="lbl">the OS-internals twist</span>
+        File I/O in Node is <strong>not</strong> event-loop-async the way sockets are. Regular files are always "readable" to <span class="term" data-term="epoll">epoll</span>/<span class="term" data-term="kqueue">kqueue</span>, so polling them is meaningless. <span class="term" data-term="libuv">libuv</span> therefore runs blocking <code>pread</code>/<code>pwrite</code> on a <span class="term" data-term="threadpool">worker thread pool</span> (default <code>UV_THREADPOOL_SIZE=4</code>) and signals completion back to the loop. Modern Linux is moving some of this onto <span class="term" data-term="io_uring">io_uring</span>, which collapses the distinction — but the threadpool model is still the one to reason about. The next section makes it visible.
+      </div>
+    </section>
+
+
+    <!-- ===== 06 EVENT LOOP ===== -->
+    <section class="block" id="loop">
+      <p class="kicker"><span class="ix">06</span> The event loop · threadpool vs readiness</p>
+      <h2>Two completely different paths for two kinds of I/O.</h2>
+      <div class="prose">
+        <p>Sockets sit directly on the <code>epoll</code>/<code>kqueue</code>/IOCP readiness loop — the OS tells libuv when a fd is ready, and the work is genuinely async. Regular files can't be polled, so file reads, DNS lookups, and CPU-bound crypto/zlib are dispatched to the <strong>4-thread worker pool</strong>, where they block on a real thread until done. Fire the operations below and watch the path each one takes. Queue five file reads and you will see the fifth wait for a free thread.</p>
+      </div>
+      <div class="figure" id="loopFig">
+        <div class="fig-bar">
+          <span class="title">⟳ libuv · readiness loop + worker pool</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-loop="fs">fs.readFile</button>
+          <button class="fbtn" data-loop="net">net socket</button>
+          <button class="fbtn" data-loop="crypto">crypto.pbkdf2</button>
+          <button class="fbtn" data-loop="dns">dns.lookup</button>
+          <button class="fbtn" data-loop="flood">flood 5× fs</button>
+          <button class="fbtn" id="iouringBtn" data-loop="iouring">io_uring: off</button>
+        </div>
+        <div class="canvas" style="cursor:default">
+          <svg class="diagram" id="loopSvg" viewBox="0 0 900 460" preserveAspectRatio="xMidYMid meet"><g id="loopVP"></g></svg>
+        </div>
+        <div class="caption" style="min-height:64px">
+          <div class="cn"><span id="loopN">IDLE</span></div>
+          <p class="cb" id="loopMsg">Sockets ride the readiness loop. Files and CPU work go to the worker pool. Dispatch something.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 07 BACKPRESSURE ===== -->
+    <section class="block" id="backpressure">
+      <p class="kicker"><span class="ix">07</span> Streams · backpressure is flow control</p>
+      <h2>When the sink is slow, the source must be told to stop.</h2>
+      <div class="prose">
+        <p>Streams are the abstraction over "data arrives in chunks over time," and by default those chunks are Buffers. The first-principles concept is <span class="term" data-term="backpressure">backpressure</span>. <code>writable.write(chunk)</code> returns <code>false</code> when the internal queue exceeds <span class="term" data-term="highWaterMark">highWaterMark</span>; the <code>'drain'</code> event says resume. It is flow control in the same spirit as TCP's receive window — stopping a fast producer from exhausting memory against a slow sink. Drag the consumer speed and watch <code>write()</code> flip to <code>false</code>.</p>
+      </div>
+      <div class="figure" id="bpFig">
+        <div class="fig-bar">
+          <span class="title">≈ producer → highWaterMark queue → consumer</span>
+          <span class="grow"></span>
+          <button class="fbtn on" id="bpToggle">⏸ running</button>
+        </div>
+        <div class="canvas" style="cursor:default">
+          <div id="bpUI" style="padding:24px 22px"></div>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="lbl">the related tools</span>
+        <code>cork()</code>/<code>uncork()</code> batch several writes into one underlying syscall — a deliberate Nagle. <code>stream.pipeline(...)</code> wires source to sink <em>and</em> propagates errors and cleans up every stream, which raw <code>.pipe()</code> does not. <code>Transform</code> streams (<code>zlib</code> gzip, <code>crypto</code> ciphers) read this same backpressure on both sides.
+      </div>
+    </section>
+
+    <!-- ===== 08 NET ===== -->
+    <section class="block" id="net">
+      <p class="kicker"><span class="ix">08</span> net · dgram · http · the framing problem</p>
+      <h2>TCP has no message boundaries. UDP keeps them. That changes everything.</h2>
+      <div class="prose">
+        <p><code>node:net</code> is TCP riding <code>uv_tcp_t</code> on the readiness loop, and its crucial property is that <strong>TCP is a byte stream with no message boundaries.</strong> A <code>'data'</code> event delivers whatever bytes happened to be available — maybe half a logical message, maybe three glued together. The Buffer chunks have no relationship to your protocol's <span class="term" data-term="framing">framing</span>. Toggle the two sends below to see them arrive split, then merged.</p>
+      </div>
+      <div class="figure" id="frameFig">
+        <div class="fig-bar">
+          <span class="title">⌗ two writes → how many 'data' events?</span>
+          <span class="grow"></span>
+          <button class="fbtn" id="frameBtn" data-mode="0">scenario: clean 1:1</button>
+        </div>
+        <div class="canvas" style="cursor:default">
+          <svg class="diagram" id="frameSvg" viewBox="0 0 900 320" preserveAspectRatio="xMidYMid meet"><g id="frameVP"></g></svg>
+        </div>
+      </div>
+      <table class="spec">
+        <thead><tr><th>Module</th><th>Boundaries?</th><th>The gotcha</th></tr></thead>
+        <tbody>
+          <tr><td>net (TCP)</td><td><span class="pill dgr">none</span></td><td>you frame messages yourself: length-prefix or delimiter</td></tr>
+          <tr><td>dgram (UDP)</td><td><span class="pill eng">preserved</span></td><td>one <code>'message'</code> = one <span class="term" data-term="datagram">datagram</span> = one Buffer; loss &amp; reorder instead</td></tr>
+          <tr><td>http / https</td><td>built on net</td><td>body as Buffer chunks; headers parsed by C state machine <span class="term" data-term="llhttp">llhttp</span></td></tr>
+        </tbody>
+      </table>
+      <div class="callout eng">
+        <span class="lbl">latency vs throughput</span>
+        <code>socket.setNoDelay(true)</code> disables <span class="term" data-term="Nagle">Nagle's algorithm</span>, which otherwise coalesces small writes to reduce packet overhead. Off = lower latency per write; on = fewer, fuller packets. <code>cork</code>/<code>uncork</code> is the userland cousin of the same idea.
+      </div>
+    </section>
+
+
+    <!-- ===== 09 DECODER ===== -->
+    <section class="block" id="decoder">
+      <p class="kicker"><span class="ix">09</span> string_decoder · a correctness fix for chunking</p>
+      <h2>A small stateful machine that survives the seam.</h2>
+      <div class="prose">
+        <p>UTF-8 code points are 1–4 bytes. When a binary stream is split at arbitrary points — TCP packet boundaries, fs read sizes — a chunk boundary can fall <em>inside</em> a multi-byte sequence. Decode each chunk independently with <code>chunk.toString('utf8')</code> and both seams emit the <span class="term" data-term="replacement character">replacement character</span> <code>�</code>, corrupting the character. (Volume I traces this byte-by-byte for <code>"café €99"</code>.) The fix is one function with memory: <code>decoder.write()</code> holds back any incomplete trailing sequence and carries it to the next call; <code>decoder.end()</code> flushes.</p>
+      </div>
+      <pre class="wire"><span class="k">const</span> { StringDecoder } = <span class="k">require</span>(<span class="v">'node:string_decoder'</span>);
+<span class="k">const</span> d = <span class="k">new</span> StringDecoder(<span class="v">'utf8'</span>);
+
+d.write(chunk1); <span class="c">// → "café "   (retains the dangling E2 internally)</span>
+d.write(chunk2); <span class="c">// → "€99"     (prepends E2, completes the codepoint)</span>
+d.end();         <span class="c">// → ""       (nothing buffered — output is byte-perfect)</span>
+
+<span class="c">// the payoff you rarely write by hand:</span>
+readable.setEncoding(<span class="v">'utf8'</span>); <span class="c">// installs a StringDecoder on the stream</span></pre>
+      <div class="callout">
+        <span class="lbl">why it's a function, not a flag</span>
+        UTF-8 decoding is <strong>stateful across bytes</strong>; <code>toString()</code> is <strong>stateless per chunk</strong>. The fix has to live somewhere that remembers a partial sequence between calls. <code>setEncoding()</code> simply wires this decoder into the stream's internal read path, so every <code>'data'</code> event already hands you whole-character strings.
+      </div>
+    </section>
+
+    <!-- ===== 10 CRYPTO / ZLIB ===== -->
+    <section class="block" id="crypto">
+      <p class="kicker"><span class="ix">10</span> crypto &amp; zlib · pointers straight into C libraries</p>
+      <h2>Byte-oriented because the underlying work is byte-oriented.</h2>
+      <div class="prose">
+        <p>Both modules hand your Buffer's stable pointer almost directly to a compiled C library — <span class="term" data-term="OpenSSL">OpenSSL</span> for crypto, zlib/brotli for compression. They operate on Buffers because letting UTF-16 or an ambiguous encoding touch key material or hash input is how you get subtle, dangerous bugs: the same input must always mean the same bytes. Each card opens the gotcha that bites people.</p>
+      </div>
+      <div class="cards" id="cryptoCards"></div>
+      <div class="callout eng">
+        <span class="lbl">where the work runs</span>
+        Compression is CPU-bound, so the async <code>zlib</code> variants run on the same <strong>libuv thread pool</strong> as fs — not the event loop. So do <code>crypto.pbkdf2</code> and <code>scrypt</code>. This is why a flood of password hashes can starve your file I/O: they share four threads.
+      </div>
+    </section>
+
+    <!-- ===== 11 NAPI ===== -->
+    <section class="block" id="napi">
+      <p class="kicker"><span class="ix">11</span> Node-API · the zero-copy bridge to native memory</p>
+      <h2>The bytes never move. JavaScript just gets a lens.</h2>
+      <div class="prose">
+        <p>This is the bottom of the stack, and it makes the whole "where do the bytes live" theme explicit. The interesting calls are the <strong>external</strong> variants: <code>napi_create_external_buffer</code> wraps memory you <em>already have</em> — a pointer from <span class="term" data-term="mmap">mmap</span>, a shared-memory segment, a frame from a hardware device — and exposes it to JS as a Buffer <strong>without copying a byte</strong>. You provide a <span class="term" data-term="finalizer">finalizer</span> so that when the JS wrapper is garbage collected, your C code frees the underlying memory. That finalizer is how two ownership models — GC and manual <code>free</code> — are reconciled across the seam.</p>
+      </div>
+      <div class="figure" id="napiFig">
+        <div class="fig-bar"><span class="title">⇌ external buffer · wrap, lens, finalize</span></div>
+        <div class="canvas" style="cursor:default">
+          <svg class="diagram" id="napiSvg" viewBox="0 0 900 380" preserveAspectRatio="xMidYMid meet"><g id="napiVP"></g></svg>
+        </div>
+      </div>
+      <div class="callout nat">
+        <span class="lbl">why "Node-API" and not "just call V8"</span>
+        It is an <strong>ABI-stable, versioned C interface</strong>. An addon compiled against an <span class="term" data-term="N-API">N-API</span> version keeps working across Node major versions, whereas poking V8 internals directly broke on essentially every V8 upgrade. Stability is the whole point.
+      </div>
+    </section>
+
+    <!-- ===== 12 CLOSE ===== -->
+    <section class="block" id="close" style="border-bottom:none">
+      <p class="kicker"><span class="ix">12</span> The one sentence that regenerates the list</p>
+      <h2>Every API was one decision, made once.</h2>
+      <div class="callout eng" style="font-size:22px;font-family:var(--serif);line-height:1.5">
+        <span class="lbl">the thesis</span>
+        Node needed a byte container with a <strong>stable, off-GC-heap address</strong> so the kernel and C libraries can be handed pointers without copies — and everything else is either a <em>lens</em> over that memory (TypedArray, DataView, Buffer methods), a <em>producer/consumer</em> of it (fs, net, http, crypto, zlib), a <em>correctness fix</em> for chunking it (string_decoder), or a <em>bridge</em> for sharing it with native code (N-API).
+      </div>
+      <h3>The footguns, gathered</h3>
+      <table class="spec">
+        <thead><tr><th>Footgun</th><th>What goes wrong</th></tr></thead>
+        <tbody>
+          <tr><td>allocUnsafe leak</td><td>uninitialised pool slab exposes old data — overwrite fully or use <code>alloc</code></td></tr>
+          <tr><td>pool pinning</td><td>a tiny <code>allocUnsafe</code> view keeps the whole 8 KiB pool alive — use <code>allocUnsafeSlow</code> for long-lived</td></tr>
+          <tr><td>subarray aliasing</td><td><code>subarray</code>/<code>slice</code> share memory; <code>Uint8Array.prototype.slice</code> copies</td></tr>
+          <tr><td>silent endianness</td><td>plain TypedArray uses host order — state <code>BE</code>/<code>LE</code></td></tr>
+          <tr><td>per-chunk toString()</td><td>multi-byte char split across chunks → <code>�</code>; use StringDecoder / setEncoding</td></tr>
+          <tr><td>TCP framing</td><td>no message boundaries — reassemble messages yourself</td></tr>
+          <tr><td>threadpool starvation</td><td>fs + crypto + zlib share four threads by default</td></tr>
+          <tr><td>missing finalizer</td><td>external buffer with no finalizer leaks the native allocation</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <span>bytes ⇄ kernel · Node binary internals Vol. II · memory worlds, syscalls, the pool &amp; the native bridge</span>
+  <span id="footTheme">engineering-blueprint mode</span>
+</footer>
+
+<div id="tip" role="tooltip"></div>
+
+<div class="scrim" id="scrim">
+  <div class="modal" role="dialog" aria-modal="true">
+    <button class="mclose" id="mClose" aria-label="close">✕</button>
+    <div class="mhead">
+      <div class="mtag"><span id="mTag">DETAIL</span><span class="lane" id="mLane"></span></div>
+      <h4 id="mTitle"></h4>
+    </div>
+    <div class="mbody" id="mBody"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   GLOSSARY — kind: spec | os | node | native | concept
+   ============================================================ */
+const GLOSSARY = {
+ "backing store":["os","The actual bytes behind an ArrayBuffer, allocated off the V8 heap with a stable address. V8 tracks it for collection pressure but never moves or scans it — that stability is what lets the kernel hold a pointer."],
+ "garbage collector":["concept","V8's automatic memory manager. It's a moving, compacting collector: it relocates live objects to defragment the heap, so no managed object has an address stable across a GC cycle."],
+ "compaction":["concept","The GC phase that slides live objects together to close gaps left by freed ones. It changes object addresses — the reason a heap pointer can't be handed to a syscall."],
+ "off-heap":["os","Memory allocated outside V8's managed heap. Buffer/ArrayBuffer payloads live here so they have stable addresses and don't add scan/copy cost to the GC."],
+ "pread":["os","pread(2): read bytes from a file descriptor at an explicit offset into a caller-supplied buffer, without moving the file position. fs.read maps almost directly onto it."],
+ "file descriptor":["os","A small integer the kernel hands back from open(2), naming an open file or socket. fs.open returns exactly this fd; you pass it to read/write."],
+ "vectored I/O":["os","readv/writev(2): fill or drain several buffers in a single syscall (scatter-gather). fs.readv/writev expose it — fewer syscalls for fragmented data."],
+ "epoll":["os","Linux's scalable readiness notification: the kernel tells you which fds are ready to read/write. Sockets live here; regular files can't, because they're always 'ready'."],
+ "kqueue":["os","The BSD/macOS equivalent of epoll — the same readiness-notification role for sockets and other pollable fds."],
+ "io_uring":["os","A modern Linux async I/O interface using shared submission/completion ring buffers. libuv is moving some file ops onto it, letting them skip the worker-thread detour."],
+ "libuv":["os","The C library under Node that provides the event loop, the readiness poller (epoll/kqueue/IOCP), and the worker thread pool. The real engine beneath the JS APIs."],
+ "threadpool":["os","libuv's pool of worker threads (default UV_THREADPOOL_SIZE=4) that run blocking work — file I/O, DNS, pbkdf2/scrypt, zlib — off the event loop, then post results back."],
+ "Buffer pool":["node","An internal ~8 KiB ArrayBuffer that small allocUnsafe buffers are carved from as slabs, so each isn't a separate allocation. Size is Buffer.poolSize."],
+ "highWaterMark":["node","A stream's soft buffer-size limit (16 KiB generic, 64 KiB for fs read streams). When buffered bytes exceed it, write() returns false — the backpressure signal."],
+ "backpressure":["concept","Flow control: when the consumer is slow, the stream signals the producer to pause so unread bytes don't pile up in memory unbounded. Like TCP's receive window."],
+ "framing":["concept","Imposing message boundaries on a raw byte stream. TCP has none, so you delimit or length-prefix messages yourself; without framing, reads split or merge arbitrarily."],
+ "datagram":["os","A single self-contained UDP packet. dgram preserves its boundary: one 'message' event is exactly one datagram, one Buffer — unlike TCP's boundary-free stream."],
+ "llhttp":["node","The C state-machine HTTP parser Node uses. It consumes raw bytes directly, handling headers and chunked transfer encoding faster than JS string scanning could."],
+ "Nagle":["concept","Nagle's algorithm coalesces small TCP writes into fuller packets to cut overhead, at the cost of latency. socket.setNoDelay(true) disables it."],
+ "replacement character":["spec","U+FFFD '�', emitted when a decoder hits bytes invalid in the target encoding — the visible signature of a multi-byte sequence split across chunks."],
+ "OpenSSL":["os","The C cryptography library Node's crypto module wraps. Hashes, ciphers, and signatures operate on Buffers so the exact same bytes always produce the same result."],
+ "mmap":["os","A syscall that maps a file or device into the process address space, returning a pointer. napi_create_external_buffer can wrap such a region with zero copy."],
+ "finalizer":["native","A callback you register with an external Buffer/ArrayBuffer. When the JS wrapper is garbage collected, N-API invokes it so your C code can free or unmap the underlying memory."],
+ "N-API":["native","Node-API: an ABI-stable, versioned C interface for native addons. Code compiled against an N-API version survives Node major upgrades — unlike direct V8 access."],
+ "ArrayBuffer":["spec","A fixed-length block of raw bytes. Opaque — you can't index it directly; you layer a view (TypedArray/DataView) on top. Its backing store is off-heap and stable."],
+ "TypedArray":["spec","A typed window onto an ArrayBuffer: Uint8Array, Int32Array, Float64Array… Each element is one fixed type, read in the platform's native byte order."],
+ "DataView":["spec","A view that reads/writes mixed types at any byte offset with explicit endianness. The portable, alignment-agnostic accessor — slower than indexed TypedArray loads."],
+ "Uint8Array":["spec","The byte-level TypedArray — one unsigned byte per element. Node's Buffer is a subclass of it, which is why every TypedArray method works on a Buffer."],
+ "endianness":["concept","The byte order of multi-byte numbers. Big-endian (network order) stores the most significant byte first; little-endian (x86/ARM) stores it last."]
+};
+const KIND_LABEL={spec:"spec",os:"os / libuv",node:"node",native:"native",concept:"concept"};
+
+const tip=document.getElementById('tip');
+const termKeys=Object.keys(GLOSSARY).sort((a,b)=>b.length-a.length);
+const esc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+function tagTerms(scope){
+  const blocks=scope.querySelectorAll('p, li, td, .lead');
+  blocks.forEach(block=>{
+    if(block.closest('pre')) return;
+    const used=new Set();
+    block.querySelectorAll('.term').forEach(t=>used.add(t.dataset.term.toLowerCase()));
+    const walker=document.createTreeWalker(block,NodeFilter.SHOW_TEXT,{
+      acceptNode(n){const p=n.parentElement;if(!p)return NodeFilter.FILTER_REJECT;
+        if(p.closest('code,pre,.term,a,.pill,h1,h2,h3,h4,.mono'))return NodeFilter.FILTER_REJECT;
+        return n.nodeValue.trim()?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT;}});
+    const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
+    nodes.forEach(node=>{
+      const text=node.nodeValue;
+      for(const term of termKeys){
+        if(used.has(term.toLowerCase()))continue;
+        const re=new RegExp('\\b'+esc(term)+'\\b','i');const m=re.exec(text);
+        if(m){used.add(term.toLowerCase());
+          const frag=document.createDocumentFragment();
+          const before=text.slice(0,m.index),after=text.slice(m.index+m[0].length);
+          if(before)frag.appendChild(document.createTextNode(before));
+          const span=document.createElement('span');span.className='term';span.dataset.term=term;span.textContent=text.substr(m.index,m[0].length);
+          frag.appendChild(span);
+          if(after)frag.appendChild(document.createTextNode(after));
+          node.parentNode.replaceChild(frag,node);return;}
+      }
+    });
+  });
+}
+let tipHideT;
+function showTip(el){
+  const key=el.dataset.term;
+  const entry=GLOSSARY[key]||GLOSSARY[Object.keys(GLOSSARY).find(k=>k.toLowerCase()===key.toLowerCase())];
+  if(!entry)return;
+  clearTimeout(tipHideT);
+  tip.className=''+(entry[0]==='native'?'kind-native':'');
+  tip.innerHTML='<span class="t-kind">'+KIND_LABEL[entry[0]]+'</span><span class="t-name">'+key+'</span>'+entry[1];
+  tip.classList.add('show');
+  const r=el.getBoundingClientRect();
+  const tw=Math.min(330,tip.offsetWidth||330),th=tip.offsetHeight;
+  let left=r.left+r.width/2-tw/2;left=Math.max(12,Math.min(left,window.innerWidth-tw-12));
+  let top=r.top-th-12,flip=false;if(top<10){top=r.bottom+12;flip=true;}
+  tip.style.left=left+'px';tip.style.top=top+'px';
+  tip.style.setProperty('--ax',(r.left+r.width/2-left-6)+'px');
+  tip.classList.toggle('flip',flip);
+}
+function hideTip(){tipHideT=setTimeout(()=>tip.classList.remove('show'),60);}
+document.addEventListener('mouseover',e=>{const t=e.target.closest('.term');if(t)showTip(t);});
+document.addEventListener('mouseout',e=>{if(e.target.closest('.term'))hideTip();});
+document.addEventListener('click',e=>{const t=e.target.closest('.term');if(t){showTip(t);setTimeout(hideTip,2800);}});
+
+/* ============================================================
+   MODAL
+   ============================================================ */
+const scrim=document.getElementById('scrim');
+function modalBodyHTML(f){
+  let h=f.body+'<div class="why"><span class="wl">why it matters</span>'+f.why+'</div>';
+  if(f.deep){
+    h+='<div class="deephd">Under the hood — internals &amp; spec</div><div class="deep">'+
+       '<div class="dcol"><span class="dl os">Node / libuv / OS</span>'+f.deep.os+'</div>'+
+       '<div class="dcol"><span class="dl spec">Spec / model</span>'+f.deep.spec+'</div></div>';
+  }
+  return h;
+}
+function openModal(f){
+  document.getElementById('mTag').textContent=f.tag||'DETAIL';
+  document.getElementById('mLane').textContent=f.laneName?('· '+f.laneName):'';
+  document.getElementById('mTitle').textContent=f.title;
+  const mb=document.getElementById('mBody');
+  mb.innerHTML=modalBodyHTML(f);
+  tagTerms(mb);
+  scrim.classList.add('open');
+}
+function closeModal(){scrim.classList.remove('open');}
+document.getElementById('mClose').onclick=closeModal;
+scrim.onclick=e=>{if(e.target===scrim)closeModal();};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();if(typeof exitFs==='function')exitFs();}});
+
+/* ============================================================
+   CARD BUILDERS
+   ============================================================ */
+function buildCards(id,list){
+  const wrap=document.getElementById(id);if(!wrap)return;
+  list.forEach(f=>{
+    const c=document.createElement('div');
+    c.className='card'+(f.cls?(' '+f.cls):'');
+    c.innerHTML='<div class="fn"><span>'+f.kicker+'</span><span>'+(f.right||'')+'</span></div>'+
+      '<div class="ft">'+f.title+'</div><div class="fs2">'+f.short+'</div>'+
+      '<span class="deepchip">▾ open detail</span>';
+    c.onclick=()=>openModal(f);
+    wrap.appendChild(c);
+  });
+}
+buildCards('constraintCards',[
+ {kicker:"Constraint 1",right:"addressing",cls:"eng",title:"Stable addresses",short:"You cannot hand the kernel a pointer into the V8 heap and let the GC move it mid-syscall.",
+  tag:"CONSTRAINT",laneName:"why off-heap",body:"<p>The GC relocates live objects during compaction. A pointer to a managed object is valid now and dangling after the next collection. A syscall in flight holding such a pointer would corrupt memory.</p>",
+  why:"This single fact forces Buffer payloads off the managed heap and into a stable backing store.",
+  deep:{os:"<p>libuv hands the raw pointer + length to <code>pread</code>/<code>send</code>. It must stay fixed for the syscall's duration.</p>",spec:"<p>ECMAScript doesn't promise stable addresses; V8 implements a moving collector, so the engine must pin or externalize.</p>"}},
+ {kicker:"Constraint 2",right:"encoding",cls:"eng",title:"No encoding tax",short:"Raw binary must not be forced through UTF-16 conversion just to be held in JS.",
+  tag:"CONSTRAINT",laneName:"why bytes",body:"<p>A JS string is UTF-16. If the only data container were strings, every byte of a file or socket read would pay a transcoding cost and risk corruption. Binary needs a byte-true container.</p>",
+  why:"This is why Buffer is a Uint8Array of octets, not a string — bytes in, bytes out.",
+  deep:{os:"<p>Disk and NIC deliver octets; the encoding (if any) is applied later, deliberately.</p>",spec:"<p>TypedArray elements are numbers, not characters — no charset is implied.</p>"}},
+ {kicker:"Constraint 3",right:"GC pressure",cls:"eng",title:"No GC pressure from payloads",short:"A 200 MB read shouldn't sit on a heap tuned for many small short-lived objects.",
+  tag:"CONSTRAINT",laneName:"why external",body:"<p>The V8 object heap is optimized for lots of tiny, short-lived allocations. Large binary payloads there would be scanned and copied by the collector repeatedly.</p>",
+  why:"Externalizing the backing store keeps big payloads out of the GC's working set.",
+  deep:{os:"<p>The allocator beneath V8 owns these pages; V8 only tracks external size for pacing.</p>",spec:"<p>External memory is reported to the GC for scheduling, not managed as heap objects.</p>"}}
+]);
+buildCards('fromCards',[
+ {kicker:"Buffer.from(arrayBuffer)",right:"share",cls:"eng",title:"Shares memory",short:"Zero copy — a view onto the existing backing store. Mutations are visible both ways.",
+  tag:"from()",laneName:"view",body:"<p><code>Buffer.from(ab)</code> creates a Buffer that points at the same backing store, optionally with a byteOffset and length. No bytes are copied.</p>",why:"This is the zero-copy path — and the aliasing surprise if you forget it shares.",deep:{os:"<p>Same BackingStore, new view object.</p>",spec:"<p>Constructs a Uint8Array-like view over the given ArrayBuffer region.</p>"}},
+ {kicker:"Buffer.from(buffer)",right:"copy",title:"Copies the bytes",short:"Allocates fresh memory and memcpy's the source in. The two are independent.",
+  tag:"from()",laneName:"copy",body:"<p><code>Buffer.from(buf)</code> always copies into a new allocation. Changing one does not affect the other.</p>",why:"The inconsistency vs the ArrayBuffer overload is a classic source of confusion.",deep:{os:"<p>New allocation + memcpy.</p>",spec:"<p>Independent backing store.</p>"}},
+ {kicker:"Buffer.from(string, enc)",right:"encode",title:"Encodes to bytes",short:"Transcodes the string under the chosen encoding into a new copy.",
+  tag:"from()",laneName:"encode + copy",body:"<p><code>Buffer.from('€','utf8')</code> produces 3 bytes. A copy with a transcoding step from UTF-16 to the target encoding.</p>",why:"Byte length ≠ string length; '€'.length is 1 but its UTF-8 byte length is 3.",deep:{os:"<p>Transcode then store.</p>",spec:"<p>UTF-8 (RFC 3629): code points map to 1–4 bytes.</p>"}},
+ {kicker:"buf.subarray(s,e)",right:"share",cls:"dgr",title:"Returns a shared view",short:"Unlike Array.slice, this aliases the same memory — the classic 'why did my other buffer mutate' bug.",
+  tag:"slicing",laneName:"view",body:"<p><code>subarray</code> (and Buffer's legacy <code>slice</code>) return a view over the same bytes. Write through one, the other changes. <code>Uint8Array.prototype.slice</code> copies.</p>",why:"Coming from arrays, people expect a copy and get aliasing instead.",deep:{os:"<p>New view, same backing store, offset window.</p>",spec:"<p>Array.prototype.slice copies; TypedArray.subarray views.</p>"}}
+]);
+buildCards('cryptoCards',[
+ {kicker:"crypto.timingSafeEqual",right:"side-channel",cls:"eng",title:"Constant-time compare",short:"Compares two Buffers without an early-exit, defeating timing attacks. You cannot do this safely with === on strings.",
+  tag:"crypto",laneName:"OpenSSL",body:"<p>A naïve compare returns as soon as bytes differ, leaking how many matched via timing. <code>timingSafeEqual(a,b)</code> always touches every byte. Lengths must match.</p>",why:"Comparing HMACs or tokens with === is a real, exploitable leak.",deep:{os:"<p>Backed by OpenSSL's constant-time primitive.</p>",spec:"<p>No data-dependent branch on the secret.</p>"}},
+ {kicker:"AEAD: getAuthTag order",right:"ordering",cls:"dgr",title:"GCM auth-tag ordering",short:"On encrypt, call getAuthTag AFTER final(). On decrypt, call setAuthTag BEFORE final(). Reverse it and it throws or silently fails.",
+  tag:"crypto",laneName:"OpenSSL",body:"<p>For <code>aes-256-gcm</code>: encrypt → <code>update</code>, <code>final</code>, then <code>cipher.getAuthTag()</code>. Decrypt → <code>decipher.setAuthTag(tag)</code> before <code>final()</code>, which then verifies integrity.</p>",why:"Getting the order wrong is the most common GCM bug — and skipping the tag drops authentication entirely.",deep:{os:"<p>The tag is computed over all ciphertext, hence available only at the end.</p>",spec:"<p>GCM authenticates then decrypts; verification happens at final.</p>"}},
+ {kicker:"crypto.randomBytes",right:"CSPRNG",title:"OS randomness into a Buffer",short:"Fills a Buffer from the OS CSPRNG (getrandom / BCryptGenRandom). Not Math.random.",
+  tag:"crypto",laneName:"OS",body:"<p><code>randomBytes(n)</code> and <code>randomFillSync(buf)</code> draw from the operating system's cryptographically secure RNG, returning bytes.</p>",why:"Math.random is predictable; never use it for keys, IVs, or tokens.",deep:{os:"<p>getrandom(2) on Linux, BCryptGenRandom on Windows.</p>",spec:"<p>Buffer-out, suitable for key material.</p>"}},
+ {kicker:"zlib Transform streams",right:"threadpool",cls:"nat",title:"Compress inline, off-loop",short:"createGzip/createBrotliCompress are Transform streams of Buffers; async one-shots run on the libuv threadpool.",
+  tag:"zlib",laneName:"zlib / brotli",body:"<p><code>zlib</code> wraps the zlib and brotli C libraries. Stream variants pipe inline; one-shots like <code>gzip</code> have async forms that run on worker threads because compression is CPU-bound.</p>",why:"Compressed bytes are not text — never toString them mid-stream.",deep:{os:"<p>Shares the threadpool with fs and pbkdf2.</p>",spec:"<p>Transform = Duplex that maps input chunks to output chunks.</p>"}}
+]);
+
+/* ============================================================
+   SVG HELPERS
+   ============================================================ */
+const SVGNS='http://www.w3.org/2000/svg';
+function el(tag,attrs,html){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(html!=null)e.innerHTML=html;return e;}
+function plate(cx,cy,text,color,fs){fs=fs||10.5;const w=text.length*(fs*0.6)+18,h=fs+12;
+  return `<rect x="${cx-w/2}" y="${cy-h/2}" width="${w}" height="${h}" rx="6" fill="var(--panel2)" stroke="var(--line)"/>`+
+    `<text x="${cx}" y="${cy+fs*0.35}" text-anchor="middle" font-size="${fs}" font-weight="700" fill="${color}">${text}</text>`;}
+
+/* ============================================================
+   HERO — TWO WORLDS (GC compaction vs stable backing store)
+   ============================================================ */
+const worldsVP=document.getElementById('worldsVP');
+/* heap cells layout */
+const HEAP_X=90, HEAP_Y=120, CELL=58, CELL_H=66, GAP=8;
+/* objects on the heap: live (amber) + the ArrayBuffer wrapper W (teal-bordered). 'g' = garbage */
+const heapInit=[
+ {id:'A',kind:'live',label:'obj A'},
+ {id:'g1',kind:'garbage'},
+ {id:'W',kind:'wrap',label:'AB wrapper'},
+ {id:'B',kind:'live',label:'obj B'},
+ {id:'g2',kind:'garbage'},
+ {id:'g3',kind:'garbage'},
+ {id:'C',kind:'live',label:'obj C'}
+];
+const W_FRAMES=[
+ {n:0,lane:"setup",title:"Two worlds, side by side",
+  body:"The V8 heap (top) holds small managed objects at fixed slots — for now. The teal block below is the off-heap backing store: the actual bytes of an ArrayBuffer. The kernel sits at the bottom, idle."},
+ {n:1,lane:"syscall",title:"A syscall needs somewhere to write",
+  body:"read(2) is about to deliver bytes. It needs a pointer to stable memory it can fill — and it will hold that pointer for the whole duration of the call."},
+ {n:2,lane:"syscall",title:"You hand it the backing store address",
+  body:"Not a heap object — the off-heap backing store at a fixed address. The kernel now holds a pointer into memory the GC does not manage."},
+ {n:3,lane:"gc",title:"Meanwhile, a GC cycle begins",
+  body:"The collector marks the dead objects (dimmed). The heap is fragmented: live objects are separated by gaps the collector wants to reclaim."},
+ {n:4,lane:"gc",title:"Compaction relocates the survivors",
+  body:"Live objects — including the ArrayBuffer's wrapper W — slide left to close the gaps. Their addresses CHANGE. This is the whole reason a heap pointer is unsafe across a collection."},
+ {n:5,lane:"danger",title:"A heap pointer would now dangle",
+  body:"If the kernel had been given W's old address, that pointer now points at relocated, reused memory. Writing through it would corrupt the heap — a use-after-move."},
+ {n:6,lane:"safe",title:"But the backing store never moved",
+  body:"The off-heap bytes stayed at their fixed address through the entire collection. The kernel's pointer is still valid. The wrapper W moved; the bytes it describes did not."},
+ {n:7,lane:"thesis",title:"That's why Buffer bytes live off-heap",
+  body:"A Buffer's wrapper is a managed object; its bytes are an external, stable backing store. This split is the foundation every other binary API is built on."}
+];
+let wState={objs:JSON.parse(JSON.stringify(heapInit)),compacted:false,kernelTarget:null,danger:false};
+
+function heapSlotX(i){return HEAP_X+i*(CELL+GAP);}
+function renderWorlds(step){
+  const f=W_FRAMES[step];
+  let h='';
+  /* defs */
+  h+='<defs><marker id="wkArr" markerWidth="10" markerHeight="10" refX="7" refY="3.5" orient="auto"><path d="M0 0L7 3.5L0 7z" fill="var(--native)"/></marker>'+
+     '<marker id="wkArrBad" markerWidth="10" markerHeight="10" refX="7" refY="3.5" orient="auto"><path d="M0 0L7 3.5L0 7z" fill="var(--danger)"/></marker></defs>';
+  /* zone labels */
+  h+=`<text x="40" y="58" font-size="13" font-weight="800" fill="var(--js)" letter-spacing="1">V8 MANAGED HEAP · objects relocate on GC</text>`;
+  h+=`<rect x="40" y="74" width="1240" height="120" rx="12" fill="none" stroke="var(--js)" stroke-opacity="0.35" stroke-dasharray="7 6"/>`;
+  h+=`<text x="40" y="300" font-size="13" font-weight="800" fill="var(--engine)" letter-spacing="1">OFF-HEAP BACKING STORE · fixed address, GC never moves it</text>`;
+  h+=`<text x="40" y="500" font-size="13" font-weight="800" fill="var(--native)" letter-spacing="1">KERNEL · holds a raw pointer for the syscall's duration</text>`;
+
+  /* heap objects */
+  const order = wState.compacted ? compactOrder() : wState.objs.map((_,i)=>i);
+  wState.objs.forEach((o,i)=>{
+    let slot = wState.compacted ? compactSlot(i) : i;
+    if(slot===null) return; /* garbage removed after compaction */
+    const x=heapSlotX(slot), y=HEAP_Y;
+    let stroke='var(--line2)', fill='var(--panel)', tcol='var(--ink3)', label=o.label||'free';
+    if(o.kind==='live'){stroke='var(--js)';tcol='var(--js)';}
+    if(o.kind==='wrap'){stroke='var(--engine)';tcol='var(--engine)';fill='var(--engine-soft)';}
+    if(o.kind==='garbage'){
+      if(step>=3){stroke='var(--danger)';tcol='var(--danger)';label='dead';fill='var(--danger-soft)';}
+      else {label='live'; stroke='var(--line2)'; tcol='var(--ink3)';}
+    }
+    const moving = wState.compacted && (slot!==i);
+    h+=`<g style="transition:transform .6s cubic-bezier(.4,0,.2,1)">`+
+       `<rect x="${x}" y="${y}" width="${CELL}" height="${CELL_H}" rx="9" fill="${fill}" stroke="${stroke}" stroke-width="${o.kind==='wrap'?2.4:1.6}"/>`+
+       `<text x="${x+CELL/2}" y="${y+26}" text-anchor="middle" font-size="13" font-weight="800" fill="${tcol}">${o.id.replace(/g\d/,'·')}</text>`+
+       `<text x="${x+CELL/2}" y="${y+46}" text-anchor="middle" font-size="8.5" fill="var(--ink3)">${label}</text>`+
+       (moving?`<text x="${x+CELL/2}" y="${y-8}" text-anchor="middle" font-size="9" fill="var(--engine)">moved →</text>`:'')+
+       `</g>`;
+  });
+
+  /* the off-heap backing store block (fixed) */
+  const bsX=480,bsY=320,bsW=360,bsH=70;
+  h+=`<rect x="${bsX}" y="${bsY}" width="${bsW}" height="${bsH}" rx="10" fill="var(--engine-soft)" stroke="var(--engine)" stroke-width="2.4"/>`;
+  for(let b=0;b<8;b++){h+=`<rect x="${bsX+14+b*42}" y="${bsY+16}" width="34" height="38" rx="5" fill="var(--panel)" stroke="var(--engine)" stroke-opacity="0.5"/>`+
+    `<text x="${bsX+31+b*42}" y="${bsY+40}" text-anchor="middle" font-size="11" font-family="var(--mono)" fill="var(--engine)">${(0x40+b).toString(16)}</text>`;}
+  h+=plate(bsX+bsW/2,bsY-16,'addr 0x7f3a…e000 · NEVER moves','var(--engine)',10);
+
+  /* wrapper -> backing store link (always) */
+  const wIdx=wState.objs.findIndex(o=>o.kind==='wrap');
+  const wSlot=wState.compacted?compactSlot(wIdx):wIdx;
+  const wx=heapSlotX(wSlot)+CELL/2, wy=HEAP_Y+CELL_H;
+  h+=`<path d="M ${wx} ${wy} C ${wx} ${wy+60}, ${bsX+bsW/2} ${bsY-70}, ${bsX+bsW/2} ${bsY}" fill="none" stroke="var(--engine)" stroke-width="1.6" stroke-dasharray="5 5" opacity="0.7"/>`;
+  h+=plate((wx+bsX+bsW/2)/2,(wy+bsY)/2-4,'.buffer / .byteOffset','var(--engine)',9);
+
+  /* kernel */
+  const kX=480,kY=520,kW=360,kH=64;
+  h+=`<rect x="${kX}" y="${kY}" width="${kW}" height="${kH}" rx="10" fill="var(--panel)" stroke="var(--native)" stroke-width="2"/>`;
+  h+=`<text x="${kX+kW/2}" y="${kY+28}" text-anchor="middle" font-size="13" font-weight="800" fill="var(--native)">read(fd, ptr, len)</text>`;
+  h+=`<text x="${kX+kW/2}" y="${kY+48}" text-anchor="middle" font-size="10" fill="var(--ink2)">${step>=1?'holding a pointer…':'idle'}</text>`;
+
+  /* kernel pointer arrow */
+  if(step>=2){
+    const good = step>=6 || step<5;
+    if(step===5){
+      /* dangling: arrow points to where wrapper USED to be (its original slot) */
+      const oldX=heapSlotX(wIdx)+CELL/2, oldY=HEAP_Y+CELL_H/2;
+      h+=`<path d="M ${kX+kW/2} ${kY} C ${kX+kW/2} ${kY-90}, ${oldX} ${oldY+150}, ${oldX} ${oldY}" fill="none" stroke="var(--danger)" stroke-width="2.4" marker-end="url(#wkArrBad)" stroke-dasharray="6 5"/>`;
+      h+=plate((kX+kW/2+oldX)/2+40,kY-60,'✕ points at moved memory','var(--danger)',10);
+    } else {
+      /* good: arrow to backing store */
+      h+=`<path d="M ${kX+kW/2} ${kY} L ${kX+kW/2} ${bsY+bsH}" fill="none" stroke="var(--native)" stroke-width="2.4" marker-end="url(#wkArr)"/>`;
+      h+=plate(kX+kW/2,(kY+bsY+bsH)/2,step>=6?'✓ still valid':'stable pointer','var(--native)',10);
+    }
+  }
+  worldsVP.innerHTML=h;
+}
+/* compaction: assign new slots to non-garbage in order, garbage -> null */
+function compactSlot(i){
+  if(wState.objs[i].kind==='garbage') return null;
+  let s=0;for(let k=0;k<i;k++){if(wState.objs[k].kind!=='garbage')s++;}return s;
+}
+function compactOrder(){return wState.objs.map((_,i)=>i);}
+
+const wTicks=document.getElementById('wTicks');
+W_FRAMES.forEach(()=>{const t=document.createElement('div');t.className='tk';wTicks.appendChild(t);});
+let wStep=0,wPlaying=false,wPlayT=null;
+function wSet(i){
+  wStep=Math.max(0,Math.min(W_FRAMES.length-1,i));
+  wState.compacted = wStep>=4;
+  const f=W_FRAMES[wStep];
+  renderWorlds(wStep);
+  document.getElementById('wCapN').textContent='FRAME '+String(f.n).padStart(2,'0');
+  document.getElementById('wCapLane').textContent=f.lane.toUpperCase();
+  document.getElementById('wCapH').textContent=f.title;
+  document.getElementById('wCapB').textContent=f.body;
+  document.getElementById('wStepNo').textContent=String(f.n).padStart(2,'0')+' / 0'+(W_FRAMES.length-1);
+  document.getElementById('wFill').style.width=(wStep/(W_FRAMES.length-1)*100)+'%';
+}
+function wPlay(){wPlaying=true;wPI();if(wStep>=W_FRAMES.length-1)wSet(0);wPlayT=setInterval(()=>{if(wStep>=W_FRAMES.length-1){wPause();return;}wSet(wStep+1);},2100);}
+function wPause(){wPlaying=false;clearInterval(wPlayT);wPI();}
+function wPI(){document.getElementById('wPlayIcon').innerHTML=wPlaying?'<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>':'<path d="M7 5v14l12-7z"/>';}
+document.getElementById('wPlay').onclick=()=>{wPlaying?wPause():wPlay();};
+document.getElementById('wNext').onclick=()=>{wPause();wSet(wStep+1);};
+document.getElementById('wPrev').onclick=()=>{wPause();wSet(wStep-1);};
+document.getElementById('wScrub').onclick=e=>{wPause();const r=e.currentTarget.getBoundingClientRect();wSet(Math.round((e.clientX-r.left)/r.width*(W_FRAMES.length-1)));};
+wSet(0);
+</script>
+<script>
+"use strict";
+/* ============================================================
+   03 — ACCESSOR MATRIX (real DataView)
+   ============================================================ */
+(function(){
+  const ui=document.getElementById('matrixUI');
+  let bytes=[0x40,0x49,0x0f,0xdb,0x0a,0x0b,0x0c,0x0d]; // pi (BE double-ish) start
+  const methods=[
+    {name:'readUInt8',w:1,fn:(dv,o)=>dv.getUint8(o)},
+    {name:'readInt8',w:1,fn:(dv,o)=>dv.getInt8(o)},
+    {name:'readUInt16BE',w:2,le:false,fn:(dv,o)=>dv.getUint16(o,false)},
+    {name:'readUInt16LE',w:2,le:true,fn:(dv,o)=>dv.getUint16(o,true)},
+    {name:'readInt16BE',w:2,le:false,fn:(dv,o)=>dv.getInt16(o,false)},
+    {name:'readUInt32BE',w:4,le:false,fn:(dv,o)=>dv.getUint32(o,false)},
+    {name:'readUInt32LE',w:4,le:true,fn:(dv,o)=>dv.getUint32(o,true)},
+    {name:'readInt32BE',w:4,le:false,fn:(dv,o)=>dv.getInt32(o,false)},
+    {name:'readFloatBE',w:4,le:false,fn:(dv,o)=>dv.getFloat32(o,false)},
+    {name:'readFloatLE',w:4,le:true,fn:(dv,o)=>dv.getFloat32(o,true)},
+    {name:'readDoubleBE',w:8,le:false,fn:(dv,o)=>dv.getFloat64(o,false)},
+    {name:'readDoubleLE',w:8,le:true,fn:(dv,o)=>dv.getFloat64(o,true)},
+    {name:'readBigUInt64BE',w:8,le:false,fn:(dv,o)=>dv.getBigUint64(o,false)},
+    {name:'readBigUInt64LE',w:8,le:true,fn:(dv,o)=>dv.getBigUint64(o,true)}
+  ];
+  let mi=10, off=0;
+  function clampOff(){const w=methods[mi].w; if(off>8-w) off=8-w; if(off<0)off=0;}
+  function render(){
+    clampOff();
+    const m=methods[mi], w=m.w;
+    const ab=new ArrayBuffer(8); const u8=new Uint8Array(ab); u8.set(bytes); const dv=new DataView(ab);
+    let val; try{ val=m.fn(dv,off); }catch(e){ val='—'; }
+    let valStr = typeof val==='bigint' ? val.toString() : (Number.isInteger(val)? val.toLocaleString('en-US') : (typeof val==='number'? val.toPrecision(9).replace(/0+$/,''):val));
+    /* byte cells */
+    let cells='<div style="display:flex;gap:6px;flex-wrap:wrap">';
+    for(let i=0;i<8;i++){
+      const inField = i>=off && i<off+w;
+      const isLE = m.le===true && inField;
+      const order = inField ? (m.le? (off+w-1-i)+1 : (i-off)+1) : '';
+      cells+=`<button data-byte="${i}" style="position:relative;flex:1;min-width:54px;border-radius:9px;padding:12px 4px 18px;cursor:pointer;font-family:var(--mono);
+        border:2px solid ${inField?(isLE?'var(--engine)':'var(--js)'):'var(--line)'};
+        background:${inField?(isLE?'var(--engine-soft)':'var(--js-soft)'):'var(--panel)'};transition:.15s">
+        <div style="font-size:9px;color:var(--ink3)">[${i}]</div>
+        <div style="font-size:17px;font-weight:800;color:${inField?'var(--ink)':'var(--ink2)'}">0x${bytes[i].toString(16).padStart(2,'0')}</div>
+        ${inField?`<div style="position:absolute;bottom:3px;left:0;right:0;font-size:8px;color:${isLE?'var(--engine)':'var(--js)'};font-weight:700">byte ${order}</div>`:''}
+      </button>`;
+    }
+    cells+='</div>';
+    /* controls */
+    let methodBtns='<div style="display:flex;flex-wrap:wrap;gap:5px;margin:16px 0 6px">';
+    methods.forEach((mm,j)=>{methodBtns+=`<button data-m="${j}" style="font-family:var(--mono);font-size:10.5px;padding:5px 9px;border-radius:7px;cursor:pointer;transition:.15s;
+      border:1px solid ${j===mi?'var(--engine)':'var(--line2)'};background:${j===mi?'var(--engine)':'transparent'};color:${j===mi?'var(--bg)':'var(--ink2)'}">${mm.name}</button>`;});
+    methodBtns+='</div>';
+    const maxOff=8-w;
+    let offCtl=`<div style="display:flex;align-items:center;gap:12px;margin-top:12px;font-family:var(--mono);font-size:12px;color:var(--ink2)">
+      <span>offset</span><input type="range" min="0" max="${maxOff}" value="${off}" id="mxOff" style="flex:1;max-width:240px;accent-color:var(--js)">
+      <span style="color:var(--js);font-weight:700">${off}</span>
+      <span style="color:var(--ink3)">· width ${w}B · ${m.le===undefined?'no endianness':(m.le?'little-endian':'big-endian')}</span></div>`;
+    /* result */
+    const result=`<div style="margin-top:18px;padding:16px 18px;border:1px solid var(--line);border-radius:11px;background:var(--bg2)">
+      <div style="font-family:var(--mono);font-size:11px;color:var(--ink3);letter-spacing:.06em">buf.${m.name}(${off}) reads ${w} byte${w>1?'s':''} ${m.le===undefined?'':(m.le?'right→left (LE)':'left→right (BE)')}</div>
+      <div style="font-family:var(--mono);font-size:28px;font-weight:800;color:var(--engine);margin-top:6px;word-break:break-all">= ${valStr}</div></div>
+      <div style="font-family:var(--serif);font-size:14px;color:var(--ink2);margin-top:10px">Same eight bytes. Switch the method or flip BE/LE and the value changes — the storage never did. Click a byte to randomize it.</div>`;
+    ui.innerHTML=cells+methodBtns+offCtl+result;
+    ui.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{mi=+b.dataset.m;render();});
+    ui.querySelectorAll('[data-byte]').forEach(b=>b.onclick=()=>{const i=+b.dataset.byte;bytes[i]=Math.floor(Math.random()*256);render();});
+    const os=document.getElementById('mxOff'); if(os) os.oninput=()=>{off=+os.value;render();};
+  }
+  document.querySelectorAll('#matrixFig [data-preset]').forEach(b=>b.onclick=()=>{
+    const p=b.dataset.preset;
+    if(p==='pi'){const ab=new ArrayBuffer(8);new DataView(ab).setFloat64(0,Math.PI,false);bytes=[...new Uint8Array(ab)];mi=10;off=0;}
+    else if(p==='ascii'){bytes=[...'Node8964'].map(c=>c.charCodeAt(0));mi=0;off=0;}
+    else {bytes=bytes.map(()=>Math.floor(Math.random()*256));}
+    render();
+  });
+  render();
+})();
+
+/* ============================================================
+   04 — POOL ALLOCATOR
+   ============================================================ */
+(function(){
+  const ui=document.getElementById('poolUI');
+  const POOL=8192, THRESH=4096;
+  let pools=[{id:1,off:0,slabs:[]}], standalone=[], pinnedPool=null;
+  function dirtyHex(){return Math.floor(Math.random()*256).toString(16).padStart(2,'0');}
+  function alloc(kind){
+    if(kind==='reset'){pools=[{id:1,off:0,slabs:[]}];standalone=[];pinnedPool=null;render();return;}
+    let size, zero=false, slow=false, big=false;
+    if(kind==='unsafe-small'){size=1024;}
+    else if(kind==='alloc-small'){size=1024;zero=true;}
+    else if(kind==='slow'){size=512;slow=true;}
+    else if(kind==='big'){size=8192;big=true;}
+    if(big || slow || size>=THRESH){
+      standalone.push({size,zero,slow,big,bytes:Array.from({length:8},()=>zero?'00':dirtyHex())});
+      render();return;
+    }
+    let pool=pools[pools.length-1];
+    if(pool.off+size>POOL){pool={id:pool.id+1,off:0,slabs:[]};pools.push(pool);}
+    const slab={off:pool.off,size,zero,id:Math.random().toString(36).slice(2,6),bytes:Array.from({length:6},()=>zero?'00':dirtyHex())};
+    pool.slabs.push(slab);pool.off+=size;render();
+  }
+  function render(){
+    let h='';
+    pools.forEach((pool,pi)=>{
+      const isPinned = pinnedPool===pool.id;
+      h+=`<div style="margin-bottom:18px">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--js);font-weight:700;letter-spacing:.05em;margin-bottom:6px">
+          SHARED 8 KiB POOL #${pool.id} · one ArrayBuffer ${isPinned?'<span style="color:var(--danger)">· PINNED ALIVE by one slab</span>':''}</div>
+        <div style="position:relative;height:64px;border:1px solid ${isPinned?'var(--danger)':'var(--line2)'};border-radius:9px;background:var(--bg2);overflow:hidden;display:flex">`;
+      let used=0;
+      pool.slabs.forEach(s=>{
+        const pct=(s.size/POOL)*100;
+        h+=`<div data-slab="${pool.id}:${s.id}" style="width:${pct}%;border-right:1px solid var(--bg);background:${s.zero?'var(--engine-soft)':'var(--danger-soft)'};
+          display:flex;flex-direction:column;justify-content:center;padding:6px 8px;cursor:pointer;transition:.15s;overflow:hidden">
+          <div style="font-family:var(--mono);font-size:9px;color:${s.zero?'var(--engine)':'var(--danger)'};font-weight:700">off ${s.off} · ${s.size}B</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--ink3);white-space:nowrap">${s.bytes.join(' ')}</div>
+          <div style="font-family:var(--mono);font-size:8px;color:${s.zero?'var(--engine)':'var(--danger)'}">${s.zero?'zero-filled':'DIRTY · old data'}</div>
+        </div>`;
+        used+=s.size;
+      });
+      const freePct=((POOL-used)/POOL)*100;
+      if(freePct>0)h+=`<div style="width:${freePct}%;display:flex;align-items:center;justify-content:center"><span style="font-family:var(--mono);font-size:9px;color:var(--ink3)">free ${POOL-used}B</span></div>`;
+      h+=`</div></div>`;
+    });
+    if(standalone.length){
+      h+=`<div style="font-family:var(--mono);font-size:11px;color:var(--native);font-weight:700;letter-spacing:.05em;margin:14px 0 6px">STANDALONE BLOCKS · own ArrayBuffer · byteOffset 0 · never pooled</div><div style="display:flex;gap:10px;flex-wrap:wrap">`;
+      standalone.forEach(s=>{h+=`<div style="border:1px solid var(--native);border-radius:9px;padding:9px 12px;background:var(--native-soft)">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--native);font-weight:700">${s.big?'allocUnsafe(8 KiB)':s.slow?'allocUnsafeSlow(512)':'alloc large'}</div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--ink3)">${s.bytes.join(' ')} · ${s.zero?'zero-filled':'dirty'}</div>
+        <div style="font-family:var(--mono);font-size:8px;color:var(--native)">${s.slow?'escapes the pool — safe for long-lived':'≥ threshold → standalone'}</div></div>`;});
+      h+=`</div>`;
+    }
+    h+=`<div style="font-family:var(--serif);font-size:14px;color:var(--ink2);margin-top:14px">Small <code style="font-family:var(--mono);color:var(--ink)">allocUnsafe</code> carves the next slab of the current pool (dirty, red). <code style="font-family:var(--mono);color:var(--ink)">alloc</code> zero-fills (teal). At ≥4 KiB, or with <code style="font-family:var(--mono);color:var(--ink)">allocUnsafeSlow</code>, you get a standalone block. Click a dirty slab to simulate pinning the whole pool.</div>`;
+    ui.innerHTML=h;
+    ui.querySelectorAll('[data-slab]').forEach(s=>s.onclick=()=>{const pid=+s.dataset.slab.split(':')[0];pinnedPool=(pinnedPool===pid?null:pid);render();
+      if(pinnedPool)openModal({tag:"POOL PINNING",laneName:"node",title:"One slab pins the whole pool",
+        body:"<p>This slab is a <em>view</em> into the 8 KiB pool ArrayBuffer. As long as your code holds a reference to it, the GC cannot free the pool — even if every other slab in it is dead. You keep 8 KiB alive for the sake of these few bytes.</p>",
+        why:"For many small, long-lived buffers this quietly wastes memory. Use <code>allocUnsafeSlow(n)</code> to get a dedicated allocation that doesn't pin a pool.",
+        deep:{os:"<p>The Buffer's <code>.buffer</code> is the shared pool; <code>.byteOffset</code> is its position inside it. Reachability of the view ⇒ reachability of the whole BackingStore.</p>",spec:"<p>A view keeps its ArrayBuffer alive; GC reclaims the buffer only when no view references it.</p>"}});});
+  }
+  document.querySelectorAll('#poolFig [data-alloc]').forEach(b=>b.onclick=()=>alloc(b.dataset.alloc));
+  render();
+})();
+
+/* ============================================================
+   06 — EVENT LOOP (threadpool vs readiness)
+   ============================================================ */
+(function(){
+  const vp=document.getElementById('loopVP');
+  let iouring=false, workers=[null,null,null,null], epoll=[], queue=[], tokId=0;
+  const loopCx=250,loopCy=190,loopR=92;
+  function base(){
+    let h='<defs><marker id="lpA" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0 0L6 3L0 6z" fill="var(--ink3)"/></marker></defs>';
+    /* event loop ring */
+    h+=`<circle cx="${loopCx}" cy="${loopCy}" r="${loopR}" fill="none" stroke="var(--engine)" stroke-width="2.5" stroke-dasharray="6 7"/>`;
+    h+=`<text x="${loopCx}" y="${loopCy-6}" text-anchor="middle" font-size="14" font-weight="800" fill="var(--engine)">EVENT</text>`;
+    h+=`<text x="${loopCx}" y="${loopCy+14}" text-anchor="middle" font-size="14" font-weight="800" fill="var(--engine)">LOOP</text>`;
+    h+=`<text x="${loopCx}" y="${loopCy+34}" text-anchor="middle" font-size="9" fill="var(--ink3)">single thread</text>`;
+    /* readiness poller */
+    h+=`<rect x="430" y="60" width="430" height="120" rx="11" fill="var(--panel)" stroke="var(--engine)" stroke-width="1.6"/>`;
+    h+=`<text x="450" y="84" font-size="12" font-weight="800" fill="var(--engine)">${iouring?'io_uring + ':''}epoll / kqueue · readiness</text>`;
+    h+=`<text x="450" y="102" font-size="9.5" fill="var(--ink3)">sockets register here — kernel notifies when ready (truly async)</text>`;
+    epoll.forEach((e,i)=>{h+=`<g><rect x="${450+i*64}" y="118" width="56" height="44" rx="7" fill="var(--engine-soft)" stroke="var(--engine)"/>
+      <text x="${478+i*64}" y="138" text-anchor="middle" font-size="9" font-weight="700" fill="var(--engine)">${e.label}</text>
+      <text x="${478+i*64}" y="152" text-anchor="middle" font-size="8" fill="var(--ink3)">watching</text></g>`;});
+    /* worker pool */
+    h+=`<rect x="430" y="240" width="430" height="160" rx="11" fill="var(--panel)" stroke="var(--native)" stroke-width="1.6"/>`;
+    h+=`<text x="450" y="264" font-size="12" font-weight="800" fill="var(--native)">libuv worker pool · ${iouring?'fs now bypasses →':'UV_THREADPOOL_SIZE=4'}</text>`;
+    h+=`<text x="450" y="282" font-size="9.5" fill="var(--ink3)">blocking work runs here: file I/O, dns, pbkdf2, zlib</text>`;
+    workers.forEach((w,i)=>{const x=450+i*100;
+      h+=`<rect x="${x}" y="300" width="86" height="70" rx="8" fill="${w?'var(--native-soft)':'var(--bg2)'}" stroke="${w?'var(--native)':'var(--line2)'}" stroke-width="${w?2:1}"/>`;
+      h+=`<text x="${x+43}" y="320" text-anchor="middle" font-size="9" font-weight="700" fill="${w?'var(--native)':'var(--ink3)'}">thread ${i+1}</text>`;
+      h+=`<text x="${x+43}" y="342" text-anchor="middle" font-size="9" fill="${w?'var(--native)':'var(--ink3)'}">${w?w.label:'idle'}</text>`;
+      if(w)h+=`<text x="${x+43}" y="358" text-anchor="middle" font-size="8" fill="var(--native)">blocking…</text>`;});
+    /* queue */
+    if(queue.length){h+=`<text x="450" y="420" font-size="9.5" fill="var(--danger)" font-weight="700">queued (all threads busy): ${queue.map(q=>q.label).join(', ')}</text>`;}
+    /* arrows */
+    h+=`<path d="M ${loopCx+loopR} ${loopCy-40} L 430 110" fill="none" stroke="var(--ink3)" stroke-width="1.3" marker-end="url(#lpA)" opacity="0.6"/>`;
+    h+=`<path d="M ${loopCx+loopR} ${loopCy+40} L 430 300" fill="none" stroke="var(--ink3)" stroke-width="1.3" marker-end="url(#lpA)" opacity="0.6"/>`;
+    vp.innerHTML=h;
+  }
+  function msg(n,m){document.getElementById('loopN').textContent=n;document.getElementById('loopMsg').textContent=m;}
+  function dispatch(kind){
+    if(kind==='iouring'){iouring=!iouring;document.getElementById('iouringBtn').textContent='io_uring: '+(iouring?'on':'off');document.getElementById('iouringBtn').classList.toggle('on',iouring);base();
+      msg('io_uring '+(iouring?'ON':'OFF'), iouring?'On Linux, fs reads can submit to io_uring and skip the worker-thread detour entirely.':'Back to the classic model: fs reads block a worker thread.');return;}
+    if(kind==='net'){const lab='socket';epoll.push({label:lab});base();msg('NET','A TCP socket registers on the readiness poller and stays there. No thread is consumed — the kernel signals when bytes arrive.');
+      setTimeout(()=>{epoll=epoll.filter(e=>e!==epoll[epoll.length-1]);base();},2600);return;}
+    if(kind==='flood'){for(let i=0;i<5;i++)setTimeout(()=>toWorker('fs.readFile'),i*120);msg('FLOOD','Five file reads dispatched. Four occupy worker threads; the fifth must wait for one to free up — threadpool starvation in miniature.');return;}
+    const map={fs:'fs.readFile',crypto:'pbkdf2',dns:'dns.lookup'};
+    const lab=map[kind]||kind;
+    if(kind==='fs' && iouring){epoll.push({label:'io_uring'});base();msg('FS via io_uring','The read is submitted to io_uring — it rides the readiness side now, not a worker thread.');
+      setTimeout(()=>{epoll.pop();base();},2200);return;}
+    toWorker(lab);
+    msg(lab.toUpperCase().replace('.READFILE',''),(kind==='crypto'?'pbkdf2 is CPU-bound — it blocks a worker thread for its full duration, sharing the pool with file I/O.':kind==='dns'?'dns.lookup uses getaddrinfo, which is blocking, so it too goes to a worker thread.':'A file read can\'t be polled, so libuv runs blocking pread on a worker thread, then posts the result back to the loop.'));
+  }
+  function toWorker(label){
+    const free=workers.findIndex(w=>!w);
+    if(free<0){queue.push({label});base();return;}
+    workers[free]={label};base();
+    setTimeout(()=>{workers[free]=null;
+      if(queue.length){const q=queue.shift();const f2=workers.findIndex(w=>!w);if(f2>=0)workers[f2]={label:q.label},setTimeout(()=>{workers[f2]=null;base();},2200);}
+      base();},2400);
+  }
+  document.querySelectorAll('#loopFig [data-loop]').forEach(b=>b.onclick=()=>dispatch(b.dataset.loop));
+  base();
+})();
+
+/* ============================================================
+   07 — BACKPRESSURE SIMULATOR
+   ============================================================ */
+(function(){
+  const ui=document.getElementById('bpUI');
+  let HWM=16, queue=0, consumeRate=4, running=true, writeOK=true, drained=0, produced=0, raf;
+  ui.innerHTML=`<div style="font-family:var(--mono);font-size:12px;color:var(--ink2);display:flex;flex-wrap:wrap;gap:18px;align-items:center;margin-bottom:16px">
+    <span>consumer speed <input type="range" min="1" max="14" value="4" id="bpRate" style="accent-color:var(--engine);vertical-align:middle"></span>
+    <span>highWaterMark <input type="range" min="6" max="30" value="16" id="bpHwm" style="accent-color:var(--js);vertical-align:middle"></span>
+    <span id="bpWrite" style="font-weight:700"></span></div>
+    <svg viewBox="0 0 860 220" style="width:100%;height:auto"><g id="bpVP"></g></svg>`;
+  const vp=document.getElementById('bpVP');
+  document.getElementById('bpRate').oninput=e=>consumeRate=+e.target.value;
+  document.getElementById('bpHwm').oninput=e=>HWM=+e.target.value;
+  document.getElementById('bpToggle').onclick=function(){running=!running;this.textContent=running?'⏸ running':'▶ paused';this.classList.toggle('on',running);};
+  function render(){
+    const fillPct=Math.min(1,queue/HWM);
+    let h='';
+    /* producer */
+    h+=`<rect x="20" y="70" width="150" height="80" rx="11" fill="${writeOK?'var(--js-soft)':'var(--danger-soft)'}" stroke="${writeOK?'var(--js)':'var(--danger)'}" stroke-width="2"/>`;
+    h+=`<text x="95" y="104" text-anchor="middle" font-size="13" font-weight="800" fill="${writeOK?'var(--js)':'var(--danger)'}">producer</text>`;
+    h+=`<text x="95" y="124" text-anchor="middle" font-size="10" fill="var(--ink2)">${writeOK?'writing':'paused (await drain)'}</text>`;
+    /* queue tank */
+    const qx=290,qw=280,qy=40,qh=140;
+    h+=`<rect x="${qx}" y="${qy}" width="${qw}" height="${qh}" rx="10" fill="var(--bg2)" stroke="var(--line2)"/>`;
+    h+=`<rect x="${qx}" y="${qy+qh*(1-fillPct)}" width="${qw}" height="${qh*fillPct}" rx="6" fill="${queue>HWM?'var(--danger)':'var(--engine)'}" opacity="0.7" style="transition:all .12s"/>`;
+    /* HWM line */
+    h+=`<line x1="${qx}" y1="${qy}" x2="${qx+qw}" y2="${qy}" stroke="var(--js)" stroke-width="2" stroke-dasharray="5 4"/>`;
+    h+=`<text x="${qx+qw+8}" y="${qy+5}" font-size="10" font-family="var(--mono)" fill="var(--js)">highWaterMark = ${HWM}</text>`;
+    h+=`<text x="${qx+qw/2}" y="${qy+qh/2}" text-anchor="middle" font-size="22" font-weight="800" font-family="var(--mono)" fill="var(--ink)">${Math.round(queue)}</text>`;
+    h+=`<text x="${qx+qw/2}" y="${qy+qh/2+20}" text-anchor="middle" font-size="9" fill="var(--ink3)">buffered bytes</text>`;
+    h+=`<text x="${qx+qw/2}" y="${qy-10}" text-anchor="middle" font-size="10" font-family="var(--mono)" fill="var(--ink3)">internal stream buffer</text>`;
+    /* consumer */
+    h+=`<rect x="690" y="70" width="150" height="80" rx="11" fill="var(--engine-soft)" stroke="var(--engine)" stroke-width="2"/>`;
+    h+=`<text x="765" y="104" text-anchor="middle" font-size="13" font-weight="800" fill="var(--engine)">consumer</text>`;
+    h+=`<text x="765" y="124" text-anchor="middle" font-size="10" fill="var(--ink2)">drains ${consumeRate}/tick</text>`;
+    /* flow arrows */
+    h+=`<path d="M 170 110 L ${qx} 110" stroke="${writeOK?'var(--js)':'var(--danger)'}" stroke-width="2"/>`;
+    h+=`<path d="M ${qx+qw} 110 L 690 110" stroke="var(--engine)" stroke-width="2"/>`;
+    vp.innerHTML=h;
+    const wlbl=document.getElementById('bpWrite');
+    wlbl.innerHTML=`write() → <span style="color:${writeOK?'var(--engine)':'var(--danger)'}">${writeOK}</span>`;
+  }
+  function tick(){
+    if(running){
+      const produce = writeOK ? 6 : 0;
+      queue+=produce; produced+=produce;
+      queue=Math.max(0,queue-consumeRate); drained+=consumeRate;
+      if(queue>HWM) writeOK=false;
+      if(!writeOK && queue<=HWM*0.5) writeOK=true; /* 'drain' fires */
+    }
+    render();
+    raf=requestAnimationFrame(()=>setTimeout(tick,90));
+  }
+  render();tick();
+})();
+
+/* ============================================================
+   08 — TCP FRAMING
+   ============================================================ */
+(function(){
+  const vp=document.getElementById('frameVP');
+  const scenarios=[
+    {name:'scenario: clean 1:1',events:[['MSG-A'],['MSG-B']],note:'Two writes, two data events — but this is luck, not a guarantee.'},
+    {name:'scenario: merged',events:[['MSG-A','MSG-B']],note:'Both writes coalesced into ONE data event. Your parser sees "MSG-AMSG-B".'},
+    {name:'scenario: split',events:[['MSG-'],['A','MSG-B']],note:'The first message arrives split across two events; the second rides along. Nothing respects your message boundaries.'}
+  ];
+  let mode=0;
+  function render(){
+    const s=scenarios[mode];let h='';
+    h+=`<text x="40" y="40" font-size="12" font-weight="800" fill="var(--js)">socket.write() ×2 (your intent)</text>`;
+    ['MSG-A','MSG-B'].forEach((m,i)=>{h+=`<rect x="${40+i*150}" y="56" width="130" height="44" rx="8" fill="var(--js-soft)" stroke="var(--js)"/>
+      <text x="${105+i*150}" y="83" text-anchor="middle" font-size="13" font-weight="700" font-family="var(--mono)" fill="var(--js)">${m}</text>`;});
+    h+=`<text x="40" y="160" font-size="12" font-weight="800" fill="var(--engine)">'data' events (what arrives)</text>`;
+    let x=40;
+    s.events.forEach((ev)=>{
+      const txt=ev.join('');const w=Math.max(110,txt.length*13+30);
+      h+=`<rect x="${x}" y="176" width="${w}" height="48" rx="8" fill="var(--engine-soft)" stroke="var(--engine)" stroke-width="1.8"/>
+        <text x="${x+w/2}" y="205" text-anchor="middle" font-size="13" font-weight="700" font-family="var(--mono)" fill="var(--engine)">${txt}</text>`;
+      x+=w+18;
+    });
+    h+=`<text x="40" y="270" font-size="13" font-family="var(--serif)" fill="var(--ink2)">${s.note}</text>`;
+    vp.innerHTML=h;
+  }
+  document.getElementById('frameBtn').onclick=function(){mode=(mode+1)%scenarios.length;this.textContent=scenarios[mode].name;render();};
+  render();
+})();
+
+/* ============================================================
+   11 — N-API external buffer diagram
+   ============================================================ */
+(function(){
+  const vp=document.getElementById('napiVP');
+  let h='<defs><marker id="npA" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0 0L6 3L0 6z" fill="var(--native)"/></marker></defs>';
+  /* native memory */
+  h+=`<rect x="60" y="250" width="320" height="90" rx="11" fill="var(--native-soft)" stroke="var(--native)" stroke-width="2"/>`;
+  h+=`<text x="220" y="278" text-anchor="middle" font-size="13" font-weight="800" fill="var(--native)">native memory (mmap / device / C lib)</text>`;
+  for(let i=0;i<8;i++)h+=`<rect x="${78+i*36}" y="296" width="28" height="30" rx="4" fill="var(--panel)" stroke="var(--native)" stroke-opacity="0.5"/>`;
+  h+=`<text x="220" y="356" text-anchor="middle" font-size="9" fill="var(--ink3)">you already own this pointer — no copy will be made</text>`;
+  /* JS buffer view */
+  h+=`<rect x="520" y="60" width="320" height="80" rx="11" fill="var(--engine-soft)" stroke="var(--engine)" stroke-width="2"/>`;
+  h+=`<text x="680" y="92" text-anchor="middle" font-size="13" font-weight="800" fill="var(--engine)">JS Buffer (a lens)</text>`;
+  h+=`<text x="680" y="114" text-anchor="middle" font-size="9.5" fill="var(--ink2)">napi_create_external_buffer(ptr, len)</text>`;
+  /* wrap arrow */
+  h+=`<path d="M 380 270 C 480 220, 460 140, 520 110" fill="none" stroke="var(--native)" stroke-width="2" marker-end="url(#npA)"/>`;
+  h+=plate(470,180,'wrap · zero copy','var(--native)',10);
+  /* finalizer */
+  h+=`<rect x="520" y="250" width="320" height="90" rx="11" fill="var(--panel)" stroke="var(--danger)" stroke-width="1.6"/>`;
+  h+=`<text x="680" y="280" text-anchor="middle" font-size="12" font-weight="800" fill="var(--danger)">finalizer callback</text>`;
+  h+=`<text x="680" y="300" text-anchor="middle" font-size="9.5" fill="var(--ink2)">runs when JS wrapper is GC'd</text>`;
+  h+=`<text x="680" y="318" text-anchor="middle" font-size="9.5" fill="var(--ink2)">→ your C code frees / unmaps</text>`;
+  h+=`<path d="M 680 140 L 680 250" fill="none" stroke="var(--danger)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#npA)" opacity="0.8"/>`;
+  h+=plate(680,196,'GC → free','var(--danger)',9.5);
+  h+=`<text x="450" y="40" text-anchor="middle" font-size="12" font-family="var(--serif)" fill="var(--ink2)">Two ownership models — GC and manual free — reconciled across one seam.</text>`;
+  vp.innerHTML=h;
+})();
+</script>
+<script>
+"use strict";
+/* ============================================================
+   INSPECT MODE (zoom / pan, fullscreen)
+   ============================================================ */
+let fsFig=null, fsApi=null;
+function enterFs(fig,api){ if(fsFig) exitFs(); fsFig=fig; fsApi=api; fig.classList.add('fs'); document.body.classList.add('fs-lock');
+  const b=fig.querySelector('[data-inspect]'); if(b) b.lastChild.textContent=' Exit'; }
+function exitFs(){ if(!fsFig) return; if(fsApi) fsApi.reset();
+  const b=fsFig.querySelector('[data-inspect]'); if(b) b.lastChild.textContent=' Inspect';
+  fsFig.classList.remove('fs'); document.body.classList.remove('fs-lock'); fsFig=null; fsApi=null; }
+function makeInspectable(svgId){
+  const svg=document.getElementById(svgId); if(!svg) return;
+  const vp=svg.querySelector('.viewport')||svg.firstElementChild;
+  const canvas=svg.closest('.canvas');
+  const fig=svg.closest('.figure');
+  const hintTag=document.createElement('div'); hintTag.className='inspect-hint'; hintTag.textContent='⤢ tap to inspect'; canvas.appendChild(hintTag);
+  const ctl=document.createElement('div'); ctl.className='zoomctl';
+  ctl.innerHTML='<button data-z="in" title="zoom in">+</button><button data-z="out" title="zoom out">−</button><button data-z="reset" title="reset view">⟲</button>';
+  canvas.appendChild(ctl);
+  const lvl=document.createElement('div'); lvl.className='zlevel'; lvl.textContent='100%'; canvas.appendChild(lvl);
+  const zh=document.createElement('div'); zh.className='zhint'; zh.textContent='scroll / pinch to zoom · drag to pan · Esc to exit'; canvas.appendChild(zh);
+  let s=1,tx=0,ty=0,drag=false,sx=0,sy=0;
+  const pts=new Map(); let pinchD=0,pinchS=1;
+  const isFs=()=>fig.classList.contains('fs');
+  const clamp=v=>Math.max(0.5,Math.min(6,v));
+  const apply=()=>{vp.setAttribute('transform',`translate(${tx},${ty}) scale(${s})`);lvl.textContent=Math.round(s*100)+'%';};
+  const reset=()=>{s=1;tx=0;ty=0;vp.removeAttribute('transform');lvl.textContent='100%';};
+  function toVB(cx,cy){const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;return[(cx-r.left)/r.width*vb.width,(cy-r.top)/r.height*vb.height];}
+  function zoomAt(cx,cy,f){const ns=clamp(s*f);const[px,py]=toVB(cx,cy);tx=px-(px-tx)*(ns/s);ty=py-(py-ty)*(ns/s);s=ns;apply();}
+  canvas.addEventListener('click',e=>{ if(isFs())return; if(e.target.closest('.node'))return; enterFs(fig,{reset}); });
+  canvas.addEventListener('wheel',e=>{ if(!isFs())return; e.preventDefault(); zoomAt(e.clientX,e.clientY,e.deltaY<0?1.12:0.89); },{passive:false});
+  canvas.addEventListener('dblclick',e=>{ if(!isFs()||e.target.closest('.node'))return; zoomAt(e.clientX,e.clientY,1.5); });
+  canvas.addEventListener('pointerdown',e=>{ if(!isFs())return;
+    pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){const a=[...pts.values()];pinchD=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);pinchS=s;drag=false;return;}
+    if(e.target.closest('.node'))return; drag=true;sx=e.clientX;sy=e.clientY;canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove',e=>{ if(!isFs())return;
+    if(pts.has(e.pointerId))pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){const a=[...pts.values()];const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);if(pinchD>0){const ns=clamp(pinchS*(d/pinchD));const cx=(a[0].x+a[1].x)/2,cy=(a[0].y+a[1].y)/2;const[px,py]=toVB(cx,cy);tx=px-(px-tx)*(ns/s);ty=py-(py-ty)*(ns/s);s=ns;apply();}return;}
+    if(!drag)return;const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;
+    tx+=(e.clientX-sx)/r.width*vb.width;ty+=(e.clientY-sy)/r.height*vb.height;sx=e.clientX;sy=e.clientY;apply(); });
+  function up(e){pts.delete(e.pointerId);if(pts.size<2)pinchD=0;drag=false;}
+  canvas.addEventListener('pointerup',up); canvas.addEventListener('pointercancel',up);
+  ctl.querySelectorAll('button').forEach(b=>{ b.onclick=ev=>{ ev.stopPropagation(); const r=svg.getBoundingClientRect();
+    if(b.dataset.z==='in')zoomAt(r.left+r.width/2,r.top+r.height/2,1.25);
+    else if(b.dataset.z==='out')zoomAt(r.left+r.width/2,r.top+r.height/2,0.8);
+    else reset(); };});
+  const tog=fig.querySelector('[data-inspect="'+svgId+'"]');
+  if(tog) tog.addEventListener('click',()=>{ isFs()?exitFs():enterFs(fig,{reset}); });
+}
+makeInspectable('worldsSvg');
+
+/* ============================================================
+   THEME TOGGLE
+   ============================================================ */
+const root=document.documentElement;
+const sunIcon='<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/>';
+const moonIcon='<path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/>';
+function setTheme(t){root.setAttribute('data-theme',t);document.getElementById('themeTxt').textContent=t.toUpperCase();document.getElementById('themeIcon').innerHTML=t==='dark'?sunIcon:moonIcon;}
+if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)setTheme('light');
+document.getElementById('themeBtn').onclick=()=>setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+
+/* ============================================================
+   TOC ACTIVE-SECTION OBSERVER
+   ============================================================ */
+const tocLinks=[...document.querySelectorAll('nav.toc a')];
+const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)tocLinks.forEach(l=>l.classList.toggle('active',l.getAttribute('href')==='#'+e.target.id));});},{rootMargin:'-30% 0px -60% 0px'});
+document.querySelectorAll('section.block').forEach(s=>io.observe(s));
+
+/* ============================================================
+   REQUIRED FEATURE 1 — retractable TOP NAV on scroll + progress
+   ============================================================ */
+const topNav=document.getElementById('topNav'), scrollProg=document.getElementById('scrollProg');
+let lastY=window.scrollY, navHidden=false;
+function onScroll(){
+  const y=window.scrollY;
+  const docH=document.documentElement.scrollHeight-window.innerHeight;
+  scrollProg.style.width=(docH>0?(y/docH*100):0)+'%';
+  if(y>lastY && y>140 && !navHidden){ topNav.classList.add('hidden'); navHidden=true; }
+  else if(y<lastY && navHidden){ topNav.classList.remove('hidden'); navHidden=false; }
+  lastY=y;
+}
+window.addEventListener('scroll',onScroll,{passive:true}); onScroll();
+
+/* ============================================================
+   REQUIRED FEATURE 2 — retractable SIDE NAV on click
+   ============================================================ */
+const toc=document.getElementById('toc'), tocShow=document.getElementById('tocShow');
+document.getElementById('tocRetract').onclick=()=>{ toc.classList.add('collapsed'); tocShow.classList.add('show'); };
+tocShow.onclick=()=>{ toc.classList.remove('collapsed'); tocShow.classList.remove('show'); };
+
+/* activate tooltips across all prose */
+tagTerms(document.querySelector('main'));
+</script>
+</body>
+</html>

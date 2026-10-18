@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bytes → text · Node binary internals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --js:#e6a93c; --js-soft:rgba(230,169,60,.16);
+  --engine:#36d6c3; --engine-soft:rgba(54,214,195,.14);
+  --danger:#f0735f; --danger-soft:rgba(240,115,95,.16);
+  --r:14px; --maxw:1180px;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --serif:'Newsreader',Georgia,serif;
+}
+html[data-theme="dark"]{
+  --bg:#0a0e13; --bg2:#0d1219; --panel:#10161f; --panel2:#141c27;
+  --ink:#e9e7df; --ink2:#aab2bf; --ink3:#6b7482;
+  --line:rgba(150,170,195,.14); --line2:rgba(150,170,195,.26);
+  --grid:rgba(120,150,185,.05); --grid2:rgba(120,150,185,.09);
+  --shadow:0 24px 60px -20px rgba(0,0,0,.7);
+}
+html[data-theme="light"]{
+  --bg:#ece7da; --bg2:#f0ece1; --panel:#f6f2e8; --panel2:#fbf8f0;
+  --ink:#171c22; --ink2:#4c5560; --ink3:#8a8e84;
+  --line:rgba(30,42,58,.16); --line2:rgba(30,42,58,.32);
+  --grid:rgba(40,60,85,.05); --grid2:rgba(40,60,85,.1);
+  --js:#b3711a; --engine:#0a8c7d; --danger:#c1422e;
+  --js-soft:rgba(179,113,26,.14); --engine-soft:rgba(10,140,125,.12); --danger-soft:rgba(193,66,46,.12);
+  --shadow:0 24px 50px -22px rgba(40,50,70,.4);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);font-family:var(--serif);
+  font-size:18px;line-height:1.65;-webkit-font-smoothing:antialiased;
+  background-image:
+    linear-gradient(var(--grid) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid) 1px,transparent 1px),
+    linear-gradient(var(--grid2) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid2) 1px,transparent 1px);
+  background-size:28px 28px,28px 28px,140px 140px,140px 140px;
+  transition:background-color .4s,color .4s;
+}
+body.fs-lock{overflow:hidden}
+::selection{background:var(--js-soft);color:var(--ink)}
+
+/* themed scrollbars */
+*{scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line2);border-radius:999px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:var(--js);border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-corner{background:transparent}
+.modal{scrollbar-color:var(--line2) transparent}
+.modal::-webkit-scrollbar-thumb:hover{background:var(--engine);border:3px solid transparent;background-clip:content-box}
+.mono{font-family:var(--mono)}
+code,pre{font-family:var(--mono)}
+
+header.top{position:sticky;top:0;z-index:60;backdrop-filter:blur(14px);background:color-mix(in srgb,var(--bg) 78%,transparent);border-bottom:1px solid var(--line);transition:transform .35s cubic-bezier(.4,0,.2,1),box-shadow .3s}
+header.top.hidden{transform:translateY(-100%)}
+header.top.scrolled{box-shadow:0 8px 30px -16px rgba(0,0,0,.5)}
+.top-inner{max-width:var(--maxw);margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:18px}
+.brand{font-family:var(--mono);font-weight:800;letter-spacing:.04em;font-size:14px;display:flex;align-items:center;gap:10px}
+.brand .dot{width:10px;height:10px;border-radius:50%;background:var(--js);box-shadow:0 0 0 4px var(--js-soft);animation:pulse 3s infinite}
+.brand .arr{color:var(--ink3)} .brand .eng{color:var(--engine)}
+@keyframes pulse{50%{box-shadow:0 0 0 9px transparent}}
+.top-spacer{flex:1}
+.theme-btn{font-family:var(--mono);font-size:12px;letter-spacing:.05em;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);padding:8px 14px;border-radius:999px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:.2s}
+.theme-btn:hover{color:var(--ink);border-color:var(--js)}
+.theme-btn svg{width:15px;height:15px}
+
+.shell{max-width:820px;margin:0 auto;padding:0 24px}
+nav.toc{display:none;position:fixed;top:88px;left:max(20px,calc(50% - 600px));width:168px;height:calc(100vh - 120px);padding-top:0;font-family:var(--mono);font-size:12.5px;overflow:auto;transition:transform .35s cubic-bezier(.4,0,.2,1),opacity .25s}
+nav.toc.retracted{transform:translateX(-130%);opacity:0;pointer-events:none}
+.toc-head{display:flex;align-items:center;gap:8px;padding:0 0 12px 14px;margin-bottom:6px;border-bottom:1px solid var(--line)}
+.toc-head .tl{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3)}
+.toc-collapse{margin-left:auto;width:24px;height:24px;display:grid;place-items:center;border:1px solid var(--line2);border-radius:7px;background:var(--panel);color:var(--ink2);cursor:pointer;transition:.18s}
+.toc-collapse:hover{color:var(--ink);border-color:var(--js)}
+.toc-collapse svg{width:13px;height:13px}
+.toc-fab{display:none;position:fixed;top:88px;left:max(20px,calc(50% - 600px));z-index:55;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);background:var(--panel);border:1px solid var(--line2);border-radius:999px;padding:9px 15px;cursor:pointer;transition:.2s,opacity .25s,transform .25s;opacity:0;transform:translateX(-8px);pointer-events:none}
+.toc-fab svg{width:14px;height:14px}
+.toc-fab:hover{color:var(--ink);border-color:var(--js)}
+.toc-fab.show{opacity:1;transform:none;pointer-events:auto}
+nav.toc a{display:flex;gap:10px;align-items:baseline;color:var(--ink3);text-decoration:none;padding:7px 0;border-left:2px solid transparent;padding-left:14px;margin-left:-2px;transition:.2s;letter-spacing:.02em}
+nav.toc a .num{color:var(--ink3);font-weight:700;font-size:11px}
+nav.toc a:hover{color:var(--ink)}
+nav.toc a.active{color:var(--ink);border-left-color:var(--js)}
+nav.toc a.active .num{color:var(--js)}
+main{padding:40px 0 140px;min-width:0}
+
+.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--engine);display:flex;align-items:center;gap:12px;margin:0 0 14px}
+.kicker .ix{color:var(--js);font-weight:800}
+.kicker::after{content:"";flex:1;height:1px;background:var(--line)}
+h1.hero-h{font-weight:600;font-size:clamp(38px,5.6vw,68px);line-height:1.04;letter-spacing:-.02em;margin:0 0 18px}
+h1.hero-h .a{color:var(--js)} h1.hero-h .b{color:var(--engine)}
+h2{font-weight:600;font-size:clamp(26px,3.4vw,38px);letter-spacing:-.015em;margin:0 0 16px;line-height:1.1}
+h3{font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2);margin:30px 0 10px}
+.lead{font-size:21px;color:var(--ink2);max-width:62ch}
+.prose{max-width:66ch}
+.prose p{margin:0 0 16px} .prose strong{color:var(--ink);font-weight:600}
+section.block{padding:70px 0;border-bottom:1px solid var(--line);scroll-margin-top:80px}
+section.block:first-of-type{padding-top:30px}
+
+.term{cursor:help;border-bottom:1.5px dotted var(--engine);position:relative;color:inherit;transition:background .15s}
+.term:hover{background:var(--engine-soft)}
+#tip{position:fixed;z-index:1200;max-width:320px;background:var(--panel2);border:1px solid var(--line2);border-radius:12px;padding:13px 15px;box-shadow:var(--shadow);font-size:14.5px;line-height:1.5;color:var(--ink2);pointer-events:none;opacity:0;transform:translateY(4px);transition:opacity .14s,transform .14s;font-family:var(--serif)}
+#tip.show{opacity:1;transform:translateY(0)}
+#tip .t-name{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--engine);text-transform:uppercase;display:block;margin-bottom:5px}
+#tip .t-kind{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--js);text-transform:uppercase;float:right}
+#tip::after{content:"";position:absolute;left:var(--ax,20px);bottom:-7px;width:12px;height:12px;background:var(--panel2);border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);transform:rotate(45deg)}
+#tip.flip::after{bottom:auto;top:-7px;transform:rotate(225deg)}
+
+.callout{border:1px solid var(--line);border-left:3px solid var(--js);background:var(--panel);border-radius:0 var(--r) var(--r) 0;padding:20px 24px;margin:26px 0;font-size:17px}
+.callout.eng{border-left-color:var(--engine)}
+.callout.dgr{border-left-color:var(--danger)}
+.callout .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--js);display:block;margin-bottom:8px}
+.callout.eng .lbl{color:var(--engine)} .callout.dgr .lbl{color:var(--danger)}
+pre.wire{font-family:var(--mono);font-size:13.5px;line-height:1.7;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow:auto;color:var(--ink2)}
+pre.wire .k{color:var(--js)} pre.wire .v{color:var(--engine)} pre.wire .c{color:var(--ink3)} pre.wire .d{color:var(--danger)}
+table.spec{width:100%;border-collapse:collapse;font-size:15px;margin:8px 0 4px;font-family:var(--mono)}
+table.spec th{text-align:left;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line2)}
+table.spec td{padding:11px 14px;border-bottom:1px solid var(--line);color:var(--ink2);vertical-align:top}
+table.spec td:first-child{color:var(--ink);font-weight:500}
+.pill{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;padding:2px 8px;border-radius:999px;border:1px solid currentColor}
+.pill.js{color:var(--js);background:var(--js-soft)} .pill.eng{color:var(--engine);background:var(--engine-soft)} .pill.os{color:var(--ink3)} .pill.dgr{color:var(--danger);background:var(--danger-soft)}
+
+.figure{margin:30px 0;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);overflow:hidden;box-shadow:var(--shadow)}
+.figure.fs{position:fixed;inset:12px;z-index:400;margin:0;max-width:none;display:flex;flex-direction:column}
+.fig-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.fig-bar .title{font-family:var(--mono);font-size:12px;letter-spacing:.05em;color:var(--ink2);text-transform:uppercase}
+.fig-bar .grow{flex:1}
+.fbtn{font-family:var(--mono);font-size:11px;letter-spacing:.03em;border:1px solid var(--line2);background:transparent;color:var(--ink2);padding:6px 11px;border-radius:8px;cursor:pointer;transition:.18s;display:inline-flex;align-items:center;gap:6px}
+.fbtn:hover{color:var(--ink);border-color:var(--js)}
+.fbtn.on{color:var(--bg);background:var(--engine);border-color:var(--engine)}
+.fbtn svg{width:13px;height:13px}
+.canvas{position:relative;background:radial-gradient(circle at 1px 1px,var(--grid2) 1px,transparent 0) 0 0/22px 22px}
+.figure.fs .canvas{flex:1;min-height:0}
+.figure:not(.fs) .canvas{cursor:zoom-in}
+.figure:not(.fs) .canvas .node{cursor:pointer}
+.figure.fs .canvas{cursor:grab}
+.figure.fs .canvas:active{cursor:grabbing}
+.figure.fs .canvas .node{cursor:pointer}
+svg.diagram{display:block;width:100%;height:auto;touch-action:auto}
+.figure.fs svg.diagram{height:100%;touch-action:none}
+.zoomctl{position:absolute;right:12px;bottom:12px;display:none;flex-direction:column;gap:6px;z-index:5}
+.figure.fs .zoomctl{display:flex}
+.zoomctl button{width:34px;height:34px;border-radius:8px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);font-family:var(--mono);font-size:15px;cursor:pointer;line-height:1;transition:.15s;display:grid;place-items:center}
+.zoomctl button:hover{color:var(--ink);border-color:var(--engine)}
+.zlevel{position:absolute;left:12px;bottom:12px;display:none;font-family:var(--mono);font-size:11px;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:5;user-select:none}
+.figure.fs .zlevel{display:block}
+.zhint{position:absolute;left:12px;top:12px;display:none;font-family:var(--mono);font-size:10px;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:5;opacity:.85;pointer-events:none}
+.figure.fs .zhint{display:block}
+.inspect-hint{position:absolute;right:12px;top:12px;font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:4;pointer-events:none;opacity:0;transition:opacity .2s}
+.figure:not(.fs) .canvas:hover .inspect-hint{opacity:.9}
+.figure.fs .inspect-hint{display:none}
+
+.node{cursor:pointer}
+.node .nbox{transition:transform .35s cubic-bezier(.4,1.3,.5,1),filter .25s}
+.node:hover .nbox{filter:brightness(1.12)}
+.node.active .nbox{filter:drop-shadow(0 0 12px var(--engine))}
+.dim-engine .engine{opacity:.12;filter:grayscale(.8);transition:opacity .4s,filter .4s}
+.dim-engine .engine.lbl-keep{opacity:.4}
+
+.player{display:flex;align-items:center;gap:10px;padding:14px 16px;border-top:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.pbtn{width:40px;height:40px;border-radius:50%;border:1px solid var(--line2);background:var(--panel);color:var(--ink);cursor:pointer;display:grid;place-items:center;transition:.18s}
+.pbtn:hover{border-color:var(--js);color:var(--js)}
+.pbtn.play{background:var(--js);border-color:var(--js);color:var(--bg);width:46px;height:46px}
+.pbtn.play:hover{filter:brightness(1.08);color:var(--bg)}
+.pbtn svg{width:18px;height:18px}
+.scrub{flex:1;min-width:160px;height:6px;border-radius:999px;background:var(--line);position:relative;cursor:pointer}
+.scrub .fill{position:absolute;left:0;top:0;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--js),var(--engine));width:0%}
+.scrub .ticks{position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center;padding:0 1px}
+.scrub .tk{width:2px;height:2px;border-radius:50%;background:var(--ink3)}
+.stepno{font-family:var(--mono);font-size:12px;color:var(--ink3);min-width:62px;text-align:right}
+.caption{padding:18px 22px;border-top:1px solid var(--line);min-height:96px}
+.caption .cn{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--js);display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.caption .cn .lane{color:var(--engine)}
+.caption .ch{font-size:21px;font-weight:600;margin:0 0 4px;letter-spacing:-.01em}
+.caption .cb{color:var(--ink2);font-size:16px;margin:0;max-width:74ch}
+.caption .more{font-family:var(--mono);font-size:11px;color:var(--engine);background:none;border:none;cursor:pointer;padding:0;margin-top:8px;border-bottom:1px dotted var(--engine)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;margin:24px 0}
+.card{border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:var(--panel);cursor:pointer;transition:.2s;position:relative;overflow:hidden}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--js);opacity:.6}
+.card.eng::before{background:var(--engine)} .card.dgr::before{background:var(--danger)}
+.card:hover{transform:translateY(-3px);border-color:var(--line2);box-shadow:var(--shadow)}
+.card .fn{font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--ink3);text-transform:uppercase;margin-bottom:6px;display:flex;justify-content:space-between}
+.card .ft{font-weight:600;font-size:17px;line-height:1.2;margin-bottom:4px}
+.card .fs2{font-size:14px;color:var(--ink2);font-family:var(--serif)}
+.card .deepchip{font-family:var(--mono);font-size:9px;letter-spacing:.06em;color:var(--engine);border:1px solid var(--engine);border-radius:999px;padding:1px 6px;margin-top:8px;display:inline-block}
+
+/* ===== CARD TREE ===== */
+.tree{margin:18px 0 0}
+.branch{position:relative;margin:0 0 14px;border:1px solid var(--line);border-radius:16px;background:color-mix(in srgb,var(--panel) 60%,transparent);overflow:hidden}
+.branch>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:14px;padding:18px 22px;user-select:none;transition:background .2s}
+.branch>summary::-webkit-details-marker{display:none}
+.branch>summary:hover{background:var(--panel2)}
+.branch .bdot{width:12px;height:12px;border-radius:50%;background:var(--bc);box-shadow:0 0 0 4px color-mix(in srgb,var(--bc) 20%,transparent);flex-shrink:0}
+.branch .bnum{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--bc);letter-spacing:.1em}
+.branch .btitle{font-weight:600;font-size:19px;letter-spacing:-.01em}
+.branch .bsub{font-family:var(--serif);font-size:14.5px;color:var(--ink2);font-weight:400}
+.branch .bcount{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink3);border:1px solid var(--line2);border-radius:999px;padding:3px 10px}
+.branch .bchev{transition:transform .25s;color:var(--ink3);flex-shrink:0}
+.branch[open] .bchev{transform:rotate(180deg)}
+.branch .bbody{padding:0 22px 22px;display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}
+.branch::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--bc);opacity:.85}
+
+.tcard{position:relative;display:flex;flex-direction:column;gap:11px;padding:18px 19px;background:var(--panel);border:1px solid var(--line);border-radius:14px;cursor:pointer;text-align:left;width:100%;font-family:inherit;color:inherit;transition:transform .24s cubic-bezier(.16,1,.3,1),border-color .24s,box-shadow .24s}
+.tcard:hover{transform:translateY(-4px);border-color:var(--cc);box-shadow:var(--shadow)}
+.tcard .tc-head{display:flex;align-items:center;gap:10px}
+.tc-icon{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;flex-shrink:0;border-radius:9px;color:var(--cc);background:color-mix(in srgb,var(--cc) 14%,transparent);border:1px solid color-mix(in srgb,var(--cc) 45%,transparent);transition:transform .3s cubic-bezier(.16,1,.3,1)}
+.tcard:hover .tc-icon{transform:scale(1.08) rotate(-5deg)}
+.tc-icon svg{width:18px;height:18px}
+.tc-layer{display:inline-flex;align-items:center;padding:3px 9px;background:color-mix(in srgb,var(--cc) 12%,transparent);border:1px solid color-mix(in srgb,var(--cc) 40%,transparent);border-radius:999px;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--cc)}
+.tc-num{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink3);letter-spacing:.08em}
+.tcard h3{font-family:var(--serif);margin:0;font-size:20px;font-weight:600;letter-spacing:-.01em;line-height:1.18}
+.tc-tag{margin:0;color:var(--ink2);font-size:14px;line-height:1.5}
+.tc-io{display:flex;align-items:center;gap:8px;margin-top:2px;padding:8px 11px;border-radius:9px;background:var(--bg2);border:1px solid var(--line)}
+.tc-io .io-c{font-family:var(--mono);font-size:10px;line-height:1.3;color:var(--ink2);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tc-io .io-c .io-k{color:var(--ink3)}
+.tc-io .io-c.out{color:var(--cc);text-align:right}
+.tc-io .io-s{display:flex;color:var(--ink3);flex-shrink:0}
+.tc-io .io-s svg{width:13px;height:13px}
+.tc-cta{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--cc);margin-top:auto;padding-top:2px}
+.tc-cta svg{width:12px;height:12px;transition:transform .2s}
+.tcard:hover .tc-cta svg{transform:translateX(4px)}
+.tcard .tc-figchip{position:absolute;top:14px;right:14px;font-family:var(--mono);font-size:8.5px;letter-spacing:.06em;color:var(--engine);border:1px solid var(--engine);border-radius:999px;padding:1px 7px;opacity:.8}
+
+.tree-tools{display:flex;gap:8px;margin:6px 0 16px}
+.tree-tools button{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--ink2);background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:7px 13px;cursor:pointer;transition:.18s}
+.tree-tools button:hover{color:var(--ink);border-color:var(--engine)}
+/* modal figure host */
+.modal .figure{margin:18px 0 0;box-shadow:none}
+.modal .mfig-wrap{margin-top:6px}
+@media(max-width:560px){.branch .bbody{grid-template-columns:1fr}.branch .bsub{display:none}}
+
+.scrim{position:fixed;inset:0;z-index:600;background:rgba(5,8,12,.62);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;pointer-events:none;transition:opacity .25s}
+.scrim.open{opacity:1;pointer-events:auto}
+.modal{background:var(--panel2);border:1px solid var(--line2);border-radius:18px;max-width:min(1100px,94vw);width:100%;max-height:90vh;overflow:auto;box-shadow:var(--shadow);transform:translateY(16px) scale(.98);transition:transform .3s cubic-bezier(.3,1.2,.4,1);position:relative}
+.scrim.open .modal{transform:none}
+.modal.nested .mhead{padding-top:62px}
+.modal .mhead{padding:28px 36px 0}
+.modal .mtag{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--js);display:flex;gap:10px;align-items:center}
+.modal .mtag .lane{color:var(--engine)}
+.modal h4{font-size:25px;font-weight:600;margin:8px 0 0;letter-spacing:-.01em}
+.modal .mbody{padding:18px 36px 32px;color:var(--ink2);font-size:16.5px}
+.modal .mbody>p,.modal .mbody>.why{max-width:74ch}
+.modal .mbody p{margin:0 0 14px}
+.mclose{position:absolute;right:18px;top:18px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);cursor:pointer;font-size:18px;line-height:1;z-index:2}
+.mback{position:absolute;left:18px;top:18px;display:inline-flex;align-items:center;gap:5px;height:34px;padding:0 14px 0 10px;border-radius:999px;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.06em;z-index:2;transition:.18s}
+.mback:hover{color:var(--ink);border-color:var(--engine)}
+.mback svg{width:15px;height:15px}
+#mBreadcrumb{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--ink3);text-transform:uppercase}
+#mBreadcrumb:not(:empty)::after{content:"›";margin:0 7px;color:var(--line2)}
+.mclose:hover{color:var(--ink);border-color:var(--danger)}
+.why{border-left:3px solid var(--engine);background:var(--engine-soft);padding:12px 16px;border-radius:0 10px 10px 0;font-size:15px;margin-top:8px}
+.why .wl{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--engine);display:block;margin-bottom:5px}
+.deeptog{margin-top:18px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--ink);background:var(--panel);border:1px solid var(--line2);border-radius:9px;padding:10px 13px;cursor:pointer;width:100%;text-align:left;transition:.18s;display:flex;justify-content:space-between;align-items:center}
+.deephd{margin-top:20px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--engine);display:flex;align-items:center;gap:9px}
+.deephd::after{content:"";flex:1;height:1px;background:var(--line)}
+.deeptog:hover{border-color:var(--engine)}
+.deeptog.open{border-color:var(--engine);color:var(--engine)}
+.deeptog .chev{transition:transform .2s}
+.deeptog.open .chev{transform:rotate(180deg)}
+.deep{display:none;margin-top:12px;gap:12px;grid-template-columns:1fr 1fr}
+.deep.open{display:grid}
+.deep .dcol{border:1px solid var(--line);border-radius:10px;padding:13px 15px;background:var(--bg2)}
+.deep .dcol p{font-size:14px;margin:0;line-height:1.55}
+.deep .dl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:8px}
+.deep .dl.chrome{color:var(--js)} .deep .dl.spec{color:var(--engine)}
+.deep code{font-size:12.5px;color:var(--ink);background:var(--panel);padding:1px 4px;border-radius:4px}
+@media(max-width:560px){.deep.open{grid-template-columns:1fr}}
+
+footer{max-width:var(--maxw);margin:0 auto;padding:40px 24px 80px;font-family:var(--mono);font-size:12px;color:var(--ink3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;border-top:1px solid var(--line)}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;color:var(--ink2);margin:18px 0 0}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+@media(min-width:1240px){
+  nav.toc{display:block}
+  .toc-fab{display:inline-flex}
+}
+@media(max-width:920px){
+  body{font-size:17px}
+  main{padding:24px 0 100px}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="brand"><span class="dot"></span>bytes<span class="arr">———▶</span><span class="eng">text</span></div>
+    <div class="top-spacer"></div>
+    <button class="theme-btn" id="themeBtn" aria-label="toggle theme">
+      <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>
+      <span id="themeTxt">DARK</span>
+    </button>
+  </div>
+</header>
+
+<button class="toc-fab" id="tocFab" aria-label="show contents">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg> Contents
+</button>
+
+<div class="shell">
+  <nav class="toc" id="toc">
+    <div class="toc-head">
+      <span class="tl">Contents</span>
+      <button class="toc-collapse" id="tocCollapse" aria-label="collapse contents">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+    </div>
+    <a href="#split"><span class="num">00</span> The split</a>
+    <a href="#model"><span class="num">01</span> The tree</a>
+    <a href="#br-foundation"><span class="num">A</span> Foundation</a>
+    <a href="#br-interpret"><span class="num">B</span> Interpretation</a>
+    <a href="#br-seam"><span class="num">C</span> The seam</a>
+    <a href="#br-world"><span class="num">D</span> In the world</a>
+    <a href="#br-hazards"><span class="num">E</span> Hazards</a>
+  </nav>
+
+  <main>
+
+    <!-- ===== HERO ===== -->
+    <section class="block" id="split" style="border-bottom:none;padding-top:36px">
+      <p class="kicker"><span class="ix">00</span> Explorable explanation · with Node internals</p>
+      <h1 class="hero-h">What a <span class="a">Buffer</span> really is —<br>and why a <span class="b">stream</span> splits the € in two.</h1>
+      <p class="lead">A <code>Buffer</code> is a view over raw memory. A stream moves it in byte-sized chunks. Put those two facts together and a single three-byte character can be sliced across a chunk boundary — producing mojibake the instant you decode each chunk on its own. Press play to trace the string <code>"café €99"</code> through the seam, click any node, and open <em>“under the hood”</em> for the Node internals and the Unicode rules they implement.</p>
+
+      <div class="figure" id="heroFig">
+        <div class="fig-bar">
+          <span class="title">▶ café €99 · source → chunks → decode</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-boundary="heroSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20M12 2v20"/></svg> Show only the bytes</button>
+          <button class="fbtn" data-inspect="heroSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="heroSvg">
+          <svg class="diagram" id="heroSvg" viewBox="0 0 1320 600" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="heroVP"></g></svg>
+        </div>
+        <div class="player">
+          <button class="pbtn" id="hPrev" title="step back"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17V7l-7 5zM8 7h-2v10h2z"/></svg></button>
+          <button class="pbtn play" id="hPlay" title="play/pause"><svg id="hPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg></button>
+          <button class="pbtn" id="hNext" title="step forward"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 7v10l7-5zM16 7h2v10h-2z"/></svg></button>
+          <div class="scrub" id="hScrub"><div class="fill" id="hFill"></div><div class="ticks" id="hTicks"></div></div>
+          <span class="stepno" id="hStepNo">00 / 12</span>
+        </div>
+        <div class="caption">
+          <div class="cn"><span id="capN">FRAME 00</span> · <span class="lane" id="capLane">—</span></div>
+          <p class="ch" id="capH">Press play to trace the bytes</p>
+          <p class="cb" id="capB">Each frame highlights one stage. Amber lanes are raw bytes — pure storage. Teal lanes are decoded text — meaning you impose. Red is corruption.</p>
+          <button class="more" id="capMore" style="display:none">Open full detail ↗</button>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--js)"></i> raw bytes (storage)</span>
+        <span><i style="background:var(--engine)"></i> decoded text (meaning)</span>
+        <span><i style="background:var(--danger)"></i> corruption / mojibake</span>
+      </div>
+    </section>
+
+    <!-- ===== 01 MODEL ===== -->
+    <section class="block" id="model" style="border-bottom:none">
+      <p class="kicker"><span class="ix">01–11</span> The mental model · as a clickable tree</p>
+      <h2>Start with one idea — <em>storage vs interpretation</em> — and branch outward.</h2>
+      <div class="prose"><p>Everything below hangs off a single split: bytes <strong>store</strong>, lenses <strong>interpret</strong>. Open a branch, then click any card to unpack it — definitions, the “why it matters”, the Node internals, and the live diagrams all live inside.</p></div>
+      <div class="tree-tools">
+        <button id="treeExpand">Expand all</button>
+        <button id="treeCollapse">Collapse all</button>
+      </div>
+      <div class="tree" id="tree"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- hidden figures, moved into modals on demand -->
+<div id="figStash" style="display:none">
+  <div class="figure" id="layerFig" data-fig="layers">
+    <div class="fig-bar"><span class="title">▣ The lens stack</span><span class="grow"></span>
+      <button class="fbtn" data-boundary="layerSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 5V2M12 22v-3M5 12H2M22 12h-3"/></svg> Show only the bytes</button>
+      <button class="fbtn" data-inspect="layerSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+    </div>
+    <div class="canvas" data-zoom="layerSvg"><svg class="diagram" id="layerSvg" viewBox="0 0 760 660" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="layerVP"></g></svg></div>
+  </div>
+  <div class="figure" id="poolFig" data-fig="pool">
+    <div class="fig-bar"><span class="title">⬡ The 8 KiB pool · slabs &amp; standalone blocks</span><span class="grow"></span>
+      <button class="fbtn" data-inspect="poolSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+    </div>
+    <div class="canvas" data-zoom="poolSvg"><svg class="diagram" id="poolSvg" viewBox="0 0 1180 520" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="poolVP"></g></svg></div>
+  </div>
+  <div class="figure" id="seamFig" data-fig="seam">
+    <div class="fig-bar"><span class="title">⟂ chunk boundary · naïve per-chunk decode</span><span class="grow"></span>
+      <button class="fbtn on" id="seamBtn" data-mode="0">cut: clean (between chars)</button>
+    </div>
+    <div class="canvas" data-zoom="seamSvg"><svg class="diagram" id="seamSvg" viewBox="0 0 900 380" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="seamVP"></g></svg></div>
+  </div>
+  <div class="figure" id="endianFig" data-fig="endian">
+    <div class="fig-bar"><span class="title">⇄ 4 bytes → uint32</span><span class="grow"></span>
+      <button class="fbtn on" id="endianBtn" data-mode="be">big-endian · readUInt32BE</button>
+    </div>
+    <div class="canvas" data-zoom="endianSvg"><svg class="diagram" id="endianSvg" viewBox="0 0 820 320" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="endianVP"></g></svg></div>
+  </div>
+</div>
+
+<footer>
+  <span>bytes → text · Node binary internals · Buffers, encodings &amp; the chunk-boundary bug</span>
+  <span id="footTheme">engineering-blueprint mode</span>
+</footer>
+
+<div id="tip" role="tooltip"></div>
+
+<div class="scrim" id="scrim">
+  <div class="modal" role="dialog" aria-modal="true">
+    <button class="mclose" id="mClose" aria-label="close">✕</button>
+    <button class="mback" id="mBack" aria-label="back" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg> Back</button>
+    <div class="mhead">
+      <div class="mtag"><span id="mBreadcrumb"></span><span id="mTag">FRAME</span><span class="lane" id="mLane"></span></div>
+      <h4 id="mTitle"></h4>
+    </div>
+    <div class="mbody" id="mBody"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   GLOSSARY — kind: spec | node | concept
+   ============================================================ */
+const GLOSSARY = {
+  "Buffer":["node","Node's subclass of Uint8Array: a view over raw memory with extra methods for encodings, plus a shared allocation pool. Predates TypedArrays, hence its huge API."],
+  "ArrayBuffer":["spec","A fixed-length block of raw bytes. It cannot be read or written directly — you need a view (TypedArray or DataView) layered on top."],
+  "TypedArray":["spec","A typed window onto an ArrayBuffer: Uint8Array, Int16Array, Float64Array, etc. Each element is interpreted as one fixed type."],
+  "Uint8Array":["spec","The byte-level TypedArray — one unsigned byte per element. The common currency of binary data in JS; Buffer extends it."],
+  "DataView":["spec","A view that reads/writes mixed types at arbitrary byte offsets with explicit endianness. The right tool for parsing binary formats."],
+  "byteOffset":["spec","Where a view begins inside its backing ArrayBuffer. Often non-zero for a pooled Buffer, because it's a slab of a larger shared block."],
+  "byteLength":["spec","The size of a view (or buffer) in bytes. Buffer.byteLength(str, enc) gives the byte count of encoding a string — unlike str.length."],
+  "view":["concept","An object that points at bytes in an ArrayBuffer without owning them. Multiple views over one buffer alias the same memory."],
+  "endianness":["concept","The byte order of multi-byte numbers. Big-endian stores the most significant byte first; little-endian last. Networks lean big, x86 leans little."],
+  "code point":["spec","A number Unicode assigns to a character (€ = U+20AC). Encodings turn code points into bytes; UTF-8 uses 1–4 bytes per code point."],
+  "code unit":["spec","The fixed-size piece an encoding works in. JS strings count length in UTF-16 code units, so one astral char counts as two."],
+  "surrogate pair":["spec","Two UTF-16 code units encoding a single astral code point (emoji). It is why '😀'.length is 2 and why naïve string slicing can split a glyph."],
+  "continuation byte":["spec","A UTF-8 byte of the form 10xxxxxx that follows a lead byte. Stranded alone at a chunk's start, it decodes to the replacement character."],
+  "lead byte":["spec","The first byte of a multi-byte UTF-8 sequence (110/1110/11110…) that announces how many continuation bytes follow. Alone at a chunk's end, it's incomplete."],
+  "replacement character":["spec","U+FFFD '�', emitted when a decoder hits bytes that aren't valid in the target encoding — the visible signature of the boundary bug."],
+  "mojibake":["concept","Garbled text from decoding bytes with the wrong encoding, or from decoding an incomplete byte sequence. Literally 'character transformation' in Japanese."],
+  "StringDecoder":["node","node:string_decoder. write(chunk) returns only complete characters and retains incomplete trailing bytes until the next call; end() flushes."],
+  "TextDecoder":["spec","The WHATWG decoder available in Node and browsers. With { stream: true } it carries state across chunks, like StringDecoder."],
+  "TextEncoder":["spec","The WHATWG encoder; encode(str) always produces a UTF-8 Uint8Array. The inverse direction of TextDecoder."],
+  "highWaterMark":["node","The soft size limit for a stream's internal buffer — and roughly the chunk size. 16 KiB for generic streams, 64 KiB for fs read streams."],
+  "backpressure":["concept","Flow control: when a reader is slow, the stream stops pulling so unread bytes don't pile up unbounded in memory."],
+  "latin1":["node","A 1-byte-per-char encoding (a.k.a. binary) that round-trips any byte 0–255 losslessly — the basis of the old 'binary string' trick."],
+  "base64":["concept","A transport encoding turning 3 bytes into 4 ASCII characters. Not a charset — it re-packages arbitrary bytes for text-only channels."],
+  "hex":["concept","A transport encoding: each byte becomes two hexadecimal digits, doubling the size. Common for hashes and keys."],
+  "allocUnsafe":["node","Buffer.allocUnsafe(n) — fast, but returns UNINITIALISED memory (often a slab of the shared pool) that may contain old data. Overwrite before reading."],
+  "Buffer.alloc":["node","Buffer.alloc(n) — zero-fills the new buffer. Safe but slower; large sizes get their own standalone ArrayBuffer rather than a pool slab."],
+  "Buffer pool":["node","An internal ~8 KiB ArrayBuffer that small allocUnsafe buffers are carved from as slabs, so each isn't a separate allocation. Set via Buffer.poolSize."],
+  "poolSize":["node","Buffer.poolSize, default 8192. allocUnsafe uses the pool only when the request is under poolSize>>>1 (4096 bytes); larger gets its own buffer."],
+  "ReadableStream":["spec","A streaming source of bytes (or objects). In Node's classic streams, non-object mode emits Buffer chunks."],
+  "Transform":["node","A Duplex stream that transforms chunks as they pass through — zlib gzip/gunzip and crypto ciphers are Transforms."],
+  "object mode":["node","A stream mode where chunks are arbitrary JS values instead of Buffers/strings; highWaterMark then counts objects, not bytes."],
+  "normalization":["spec","Unicode NFC/NFD: the same visible text can have different byte sequences (é as one code point vs e + combining accent), affecting length and equality."],
+  "BOM":["spec","Byte Order Mark, U+FEFF. A leading BOM can change a string's length and silently break naïve parsing if not stripped."],
+  "octet":["concept","An 8-bit byte. The flat, addressable unit memory is made of — the substrate every view interprets."],
+  "socket":["concept","The OS-level TCP endpoint. It delivers a stream of bytes with no inherent message boundaries — you frame messages yourself."],
+  "SharedArrayBuffer":["spec","An ArrayBuffer whose memory is shared across workers; paired with Atomics for safe concurrent reads and writes."]
+};
+const KIND_LABEL={spec:"spec",node:"node",concept:"concept"};
+
+const tip=document.getElementById('tip');
+const termKeys=Object.keys(GLOSSARY).sort((a,b)=>b.length-a.length);
+const esc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+
+function tagTerms(scope){
+  const blocks=scope.querySelectorAll('p, li, td, .lead');
+  blocks.forEach(block=>{
+    if(block.closest('pre')) return;
+    const used=new Set();
+    block.querySelectorAll('.term').forEach(t=>used.add(t.dataset.term.toLowerCase()));
+    const walker=document.createTreeWalker(block,NodeFilter.SHOW_TEXT,{
+      acceptNode(n){
+        const p=n.parentElement; if(!p) return NodeFilter.FILTER_REJECT;
+        if(p.closest('code,pre,.term,a,.pill,h1,h2,h3,h4,.mono')) return NodeFilter.FILTER_REJECT;
+        return n.nodeValue.trim()?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT;
+      }
+    });
+    const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(node=>{
+      const text=node.nodeValue;
+      for(const term of termKeys){
+        if(used.has(term.toLowerCase())) continue;
+        const re=new RegExp('\\b'+esc(term)+'\\b','i');
+        const m=re.exec(text);
+        if(m){
+          used.add(term.toLowerCase());
+          const frag=document.createDocumentFragment();
+          const before=text.slice(0,m.index), after=text.slice(m.index+m[0].length);
+          if(before) frag.appendChild(document.createTextNode(before));
+          const span=document.createElement('span');
+          span.className='term'; span.dataset.term=term; span.textContent=text.substr(m.index,m[0].length);
+          frag.appendChild(span);
+          if(after) frag.appendChild(document.createTextNode(after));
+          node.parentNode.replaceChild(frag,node);
+          return;
+        }
+      }
+    });
+  });
+}
+let tipHideT;
+function showTip(el){
+  const key=el.dataset.term;
+  const entry=GLOSSARY[key]||GLOSSARY[Object.keys(GLOSSARY).find(k=>k.toLowerCase()===key.toLowerCase())];
+  if(!entry) return;
+  clearTimeout(tipHideT);
+  tip.innerHTML='<span class="t-kind">'+KIND_LABEL[entry[0]]+'</span><span class="t-name">'+key+'</span>'+entry[1];
+  tip.classList.add('show');
+  const r=el.getBoundingClientRect();
+  const tw=Math.min(320,tip.offsetWidth||320), th=tip.offsetHeight;
+  let left=r.left+r.width/2-tw/2;
+  left=Math.max(12,Math.min(left,window.innerWidth-tw-12));
+  let top=r.top-th-12, flip=false;
+  if(top<10){top=r.bottom+12;flip=true;}
+  tip.style.left=left+'px'; tip.style.top=top+'px';
+  tip.style.setProperty('--ax',(r.left+r.width/2-left-6)+'px');
+  tip.classList.toggle('flip',flip);
+}
+function hideTip(){tipHideT=setTimeout(()=>tip.classList.remove('show'),60);}
+document.addEventListener('mouseover',e=>{const t=e.target.closest('.term');if(t)showTip(t);});
+document.addEventListener('mouseout',e=>{if(e.target.closest('.term'))hideTip();});
+document.addEventListener('click',e=>{const t=e.target.closest('.term');if(t){showTip(t);setTimeout(hideTip,2800);}});
+
+/* ============================================================
+   FRAMES — lanes: 0 Source bytes · 1 Stream · 2 Naïve decode · 3 StringDecoder
+   ============================================================ */
+const LANES=["Source · the value","Stream · chunks","Naïve decode","StringDecoder"];
+const LANE_OWNER=["bytes","stream","bad","text"];          /* 'bytes'/'stream' = storage · 'bad'/'text' = interpretation */
+const laneColor=li=>li===0?'var(--js)':li===1?'var(--ink2)':li===2?'var(--danger)':'var(--engine)';
+const laneIsInterp=li=>li>=2;                              /* dimmed by the "show only bytes" overlay */
+const FRAMES=[
+ {n:1,lane:0,title:"The value you think you have",short:"\"café €99\" — a string of 8 visible characters",
+  body:"<p>You start with text: <code>\"café €99\"</code>. Eight glyphs. But <strong>text is not how it's stored</strong> — the moment it touches a socket, a file, or a stream, it becomes bytes under some encoding.</p>",
+  why:"The glyph count and the byte count are different numbers — and confusing them is where the trouble starts.",
+  deep:{node:"<p>In V8 a JS string is stored as UTF-16 internally, so <code>\"café €99\".length</code> is <strong>8</strong> (code units here). That is a count of UTF-16 units, never of bytes.</p>",
+        spec:"<p>ECMAScript strings are sequences of UTF-16 <em>code units</em>; <code>.length</code> is the unit count, not characters and not bytes.</p>"}},
+ {n:2,lane:0,title:"Encoded to UTF-8 bytes",short:"63 61 66 C3A9 20 E282AC 39 39 — 11 bytes, not 8",
+  body:"<p>Encoded as UTF-8 the string is <strong>11 bytes</strong>: <code>63 61 66</code> for <code>caf</code>, <code>C3 A9</code> for <code>é</code> (2 bytes), <code>20</code> space, <code>E2 82 AC</code> for <code>€</code> (3 bytes), <code>39 39</code> for <code>99</code>. The variable width is the whole problem.</p>",
+  why:"Because é is 2 bytes and € is 3, a byte boundary can land inside a character — something a fixed-width charset would never do.",
+  deep:{node:"<p><code>Buffer.from('café €99','utf8')</code> yields an 11-byte Buffer. <code>Buffer.byteLength('café €99')</code> returns <strong>11</strong>; the string's <code>.length</code> is 8.</p>",
+        spec:"<p>UTF-8 (RFC 3629): U+0000–7F → 1 byte, U+0080–7FF → 2 (é = U+00E9), U+0800–FFFF → 3 (€ = U+20AC).</p>"}},
+ {n:3,lane:1,title:"The stream reads in byte-sized chunks",short:"chunk size = highWaterMark, blind to characters",
+  body:"<p>A Readable doesn't know or care about characters. It fills its internal buffer up to <code>highWaterMark</code> and emits a <strong>Buffer of bytes</strong>. The cut point is decided by byte count, the network, or the disk — never by your text.</p>",
+  why:"Nothing in the transport layer respects character boundaries; that contract simply doesn't exist down here.",
+  deep:{node:"<p>Non-object-mode streams push <code>Buffer</code> chunks; <code>highWaterMark</code> defaults to 16 KiB (65536 for fs read streams). Real socket/disk reads fragment wherever the OS hands bytes over.</p>",
+        spec:"<p>Node Streams: a Readable in binary mode yields Buffers; backpressure bounds how many bytes sit buffered.</p>"}},
+ {n:4,lane:1,title:"Chunk 1 emitted — boundary inside €",short:"63 61 66 C3A9 20 E2 — ends on a lone lead byte",
+  body:"<p>Suppose the first chunk is <code>63 61 66 C3 A9 20 E2</code>. It ends on <code>E2</code> — the <strong>lead byte</strong> of €, which announces two continuation bytes that haven't arrived yet. The character is cut in half.</p>",
+  why:"A lead byte with no continuation bytes is, by definition, an incomplete sequence — invalid on its own.",
+  deep:{node:"<p>The Buffer is <code>&lt;Buffer 63 61 66 c3 a9 20 e2&gt;</code>. <code>E2</code> = <code>1110 0010</code>: a 3-byte lead byte still owed <code>82 AC</code>.</p>",
+        spec:"<p>UTF-8: <code>1110xxxx</code> must be followed by two <code>10xxxxxx</code> continuation bytes; absent them the sequence is ill-formed.</p>"}},
+ {n:5,lane:2,title:"Naïve: chunk1.toString('utf8')",short:"→ \"café \" + � — the lone E2 is invalid",
+  body:"<p>Call <code>chunk1.toString('utf8')</code> and the decoder handles <code>café&nbsp;</code> fine, then hits the dangling <code>E2</code> with nothing to complete it — so it emits <strong>U+FFFD �</strong>. You've already lost the €.</p>",
+  why:"toString decodes this chunk in isolation; it has no way to wait for bytes that live in the next chunk.",
+  deep:{node:"<p><code>buf.toString('utf8')</code> goes through Node's internal decoder, which substitutes <code>�</code> for the incomplete tail rather than throwing.</p>",
+        spec:"<p>WHATWG Encoding: a decoder in replacement mode emits U+FFFD on ill-formed input.</p>"}},
+ {n:6,lane:1,title:"Chunk 2 arrives",short:"82 AC 39 39 — starts mid-character",
+  body:"<p>The next chunk is <code>82 AC 39 39</code>. It <strong>begins</strong> with the two continuation bytes that belonged to €, now orphaned, followed by <code>39 39</code> = <code>99</code>.</p>",
+  why:"Continuation bytes at the very start of a chunk have no lead byte to attach to — they're orphans.",
+  deep:{node:"<p><code>&lt;Buffer 82 ac 39 39&gt;</code>. <code>82</code> and <code>AC</code> are <code>10xxxxxx</code> continuation bytes; <code>39</code> is ASCII <code>9</code>.</p>",
+        spec:"<p>UTF-8: a continuation byte not preceded by a valid lead byte is ill-formed input.</p>"}},
+ {n:7,lane:2,title:"Naïve: chunk2.toString('utf8')",short:"→ �\"99\" — orphan bytes, corrupted result",
+  body:"<p><code>chunk2.toString('utf8')</code> sees <code>82 AC</code> with no lead byte → more <code>�</code>, then <code>99</code>. Concatenated, the naïve result is <code>\"café �\" + \"�99\"</code> = <strong>\"café ��99\"</strong>. The € is gone, replaced by two replacement characters.</p>",
+  why:"Both halves of the split character degraded independently — neither chunk could ever have recovered it alone.",
+  deep:{node:"<p>String concatenation of the two decoded chunks gives <code>'café ' + '\\uFFFD' + '\\uFFFD' + '99'</code> — irreversibly lossy.</p>",
+        spec:"<p>Encoding standard: once emitted, U+FFFD carries no record of the original bytes; the information is gone.</p>"}},
+ {n:8,lane:2,title:"Root cause: stateful vs stateless",short:"decoding needs memory; toString has none",
+  body:"<p>The real defect isn't the bytes — it's the <strong>method</strong>. UTF-8 decoding is a state machine that may need to remember a partial sequence between bytes. <code>toString()</code> is a one-shot with no memory between chunks. The mismatch is the bug.</p>",
+  why:"Fix the statefulness and the same bytes decode perfectly — proving the data was never the problem.",
+  deep:{node:"<p>What's needed is something that remembers the dangling <code>E2</code> across calls — precisely what <code>StringDecoder</code> stores in its internal <code>lastChar</code> / <code>lastNeed</code> state.</p>",
+        spec:"<p>A streaming decoder is a coroutine over the byte sequence; per-chunk decoding discards its continuation between resumptions.</p>"}},
+ {n:9,lane:3,title:"StringDecoder.write(chunk1)",short:"→ \"café \"  · retains E2 internally",
+  body:"<p>Feed chunk 1 to a <code>StringDecoder</code>. It returns the characters it can <strong>complete</strong> — <code>\"café \"</code> — and quietly <strong>keeps the dangling <code>E2</code></strong> in its internal state instead of emitting <code>�</code>.</p>",
+  why:"Holding the incomplete tail is the entire trick — it turns a stateless call into a stateful one.",
+  deep:{node:"<p><code>new StringDecoder('utf8').write(chunk1)</code> → <code>'café '</code>. Internally it records that 1 byte (<code>E2</code>) of a 3-byte sequence is pending (<code>lastNeed = 2</code>).</p>",
+        spec:"<p>The decoder buffers an incomplete trailing sequence rather than treating it as an error.</p>"}},
+ {n:10,lane:3,title:"StringDecoder.write(chunk2)",short:"→ \"€99\"  · E2 + 82 AC completes €",
+  body:"<p>Feed chunk 2. The decoder <strong>prepends the retained <code>E2</code></strong>, completing <code>E2 82 AC</code> = <code>€</code>, then decodes <code>39 39</code> = <code>99</code>. It returns <code>\"€99\"</code> — the character is whole.</p>",
+  why:"The byte that was stranded at the seam is reunited with its continuation bytes exactly as the encoding intended.",
+  deep:{node:"<p><code>d.write(chunk2)</code> → <code>'€99'</code>. The buffered <code>E2</code> + incoming <code>82 AC</code> form the code point, then ASCII <code>99</code> follows.</p>",
+        spec:"<p>The decoder resumes its state machine: pending lead byte + arriving continuation bytes → one code point.</p>"}},
+ {n:11,lane:3,title:"StringDecoder.end()",short:"→ \"\"  · nothing buffered · result is whole",
+  body:"<p><code>d.end()</code> flushes any leftover bytes; here there are none, so it returns <code>\"\"</code>. Concatenated, the output is <strong>\"café €99\"</strong> — byte-perfect. Same bytes as the naïve path; only the decoder had memory.</p>",
+  why:"end() matters when a stream truly ends mid-character: it lets you decide to emit � or surface an error, deliberately.",
+  deep:{node:"<p><code>d.end()</code> returns any remaining buffered bytes decoded (or <code>�</code> if still incomplete). Clean here → <code>''</code>.</p>",
+        spec:"<p>Flushing a streaming decoder finalises state; a still-incomplete tail at true end-of-input is the only place replacement is correct.</p>"}},
+ {n:12,lane:3,title:"The payoff: setEncoding does this for you",short:"readable.setEncoding('utf8') installs a StringDecoder",
+  body:"<p>You rarely write this by hand. <code>readable.setEncoding('utf8')</code> wires a <code>StringDecoder</code> into the stream's internals, so every <code>'data'</code> event already hands you whole-character <strong>strings</strong>. The seam is handled before you ever see a chunk.</p>",
+  why:"The fix you just traced is the same machinery the platform runs automatically — once you know it's there.",
+  deep:{node:"<p><code>setEncoding(enc)</code> sets <code>state.encoding</code> and creates <code>state.decoder = new StringDecoder(enc)</code>; the read path runs each chunk through <code>decoder.write</code> before emitting.</p>",
+        spec:"<p>Node Streams: with an encoding set, a Readable emits decoded strings instead of Buffers.</p>"}}
+];
+
+/* ---------- MODAL ---------- */
+const scrim=document.getElementById('scrim');
+function modalBodyHTML(f){
+  let h=f.body+'<div class="why"><span class="wl">why it matters</span>'+f.why+'</div>';
+  if(f.extra) h+=f.extra;
+  if(f.figure) h+='<div class="mfig-wrap" id="mFigWrap"></div>';
+  if(f.deep){
+    h+='<div class="deephd">Under the hood — Node internals &amp; spec</div>'+
+       '<div class="deep open">'+
+         '<div class="dcol"><span class="dl chrome">Node internals</span>'+f.deep.node+'</div>'+
+         '<div class="dcol"><span class="dl spec">Unicode / spec</span>'+f.deep.spec+'</div>'+
+       '</div>';
+  }
+  return h;
+}
+let stashedFig=null;
+function returnStashedFig(){
+  if(stashedFig){ if(fsFig===stashedFig) exitFs(); document.getElementById('figStash').appendChild(stashedFig); stashedFig=null; }
+}
+let modalStack=[];
+function renderModal(f){
+  returnStashedFig();
+  const nested=modalStack.length>1;
+  document.querySelector('.modal').classList.toggle('nested',nested);
+  document.getElementById('mBack').style.display=nested?'inline-flex':'none';
+  document.getElementById('mBreadcrumb').textContent=nested?(modalStack[modalStack.length-2].title||''):'';
+  document.getElementById('mTag').textContent=(f.n!=null?('FRAME '+String(f.n).padStart(2,'0')):(f.tag||'DETAIL'));
+  document.getElementById('mLane').textContent=f.lane!=null?('· '+(LANES[f.lane]||f.laneName||'')):(f.laneName?('· '+f.laneName):'');
+  document.getElementById('mTitle').textContent=f.title;
+  const mb=document.getElementById('mBody');
+  mb.innerHTML=modalBodyHTML(f);
+  if(f.figure){
+    const fig=document.getElementById(f.figure);
+    if(fig){ document.getElementById('mFigWrap').appendChild(fig); stashedFig=fig; }
+  }
+  const tog=mb.querySelector('.deeptog'), deep=mb.querySelector('.deep');
+  if(tog) tog.onclick=()=>{tog.classList.toggle('open');deep.classList.toggle('open');};
+  tagTerms(mb);
+  mb.scrollTop=0; document.querySelector('.modal').scrollTop=0;
+}
+function openModal(f){
+  if(scrim.classList.contains('open')) modalStack.push(f);
+  else modalStack=[f];
+  renderModal(f);
+  scrim.classList.add('open');
+}
+function modalBack(){
+  if(modalStack.length>1){ modalStack.pop(); renderModal(modalStack[modalStack.length-1]); }
+  else closeModal();
+}
+function closeModal(){scrim.classList.remove('open');returnStashedFig();modalStack=[];document.querySelector('.modal').classList.remove('nested');}
+document.getElementById('mBack').onclick=modalBack;
+document.getElementById('mClose').onclick=closeModal;
+scrim.onclick=e=>{if(e.target===scrim)closeModal();};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(fsFig){exitFs();}else if(modalStack.length>1){modalBack();}else{closeModal();}}});
+
+/* ---------- cards ---------- */
+function cardClass(lane){return LANE_OWNER[lane]==='bad'?' dgr':LANE_OWNER[lane]==='text'?' eng':'';}
+function buildCards(id,list){
+  const wrap=document.getElementById(id);
+  if(!wrap) return;
+  list.forEach(f=>{
+    const c=document.createElement('div');
+    c.className='card'+cardClass(f.lane);
+    c.innerHTML='<div class="fn"><span>Frame '+String(f.n).padStart(2,'0')+'</span><span>'+LANES[f.lane]+'</span></div>'+
+                '<div class="ft">'+f.title+'</div><div class="fs2">'+f.short+'</div>'+
+                '<span class="deepchip">▾ node + spec</span>';
+    c.onclick=()=>openModal(f);
+    wrap.appendChild(c);
+  });
+}
+/* §07 cards: the StringDecoder frames (9–12) */
+buildCards('fixCards',FRAMES.slice(8));
+
+/* ============================================================
+   CARD TREE — branches → cards → rich modal (fetch.html pattern)
+   ============================================================ */
+const TICON={
+  byte:'<path d="M3 5h18M3 12h18M3 19h18"/><circle cx="7" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="17" cy="19" r="1.4"/>',
+  layers:'<path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/>',
+  lens:'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+  pool:'<rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/>',
+  abc:'<path d="M4 18L7 7l3 11M5 14h4"/><path d="M14 7v11h2.5a2.5 2.5 0 000-5H14m0 0h2a2 2 0 000-4h-2"/>',
+  scissors:'<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.12 15.88M14.47 14.48L20 20M8.12 8.12L12 12"/>',
+  wrench:'<path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2.8-2.8 2.5-2.5z"/>',
+  stream:'<path d="M4 7h10M4 12h16M4 17h7"/><circle cx="18" cy="7" r="1.6"/><circle cx="14" cy="17" r="1.6"/>',
+  globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/>',
+  swap:'<path d="M7 4L3 8l4 4M3 8h13M17 20l4-4-4-4M21 16H8"/>',
+  warn:'<path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.4 3.9a2 2 0 00-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+  bolt:'<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>'
+};
+function ticon(n){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'+(TICON[n]||TICON.bolt)+'</svg>';}
+const ioArrow='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+const ctaArrow='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 8h10M9 4l4 4-4 4"/></svg>';
+const COLORVAR={js:'var(--js)',engine:'var(--engine)',danger:'var(--danger)',ink:'var(--ink2)'};
+
+/* shared content fragments reused in modals */
+const TBL_CAST='<table class="spec"><thead><tr><th>Type</th><th>What it is</th><th>Layer</th><th>Role</th></tr></thead><tbody>'+
+ '<tr><td>ArrayBuffer</td><td>Fixed-length block of raw bytes; not directly readable.</td><td><span class="pill js">ES</span></td><td>storage</td></tr>'+
+ '<tr><td>TypedArray</td><td>Uint8 / Int16 / Float64 … a typed window onto an ArrayBuffer.</td><td><span class="pill js">ES</span></td><td>lens (one type)</td></tr>'+
+ '<tr><td>DataView</td><td>Mixed-type, explicit-endianness reads at any offset.</td><td><span class="pill js">ES</span></td><td>lens (any type)</td></tr>'+
+ '<tr><td>Uint8Array</td><td>The byte-level TypedArray; lingua franca of binary JS.</td><td><span class="pill js">ES</span></td><td>lens (bytes)</td></tr>'+
+ '<tr><td>Buffer</td><td>Node\u2019s Uint8Array subclass with encodings + a pool.</td><td><span class="pill eng">Node</span></td><td>lens (bytes+text)</td></tr>'+
+ '<tr><td>StringDecoder</td><td>Stateful UTF-8/16 decoder that survives chunk boundaries.</td><td><span class="pill eng">Node</span></td><td>bytes\u2192text</td></tr>'+
+ '<tr><td>TextDecoder</td><td>WHATWG decoder; <code>{stream:true}</code> is the modern equivalent.</td><td><span class="pill os">Web</span></td><td>bytes\u2192text</td></tr>'+
+ '<tr><td>SharedArrayBuffer</td><td>An ArrayBuffer shared across workers, paired with <code>Atomics</code>.</td><td><span class="pill js">ES</span></td><td>shared storage</td></tr>'+
+ '</tbody></table>';
+const TBL_ENC='<table class="spec"><thead><tr><th>Encoding</th><th>Bytes/char</th><th>Notes</th></tr></thead><tbody>'+
+ '<tr><td>utf8</td><td>1\u20134</td><td>ASCII-compatible, self-synchronising; the one that splits across chunks.</td></tr>'+
+ '<tr><td>utf16le / ucs2</td><td>2 or 4</td><td>JS\u2019s internal form; astral chars use a <span class="term" data-term="surrogate pair">surrogate pair</span>.</td></tr>'+
+ '<tr><td>latin1</td><td>1</td><td>Lossless for any byte 0\u2013255 \u2014 the old \u201Cbinary string\u201D trick.</td></tr>'+
+ '<tr><td>ascii</td><td>1</td><td>7-bit; the high bit is masked, so bytes \u2265128 mangle.</td></tr>'+
+ '<tr><td>hex</td><td>\u00d72</td><td>Each byte \u2192 two hex digits. Transport, not a charset.</td></tr>'+
+ '<tr><td>base64</td><td>\u00d74\u20443</td><td>3 bytes \u2192 4 ASCII chars; <code>url</code> swaps <code>+/</code> for <code>-_</code>.</td></tr>'+
+ '</tbody></table>'+
+ '<div class="callout eng"><span class="lbl">the length trap</span><code>"\u20ac".length</code> is <strong>1</strong> (UTF-16 units) but <code>Buffer.byteLength("\u20ac")</code> is <strong>3</strong> (UTF-8 bytes). <code>str.length</code> is never a byte count.</div>';
+const TBL_ORIGINS='<table class="spec"><thead><tr><th>Source</th><th>What arrives</th><th>The gotcha</th></tr></thead><tbody>'+
+ '<tr><td>fs.createReadStream</td><td>64 KiB Buffer chunks</td><td>multi-byte chars split at every 64 KiB boundary</td></tr>'+
+ '<tr><td>net / TCP socket</td><td>a raw byte stream, not messages</td><td>you must frame it yourself</td></tr>'+
+ '<tr><td>http req / res</td><td>body as Buffer chunks</td><td>same UTF-8 seam bug if you concat-and-toString</td></tr>'+
+ '<tr><td>crypto</td><td>hashes / HMAC as Buffers</td><td>use hex / base64 for transport, not utf8</td></tr>'+
+ '<tr><td>zlib</td><td>Transform stream of Buffers</td><td>compressed bytes are not text at all</td></tr>'+
+ '</tbody></table>'+
+ '<div class="callout dgr"><span class="lbl">the framing trap</span>TCP gives you bytes with <strong>no message boundaries</strong>. Two <code>socket.write()</code>s can arrive as one <code>data</code> event. Same problem as the chunk seam, one level up.</div>';
+const TBL_FOOT='<table class="spec"><thead><tr><th>Footgun</th><th>What goes wrong</th></tr></thead><tbody>'+
+ '<tr><td>per-chunk toString()</td><td>split multi-byte char \u2192 \uFFFD. Use StringDecoder / setEncoding.</td></tr>'+
+ '<tr><td>allocUnsafe leak</td><td>uninitialised pool memory exposes old data. Use alloc.</td></tr>'+
+ '<tr><td>subarray / slice aliasing</td><td>shared view mutates original. Uint8Array.slice copies; Buffer.slice doesn\u2019t.</td></tr>'+
+ '<tr><td>str.length as bytes</td><td>UTF-16 units, not bytes. Use Buffer.byteLength.</td></tr>'+
+ '<tr><td>wrong endianness</td><td>valid-looking but wrong integer. State LE/BE explicitly.</td></tr>'+
+ '<tr><td>slicing mid-character</td><td>cutting at a byte index bisects a char. Decode, then slice.</td></tr>'+
+ '<tr><td>BOM &amp; normalization</td><td>leading U+FEFF or NFC/NFD changes length &amp; equality.</td></tr>'+
+ '</tbody></table>';
+
+/* the tree: branches → cards. each card is an openModal payload + card chrome */
+const TREE=[
+ {id:'br-foundation',num:'A',color:'js',title:'Foundation',sub:'what a byte is, and the cast of types',
+  cards:[
+   {color:'js',icon:'byte',layer:'concept',num:'01',title:'A byte has no meaning',tagline:'Storage vs interpretation \u2014 the one split everything hangs off.',inp:'0x41',out:'"A" · 65 · \u00bc float',
+    tag:'MODEL',laneName:'the core idea',
+    body:'<p>Memory is a flat array of <span class="term" data-term="octet">octets</span>. The same byte <code>0x41</code> is the letter <code>"A"</code>, the number <code>65</code>, or one-quarter of a float \u2014 entirely depending on the lens you read it through. <code>Buffer</code>, <code>TypedArray</code> and <code>DataView</code> are all just <strong>lenses over the same raw bytes</strong>.</p>',
+    why:'Get this and the rest is corollary: the bytes never change, only the lens does.',
+    extra:'<pre class="wire"><span class="c">as text </span>bytes <span class="c">+ utf8     \u2192</span> "A"\n<span class="c">as int  </span>bytes <span class="c">+ DataView \u2192</span> 65\n<span class="c">as float</span>bytes <span class="c">+ Float64  \u2192</span> 3.14</pre>',
+    deep:{node:'<p>A Node <code>Buffer</code> over <code>[0x41]</code> answers differently per method: <code>buf.toString()</code>\u2192"A", <code>buf[0]</code>\u219265, <code>buf.readFloatLE()</code> reinterprets the same bytes.</p>',spec:'<p>ECMAScript stores no type on the bytes; views carry the element type.</p>'}},
+   {color:'js',icon:'layers',layer:'the cast',num:'02',title:'The cast & their layers',tagline:'A handful of types; knowing each one\u2019s layer explains everything.',inp:'ArrayBuffer',out:'Buffer / View',
+    tag:'CAST',laneName:'types',
+    body:'<p>The crucial fact: <strong><code>Buffer</code> is a subclass of <code>Uint8Array</code></strong>. Everything true of a TypedArray is already true of a Buffer \u2014 the sprawling Buffer API exists only because Buffer <em>predates</em> TypedArrays in Node.</p>',
+    why:'You can pass a Buffer anywhere a Uint8Array is expected; the reverse needs Buffer.from.',
+    extra:TBL_CAST,
+    deep:{node:'<p><code>Buffer.prototype</code> chains to <code>Uint8Array.prototype</code>. <code>Buffer.from</code>, <code>.alloc</code>, encodings, and the pool are the Node-only additions.</p>',spec:'<p>TypedArrays + DataView + ArrayBuffer are the ECMAScript binary primitives; Buffer is outside the spec.</p>'}}
+  ]},
+ {id:'br-interpret',num:'B',color:'engine',title:'Interpretation',sub:'the lenses: views, the pool, encodings',
+  cards:[
+   {color:'engine',icon:'lens',layer:'memory',num:'03',title:'Views over memory',tagline:'Below the line it\u2019s octets; above it, every layer is a choice.',inp:'ArrayBuffer',out:'typed value',figchip:'live diagram',
+    tag:'LAYERS',laneName:'the lens stack',figure:'layerFig',
+    body:'<p>The C instinct made literal: casting <code>char*</code> to <code>int*</code> over one address. A view owns no bytes \u2014 it points at an <code>ArrayBuffer</code> with a <code>byteOffset</code> and a length. Toggle <em>show only the bytes</em> to dim every interpreting layer; click any layer in the diagram.</p>',
+    why:'Multiple views over one buffer alias the same memory \u2014 the root of slice/subarray surprises.',
+    deep:{node:'<p><code>buf.buffer</code> is the backing ArrayBuffer; <code>buf.byteOffset</code>/<code>byteLength</code> the window into it.</p>',spec:'<p>A view = ArrayBuffer + offset + length + element type.</p>'}},
+   {color:'js',icon:'pool',layer:'allocation',num:'04',title:'The Buffer pool',tagline:'Why a fresh small Buffer has a non-zero byteOffset into a bigger block.',inp:'allocUnsafe(n)',out:'slab of 8 KiB pool',figchip:'live diagram',
+    tag:'POOL',laneName:'where bytes live',figure:'poolFig',
+    body:'<p>Small buffers are <strong>slabs of a shared 8 KiB pool</strong>. <span class="term" data-term="allocUnsafe">Buffer.allocUnsafe(n)</span> hands you a view into the pool at the next <code>byteOffset</code> \u2014 fast, but <strong>uninitialised</strong>. <span class="term" data-term="Buffer.alloc">Buffer.alloc(n)</span> zero-fills; large allocations get a standalone ArrayBuffer. Click any box.</p>',
+    why:'allocUnsafe can leak old pool data \u2014 keys, request bodies. That\u2019s why new Buffer(n) was deprecated.',
+    deep:{node:'<p>Pool used when size &lt; <code>poolSize&gt;&gt;&gt;1</code> (4096 of the 8192 default).</p>',spec:'<p>Pure Node implementation detail; spec only requires contiguous bytes.</p>'}},
+   {color:'engine',icon:'abc',layer:'bytes\u2194text',num:'05',title:'Encodings',tagline:'A charset is not an encoding. Most confusion lives in that gap.',inp:'code points',out:'bytes',
+    tag:'ENCODINGS',laneName:'the bridge',
+    body:'<p>Unicode is the <strong>charset</strong> \u2014 characters to numbered <span class="term" data-term="code point">code points</span> (\u20ac = U+20AC). An <strong>encoding</strong> turns those numbers into bytes (UTF-8 makes \u20ac three bytes; UTF-16 two). <code>hex</code>/<code>base64</code> re-encode arbitrary bytes into safe ASCII \u2014 not charsets at all.</p>',
+    why:'Mixing the two is why \u201cwhy is my emoji 4 bytes but length 2?\u201d happens.',
+    extra:TBL_ENC,
+    deep:{node:'<p>Buffer accepts these as the encoding arg to <code>toString</code>/<code>from</code>/<code>write</code>.</p>',spec:'<p>UTF-8 per RFC 3629; base64 per RFC 4648.</p>'}}
+  ]},
+ {id:'br-seam',num:'C',color:'danger',title:'The seam',sub:'the boundary bug and its fix',
+  cards:[
+   {color:'danger',icon:'scissors',layer:'the bug',num:'06',title:'Move the seam yourself',tagline:'The same bytes, decoded per-chunk, at three boundary positions.',inp:'11 bytes',out:'\u2713 text or \uFFFD',figchip:'interactive',
+    tag:'SEAM',laneName:'chunk boundary',figure:'seamFig',
+    body:'<p>The eleven bytes of <code>"caf\u00e9 \u20ac99"</code>. Flip the switch to move the cut \u2014 when it lands inside the multi-byte <code>\u00e9</code> or <code>\u20ac</code>, naively calling <code>chunk.toString(\u2019utf8\u2019)</code> on each side yields <code>\uFFFD</code>. Same bytes every time; only the cut changes the output.</p>',
+    why:'UTF-8 decoding is stateful across bytes; toString() is stateless per chunk. That mismatch is the bug.',
+    deep:{node:'<p>A lead byte stranded at a chunk\u2019s end has no continuation bytes to pair with.</p>',spec:'<p><code>1110xxxx</code> must be followed by two <code>10xxxxxx</code> bytes; absent them, ill-formed \u2192 U+FFFD.</p>'}},
+   {color:'engine',icon:'wrench',layer:'the fix',num:'07',title:'StringDecoder',tagline:'Decode statefully: emit complete characters, keep the tail.',inp:'Buffer chunks',out:'whole chars',
+    tag:'FIX',laneName:'node:string_decoder',
+    body:'<p><code>node:string_decoder</code> exists for exactly this. <code>decoder.write(chunk)</code> returns only the characters it can <em>complete</em> and <strong>retains incomplete trailing bytes internally</strong> until the next call. <code>decoder.end()</code> flushes.</p>',
+    why:'Holding the dangling tail across calls is the whole trick \u2014 stateless becomes stateful.',
+    extra:'<pre class="wire"><span class="k">const</span> d = <span class="k">new</span> StringDecoder(<span class="v">\u2019utf8\u2019</span>);\nd.write(chunk1); <span class="c">// \u2192 "caf\u00e9 "  (retains E2)</span>\nd.write(chunk2); <span class="c">// \u2192 "\u20ac99"   (completes E2 82 AC)</span>\nd.end();         <span class="c">// \u2192 ""</span></pre><p style="font-size:14px;color:var(--ink3);margin:10px 0 0">The four frames of this fix are also the cards in the hero animation\u2019s tail (09\u201312).</p>',
+    deep:{node:'<p>Internally tracks <code>lastChar</code>/<code>lastNeed</code> \u2014 how many bytes of a pending sequence remain.</p>',spec:'<p>A streaming decoder is a coroutine over the byte sequence.</p>'}}
+  ]},
+ {id:'br-world',num:'D',color:'engine',title:'In the world',sub:'streams, byte sources, endianness',
+  cards:[
+   {color:'engine',icon:'stream',layer:'streams',num:'08',title:'Where this lands',tagline:'In binary mode every chunk is a Buffer \u2014 so all of the above applies.',inp:'Readable',out:'Buffer chunks',
+    tag:'STREAMS',laneName:'highWaterMark',
+    body:'<p>A non-object-mode Readable emits <strong>Buffer</strong> chunks sized by <span class="term" data-term="highWaterMark">highWaterMark</span> (16 KiB generic, 64 KiB fs) \u2014 never by character boundaries. That is the entire reason the seam bug exists.</p>',
+    why:'setEncoding() installs a StringDecoder on the stream\u2019s internal state \u2014 the §07 fix, automatic.',
+    extra:'<pre class="wire"><span class="c">// \u2717 mojibake at seams</span>\nr.on(<span class="v">\u2019data\u2019</span>, c => out += c.toString(<span class="v">\u2019utf8\u2019</span>));\n\n<span class="c">// \u2713 setEncoding = StringDecoder under the hood</span>\nr.setEncoding(<span class="v">\u2019utf8\u2019</span>);\nr.on(<span class="v">\u2019data\u2019</span>, s => out += s);</pre>',
+    deep:{node:'<p><code>setEncoding</code> sets <code>state.decoder = new StringDecoder(enc)</code>; the read path runs each chunk through it.</p>',spec:'<p>With an encoding set, a Readable emits strings instead of Buffers.</p>'}},
+   {color:'ink',icon:'globe',layer:'sources',num:'09',title:'Where bytes come from',tagline:'Every byte source in Node hands you Buffers.',inp:'fs · net · http',out:'Buffer chunks',
+    tag:'ORIGINS',laneName:'byte sources',
+    body:'<p>The boundary problem isn\u2019t a stream curiosity \u2014 it\u2019s everywhere bytes enter your process. Each source below produces <code>Buffer</code> chunks you must decode statefully (text) or frame correctly (binary).</p>',
+    why:'Same root cause recurs at the message level for TCP: you reassemble messages, not characters.',
+    extra:TBL_ORIGINS,
+    deep:{node:'<p><code>fs</code>, <code>net</code>, <code>http</code>, <code>crypto</code>, <code>zlib</code> all speak Buffers.</p>',spec:'<p>TCP is a byte stream with no framing \u2014 an OS/transport guarantee, not Node\u2019s.</p>'}},
+   {color:'js',icon:'swap',layer:'byte order',num:'10',title:'Endianness',tagline:'Just another lens \u2014 and a silent one.',inp:'4 bytes',out:'two different uint32s',figchip:'interactive',
+    tag:'ENDIAN',laneName:'LE vs BE',figure:'endianFig',
+    body:'<p>Reading a multi-byte integer needs a byte order. <code>DataView</code> forces you to state it; <code>readUInt32LE/BE</code> name it; plain TypedArrays quietly use the platform\u2019s (almost always little-endian). Flip the switch to see the same four bytes become two different numbers.</p>',
+    why:'Network and file formats are often big-endian, so guessing wrong gives a plausible, wrong value.',
+    deep:{node:'<p>Buffer has explicit <code>readUInt32BE</code>/<code>LE</code> (and friends) so order is never implicit.</p>',spec:'<p>DataView defaults to big-endian unless you pass <code>littleEndian=true</code>.</p>'}}
+  ]},
+ {id:'br-hazards',num:'E',color:'danger',title:'Hazards',sub:'the footguns, gathered',
+  cards:[
+   {color:'danger',icon:'warn',layer:'summary',num:'11',title:'The footguns, gathered',tagline:'Almost all are one confusion: storage mistaken for meaning.',inp:'every section',out:'one rule',
+    tag:'FOOTGUNS',laneName:'wrap-up',
+    body:'<p>Each hazard below is the storage-vs-interpretation split going wrong in a specific way. The cure is always the same shape: choose the lens deliberately, and keep its state across the seams.</p>',
+    why:'Bytes are not text you happen to have \u2014 they are storage waiting for a lens.',
+    extra:TBL_FOOT,
+    deep:{node:'<p>The Node-specific traps: allocUnsafe, Buffer.slice aliasing, pool offsets.</p>',spec:'<p>The universal ones: UTF-8 statefulness, UTF-16 length, endianness, BOM/normalization.</p>'}}
+  ]}
+];
+
+function renderTree(){
+  const host=document.getElementById('tree');
+  TREE.forEach((br,bi)=>{
+    const det=document.createElement('details');
+    det.className='branch'; det.id=br.id; det.style.setProperty('--bc',COLORVAR[br.color]);
+    if(bi===0) det.open=true;
+    const sum=document.createElement('summary');
+    sum.innerHTML='<span class="bdot"></span><span class="bnum">'+br.num+'</span>'+
+      '<span class="btitle">'+br.title+'</span><span class="bsub">'+br.sub+'</span>'+
+      '<span class="bcount">'+br.cards.length+' card'+(br.cards.length>1?'s':'')+'</span>'+
+      '<svg class="bchev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+    det.appendChild(sum);
+    const body=document.createElement('div'); body.className='bbody';
+    br.cards.forEach(card=>{
+      const btn=document.createElement('button');
+      btn.className='tcard'; btn.style.setProperty('--cc',COLORVAR[card.color]);
+      btn.innerHTML=
+        '<div class="tc-head"><span class="tc-icon">'+ticon(card.icon)+'</span>'+
+          '<span class="tc-layer">'+card.layer+'</span><span class="tc-num">'+card.num+'</span></div>'+
+        (card.figchip?'<span class="tc-figchip">'+card.figchip+'</span>':'')+
+        '<h3>'+card.title+'</h3>'+
+        '<p class="tc-tag">'+card.tagline+'</p>'+
+        '<div class="tc-io"><span class="io-c" title="'+card.inp+'"><span class="io-k">in&nbsp;</span>'+card.inp+'</span>'+
+          '<span class="io-s">'+ioArrow+'</span>'+
+          '<span class="io-c out" title="'+card.out+'">'+card.out+'<span class="io-k">&nbsp;out</span></span></div>'+
+        '<span class="tc-cta">Open detail '+ctaArrow+'</span>';
+      btn.addEventListener('click',()=>openModal(card));
+      body.appendChild(btn);
+    });
+    det.appendChild(body);
+    host.appendChild(det);
+  });
+  document.getElementById('treeExpand').onclick=()=>host.querySelectorAll('details.branch').forEach(d=>d.open=true);
+  document.getElementById('treeCollapse').onclick=()=>host.querySelectorAll('details.branch').forEach(d=>d.open=false);
+}
+renderTree();
+
+/* ============================================================
+   SVG HELPERS
+   ============================================================ */
+const SVGNS='http://www.w3.org/2000/svg';
+function el(tag,attrs,html){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(html!=null)e.innerHTML=html;return e;}
+function plate(cx,cy,text,color,fs){
+  fs=fs||10.5;
+  const w=text.length*(fs*0.6)+18, h=fs+12;
+  return `<rect x="${cx-w/2}" y="${cy-h/2}" width="${w}" height="${h}" rx="6" fill="var(--panel2)" stroke="var(--line)"/>`+
+    `<text x="${cx}" y="${cy+fs*0.35}" text-anchor="middle" font-size="${fs}" font-weight="700" fill="${color}">${text}</text>`;
+}
+
+/* ============================================================
+   HERO swimlane
+   ============================================================ */
+const heroVP=document.getElementById('heroVP');
+const laneX0=160, laneW=1320-laneX0-40, laneY=[120,250,380,500], laneH=54, R=16;
+const nodeCX=i=>laneX0+34+(laneW-68)*(i/(FRAMES.length-1));
+LANES.forEach((name,li)=>{
+  const interp=laneIsInterp(li);
+  const g=el('g',{class:interp?'engine lbl-keep':''});
+  g.appendChild(el('rect',{x:laneX0,y:laneY[li]-laneH/2,width:laneW,height:laneH,rx:10,fill:'var(--panel2)',stroke:'var(--line)'}));
+  g.appendChild(el('text',{x:laneX0-12,y:laneY[li]-3,'text-anchor':'end','font-size':11,'font-weight':700,fill:laneColor(li),'letter-spacing':1},name.split(' ')[0].toUpperCase()));
+  g.appendChild(el('text',{x:laneX0-12,y:laneY[li]+11,'text-anchor':'end','font-size':9,fill:'var(--ink3)','letter-spacing':1},name.split('·').slice(1).join('').trim().toUpperCase()));
+  heroVP.appendChild(g);
+});
+const pts=FRAMES.map((f,i)=>[nodeCX(i),laneY[f.lane]]);
+let dd='M '+pts[0][0]+' '+pts[0][1];
+for(let i=1;i<pts.length;i++){const[x0,y0]=pts[i-1],[x1,y1]=pts[i],mx=(x0+x1)/2;dd+=` C ${mx} ${y0}, ${mx} ${y1}, ${x1} ${y1}`;}
+heroVP.appendChild(el('path',{d:dd,fill:'none',stroke:'var(--line2)','stroke-width':2,'stroke-dasharray':'4 5'}));
+
+const heroNodes=[], heroLabels=[];
+FRAMES.forEach((f,i)=>{
+  const cx=nodeCX(i), cy=laneY[f.lane], c=laneColor(f.lane), interp=laneIsInterp(f.lane);
+  const above=(i%2===0);
+  const ly=above?cy-R-26:cy+R+26;
+  const lead0=above?cy-R:cy+R, lead1=above?ly+9:ly-9;
+  heroVP.appendChild(el('line',{x1:cx,y1:lead0,x2:cx,y2:lead1,stroke:'var(--line2)','stroke-width':1.2}));
+  const lg=el('g',{class:'hlabel'+(interp?' engine lbl-keep':'')});
+  lg.innerHTML=plate(cx,ly,f.title,'var(--ink)',9.5);
+  heroVP.appendChild(lg); heroLabels.push({g:lg,c});
+  const g=el('g',{class:'node'+(interp?' engine':''),transform:`translate(${cx},${cy})`});
+  g.innerHTML=`<g class="nbox" style="transform-origin:0 0">`+
+    `<circle r="${R}" fill="var(--panel)" stroke="${c}" stroke-width="2"/>`+
+    `<text x="0" y="4" text-anchor="middle" font-size="12" font-weight="800" fill="${c}">${String(f.n).padStart(2,'0')}</text></g>`;
+  g.addEventListener('click',()=>{setStep(i);openModal(f);});
+  heroVP.appendChild(g); heroNodes.push(g);
+});
+/* annotation under the naïve lane */
+heroVP.appendChild(el('g',{class:'engine lbl-keep'},plate(nodeCX(6),laneY[2]+R+50,'✕ result: "café ��99"','var(--danger)',9.5)));
+const token=el('g',{},'<circle r="13" fill="var(--js)" opacity="0.25"/><circle r="7" fill="var(--js)"/>');
+token.style.transition='transform .55s cubic-bezier(.5,0,.3,1)';
+heroVP.appendChild(token);
+const ticks=document.getElementById('hTicks');
+FRAMES.forEach(()=>{const t=document.createElement('div');t.className='tk';ticks.appendChild(t);});
+let step=-1,playing=false,playT=null;
+function setStep(i){
+  step=Math.max(0,Math.min(FRAMES.length-1,i));
+  const f=FRAMES[step];
+  heroNodes.forEach((n,k)=>n.classList.toggle('active',k===step));
+  heroLabels.forEach((L,k)=>{const on=k===step;L.g.style.opacity=on?'1':'0.55';
+    const rect=L.g.querySelector('rect'),txt=L.g.querySelector('text');
+    if(rect)rect.setAttribute('stroke',on?L.c:'var(--line)');
+    if(txt)txt.setAttribute('fill',on?L.c:'var(--ink2)');});
+  const tx=nodeCX(step),ty=laneY[f.lane],col=laneColor(f.lane);
+  token.setAttribute('transform',`translate(${tx},${ty})`);
+  token.querySelectorAll('circle').forEach(c=>c.setAttribute('fill',col));
+  document.getElementById('capN').textContent='FRAME '+String(f.n).padStart(2,'0');
+  document.getElementById('capLane').textContent=LANES[f.lane];
+  document.getElementById('capH').textContent=f.title;
+  document.getElementById('capB').textContent=f.short.charAt(0).toUpperCase()+f.short.slice(1)+'.';
+  const more=document.getElementById('capMore');more.style.display='inline-block';more.onclick=()=>openModal(f);
+  document.getElementById('hStepNo').textContent=String(f.n).padStart(2,'0')+' / 12';
+  document.getElementById('hFill').style.width=(step/(FRAMES.length-1)*100)+'%';
+}
+function play(){playing=true;updatePI();if(step>=FRAMES.length-1)setStep(0);playT=setInterval(()=>{if(step>=FRAMES.length-1){pause();return;}setStep(step+1);},1700);}
+function pause(){playing=false;clearInterval(playT);updatePI();}
+function updatePI(){document.getElementById('hPlayIcon').innerHTML=playing?'<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>':'<path d="M7 5v14l12-7z"/>';}
+document.getElementById('hPlay').onclick=()=>{playing?pause():play();};
+document.getElementById('hNext').onclick=()=>{pause();setStep(step+1);};
+document.getElementById('hPrev').onclick=()=>{pause();setStep(step-1);};
+document.getElementById('hScrub').onclick=e=>{pause();const r=e.currentTarget.getBoundingClientRect();setStep(Math.round((e.clientX-r.left)/r.width*(FRAMES.length-1)));};
+setStep(0);document.getElementById('hStepNo').textContent='00 / 12';document.getElementById('hFill').style.width='0%';document.getElementById('capMore').style.display='none';
+
+/* ============================================================
+   LAYER diagram — the lens stack
+   ============================================================ */
+const layerVP=document.getElementById('layerVP');
+const layers=[
+ {y:30,o:'text',t:'JavaScript value',s:'"café"  ·  3.14  ·  65',body:"<p>What your program means: a string, a number, a float. None of this is how the bits are stored — it's the interpretation you asked for.</p>",why:"This is the only layer most code ever sees; the bytes below are invisible until you stream or serialise.",deep:{node:"<p>Strings live as UTF-16 in V8; numbers as IEEE-754 doubles. Conversions to/from bytes happen at the layers below.</p>",spec:"<p>ECMAScript values — distinct from any byte representation.</p>"}},
+ {y:130,o:'text',t:'View · Buffer / DataView / TypedArray',s:'the lens that imposes a type',body:"<p>A view reads the raw bytes <em>as</em> something — bytes, int16s, a UTF-8 string. Swap the view and the same memory becomes a different value. It owns no bytes of its own.</p>",why:"Multiple views over one ArrayBuffer alias the same memory — the source of slice/subarray surprises.",deep:{node:"<p><code>Buffer</code> extends <code>Uint8Array</code>; <code>buf.buffer</code> is the underlying ArrayBuffer, <code>buf.byteOffset</code>/<code>byteLength</code> the window.</p>",spec:"<p>WebIDL/ECMAScript: a view = ArrayBuffer + byteOffset + length + element type.</p>"}},
+ {y:240,o:'bytes',t:'— raw octets · no meaning —',s:'below this line it is just bytes',boundary:true,body:"<p>The membrane. Everything above interprets; everything here and below merely <strong>stores</strong>. The same octets serve every view simultaneously — they carry no type, no encoding, no endianness of their own.</p>",why:"This is why JS can't 'forge' meaning: meaning is imposed by the lens, never stamped on the bytes.",deep:{node:"<p>An <code>ArrayBuffer</code> exposes only <code>byteLength</code> — no element accessors at all. You must layer a view to touch it.</p>",spec:"<p>ECMAScript: ArrayBuffer is opaque storage; reads require a view.</p>"}},
+ {y:340,o:'bytes',t:'ArrayBuffer',s:'fixed-length block of bytes',body:"<p>The owned chunk of bytes. Resizable variants and <code>transfer()</code> (detaching) exist, but at heart it's a length and a backing store.</p>",why:"After transfer() the buffer is detached — touching it throws. A real lifecycle footgun with Workers.",deep:{node:"<p>Backed by a V8 <code>BackingStore</code>; can be allocated, shared (SharedArrayBuffer), or transferred between agents.</p>",spec:"<p>ECMAScript: ArrayBuffer with optional [[ArrayBufferData]] detach semantics.</p>"}},
+ {y:440,o:'bytes',t:'V8 backing store',s:'the engine\u2019s allocation',body:"<p>The actual heap allocation V8 manages for the buffer's bytes — possibly a slab of Node's shared Buffer pool for small buffers.</p>",why:"Pooling is why a small Buffer's byteOffset is rarely zero and its .buffer is bigger than the Buffer itself.",deep:{node:"<p>Small <code>allocUnsafe</code> buffers are carved from an ~8 KiB pool; large ones get a dedicated BackingStore.</p>",spec:"<p>Implementation detail; the spec only requires contiguous addressable bytes.</p>"}},
+ {y:540,o:'bytes',t:'OS memory page',s:'physical RAM, addressable octets',body:"<p>The substrate your C instincts already know: a flat, addressable array of bytes in a memory page. Everything above is structure layered onto this.</p>",why:"Same model as casting char* to int* in C — the address is fixed; the type is your choice.",deep:{node:"<p>Mapped by the allocator beneath V8; alignment and page boundaries live here.</p>",spec:"<p>Outside any language spec — the hardware/OS layer.</p>"}}
+];
+const lbw=440,lbx=(760-lbw)/2;
+layerVP.appendChild(el('defs',{},'<marker id="arr" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--line2)"/></marker>'));
+layers.forEach((L,i)=>{
+  if(i<layers.length-1) layerVP.appendChild(el('path',{d:`M ${lbx+lbw/2} ${L.y+76} L ${lbx+lbw/2} ${layers[i+1].y}`,stroke:'var(--line2)','stroke-width':2,'marker-end':'url(#arr)'}));
+});
+layers.forEach((L)=>{
+  const interp=(L.o==='text'), c=interp?'var(--engine)':L.boundary?'var(--ink3)':'var(--js)';
+  const g=el('g',{class:'node'+(interp?' engine':'')});
+  g.innerHTML=`<g class="nbox" style="transform-origin:${lbx+lbw/2}px ${L.y+38}px">`+
+    `<rect x="${lbx}" y="${L.y}" width="${lbw}" height="76" rx="12" fill="var(--panel)" stroke="${c}" stroke-width="${L.boundary?2.5:1.5}" ${L.boundary?'stroke-dasharray="9 6"':''}/>`+
+    `<text x="${lbx+22}" y="${L.y+32}" font-size="16" font-weight="700" fill="var(--ink)">${L.t}</text>`+
+    `<text x="${lbx+22}" y="${L.y+55}" font-size="12" fill="var(--ink2)">${L.s}</text>`+
+    `<text x="${lbx+lbw-18}" y="${L.y+44}" text-anchor="end" font-size="11" font-weight="800" fill="${c}">${interp?'MEANING':L.boundary?'⎯':'STORAGE'}</text></g>`;
+  g.addEventListener('click',()=>openModal({tag:'LAYER',laneName:interp?'interpretation':'storage',title:L.t.replace(/—/g,'').trim(),body:L.body,why:L.why,deep:L.deep}));
+  layerVP.appendChild(g);
+});
+
+/* ============================================================
+   POOL diagram — allocation model
+   ============================================================ */
+const poolVP=document.getElementById('poolVP');
+const poolData={
+ 'Buffer.allocUnsafe(100)':{tag:'POOL',laneName:'storage',title:'allocUnsafe → pool slab',body:"<p>A small unsafe allocation is carved from the shared pool at the current offset. Fast — no new allocation — but the bytes are whatever was there before.</p>",why:"That stale memory can contain another request's data; never expose it without overwriting.",deep:{node:"<p>Uses <code>allocPool</code> when size &lt; <code>poolSize&gt;&gt;&gt;1</code> (4096). The Buffer's <code>.buffer</code> is the 8 KiB pool; <code>.byteOffset</code> is non-zero.</p>",spec:"<p>Node-specific; no ECMAScript counterpart.</p>"}},
+ 'Buffer.allocUnsafe(200)':{tag:'POOL',laneName:'storage',title:'next slab, same pool',body:"<p>The next small unsafe buffer takes the following region of the <em>same</em> pool. Two unrelated Buffers can share one ArrayBuffer.</p>",why:"Two Buffers sharing a backing store means a bug in one can, in principle, read the other's slab.",deep:{node:"<p>The pool offset advances and is 8-byte aligned; when the pool fills, a fresh 8 KiB pool is allocated.</p>",spec:"<p>Implementation detail of Node's allocator.</p>"}},
+ 'Buffer.alloc(64)':{tag:'POOL',laneName:'storage',title:'alloc → zero-filled',body:"<p><code>Buffer.alloc</code> zero-fills before returning. Safe by default; the cost is writing every byte to zero first.</p>",why:"This is the right default — you trade a little speed for never leaking old memory.",deep:{node:"<p><code>alloc</code> may still use the pool but always zero-fills; pass a fill value/encoding to initialise differently.</p>",spec:"<p>Node-specific.</p>"}},
+ 'Buffer.alloc(64 KiB)':{tag:'POOL',laneName:'storage',title:'large → standalone',body:"<p>Allocations at or above the pool threshold get their <strong>own</strong> ArrayBuffer with <code>byteOffset</code> 0 — never pooled.</p>",why:"Knowing the threshold explains why some Buffers alias a big block and others stand alone.",deep:{node:"<p>Size ≥ <code>poolSize&gt;&gt;&gt;1</code> bypasses the pool; <code>allocUnsafeSlow</code> always does, returning an un-pooled buffer.</p>",spec:"<p>Node-specific.</p>"}}
+};
+function pbox(x,y,w,h,stroke,title,sub){
+  return `<g class="node"><g class="nbox" style="transform-origin:${x+w/2}px ${y+h/2}px">`+
+    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="var(--panel)" stroke="${stroke}" stroke-width="1.6"/>`+
+    `<text x="${x+14}" y="${y+25}" font-size="13" font-weight="700" fill="var(--ink)">${title}</text>`+
+    `<text x="${x+14}" y="${y+44}" font-size="10.5" fill="var(--ink2)">${sub}</text></g></g>`;
+}
+let poolH='<defs><marker id="parr" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--ink3)"/></marker></defs>';
+/* the 8 KiB pool bar */
+poolH+='<text x="60" y="60" font-size="12" font-weight="800" fill="var(--js)" letter-spacing="1">SHARED 8 KiB POOL · one ArrayBuffer</text>';
+poolH+='<rect x="60" y="78" width="800" height="60" rx="10" fill="var(--js-soft)" stroke="var(--js)" stroke-dasharray="3 5"/>';
+/* slabs inside the pool */
+poolH+='<rect x="66" y="84" width="120" height="48" rx="6" fill="var(--panel2)" stroke="var(--js)"/>';
+poolH+='<text x="126" y="106" text-anchor="middle" font-size="11" font-weight="700" fill="var(--js)">slab A</text>';
+poolH+='<text x="126" y="122" text-anchor="middle" font-size="9" fill="var(--ink3)">offset 0 · 100B</text>';
+poolH+='<rect x="190" y="84" width="220" height="48" rx="6" fill="var(--panel2)" stroke="var(--js)"/>';
+poolH+='<text x="300" y="106" text-anchor="middle" font-size="11" font-weight="700" fill="var(--js)">slab B</text>';
+poolH+='<text x="300" y="122" text-anchor="middle" font-size="9" fill="var(--ink3)">offset 104 · 200B</text>';
+poolH+='<rect x="414" y="84" width="440" height="48" rx="6" fill="none" stroke="var(--line2)" stroke-dasharray="2 4"/>';
+poolH+='<text x="634" y="112" text-anchor="middle" font-size="10" fill="var(--ink3)">…free, uninitialised (old bytes)…</text>';
+/* the four allocation boxes */
+poolH+=pbox(60,210,250,64,'var(--js)','Buffer.allocUnsafe(100)','→ slab A · byteOffset 0 · dirty');
+poolH+=pbox(330,210,250,64,'var(--js)','Buffer.allocUnsafe(200)','→ slab B · byteOffset 104 · dirty');
+poolH+=pbox(60,300,250,64,'var(--engine)','Buffer.alloc(64)','zero-filled · safe default');
+poolH+=pbox(330,300,250,64,'var(--engine)','Buffer.alloc(64 KiB)','standalone ArrayBuffer · offset 0');
+/* arrows from unsafe boxes up into pool slabs */
+poolH+='<path d="M126 210 L126 138" fill="none" stroke="var(--ink3)" stroke-width="1.6" stroke-dasharray="5 5" marker-end="url(#parr)"/>';
+poolH+='<path d="M380 210 L300 138" fill="none" stroke="var(--ink3)" stroke-width="1.6" stroke-dasharray="5 5" marker-end="url(#parr)"/>';
+/* standalone block on the right */
+poolH+='<text x="660" y="200" font-size="12" font-weight="800" fill="var(--engine)" letter-spacing="1">STANDALONE</text>';
+poolH+='<rect x="640" y="214" width="220" height="150" rx="10" fill="var(--engine-soft)" stroke="var(--engine)"/>';
+poolH+='<text x="750" y="285" text-anchor="middle" font-size="12" font-weight="700" fill="var(--engine)">own ArrayBuffer</text>';
+poolH+='<text x="750" y="306" text-anchor="middle" font-size="10" fill="var(--ink2)">zeroed · byteOffset 0</text>';
+poolH+='<path d="M580 332 L640 320" fill="none" stroke="var(--ink3)" stroke-width="1.6" stroke-dasharray="5 5" marker-end="url(#parr)"/>';
+poolH+=plate(440,420,'small unsafe → shared & dirty · large/alloc → safe','var(--ink3)',11);
+poolVP.innerHTML=poolH;
+poolVP.querySelectorAll('.node').forEach(node=>{const title=node.querySelector('text');node.addEventListener('click',()=>{const d=poolData[title.textContent];if(d)openModal(d);});});
+
+/* ============================================================
+   SEAM morph — move the chunk boundary
+   ============================================================ */
+const seamVP=document.getElementById('seamVP');
+/* bytes of "café €99": value, hexcode, char-group index, isLead, isCont */
+const SEAM_BYTES=[
+ {hex:'63',ch:'c',g:0},{hex:'61',ch:'a',g:1},{hex:'66',ch:'f',g:2},
+ {hex:'C3',ch:'é',g:3,lead:1},{hex:'A9',ch:'',g:3,cont:1},
+ {hex:'20',ch:'␠',g:4},
+ {hex:'E2',ch:'€',g:5,lead:1},{hex:'82',ch:'',g:5,cont:1},{hex:'AC',ch:'',g:5,cont:1},
+ {hex:'39',ch:'9',g:6},{hex:'39',ch:'9',g:7}
+];
+const SEAM_MODES=[
+ {label:'cut: clean (between chars)',cut:6,res1:'"café "',res2:'"€99"',ok:true,note:'boundary falls between space and €'},
+ {label:'cut: inside € (after E2)',cut:7,res1:'"café " + �',res2:'� + "99"',ok:false,note:'E2 stranded · 82 AC orphaned'},
+ {label:'cut: inside é (after C3)',cut:4,res1:'"caf" + �',res2:'� + " €99"',ok:false,note:'C3 stranded · A9 orphaned'}
+];
+function renderSeam(mode){
+  const M=SEAM_MODES[mode];
+  const x0=60,w=64,gap=6,y=120;
+  let h='<text x="60" y="46" font-size="12" font-weight="700" fill="var(--ink2)">11 bytes of "café €99" · UTF-8 · drag the seam by flipping the toggle</text>';
+  SEAM_BYTES.forEach((b,i)=>{
+    const x=x0+i*(w+gap);
+    const inCut=i<M.cut;
+    const stroke=b.lead?'var(--danger)':b.cont?'var(--danger)':'var(--js)';
+    const fill=(b.lead||b.cont)?'var(--danger-soft)':'var(--bg2)';
+    h+=`<rect x="${x}" y="${y}" width="${w}" height="58" rx="7" fill="${fill}" stroke="${stroke}" stroke-width="${(b.lead||b.cont)?1.6:1.2}"/>`;
+    h+=`<text x="${x+w/2}" y="${y+26}" text-anchor="middle" font-size="15" font-weight="700" fill="${stroke}">${b.hex}</text>`;
+    h+=`<text x="${x+w/2}" y="${y+47}" text-anchor="middle" font-size="13" fill="var(--ink2)">${b.ch||'·'}</text>`;
+    h+=`<text x="${x+w/2}" y="${y-8}" text-anchor="middle" font-size="9" fill="var(--ink3)">${String(i)}</text>`;
+  });
+  /* the seam line */
+  const sx=x0+M.cut*(w+gap)-gap/2;
+  h+=`<line x1="${sx}" y1="${y-22}" x2="${sx}" y2="${y+78}" stroke="var(--engine)" stroke-width="3"/>`;
+  h+=`<polygon points="${sx-6},${y-22} ${sx+6},${y-22} ${sx},${y-12}" fill="var(--engine)"/>`;
+  h+=plate(sx,y+96,'chunk boundary','var(--engine)',10);
+  /* results */
+  const ry=250;
+  h+=`<text x="60" y="${ry}" font-size="12" font-weight="700" fill="var(--ink2)">chunk1.toString('utf8')</text>`;
+  h+=`<text x="60" y="${ry+30}" font-size="18" font-weight="700" fill="${M.ok?'var(--engine)':'var(--danger)'}">${M.res1}</text>`;
+  h+=`<text x="480" y="${ry}" font-size="12" font-weight="700" fill="var(--ink2)">chunk2.toString('utf8')</text>`;
+  h+=`<text x="480" y="${ry+30}" font-size="18" font-weight="700" fill="${M.ok?'var(--engine)':'var(--danger)'}">${M.res2}</text>`;
+  h+=plate(450,320,(M.ok?'✓ concatenated: "café €99"':'✕ concatenated: corrupted — '+M.note),M.ok?'var(--engine)':'var(--danger)',11);
+  seamVP.innerHTML=h;
+}
+renderSeam(0);
+const seamBtn=document.getElementById('seamBtn');
+seamBtn.onclick=()=>{const next=(parseInt(seamBtn.dataset.mode,10)+1)%SEAM_MODES.length;seamBtn.dataset.mode=next;seamBtn.textContent=SEAM_MODES[next].label;seamBtn.classList.toggle('on',SEAM_MODES[next].ok);renderSeam(next);};
+
+/* ============================================================
+   ENDIAN morph
+   ============================================================ */
+const endianVP=document.getElementById('endianVP');
+const EB=[{hex:'0A',v:0x0A},{hex:'0B',v:0x0B},{hex:'0C',v:0x0C},{hex:'0D',v:0x0D}];
+function renderEndian(mode){
+  const be=mode==='be';
+  const order=be?[0,1,2,3]:[3,2,1,0];
+  const val=be?((EB[0].v<<24)|(EB[1].v<<16)|(EB[2].v<<8)|EB[3].v)>>>0
+              :((EB[3].v<<24)|(EB[2].v<<16)|(EB[1].v<<8)|EB[0].v)>>>0;
+  const x0=120,w=120,gap=14,y=70;
+  let h=`<text x="60" y="40" font-size="12" font-weight="700" fill="var(--ink2)">the same 4 bytes in memory:</text>`;
+  EB.forEach((b,i)=>{
+    const x=x0+i*(w+gap);
+    h+=`<rect x="${x}" y="${y}" width="${w}" height="60" rx="8" fill="var(--js-soft)" stroke="var(--js)"/>`;
+    h+=`<text x="${x+w/2}" y="${y+30}" text-anchor="middle" font-size="18" font-weight="800" fill="var(--js)">0x${b.hex}</text>`;
+    h+=`<text x="${x+w/2}" y="${y+50}" text-anchor="middle" font-size="10" fill="var(--ink3)">addr ${i}</text>`;
+  });
+  /* read-order arrows */
+  let prev=null;
+  order.forEach((idx,step)=>{
+    const x=x0+idx*(w+gap)+w/2;
+    h+=`<circle cx="${x}" cy="${y+90}" r="13" fill="var(--engine-soft)" stroke="var(--engine)"/>`;
+    h+=`<text x="${x}" y="${y+95}" text-anchor="middle" font-size="12" font-weight="800" fill="var(--engine)">${step+1}</text>`;
+  });
+  h+=`<text x="60" y="${y+95}" font-size="11" font-weight="700" fill="var(--engine)">read order →</text>`;
+  /* the assembled value */
+  const hexstr=(be?[0,1,2,3]:[3,2,1,0]).map(i=>EB[i].hex).join(' ');
+  h+=`<text x="120" y="${y+150}" font-size="13" fill="var(--ink2)">most-significant first: <tspan font-weight="700" fill="var(--ink)">0x${hexstr.replace(/ /g,'')}</tspan></text>`;
+  h+=`<text x="120" y="${y+185}" font-size="26" font-weight="800" fill="${be?'var(--js)':'var(--engine)'}">= ${val.toLocaleString('en-US')}</text>`;
+  h+=plate(410,y+210,be?'big-endian · 0x0A0B0C0D = 168,496,141':'little-endian · 0x0D0C0B0A = 218,893,066',be?'var(--js)':'var(--engine)',11);
+  endianVP.innerHTML=h;
+}
+renderEndian('be');
+const endianBtn=document.getElementById('endianBtn');
+endianBtn.onclick=()=>{const next=endianBtn.dataset.mode==='be'?'le':'be';endianBtn.dataset.mode=next;endianBtn.textContent=next==='be'?'big-endian · readUInt32BE':'little-endian · readUInt32LE';endianBtn.classList.toggle('on',next==='be');renderEndian(next);};
+
+/* ============================================================
+   BOUNDARY overlay (delegated by data-boundary)
+   ============================================================ */
+document.querySelectorAll('[data-boundary]').forEach(btn=>{
+  const svg=document.getElementById(btn.dataset.boundary);
+  btn.addEventListener('click',()=>{
+    const on=svg.classList.toggle('dim-engine');
+    btn.classList.toggle('on',on);
+    const last=btn.childNodes[btn.childNodes.length-1];
+    last.textContent=on?' Showing bytes only':' Show only the bytes';
+  });
+});
+
+/* ============================================================
+   INSPECT MODE
+   ============================================================ */
+let fsFig=null, fsApi=null;
+function enterFs(fig,api){ if(fsFig) exitFs(); fsFig=fig; fsApi=api; fig.classList.add('fs'); document.body.classList.add('fs-lock');
+  const b=fig.querySelector('[data-inspect]'); if(b) b.lastChild.textContent=' Exit'; }
+function exitFs(){ if(!fsFig) return; if(fsApi) fsApi.reset();
+  const b=fsFig.querySelector('[data-inspect]'); if(b) b.lastChild.textContent=' Inspect';
+  fsFig.classList.remove('fs'); document.body.classList.remove('fs-lock'); fsFig=null; fsApi=null; }
+
+function makeInspectable(svgId){
+  const svg=document.getElementById(svgId);
+  const vp=svg.querySelector('.viewport');
+  const canvas=svg.closest('.canvas');
+  const fig=svg.closest('.figure');
+
+  const hintTag=document.createElement('div'); hintTag.className='inspect-hint'; hintTag.textContent='⤢ tap to inspect'; canvas.appendChild(hintTag);
+  const ctl=document.createElement('div'); ctl.className='zoomctl';
+  ctl.innerHTML='<button data-z="in" title="zoom in">+</button>'+
+                '<button data-z="out" title="zoom out">−</button>'+
+                '<button data-z="reset" title="reset view">⟲</button>';
+  canvas.appendChild(ctl);
+  const lvl=document.createElement('div'); lvl.className='zlevel'; lvl.textContent='100%'; canvas.appendChild(lvl);
+  const zh=document.createElement('div'); zh.className='zhint'; zh.textContent='scroll / pinch to zoom · drag to pan · Esc to exit'; canvas.appendChild(zh);
+
+  let s=1,tx=0,ty=0,drag=false,sx=0,sy=0;
+  const pts=new Map(); let pinchD=0,pinchS=1;
+  const isFs=()=>fig.classList.contains('fs');
+  const clamp=v=>Math.max(0.5,Math.min(6,v));
+  const apply=()=>{vp.setAttribute('transform',`translate(${tx},${ty}) scale(${s})`);lvl.textContent=Math.round(s*100)+'%';};
+  const reset=()=>{s=1;tx=0;ty=0;vp.removeAttribute('transform');lvl.textContent='100%';};
+  function toVB(cx,cy){const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;return[(cx-r.left)/r.width*vb.width,(cy-r.top)/r.height*vb.height];}
+  function zoomAt(cx,cy,f){const ns=clamp(s*f);const[px,py]=toVB(cx,cy);tx=px-(px-tx)*(ns/s);ty=py-(py-ty)*(ns/s);s=ns;apply();}
+
+  canvas.addEventListener('click',e=>{ if(isFs())return; if(e.target.closest('.node'))return; enterFs(fig,{reset}); });
+  canvas.addEventListener('wheel',e=>{ if(!isFs())return; e.preventDefault(); zoomAt(e.clientX,e.clientY,e.deltaY<0?1.12:0.89); },{passive:false});
+  canvas.addEventListener('dblclick',e=>{ if(!isFs()||e.target.closest('.node'))return; zoomAt(e.clientX,e.clientY,1.5); });
+  canvas.addEventListener('pointerdown',e=>{
+    if(!isFs())return;
+    pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){const a=[...pts.values()];pinchD=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);pinchS=s;drag=false;return;}
+    if(e.target.closest('.node'))return;
+    drag=true;sx=e.clientX;sy=e.clientY;canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove',e=>{
+    if(!isFs())return;
+    if(pts.has(e.pointerId))pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){const a=[...pts.values()];const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);if(pinchD>0){const ns=clamp(pinchS*(d/pinchD));const cx=(a[0].x+a[1].x)/2,cy=(a[0].y+a[1].y)/2;const[px,py]=toVB(cx,cy);tx=px-(px-tx)*(ns/s);ty=py-(py-ty)*(ns/s);s=ns;apply();}return;}
+    if(!drag)return;const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;
+    tx+=(e.clientX-sx)/r.width*vb.width;ty+=(e.clientY-sy)/r.height*vb.height;sx=e.clientX;sy=e.clientY;apply();
+  });
+  function up(e){pts.delete(e.pointerId);if(pts.size<2)pinchD=0;drag=false;}
+  canvas.addEventListener('pointerup',up); canvas.addEventListener('pointercancel',up);
+  ctl.querySelectorAll('button').forEach(b=>{ b.onclick=ev=>{ ev.stopPropagation(); const r=svg.getBoundingClientRect();
+    if(b.dataset.z==='in')zoomAt(r.left+r.width/2,r.top+r.height/2,1.25);
+    else if(b.dataset.z==='out')zoomAt(r.left+r.width/2,r.top+r.height/2,0.8);
+    else reset();
+  };});
+
+  const tog=fig.querySelector('[data-inspect="'+svgId+'"]');
+  if(tog) tog.addEventListener('click',()=>{ isFs()?exitFs():enterFs(fig,{reset}); });
+}
+['heroSvg','layerSvg','poolSvg','seamSvg','endianSvg'].forEach(makeInspectable);
+
+/* ============================================================
+   THEME / TOC
+   ============================================================ */
+const root=document.documentElement,themeBtn=document.getElementById('themeBtn');
+const sunIcon='<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/>';
+const moonIcon='<path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/>';
+if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)setTheme('light');
+function setTheme(t){root.setAttribute('data-theme',t);document.getElementById('themeTxt').textContent=t.toUpperCase();document.getElementById('themeIcon').innerHTML=t==='dark'?sunIcon:moonIcon;}
+themeBtn.onclick=()=>setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+
+const links=[...document.querySelectorAll('nav.toc a')];
+const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)links.forEach(l=>l.classList.toggle('active',l.getAttribute('href')==='#'+e.target.id));});},{rootMargin:'-30% 0px -60% 0px'});
+document.querySelectorAll('section.block, details.branch').forEach(s=>io.observe(s));
+
+/* ---- retractable top nav ---- */
+const topNav=document.querySelector('header.top');
+let lastY=window.scrollY, navTick=false;
+function onScroll(){
+  const y=window.scrollY;
+  topNav.classList.toggle('scrolled',y>4);
+  if(y>lastY && y>120) topNav.classList.add('hidden');
+  else if(y<lastY) topNav.classList.remove('hidden');
+  lastY=y; navTick=false;
+}
+window.addEventListener('scroll',()=>{if(!navTick){requestAnimationFrame(onScroll);navTick=true;}},{passive:true});
+
+/* ---- retractable side nav ---- */
+const sideNav=document.getElementById('toc');
+const tocFab=document.getElementById('tocFab');
+function retractToc(){sideNav.classList.add('retracted');tocFab.classList.add('show');}
+function expandToc(){sideNav.classList.remove('retracted');tocFab.classList.remove('show');}
+document.getElementById('tocCollapse').onclick=retractToc;
+tocFab.onclick=expandToc;
+sideNav.querySelectorAll('a').forEach(a=>a.addEventListener('click',retractToc));
+
+tagTerms(document.querySelector('main'));
+</script>
+</body>
+</html>

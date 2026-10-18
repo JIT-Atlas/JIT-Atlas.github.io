@@ -1,0 +1,3049 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ArrayBuffer · TypedArrays · DataView — reference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TOKYO NIGHT — design tokens
+   ============================================================ */
+:root {
+  /* Base surfaces — near-black with cool blue cast */
+  --bg-0:        #16161e;   /* deepest */
+  --bg-1:        #1a1b26;   /* default */
+  --bg-2:        #1f202e;   /* elevated */
+  --bg-3:        #24253a;   /* hover / focus */
+  --bg-float:    rgba(26, 27, 38, 0.65);  /* glass panels */
+  --bg-overlay:  rgba(22, 22, 30, 0.85);  /* modal backdrop */
+
+  /* Foregrounds */
+  --fg-0:        #c0caf5;   /* default text */
+  --fg-1:        #a9b1d6;   /* secondary */
+  --fg-2:        #737aa2;   /* tertiary */
+  --fg-3:        #565f89;   /* muted / hints */
+  --fg-4:        #3b4261;   /* very muted / dividers */
+
+  /* Tokyo Night accent rainbow (semantic mapping) */
+  --tn-blue:     #7aa2f7;   /* primary accent · "functions" */
+  --tn-cyan:     #7dcfff;   /* secondary · "consts" */
+  --tn-teal:     #1abc9c;
+  --tn-green:    #9ece6a;   /* strings / success */
+  --tn-yellow:   #e0af68;   /* warnings / numbers */
+  --tn-orange:   #ff9e64;   /* numbers (alt) */
+  --tn-red:      #f7768e;   /* errors / deprecated */
+  --tn-magenta:  #bb9af7;   /* keywords */
+  --tn-purple:   #9d7cd8;   /* operators */
+  --tn-pink:     #ff79c6;
+
+  /* Semantic role mappings */
+  --accent:      var(--tn-blue);
+  --accent-dim:  rgba(122, 162, 247, 0.15);
+  --danger:      var(--tn-red);
+  --success:     var(--tn-green);
+  --warning:     var(--tn-yellow);
+
+  /* Diagram palette (mapped to TN) */
+  --c-source:       var(--tn-magenta);   /* containers / buffers */
+  --c-source-soft:  rgba(187, 154, 247, 0.18);
+  --c-lens:         var(--tn-green);     /* views / lenses */
+  --c-lens-soft:    rgba(158, 206, 106, 0.18);
+  --c-mutate:       var(--tn-red);       /* mutation / danger */
+  --c-mutate-soft:  rgba(247, 118, 142, 0.18);
+  --c-neutral:      var(--fg-2);
+  --c-neutral-soft: rgba(115, 122, 162, 0.18);
+  --c-gold:         var(--tn-yellow);    /* highlights */
+  --c-gold-soft:    rgba(224, 175, 104, 0.18);
+
+  /* Lines & glass */
+  --line:         rgba(115, 122, 162, 0.20);
+  --line-strong:  rgba(115, 122, 162, 0.40);
+  --glass-edge:   rgba(192, 202, 245, 0.08);
+  --glass-glow:   0 0 0 1px rgba(122, 162, 247, 0.06), 0 12px 40px rgba(0, 0, 0, 0.35);
+
+  /* Typography */
+  --font-mono:    'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --font-sans:    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Geometry */
+  --content-max: 980px;
+  --side:        300px;
+  --gutter:      32px;
+  --radius:      6px;
+  --radius-lg:   10px;
+  --statusline-h: 28px;
+  --topbar-h:    52px;
+
+  /* Motion */
+  --ease:   cubic-bezier(0.4, 0, 0.2, 1);
+  --t-fast: 140ms;
+  --t-med:  260ms;
+  --t-slow: 600ms;
+}
+
+/* ============================================================
+   RESET / BASE
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--topbar-h) + 20px);
+}
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 15.5px;
+  line-height: 1.65;
+  color: var(--fg-0);
+  background: var(--bg-1);
+  background-image:
+    radial-gradient(ellipse at top left, rgba(122, 162, 247, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at bottom right, rgba(187, 154, 247, 0.05) 0%, transparent 50%);
+  background-attachment: fixed;
+  min-height: 100vh;
+  padding-bottom: var(--statusline-h);
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+/* subtle grain overlay (less than editorial; cool tone) */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.55 0 0 0 0 0.8 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  margin: 0;
+  color: var(--fg-0);
+}
+
+p { margin: 0 0 0.9em 0; color: var(--fg-1); }
+
+code, kbd, pre, samp {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  font-feature-settings: 'liga' 0, 'calt' 1;
+}
+code {
+  background: var(--bg-2);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  color: var(--tn-cyan);
+  font-size: 0.88em;
+}
+pre {
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  overflow-x: auto;
+  line-height: 1.6;
+  color: var(--fg-0);
+  margin: 1em 0;
+  position: relative;
+}
+pre::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--tn-blue) 0%, var(--tn-magenta) 100%);
+  border-radius: 3px 0 0 3px;
+  opacity: 0.5;
+}
+pre code { background: none; padding: 0; border: 0; color: inherit; font-size: 0.9em; }
+
+a {
+  color: var(--tn-blue);
+  text-decoration: none;
+  border-bottom: 1px dashed transparent;
+  transition: border-color var(--t-fast), color var(--t-fast);
+}
+a:hover { color: var(--tn-cyan); border-bottom-color: var(--tn-cyan); }
+
+button { font-family: inherit; font-size: inherit; cursor: pointer; }
+
+::selection { background: rgba(122, 162, 247, 0.25); color: var(--fg-0); }
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg-0); }
+::-webkit-scrollbar-thumb { background: var(--fg-4); border-radius: 5px; border: 2px solid var(--bg-0); }
+::-webkit-scrollbar-thumb:hover { background: var(--fg-3); }
+
+/* ============================================================
+   SYNTAX TOKEN COLORS (used inside <pre><code>)
+   ============================================================ */
+.tk-kw  { color: var(--tn-magenta); }   /* keywords: const, let, new, return */
+.tk-fn  { color: var(--tn-blue); }      /* function names */
+.tk-str { color: var(--tn-green); }     /* strings */
+.tk-num { color: var(--tn-orange); }    /* numbers */
+.tk-typ { color: var(--tn-cyan); }      /* types / classes */
+.tk-cmt { color: var(--fg-3); font-style: italic; }  /* comments */
+.tk-pun { color: var(--fg-2); }         /* punctuation */
+.tk-op  { color: var(--tn-purple); }    /* operators */
+.tk-out { color: var(--tn-yellow); }    /* output lines / out comments */
+.tk-prop{ color: var(--tn-cyan); }      /* property access */
+.tk-err { color: var(--tn-red); }       /* errors */
+
+/* ============================================================
+   TOP BAR — glass tabline
+   ============================================================ */
+.topbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--topbar-h);
+  background: var(--bg-float);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border-bottom: 1px solid var(--line);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 14px;
+}
+.topbar::after {
+  content: '';
+  position: absolute; left: 0; right: 0; bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--tn-blue) 30%, var(--tn-magenta) 70%, transparent 100%);
+  opacity: 0.3;
+}
+
+.brand {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 13px; font-weight: 600;
+  color: var(--fg-0);
+}
+.brand .nv-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px;
+  background: var(--bg-3);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  color: var(--tn-green);
+  font-weight: 700;
+  font-size: 13px;
+}
+.brand .mode {
+  background: var(--tn-magenta); color: var(--bg-0);
+  padding: 2px 8px; border-radius: 3px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+}
+
+.tabline {
+  display: flex; align-items: stretch; gap: 0;
+  height: 100%;
+  font-family: var(--font-mono); font-size: 12px;
+  margin-left: 6px;
+}
+.tabline .tab {
+  display: flex; align-items: center;
+  padding: 0 14px; height: 100%;
+  color: var(--fg-2); border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  transition: all var(--t-fast);
+}
+.tabline .tab:first-child { border-left: 1px solid var(--line); }
+.tabline .tab:hover { color: var(--fg-0); background: var(--bg-2); }
+.tabline .tab.is-current {
+  color: var(--tn-blue);
+  background: var(--bg-1);
+  border-bottom-color: var(--tn-blue);
+}
+.tabline .tab .num { color: var(--fg-3); margin-right: 8px; font-size: 11px; }
+
+.topbar-spacer { flex: 1; }
+
+.topbar-search {
+  position: relative;
+  width: 280px;
+}
+.topbar-search input {
+  width: 100%; height: 30px;
+  padding: 0 10px 0 32px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--fg-0);
+  font-family: var(--font-mono); font-size: 12px;
+  outline: none;
+  transition: all var(--t-fast);
+}
+.topbar-search input:focus {
+  border-color: var(--tn-blue);
+  box-shadow: 0 0 0 3px rgba(122, 162, 247, 0.12);
+  background: var(--bg-3);
+}
+.topbar-search::before {
+  content: '/'; position: absolute; left: 11px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--tn-yellow); font-family: var(--font-mono);
+  font-size: 13px; font-weight: 700;
+}
+.topbar-search input::placeholder { color: var(--fg-3); }
+
+.search-results {
+  position: absolute; top: 36px; left: 0; right: 0;
+  background: var(--bg-float);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  max-height: 420px; overflow-y: auto;
+  box-shadow: var(--glass-glow);
+  display: none; z-index: 200;
+}
+.search-results.is-open { display: block; }
+.search-results a {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px;
+  color: var(--fg-1);
+  border-bottom: 1px solid var(--line);
+  border-left: 0 !important;
+  font-family: var(--font-mono); font-size: 12px;
+}
+.search-results a:hover { background: var(--bg-3); color: var(--fg-0); }
+.search-results a .meta {
+  margin-left: auto;
+  color: var(--fg-3); font-size: 10px;
+}
+.search-results .empty { padding: 16px; color: var(--fg-3); font-size: 12px; font-style: italic; }
+
+.topbar-controls { display: flex; gap: 6px; align-items: center; }
+.topbar-controls button {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--fg-2);
+  width: 30px; height: 30px;
+  border-radius: var(--radius);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px;
+  transition: all var(--t-fast);
+}
+.topbar-controls button:hover {
+  border-color: var(--tn-blue); color: var(--tn-blue);
+  background: var(--accent-dim);
+}
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+.layout {
+  display: grid;
+  grid-template-columns: var(--side) minmax(0, 1fr);
+  gap: var(--gutter);
+  max-width: 1400px;
+  margin: 0 auto;
+  padding-top: var(--topbar-h);
+  position: relative;
+  z-index: 1;
+}
+
+aside.toc {
+  position: sticky;
+  top: var(--topbar-h);
+  align-self: start;
+  height: calc(100vh - var(--topbar-h) - var(--statusline-h));
+  overflow-y: auto;
+  padding: 18px 0 32px 14px;
+  border-right: 1px solid var(--line);
+  font-size: 13px;
+  font-family: var(--font-mono);
+}
+
+.toc-pane-head {
+  padding: 6px 10px 10px 6px;
+  display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: var(--fg-2);
+  letter-spacing: 0.06em;
+}
+.toc-pane-head .pane-icon { color: var(--tn-blue); font-weight: 700; }
+
+.toc-group { margin-bottom: 18px; }
+.toc-group-title {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--tn-magenta);
+  margin: 14px 6px 6px 6px;
+  display: flex; align-items: center; gap: 8px;
+}
+.toc-group-title::after {
+  content: ''; flex: 1; height: 1px; background: var(--line);
+}
+.toc a {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 3px 10px 3px 6px;
+  color: var(--fg-2);
+  border: 0;
+  border-left: 2px solid transparent;
+  line-height: 1.45;
+  font-size: 12.5px;
+  transition: all var(--t-fast);
+}
+.toc a:hover {
+  color: var(--fg-0);
+  background: var(--bg-2);
+  border-left-color: var(--fg-3);
+}
+.toc a.is-current {
+  color: var(--tn-blue);
+  background: var(--accent-dim);
+  border-left-color: var(--tn-blue);
+}
+.toc a .num {
+  color: var(--fg-3); font-size: 10px; min-width: 24px;
+  font-variant-numeric: tabular-nums;
+}
+.toc a .glyph { color: var(--tn-yellow); font-size: 10px; margin-right: -4px; }
+
+main {
+  padding: 28px 32px 96px 0;
+  max-width: var(--content-max);
+}
+
+/* ============================================================
+   STATUS LINE — bottom, Neovim-style
+   ============================================================ */
+.statusline {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: var(--statusline-h);
+  background: var(--bg-float);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border-top: 1px solid var(--line);
+  z-index: 99;
+  display: flex; align-items: stretch;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-2);
+}
+.statusline .sl-mode {
+  background: var(--tn-magenta); color: var(--bg-0);
+  padding: 0 12px;
+  display: flex; align-items: center; font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.statusline .sl-mode::after {
+  content: ''; width: 0; height: 0;
+  border: 14px solid transparent;
+  border-left-color: var(--tn-magenta);
+  border-right: 0;
+  margin-left: 0;
+}
+.statusline .sl-section {
+  display: flex; align-items: center;
+  padding: 0 14px 0 8px;
+  background: var(--bg-3);
+  color: var(--fg-0);
+}
+.statusline .sl-section::after {
+  content: ''; width: 0; height: 0;
+  border: 14px solid transparent;
+  border-left-color: var(--bg-3);
+  border-right: 0;
+}
+.statusline .sl-section .sep { color: var(--fg-3); margin: 0 6px; }
+.statusline .sl-spacer { flex: 1; }
+.statusline .sl-right {
+  display: flex; align-items: center;
+  padding: 0 14px;
+  gap: 14px;
+  color: var(--fg-1);
+}
+.statusline .sl-right .k { color: var(--fg-3); }
+.statusline .sl-right .v { color: var(--tn-cyan); }
+.statusline .sl-right .doc-pos { color: var(--tn-green); font-weight: 600; }
+
+/* ============================================================
+   HERO
+   ============================================================ */
+.hero {
+  padding: 36px 0 40px 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 48px;
+  position: relative;
+}
+.hero::after {
+  content: ''; position: absolute;
+  left: 0; bottom: -1px; height: 1px; width: 120px;
+  background: linear-gradient(90deg, var(--tn-blue), var(--tn-magenta));
+}
+.hero-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--tn-cyan);
+  margin-bottom: 18px;
+  display: flex; align-items: center; gap: 10px;
+}
+.hero-eyebrow::before {
+  content: ''; width: 24px; height: 1px; background: var(--tn-cyan);
+}
+.hero h1 {
+  font-size: clamp(36px, 4.8vw, 54px);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin-bottom: 18px;
+  line-height: 1.05;
+  font-family: var(--font-mono);
+}
+.hero h1 .punc { color: var(--fg-3); font-weight: 400; }
+.hero h1 .kw   { color: var(--tn-magenta); }
+.hero h1 .typ  { color: var(--tn-cyan); }
+.hero h1 .typ-alt { color: var(--tn-green); }
+.hero-lede {
+  font-size: 17px;
+  color: var(--fg-1);
+  line-height: 1.6;
+  max-width: 680px;
+  margin-bottom: 22px;
+}
+.hero-meta {
+  display: flex; gap: 18px; flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-2);
+}
+.hero-meta span { display: flex; align-items: center; gap: 8px; padding: 4px 10px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 4px; }
+.hero-meta span::before { content: ''; width: 5px; height: 5px; background: var(--tn-blue); border-radius: 50%; }
+.hero-meta span:nth-child(2)::before { background: var(--tn-magenta); }
+.hero-meta span:nth-child(3)::before { background: var(--tn-green); }
+
+/* ============================================================
+   SECTIONS
+   ============================================================ */
+section { margin: 60px 0; scroll-margin-top: calc(var(--topbar-h) + 20px); }
+.section-marker {
+  display: flex; align-items: baseline; gap: 16px;
+  margin-bottom: 28px;
+}
+.section-marker .num {
+  font-family: var(--font-mono);
+  font-size: 11px; letter-spacing: 0.12em;
+  color: var(--tn-magenta);
+  font-weight: 600;
+}
+.section-marker .rule {
+  flex: 1; height: 1px;
+  background: linear-gradient(90deg, var(--line) 0%, transparent 100%);
+}
+section h2 {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-family: var(--font-mono);
+}
+section h2 .punc { color: var(--fg-3); font-weight: 400; }
+section h2 em {
+  font-style: normal; color: var(--tn-blue);
+}
+
+.prose { max-width: 720px; }
+.prose p { font-size: 16px; line-height: 1.72; color: var(--fg-1); }
+.prose p strong { color: var(--fg-0); }
+
+/* Insight list */
+.insights {
+  display: grid; grid-template-columns: 1fr; gap: 8px;
+  margin: 28px 0;
+}
+.insight {
+  display: grid; grid-template-columns: 56px 1fr;
+  gap: 20px;
+  padding: 20px 22px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  align-items: baseline;
+  transition: all var(--t-fast);
+}
+.insight:hover {
+  border-color: var(--line-strong);
+  background: var(--bg-3);
+}
+.insight .n {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  color: var(--tn-blue);
+  font-weight: 700;
+}
+.insight h3 {
+  font-size: 16.5px; margin-bottom: 6px; color: var(--fg-0);
+  font-weight: 600; letter-spacing: -0.01em;
+}
+.insight p { margin: 0; color: var(--fg-1); font-size: 14.5px; }
+.insight code { font-size: 12.5px; }
+
+/* ============================================================
+   DIAGRAM COMPONENT
+   ============================================================ */
+.diagram {
+  margin: 44px 0;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color var(--t-med);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
+}
+.diagram:hover { border-color: var(--line-strong); }
+
+.diagram-head {
+  padding: 22px 26px 18px;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 16px;
+  background: linear-gradient(180deg, var(--bg-3) 0%, var(--bg-2) 100%);
+}
+.diagram-head .num {
+  grid-row: 1 / 3;
+  font-family: var(--font-mono);
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--tn-blue);
+  align-self: start;
+  padding: 4px 8px;
+  background: var(--accent-dim);
+  border: 1px solid rgba(122, 162, 247, 0.3);
+  border-radius: 4px;
+}
+.diagram-head h3 {
+  font-size: 20px; font-weight: 600;
+  letter-spacing: -0.01em; line-height: 1.3;
+  margin-bottom: 4px;
+  color: var(--fg-0);
+}
+.diagram-head h3 em {
+  font-style: normal; color: var(--tn-magenta);
+  font-weight: 500;
+}
+.diagram-head .lede {
+  font-size: 14px;
+  color: var(--fg-2);
+  margin: 0; line-height: 1.55;
+}
+
+.diagram-canvas {
+  position: relative;
+  background:
+    linear-gradient(var(--bg-0), var(--bg-0)),
+    repeating-linear-gradient(0deg, transparent 0, transparent 38px, rgba(122, 162, 247, 0.025) 38px, rgba(122, 162, 247, 0.025) 39px),
+    repeating-linear-gradient(90deg, transparent 0, transparent 38px, rgba(122, 162, 247, 0.025) 38px, rgba(122, 162, 247, 0.025) 39px);
+  padding: 28px;
+  min-height: 360px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.diagram-canvas svg {
+  width: 100%; height: auto; max-height: 480px; display: block;
+}
+
+/* Default SVG text */
+.diagram-canvas svg text {
+  font-family: var(--font-mono);
+  fill: var(--fg-1); font-size: 12px;
+}
+.diagram-canvas svg .t-label { font-family: var(--font-mono); font-size: 11px; fill: var(--fg-2); text-transform: uppercase; letter-spacing: 0.08em; }
+.diagram-canvas svg .t-title { font-family: var(--font-mono); font-weight: 600; font-size: 14px; fill: var(--fg-0); }
+.diagram-canvas svg .t-num { font-family: var(--font-mono); font-weight: 500; fill: var(--fg-0); }
+.diagram-canvas svg .t-mono { font-family: var(--font-mono); fill: var(--fg-1); }
+.diagram-canvas svg .t-faint { fill: var(--fg-3); }
+.diagram-canvas svg .t-accent { fill: var(--tn-blue); }
+
+.diagram-canvas svg .fill-bg { fill: var(--bg-0); }
+.diagram-canvas svg .fill-bg-elev { fill: var(--bg-2); }
+.diagram-canvas svg .fill-source { fill: var(--c-source-soft); }
+.diagram-canvas svg .stroke-source { stroke: var(--c-source); }
+.diagram-canvas svg .text-source { fill: var(--c-source); }
+.diagram-canvas svg .fill-lens { fill: var(--c-lens-soft); }
+.diagram-canvas svg .stroke-lens { stroke: var(--c-lens); }
+.diagram-canvas svg .text-lens { fill: var(--c-lens); }
+.diagram-canvas svg .fill-mutate { fill: var(--c-mutate-soft); }
+.diagram-canvas svg .stroke-mutate { stroke: var(--c-mutate); }
+.diagram-canvas svg .text-mutate { fill: var(--c-mutate); }
+.diagram-canvas svg .fill-neutral { fill: var(--c-neutral-soft); }
+.diagram-canvas svg .stroke-neutral { stroke: var(--c-neutral); }
+.diagram-canvas svg .text-neutral { fill: var(--c-neutral); }
+.diagram-canvas svg .fill-gold { fill: var(--c-gold-soft); }
+.diagram-canvas svg .stroke-gold { stroke: var(--c-gold); }
+.diagram-canvas svg .text-gold { fill: var(--c-gold); }
+.diagram-canvas svg .stroke-rule { stroke: var(--line-strong); }
+.diagram-canvas svg .stroke-ink { stroke: var(--fg-1); }
+
+.diagram-canvas svg [data-anim] {
+  transition: opacity var(--t-slow) var(--ease),
+              transform var(--t-slow) var(--ease),
+              fill var(--t-med) var(--ease),
+              stroke var(--t-med) var(--ease),
+              stroke-width var(--t-med) var(--ease),
+              stroke-dasharray var(--t-med) var(--ease);
+  transform-origin: center; transform-box: fill-box;
+}
+.diagram-canvas svg [data-tip] { cursor: help; }
+.diagram-canvas svg [data-tip]:hover > rect:first-of-type,
+.diagram-canvas svg [data-tip]:hover > circle:first-of-type,
+.diagram-canvas svg [data-tip]:hover > path:first-of-type {
+  filter: brightness(1.2);
+  stroke-width: 2;
+}
+
+.diagram-desc {
+  padding: 20px 26px;
+  background: var(--bg-2);
+  border-top: 1px solid var(--line);
+  min-height: 96px;
+}
+.diagram-desc .step-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--tn-cyan);
+  margin-bottom: 8px;
+  display: block;
+}
+.diagram-desc h4 {
+  font-size: 15px; font-weight: 600;
+  margin-bottom: 8px; color: var(--fg-0);
+  font-family: var(--font-mono);
+}
+.diagram-desc p {
+  margin: 0; font-size: 14px;
+  color: var(--fg-1); line-height: 1.6;
+}
+.diagram-desc .step-takeaway {
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px dashed var(--line);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--tn-yellow);
+}
+.diagram-desc .step-takeaway::before {
+  content: '➜ '; color: var(--tn-magenta); font-weight: 700;
+}
+
+.diagram-controls {
+  display: flex; align-items: center; gap: 6px;
+  padding: 12px 22px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-3);
+  flex-wrap: wrap;
+}
+.diagram-controls button {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  color: var(--fg-1);
+  width: 32px; height: 32px;
+  border-radius: 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 500;
+  transition: all var(--t-fast);
+  font-family: var(--font-mono);
+}
+.diagram-controls button:hover:not(:disabled) {
+  border-color: var(--tn-blue); color: var(--tn-blue);
+  background: var(--accent-dim);
+}
+.diagram-controls button:active:not(:disabled) { transform: scale(0.94); }
+.diagram-controls button:disabled { opacity: 0.3; cursor: not-allowed; }
+.diagram-controls button.play-btn.is-playing {
+  background: var(--tn-blue); color: var(--bg-0);
+  border-color: var(--tn-blue);
+}
+.diagram-controls .scrubber {
+  flex: 1; min-width: 100px;
+  appearance: none; -webkit-appearance: none;
+  background: transparent;
+  height: 24px; margin: 0 8px;
+}
+.diagram-controls .scrubber::-webkit-slider-runnable-track {
+  height: 3px; background: var(--bg-0); border-radius: 2px;
+  border: 1px solid var(--line);
+}
+.diagram-controls .scrubber::-moz-range-track {
+  height: 3px; background: var(--bg-0); border-radius: 2px;
+  border: 1px solid var(--line);
+}
+.diagram-controls .scrubber::-webkit-slider-thumb {
+  appearance: none; -webkit-appearance: none;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--tn-blue);
+  margin-top: -7px; cursor: grab;
+  border: 2px solid var(--bg-3);
+  box-shadow: 0 0 0 1px var(--tn-blue);
+}
+.diagram-controls .scrubber::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--tn-blue); cursor: grab;
+  border: 2px solid var(--bg-3);
+}
+.diagram-controls .step-counter {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--fg-2); white-space: nowrap;
+  min-width: 52px; text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.diagram-controls .auto-toggle {
+  width: auto; padding: 0 10px;
+  font-size: 9.5px; text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.diagram-controls .auto-toggle.is-on {
+  background: var(--tn-yellow); color: var(--bg-0);
+  border-color: var(--tn-yellow);
+}
+.diagram-step-pips { display: flex; gap: 3px; align-items: center; margin: 0 6px; }
+.diagram-step-pips .pip {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--fg-4); cursor: pointer;
+  transition: all var(--t-fast); border: 0; padding: 0;
+}
+.diagram-step-pips .pip.is-active {
+  background: var(--tn-blue); transform: scale(1.5);
+  box-shadow: 0 0 8px rgba(122, 162, 247, 0.6);
+}
+.diagram-step-pips .pip.is-past { background: var(--tn-green); opacity: 0.6; }
+
+/* ============================================================
+   REFERENCE ENTRY BLOCKS
+   ============================================================ */
+.class-block { margin: 48px 0 64px; scroll-margin-top: calc(var(--topbar-h) + 20px); }
+
+.class-head {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  padding: 18px 22px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  margin-bottom: 22px;
+  position: relative;
+}
+.class-head::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--tn-blue) 0%, var(--tn-magenta) 100%);
+  border-radius: 3px 0 0 3px;
+}
+.class-head .kind {
+  font-family: var(--font-mono); font-size: 10px;
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em;
+  color: var(--tn-blue);
+  padding: 3px 8px;
+  background: var(--accent-dim);
+  border: 1px solid rgba(122, 162, 247, 0.3);
+  border-radius: 3px;
+}
+.class-head h2 {
+  font-size: 26px; font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: -0.01em;
+  color: var(--tn-cyan);
+  margin: 0;
+}
+.class-head .summary {
+  width: 100%; margin-top: 4px;
+  font-size: 14.5px; color: var(--fg-1);
+  font-family: var(--font-sans);
+}
+.class-intro {
+  margin-bottom: 30px;
+  padding: 16px 20px;
+  background: var(--bg-2);
+  border-left: 3px solid var(--tn-blue);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: 14.5px; color: var(--fg-1); line-height: 1.65;
+}
+.class-intro p { margin: 0 0 0.7em 0; color: var(--fg-1); }
+.class-intro p:last-child { margin-bottom: 0; }
+
+.method-block {
+  margin: 24px 0 32px;
+  padding: 24px 26px;
+  scroll-margin-top: calc(var(--topbar-h) + 20px);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  transition: border-color var(--t-fast);
+}
+.method-block:hover { border-color: var(--line-strong); }
+
+.method-head {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.method-head h3 {
+  font-size: 19px; font-weight: 600; font-family: var(--font-mono);
+  color: var(--tn-blue); margin: 0; letter-spacing: -0.005em;
+}
+.method-head h3 .punc { color: var(--fg-3); font-weight: 400; }
+.method-head .kind-tag {
+  font-family: var(--font-mono); font-size: 9px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.14em;
+  padding: 2px 7px; border-radius: 3px;
+  border: 1px solid var(--line-strong); color: var(--fg-2);
+  background: var(--bg-3);
+}
+.method-head .kind-tag.static { color: var(--tn-magenta); border-color: var(--tn-magenta); background: rgba(187, 154, 247, 0.08); }
+.method-head .kind-tag.instance { color: var(--tn-green); border-color: var(--tn-green); background: rgba(158, 206, 106, 0.08); }
+.method-head .kind-tag.prop { color: var(--tn-yellow); border-color: var(--tn-yellow); background: rgba(224, 175, 104, 0.08); }
+.method-head .kind-tag.proto { color: var(--tn-orange); border-color: var(--tn-orange); background: rgba(255, 158, 100, 0.08); }
+.method-head .deprecated { color: var(--tn-red); border-color: var(--tn-red); }
+
+.signature {
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--tn-blue);
+  border-radius: var(--radius);
+  padding: 12px 16px; margin: 10px 0 14px;
+  font-family: var(--font-mono); font-size: 12.5px;
+  color: var(--fg-0); overflow-x: auto;
+  line-height: 1.55;
+}
+.signature .ret  { color: var(--tn-cyan); }
+.signature .typ  { color: var(--tn-cyan); }
+.signature .opt  { color: var(--fg-3); font-style: italic; }
+.signature .nam  { color: var(--tn-blue); font-weight: 600; }
+.signature .kw   { color: var(--tn-magenta); }
+.signature .punc { color: var(--fg-2); }
+
+.summary-line {
+  font-size: 15px; color: var(--fg-0);
+  margin: 0 0 14px; line-height: 1.55;
+  font-weight: 500;
+}
+
+.method-block dl {
+  display: grid; grid-template-columns: 110px 1fr;
+  gap: 4px 16px; margin: 12px 0;
+}
+.method-block dt {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--tn-magenta); padding-top: 2px;
+  align-self: start;
+}
+.method-block dd {
+  margin: 0 0 6px 0; color: var(--fg-1);
+  font-size: 14px; line-height: 1.6;
+}
+.method-block dd code { font-size: 12px; }
+
+.params-list { margin: 4px 0; padding-left: 0; list-style: none; }
+.params-list li {
+  margin: 4px 0; padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13.5px; color: var(--fg-1);
+}
+.params-list li:last-child { border-bottom: 0; }
+.params-list .pname { font-family: var(--font-mono); color: var(--tn-blue); font-size: 12.5px; font-weight: 600; }
+.params-list .ptype { font-family: var(--font-mono); color: var(--tn-cyan); font-size: 11.5px; }
+.params-list .popt  { font-family: var(--font-mono); color: var(--fg-3); font-size: 10.5px; font-style: italic; }
+
+.method-desc {
+  margin: 12px 0; color: var(--fg-1);
+  font-size: 14px; line-height: 1.7;
+}
+.method-desc p { margin: 0 0 0.6em 0; color: var(--fg-1); font-size: 14px; }
+.method-desc p:last-child { margin-bottom: 0; }
+
+.example-block {
+  margin: 12px 0; border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+}
+.example-label {
+  background: var(--bg-3);
+  padding: 5px 14px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono); font-size: 9.5px;
+  text-transform: uppercase; letter-spacing: 0.14em;
+  color: var(--tn-yellow); font-weight: 700;
+  display: flex; align-items: center; gap: 8px;
+}
+.example-label::before {
+  content: '$'; color: var(--tn-green); font-weight: 700;
+}
+.example-block pre {
+  margin: 0; border: 0; border-left: 0; border-radius: 0;
+  background: var(--bg-0);
+  font-size: 12.5px; line-height: 1.65;
+}
+.example-block pre::before { display: none; }
+
+.gotchas, .bridge-c, .source-block, .see-also {
+  margin: 12px 0; padding: 12px 16px;
+  background: var(--bg-3);
+  border-radius: var(--radius);
+  font-size: 13px; line-height: 1.6;
+  border-left: 3px solid;
+}
+.gotchas { border-left-color: var(--tn-red); }
+.gotchas .label { color: var(--tn-red); }
+.bridge-c { border-left-color: var(--tn-magenta); }
+.bridge-c .label { color: var(--tn-magenta); }
+.source-block { border-left-color: var(--tn-yellow); }
+.source-block .label { color: var(--tn-yellow); }
+.see-also { border-left-color: var(--tn-green); }
+.see-also .label { color: var(--tn-green); }
+.gotchas .label, .bridge-c .label, .source-block .label, .see-also .label {
+  display: inline-block; font-family: var(--font-mono); font-size: 9.5px;
+  text-transform: uppercase; letter-spacing: 0.14em; margin-right: 10px;
+  font-weight: 700;
+}
+.gotchas ul, .source-block ul { margin: 6px 0 0 0; padding-left: 20px; }
+.gotchas li, .source-block li { margin: 3px 0; color: var(--fg-1); }
+.bridge-c p, .see-also p { margin: 0; color: var(--fg-1); display: inline; }
+.see-also a {
+  font-family: var(--font-mono); font-size: 12px;
+  color: var(--tn-blue);
+}
+.see-also a + a::before { content: ' · '; color: var(--fg-3); border: 0; }
+
+.meta-row {
+  display: flex; gap: 10px; flex-wrap: wrap;
+  margin: 8px 0 14px;
+  font-family: var(--font-mono); font-size: 10.5px;
+}
+.meta-row span {
+  padding: 3px 9px; border-radius: 3px;
+  background: var(--bg-3); border: 1px solid var(--line);
+  color: var(--fg-2);
+}
+.meta-row span .k {
+  color: var(--fg-3); text-transform: uppercase;
+  letter-spacing: 0.1em; font-size: 9px; margin-right: 5px; font-weight: 700;
+}
+.meta-row .perf-O1 { border-color: var(--tn-green); }
+.meta-row .perf-O1 .v { color: var(--tn-green); }
+.meta-row .perf-On { border-color: var(--tn-orange); }
+.meta-row .perf-On .v { color: var(--tn-orange); }
+
+/* Tooltip */
+#tooltip {
+  position: fixed; pointer-events: none;
+  background: var(--bg-float);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  color: var(--fg-0);
+  padding: 10px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  font-size: 12.5px; line-height: 1.5;
+  max-width: 320px;
+  z-index: 200; opacity: 0;
+  transform: translate(-50%, -100%) translateY(-12px);
+  transition: opacity 120ms;
+  font-family: var(--font-sans);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+#tooltip.is-visible { opacity: 1; }
+#tooltip::after {
+  content: ''; position: absolute; bottom: -6px; left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--line-strong); border-bottom: 0;
+}
+
+/* Mobile */
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  aside.toc {
+    position: fixed; top: var(--topbar-h); left: 0;
+    width: 280px; height: calc(100vh - var(--topbar-h) - var(--statusline-h));
+    z-index: 50; background: var(--bg-1);
+    transform: translateX(-100%); transition: transform var(--t-med);
+    padding-left: 14px;
+  }
+  aside.toc.is-open { transform: translateX(0); }
+  main { padding: 24px 16px 80px 16px; }
+  .topbar-search { display: none; }
+  .tabline { display: none; }
+  .method-block dl { grid-template-columns: 1fr; gap: 2px; }
+  .method-block dt { margin-top: 8px; }
+  .statusline .sl-mode { padding: 0 8px; }
+}
+@media print {
+  .topbar, aside.toc, .statusline, .diagram-controls, #tooltip { display: none; }
+  body { background: white; color: black; padding-bottom: 0; }
+  main { padding: 0; max-width: 100%; }
+  .diagram, .method-block { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<!-- ============================================================
+     TOP BAR — Neovim-style tabline with brand mode badge
+     ============================================================ -->
+<header class="topbar">
+  <div class="brand">
+    <span class="nv-icon">N</span>
+    <span class="mode">NORMAL</span>
+  </div>
+  <nav class="tabline">
+    <a class="tab is-current" href="#"><span class="num">01</span>buffer-view.html</a>
+  </nav>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-search">
+    <input id="search" type="search" placeholder="search methods… (press / to focus)" autocomplete="off">
+    <div class="search-results" id="searchResults"></div>
+  </div>
+  <div class="topbar-controls">
+    <button id="tocToggle" aria-label="Toggle TOC" title="Toggle file tree">⌘</button>
+  </div>
+</header>
+
+<div class="layout">
+
+<!-- ============================================================
+     SIDEBAR — file-tree styled TOC
+     ============================================================ -->
+<aside class="toc" id="toc">
+  <div class="toc-pane-head">
+    <span class="pane-icon">▸</span><span>EXPLORER · ref-01</span>
+  </div>
+
+  <div class="toc-group">
+    <div class="toc-group-title">preface</div>
+    <a href="#hero" data-toc><span class="num">·</span><span class="glyph">▸</span>opening</a>
+    <a href="#model" data-toc><span class="num">·</span><span class="glyph">▸</span>mental_model</a>
+    <a href="#insights" data-toc><span class="num">·</span><span class="glyph">▸</span>pivotal_insights</a>
+  </div>
+
+  <div class="toc-group">
+    <div class="toc-group-title">§3 diagrams</div>
+    <a href="#d1" data-toc><span class="num">01</span><span class="glyph">◆</span>container_vs_view</a>
+    <a href="#d2" data-toc><span class="num">02</span><span class="glyph">◆</span>element_layout</a>
+    <a href="#d3" data-toc><span class="num">03</span><span class="glyph">◆</span>byteOffset_windows</a>
+    <a href="#d4" data-toc><span class="num">04</span><span class="glyph">◆</span>set_vs_slice</a>
+    <a href="#d5" data-toc><span class="num">05</span><span class="glyph">◆</span>copyWithin</a>
+    <a href="#d6" data-toc><span class="num">06</span><span class="glyph">◆</span>DataView_surgery</a>
+    <a href="#d7" data-toc><span class="num">07</span><span class="glyph">◆</span>endianness</a>
+    <a href="#d8" data-toc><span class="num">08</span><span class="glyph">◆</span>BigInt_64bit</a>
+    <a href="#d9" data-toc><span class="num">09</span><span class="glyph">◆</span>detach_transfer</a>
+    <a href="#d10" data-toc><span class="num">10</span><span class="glyph">◆</span>resizable_buffers</a>
+    <a href="#d11" data-toc><span class="num">11</span><span class="glyph">◆</span>SAB_atomics</a>
+    <a href="#d12" data-toc><span class="num">12</span><span class="glyph">◆</span>cross_type_viewing</a>
+  </div>
+
+  <div class="toc-group">
+    <div class="toc-group-title">§4 reference</div>
+    <a href="#ab" data-toc><span class="num">·</span><span class="glyph">⬢</span>ArrayBuffer</a>
+    <a href="#sab" data-toc><span class="num">·</span><span class="glyph">⬢</span>SharedArrayBuffer</a>
+    <a href="#ta-base" data-toc><span class="num">·</span><span class="glyph">⬢</span>%TypedArray%</a>
+    <a href="#ta-concrete" data-toc><span class="num">·</span><span class="glyph">⬢</span>Concrete_typed_arrays</a>
+    <a href="#dv" data-toc><span class="num">·</span><span class="glyph">⬢</span>DataView</a>
+    <a href="#globals" data-toc><span class="num">·</span><span class="glyph">⬢</span>Global_helpers</a>
+  </div>
+
+  <div class="toc-group">
+    <div class="toc-group-title">§5+ closing</div>
+    <a href="#recipes" data-toc><span class="num">·</span><span class="glyph">▸</span>recipes</a>
+    <a href="#footguns" data-toc><span class="num">·</span><span class="glyph">▸</span>footguns</a>
+    <a href="#bridge" data-toc><span class="num">·</span><span class="glyph">▸</span>bridge_to_c</a>
+    <a href="#source" data-toc><span class="num">·</span><span class="glyph">▸</span>source_pointers</a>
+    <a href="#xref" data-toc><span class="num">·</span><span class="glyph">▸</span>cross_refs</a>
+    <a href="#index" data-toc><span class="num">·</span><span class="glyph">▸</span>name_index</a>
+    <a href="#notes" data-toc><span class="num">·</span><span class="glyph">▸</span>working_notes</a>
+  </div>
+</aside>
+
+<!-- ============================================================
+     MAIN
+     ============================================================ -->
+<main>
+
+<!-- HERO -->
+<section id="hero" class="hero">
+  <div class="hero-eyebrow">REF · doc 01 of 06 · binary data suite</div>
+  <h1><span class="typ">ArrayBuffer</span><span class="punc"> · </span><span class="typ-alt">TypedArray</span><br><span class="punc">· </span><span class="kw">DataView</span></h1>
+  <p class="hero-lede">
+    Reference-grade. Every constructor, method, property, and option of the three foundational binary primitives in JavaScript — the layer that everything else (Buffer, Blob, fetch body, streams) is built on. Animated diagrams for the conceptually tricky pieces; full per-method entries for the rest.
+  </p>
+  <div class="hero-meta">
+    <span>~120 entries</span>
+    <span>12 animated diagrams</span>
+    <span>browser + Node</span>
+  </div>
+</section>
+
+<!-- MENTAL MODEL -->
+<section id="model">
+  <div class="section-marker">
+    <span class="num">§ 01 ──</span>
+    <h2><span class="punc">// </span>Mental <em>model</em></h2>
+    <span class="rule"></span>
+  </div>
+  <div class="prose">
+    <p>Three primitives, one clear separation of concerns. <code>ArrayBuffer</code> is opaque storage: a fixed (or resizable) block of bytes you cannot read directly. <code>TypedArray</code> is the indexable lens: it gives you element access in a chosen numeric type, with host byte order. <code>DataView</code> is the surgical lens: it lets you read or write any size at any offset, with the byte order spelled out.</p>
+    <p>Calling a TypedArray <strong>"an array of bytes"</strong> is the most common misconception. It is an array <em>of elements</em>, where the element size depends on the type — one byte for <code>Uint8Array</code>, eight bytes for <code>Float64Array</code>, eight bytes for <code>BigUint64Array</code>. The arithmetic linking <em>element count</em> to <em>byte count</em> is the constant <code>BYTES_PER_ELEMENT</code> on every TypedArray class.</p>
+    <p>The lens analogy is exact, not metaphorical. A TypedArray owns its <code>.buffer</code> reference but does not own the bytes — they live in the ArrayBuffer. Two TypedArrays of different types over the same buffer see the same memory at different element sizes. Writes through one are visible through the other on the next read. This is C union semantics in JavaScript form.</p>
+    <p><strong>Detachment</strong> is the unusual cliff. When an ArrayBuffer is transferred (to a worker, or via <code>transfer()</code>), it is <em>detached</em> at the source: every view over it suddenly throws on access. There is no equivalent in plain C, where transferring a pointer to another thread is silent. JavaScript surfaces it because ownership crossings have to be observable in a single-threaded language.</p>
+    <p>Resizable buffers, BigInt 64-bit views, and float16 (where supported) round out the modern surface. They share the same three-piece model — container, indexable lens, surgical lens — and never break it.</p>
+  </div>
+</section>
+
+<!-- INSIGHTS -->
+<section id="insights">
+  <div class="section-marker">
+    <span class="num">§ 02 ──</span>
+    <h2><span class="punc">// </span>Pivotal <em>insights</em></h2>
+    <span class="rule"></span>
+  </div>
+  <div class="insights">
+    <div class="insight"><span class="n">01</span><div><h3>ArrayBuffer is opaque. Always.</h3><p>You cannot do <code>ab[0]</code>. There is no iterator. The only way to read or write its bytes is through a view (TypedArray or DataView).</p></div></div>
+
+    <div class="insight"><span class="n">02</span><div><h3>TypedArray indexing is <em>element</em>-indexing, not byte-indexing.</h3><p><code>new Uint32Array(ab)[1]</code> is bytes 4–7, not byte 1. <code>BYTES_PER_ELEMENT</code> tells you the multiplier.</p></div></div>
+
+    <div class="insight"><span class="n">03</span><div><h3>Construction overloads diverge sharply.</h3><p><code>new Uint8Array(8)</code> allocates 8 bytes. <code>new Uint8Array([8])</code> is a 1-element array holding the value 8. <code>new Uint8Array(ab, 2, 4)</code> is a 4-byte view at offset 2 of <code>ab</code>. Same constructor, three behaviors.</p></div></div>
+
+    <div class="insight"><span class="n">04</span><div><h3>TypedArrays use host byte order; DataView does not.</h3><p><code>Uint16Array</code> reads pairs of bytes in whatever order the CPU prefers (almost always little-endian). <code>DataView.getUint16(offset, littleEndian)</code> takes an explicit flag. Use DataView at any protocol boundary.</p></div></div>
+
+    <div class="insight"><span class="n">05</span><div><h3><code>subarray</code> aliases; <code>slice</code> copies.</h3><p><code>.subarray(start, end)</code> returns a new TypedArray sharing the same backing buffer. <code>.slice(start, end)</code> returns a new TypedArray with its own backing buffer. Subtle one-word difference, enormous semantic gap.</p></div></div>
+
+    <div class="insight"><span class="n">06</span><div><h3>Detached buffers throw on every access.</h3><p>After <code>structuredClone(ab, { transfer: [ab] })</code> or <code>ab.transfer()</code>, the original buffer is dead. Every view raises a TypeError. Detachment is a one-way edge.</p></div></div>
+
+    <div class="insight"><span class="n">07</span><div><h3>Resizable buffers exist; views auto-track them.</h3><p>Pass <code>{ maxByteLength }</code> to the ArrayBuffer constructor, then call <code>resize()</code>. Length-tracking views (created with no length argument) follow the resize. Fixed-length views may become out-of-bounds.</p></div></div>
+
+    <div class="insight"><span class="n">08</span><div><h3>BigInt arrays are real.</h3><p><code>BigInt64Array</code> and <code>BigUint64Array</code> hold 64-bit integers. Indexing returns BigInts (the <code>n</code> literals), not Numbers. JSON serialization needs custom replacers — BigInts can't be JSON-stringified directly.</p></div></div>
+
+    <div class="insight"><span class="n">09</span><div><h3><code>Uint8ClampedArray</code> exists for a single reason: canvas.</h3><p>It saturates instead of wrapping. Assigning 300 to a slot gives 255, not 44. <code>ImageData.data</code> is the only place this matters in practice.</p></div></div>
+
+    <div class="insight"><span class="n">10</span><div><h3>SharedArrayBuffer is real shared memory, with rules.</h3><p>Same byte storage across workers. Requires cross-origin isolation headers in browsers (<code>COOP</code>/<code>COEP</code>). Must be coordinated through <code>Atomics.*</code> to avoid races. It's the closest JavaScript gets to a C mutex-protected struct.</p></div></div>
+  </div>
+</section>
+
+<!-- DIAGRAMS section header -->
+<section id="diagrams-intro">
+  <div class="section-marker">
+    <span class="num">§ 03 ──</span>
+    <h2><span class="punc">// </span>Twelve <em>diagrams</em></h2>
+    <span class="rule"></span>
+  </div>
+  <div class="prose">
+    <p>The conceptually tricky parts — element vs byte indexing, the byteOffset window, set vs slice semantics, in-place mutation with overlapping ranges, BigInt 64-bit reads, detach/transfer, resize tracking, cross-type aliasing — each visualized as a step-through. Hover any colored element for a tooltip; controls are at the foot of each diagram.</p>
+  </div>
+</section>
+<!-- ============================================================
+     DIAGRAM 1 — Container vs view
+     ============================================================ -->
+<figure id="d1" class="diagram">
+  <header class="diagram-head">
+    <span class="num">01</span>
+    <div>
+      <h3>Container vs view — <em>three roles, one storage</em></h3>
+      <p class="lede">An ArrayBuffer holds bytes. TypedArrays and DataView are views that read them. No copy happens at construction.</p>
+    </div>
+  </header>
+  <div class="diagram-canvas">
+    <svg viewBox="0 0 800 380" xmlns="http://www.w3.org/2000/svg">
+      <text x="50" y="36" class="t-label" data-id="d1-buf-label" data-anim>ArrayBuffer · 16 bytes</text>
+      <g data-id="d1-buf">
+        <rect x="50" y="50" width="700" height="60" rx="6" class="fill-source stroke-source" stroke-width="1.5" fill-opacity="0.6"/>
+        <text x="400" y="84" text-anchor="middle" class="t-mono text-source" font-size="13">storage · opaque · no indexing · no iteration</text>
+      </g>
+      <g data-id="d1-l1" data-anim opacity="0" data-tip="A Uint8Array view — element size 1 byte, so 16 elements over 16 bytes.">
+        <rect x="50" y="140" width="220" height="80" rx="6" class="fill-lens stroke-lens" stroke-width="1.5"/>
+        <text x="160" y="166" text-anchor="middle" class="t-title text-lens">Uint8Array</text>
+        <text x="160" y="186" text-anchor="middle" class="t-mono text-lens" font-size="11">16 elements · 1 byte each</text>
+        <text x="160" y="204" text-anchor="middle" class="t-faint" font-size="10">view[0..15]</text>
+      </g>
+      <g data-id="d1-l2" data-anim opacity="0" data-tip="A Uint32Array view — element size 4 bytes, so 4 elements over 16 bytes.">
+        <rect x="290" y="140" width="220" height="80" rx="6" class="fill-mutate stroke-mutate" stroke-width="1.5"/>
+        <text x="400" y="166" text-anchor="middle" class="t-title text-mutate">Uint32Array</text>
+        <text x="400" y="186" text-anchor="middle" class="t-mono text-mutate" font-size="11">4 elements · 4 bytes each</text>
+        <text x="400" y="204" text-anchor="middle" class="t-faint" font-size="10">view[0..3]</text>
+      </g>
+      <g data-id="d1-l3" data-anim opacity="0" data-tip="A DataView — no element count; any size, any offset, explicit byte order.">
+        <rect x="530" y="140" width="220" height="80" rx="6" class="fill-gold stroke-gold" stroke-width="1.5"/>
+        <text x="640" y="166" text-anchor="middle" class="t-title text-gold">DataView</text>
+        <text x="640" y="186" text-anchor="middle" class="t-mono text-gold" font-size="11">no element count · any size</text>
+        <text x="640" y="204" text-anchor="middle" class="t-faint" font-size="10">dv.getXxx(offset, le?)</text>
+      </g>
+      <g data-id="d1-arr" data-anim opacity="0" stroke-dasharray="3 3" fill="none" class="stroke-rule">
+        <path d="M 160 220 v 30" marker-end="url(#d1-arrh)"/>
+        <path d="M 400 220 v 30" marker-end="url(#d1-arrh)"/>
+        <path d="M 640 220 v 30" marker-end="url(#d1-arrh)"/>
+      </g>
+      <defs><marker id="d1-arrh" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 2 L8 5 L2 8" fill="none" class="stroke-rule" stroke-width="1.5"/></marker></defs>
+      <g data-id="d1-note" data-anim opacity="0">
+        <rect x="100" y="280" width="600" height="60" rx="8" fill="rgba(122,162,247,0.08)" class="stroke-source" stroke-width="1.5"/>
+        <text x="400" y="306" text-anchor="middle" class="t-label">all three views observe the same 16 bytes</text>
+        <text x="400" y="326" text-anchor="middle" class="t-mono text-accent" font-size="12">writes through any view propagate to the buffer — visible to all the others</text>
+      </g>
+    </svg>
+  </div>
+  <div class="diagram-desc"><span class="step-label">step 1 of 6</span><h4 class="step-title"></h4><p class="step-text"></p><div class="step-takeaway"></div></div>
+  <div class="diagram-controls">
+    <button class="reset-btn" title="Reset">↺</button><button class="prev-btn" title="Previous">‹</button>
+    <button class="play-btn" title="Play">▶</button><button class="next-btn" title="Next">›</button>
+    <div class="diagram-step-pips"></div>
+    <input type="range" class="scrubber" min="0" max="5" value="0" step="1">
+    <span class="step-counter">1 / 6</span>
+    <button class="auto-toggle">Loop</button>
+  </div>
+</figure>
+
+<!-- ============================================================
+     DIAGRAM 2 — Element layout
+     ============================================================ -->
+<figure id="d2" class="diagram">
+  <header class="diagram-head">
+    <span class="num">02</span>
+    <div>
+      <h3>Element layout — <em>index × BYTES_PER_ELEMENT</em></h3>
+      <p class="lede">Indexing a TypedArray is indexing by element, not by byte. The constant tells you the multiplier.</p>
+    </div>
+  </header>
+  <div class="diagram-canvas">
+    <svg viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
+      <text x="50" y="32" class="t-label">16-byte buffer</text>
+      <g data-id="d2-cells">
+        <g><rect x="50" y="46" width="44" height="48" class="fill-source stroke-source" stroke-width="1" rx="3"/><text x="72" y="76" text-anchor="middle" class="t-mono text-source" font-size="11">00</text></g>
+        <g><rect x="94" y="46" width="44" height="48" class="fill-source stroke-source" stroke-width="1" rx="3"/><text x="116" y="76" text-anchor="middle" class="t-mono text-source" font-size="11">00</text></g>
+        <g><rect x="138" y="46" width="44" height="48" class="fill-source stroke-source" stroke-width="1" rx="3"/><text x="160" y="76" text-anchor="middle" class="t-mono text-source" font-size="11">00</text></g>
+        <g><rect x="182" y="46" width="44" height="48" class="fill-source stroke-source" stroke-width="1" rx="3"/><text x="204" y="76" text-anchor="middle" class="t-mono text-source" font-size="11">00</text></g>
+        <g><rect x="226" y="46" width="44" height="48" class="fill-source stroke-source" stroke-width="1" rx="3"/><text x="248" y="76" text-anchor="middle" class="t-mono text-source" font-size="11">00</text></g>
+        <g><rect x="270" y="46" width="44" height="48" class="fill-source stroke-source" stroke-width="1" rx="3"/><text x="292" y="76" text-anchor="middle" class="t-mono text-source" font-size="11">00</text></g>
+        <g><rect x="314" y="46" width="44" height="48" class="fill-source stroke-source" stroke-width="1" rx="3"/><text x="336" y="76" text-anchor="middle" class="t-mono text-source" font-size="11">00</text></g>
+        <g><rect x="358" y="46" width="44" height="48" class="fill-source stroke-source" stroke-width="1" rx="3"/><text x="380" y="76" text-anchor="middle" class="t-mono text-source" font-size="11">00</text></g>
+        <g><rect x="402" y="46" width="44" height="48" class="fill-source stroke-source" stroke-width="1" rx="3"/><text x="424" y="76" text-anchor="middle" class="t-mono text-source" font-size="11">00</text></g>
+        <g><rect x="446" y="46" width="44" height="48" class="fill-source stroke-source" stroke-width="1" rx="3"/><text x="468" y="76" text-anchor="middle" class="t-mono text-source" font-size="11">00</text></g>
+        <g><rect x="490" y="46" width="44" height="48" class="fill-source stroke-source" stroke-width="1" rx="3"/><text x="512" y="76" text-anchor="middle" class="t-mono text-source" font-size="11">00</text></g>
+        <g><rect x="534" y="46" width="44" height="48" class="fill-source stroke-source" stroke-width="1" rx="3"/><text x="556" y="76" text-anchor="middle" class="t-mono text-source" font-size="11">00</text></g>
+        <g><rect x="578" y="46" width="44" height="48" class="fill-source stroke-source" stroke-width="1" rx="3"/><text x="600" y="76" text-anchor="middle" class="t-mono text-source" font-size="11">00</text></g>
+        <g><rect x="622" y="46" width="44" height="48" class="fill-source stroke-source" stroke-width="1" rx="3"/><text x="644" y="76" text-anchor="middle" class="t-mono text-source" font-size="11">00</text></g>
+        <g><rect x="666" y="46" width="44" height="48" class="fill-source stroke-source" stroke-width="1" rx="3"/><text x="688" y="76" text-anchor="middle" class="t-mono text-source" font-size="11">00</text></g>
+        <g><rect x="710" y="46" width="44" height="48" class="fill-source stroke-source" stroke-width="1" rx="3"/><text x="732" y="76" text-anchor="middle" class="t-mono text-source" font-size="11">00</text></g>
+      </g>
+      <g class="t-faint" font-size="9">
+        <text x="72" y="106" text-anchor="middle">0</text><text x="116" y="106" text-anchor="middle">1</text><text x="160" y="106" text-anchor="middle">2</text><text x="204" y="106" text-anchor="middle">3</text>
+        <text x="248" y="106" text-anchor="middle">4</text><text x="292" y="106" text-anchor="middle">5</text><text x="336" y="106" text-anchor="middle">6</text><text x="380" y="106" text-anchor="middle">7</text>
+        <text x="424" y="106" text-anchor="middle">8</text><text x="468" y="106" text-anchor="middle">9</text><text x="512" y="106" text-anchor="middle">10</text><text x="556" y="106" text-anchor="middle">11</text>
+        <text x="600" y="106" text-anchor="middle">12</text><text x="644" y="106" text-anchor="middle">13</text><text x="688" y="106" text-anchor="middle">14</text><text x="732" y="106" text-anchor="middle">15</text>
+      </g>
+      <g data-id="d2-u8" data-anim opacity="0">
+        <text x="50" y="140" class="t-label">Uint8Array · BYTES_PER_ELEMENT = 1</text>
+        <g><rect x="50" y="150" width="44" height="36" rx="3" class="fill-lens stroke-lens" stroke-width="1" fill-opacity="0.5"/><text x="72" y="172" text-anchor="middle" class="t-mono text-lens" font-size="11">[0]</text></g>
+        <g><rect x="94" y="150" width="44" height="36" rx="3" class="fill-lens stroke-lens" stroke-width="1" fill-opacity="0.5"/><text x="116" y="172" text-anchor="middle" class="t-mono text-lens" font-size="11">[1]</text></g>
+        <g><rect x="138" y="150" width="44" height="36" rx="3" class="fill-lens stroke-lens" stroke-width="1" fill-opacity="0.5"/><text x="160" y="172" text-anchor="middle" class="t-mono text-lens" font-size="11">[2]</text></g>
+        <g><rect x="182" y="150" width="44" height="36" rx="3" class="fill-lens stroke-lens" stroke-width="1" fill-opacity="0.5"/><text x="204" y="172" text-anchor="middle" class="t-mono text-lens" font-size="11">[3]</text></g>
+        <text x="270" y="172" class="t-faint" font-size="11">… up to [15]    .length = 16</text>
+      </g>
+      <g data-id="d2-u16" data-anim opacity="0">
+        <text x="50" y="206" class="t-label">Uint16Array · BYTES_PER_ELEMENT = 2</text>
+        <g><rect x="50" y="216" width="88" height="36" rx="3" class="fill-mutate stroke-mutate" stroke-width="1" fill-opacity="0.5"/><text x="94" y="238" text-anchor="middle" class="t-mono text-mutate" font-size="11">[0]</text></g>
+        <g><rect x="138" y="216" width="88" height="36" rx="3" class="fill-mutate stroke-mutate" stroke-width="1" fill-opacity="0.5"/><text x="182" y="238" text-anchor="middle" class="t-mono text-mutate" font-size="11">[1]</text></g>
+        <g><rect x="226" y="216" width="88" height="36" rx="3" class="fill-mutate stroke-mutate" stroke-width="1" fill-opacity="0.5"/><text x="270" y="238" text-anchor="middle" class="t-mono text-mutate" font-size="11">[2]</text></g>
+        <g><rect x="314" y="216" width="88" height="36" rx="3" class="fill-mutate stroke-mutate" stroke-width="1" fill-opacity="0.5"/><text x="358" y="238" text-anchor="middle" class="t-mono text-mutate" font-size="11">[3]</text></g>
+        <text x="430" y="238" class="t-faint" font-size="11">… up to [7]    .length = 8</text>
+      </g>
+      <g data-id="d2-u32" data-anim opacity="0">
+        <text x="50" y="272" class="t-label">Uint32Array · BYTES_PER_ELEMENT = 4</text>
+        <g><rect x="50" y="282" width="176" height="36" rx="3" class="fill-gold stroke-gold" stroke-width="1" fill-opacity="0.5"/><text x="138" y="304" text-anchor="middle" class="t-mono text-gold" font-size="11">[0]</text></g>
+        <g><rect x="226" y="282" width="176" height="36" rx="3" class="fill-gold stroke-gold" stroke-width="1" fill-opacity="0.5"/><text x="314" y="304" text-anchor="middle" class="t-mono text-gold" font-size="11">[1]</text></g>
+        <text x="430" y="304" class="t-faint" font-size="11">… up to [3]    .length = 4</text>
+      </g>
+      <g data-id="d2-u64" data-anim opacity="0">
+        <text x="50" y="338" class="t-label">BigUint64Array · BYTES_PER_ELEMENT = 8</text>
+        <g><rect x="50" y="348" width="352" height="36" rx="3" class="fill-source stroke-source" stroke-width="1" fill-opacity="0.6"/><text x="226" y="370" text-anchor="middle" class="t-mono text-source" font-size="11">[0]  ·  BigInt</text></g>
+        <text x="430" y="370" class="t-faint" font-size="11">… up to [1]    .length = 2</text>
+      </g>
+    </svg>
+  </div>
+  <div class="diagram-desc"><span class="step-label">step 1 of 5</span><h4 class="step-title"></h4><p class="step-text"></p><div class="step-takeaway"></div></div>
+  <div class="diagram-controls">
+    <button class="reset-btn">↺</button><button class="prev-btn">‹</button>
+    <button class="play-btn">▶</button><button class="next-btn">›</button>
+    <div class="diagram-step-pips"></div>
+    <input type="range" class="scrubber" min="0" max="4" value="0" step="1">
+    <span class="step-counter">1 / 5</span>
+    <button class="auto-toggle">Loop</button>
+  </div>
+</figure>
+
+<!-- ============================================================
+     DIAGRAM 3 — byteOffset windows
+     ============================================================ -->
+<figure id="d3" class="diagram">
+  <header class="diagram-head">
+    <span class="num">03</span>
+    <div>
+      <h3>byteOffset — <em>views can window into a buffer</em></h3>
+      <p class="lede">A TypedArray doesn't have to start at byte 0 or cover the whole buffer. Three numbers — buffer, offset, length — define every view.</p>
+    </div>
+  </header>
+  <div class="diagram-canvas">
+    <svg viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
+      <text x="50" y="36" class="t-label">ArrayBuffer · 16 bytes</text>
+      <g data-id="d3-cells">
+        <rect x="50" y="50" width="700" height="48" rx="6" class="fill-source stroke-source" stroke-width="1.5" fill-opacity="0.5"/>
+        <g class="t-faint" font-size="10">
+          <text x="50" y="118" text-anchor="middle">0</text><text x="93" y="118" text-anchor="middle">1</text><text x="137" y="118" text-anchor="middle">2</text><text x="181" y="118" text-anchor="middle">3</text>
+          <text x="225" y="118" text-anchor="middle">4</text><text x="269" y="118" text-anchor="middle">5</text><text x="313" y="118" text-anchor="middle">6</text><text x="357" y="118" text-anchor="middle">7</text>
+          <text x="401" y="118" text-anchor="middle">8</text><text x="445" y="118" text-anchor="middle">9</text><text x="488" y="118" text-anchor="middle">10</text><text x="531" y="118" text-anchor="middle">11</text>
+          <text x="575" y="118" text-anchor="middle">12</text><text x="619" y="118" text-anchor="middle">13</text><text x="663" y="118" text-anchor="middle">14</text><text x="707" y="118" text-anchor="middle">15</text>
+        </g>
+      </g>
+      <g data-id="d3-v1" data-anim opacity="0">
+        <rect x="50" y="148" width="700" height="44" rx="6" class="fill-lens stroke-lens" stroke-width="1.5" fill-opacity="0.55"/>
+        <text x="60" y="166" class="t-mono text-lens" font-size="11">new Uint8Array(ab)</text>
+        <text x="60" y="182" class="t-faint" font-size="11">offset 0 · length 16 · covers everything</text>
+      </g>
+      <g data-id="d3-v2" data-anim opacity="0">
+        <rect x="225" y="208" width="350" height="44" rx="6" class="fill-mutate stroke-mutate" stroke-width="1.5" fill-opacity="0.55"/>
+        <text x="232" y="226" class="t-mono text-mutate" font-size="11">new Uint8Array(ab, 4, 8)</text>
+        <text x="232" y="242" class="t-faint" font-size="11">offset 4 · length 8 · windows into the middle</text>
+      </g>
+      <g data-id="d3-v3" data-anim opacity="0">
+        <rect x="401" y="268" width="350" height="44" rx="6" class="fill-gold stroke-gold" stroke-width="1.5" fill-opacity="0.55"/>
+        <text x="408" y="286" class="t-mono text-gold" font-size="11">new Uint32Array(ab, 8, 2)</text>
+        <text x="408" y="302" class="t-faint" font-size="11">offset 8 · 2 uint32 elements = 8 bytes</text>
+      </g>
+      <g data-id="d3-align" data-anim opacity="0">
+        <text x="400" y="346" text-anchor="middle" class="t-label">offsets for Uint32 must be a multiple of 4 — alignment is required</text>
+        <text x="400" y="368" text-anchor="middle" class="t-mono" font-size="11" fill="var(--tn-red)">new Uint32Array(ab, 3, 2)  →  RangeError</text>
+      </g>
+    </svg>
+  </div>
+  <div class="diagram-desc"><span class="step-label">step 1 of 5</span><h4 class="step-title"></h4><p class="step-text"></p><div class="step-takeaway"></div></div>
+  <div class="diagram-controls">
+    <button class="reset-btn">↺</button><button class="prev-btn">‹</button>
+    <button class="play-btn">▶</button><button class="next-btn">›</button>
+    <div class="diagram-step-pips"></div>
+    <input type="range" class="scrubber" min="0" max="4" value="0" step="1">
+    <span class="step-counter">1 / 5</span>
+    <button class="auto-toggle">Loop</button>
+  </div>
+</figure>
+
+<!-- ============================================================
+     DIAGRAM 4 — set vs slice
+     ============================================================ -->
+<figure id="d4" class="diagram">
+  <header class="diagram-head">
+    <span class="num">04</span>
+    <div>
+      <h3>set vs slice — <em>copy in vs copy out</em></h3>
+      <p class="lede">Both copy bytes. <code>.set()</code> writes from a source into the existing view; <code>.slice()</code> reads from this view into a new one.</p>
+    </div>
+  </header>
+  <div class="diagram-canvas">
+    <svg viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
+      <text x="40" y="36" class="t-label">source: [10, 20, 30]</text>
+      <g>
+        <g><rect x="40" y="50" width="56" height="48" rx="4" class="fill-mutate stroke-mutate" stroke-width="1.5"/><text x="68" y="80" text-anchor="middle" class="t-num text-mutate" font-size="14">10</text></g>
+        <g><rect x="100" y="50" width="56" height="48" rx="4" class="fill-mutate stroke-mutate" stroke-width="1.5"/><text x="128" y="80" text-anchor="middle" class="t-num text-mutate" font-size="14">20</text></g>
+        <g><rect x="160" y="50" width="56" height="48" rx="4" class="fill-mutate stroke-mutate" stroke-width="1.5"/><text x="188" y="80" text-anchor="middle" class="t-num text-mutate" font-size="14">30</text></g>
+      </g>
+      <g data-id="d4-set-arr" data-anim opacity="0" stroke="var(--c-mutate)" stroke-width="2" fill="none" stroke-dasharray="4 3">
+        <path d="M 220 74 q 100 0 130 60" marker-end="url(#d4-arr-r)"/>
+        <text x="280" y="88" class="t-mono text-mutate" font-size="11">view.set(src, 1)</text>
+      </g>
+      <text x="320" y="160" class="t-label">view (length 6, all zero)</text>
+      <g data-id="d4-view">
+        <g data-id="d4-view-0"><rect x="320" y="174" width="56" height="48" rx="4" class="fill-lens stroke-lens" stroke-width="1.5"/><text x="348" y="204" text-anchor="middle" class="t-num text-lens" font-size="14">0</text></g>
+        <g data-id="d4-view-1"><rect x="380" y="174" width="56" height="48" rx="4" class="fill-lens stroke-lens" stroke-width="1.5"/><text x="408" y="204" text-anchor="middle" class="t-num text-lens" font-size="14">0</text></g>
+        <g data-id="d4-view-2"><rect x="440" y="174" width="56" height="48" rx="4" class="fill-lens stroke-lens" stroke-width="1.5"/><text x="468" y="204" text-anchor="middle" class="t-num text-lens" font-size="14">0</text></g>
+        <g data-id="d4-view-3"><rect x="500" y="174" width="56" height="48" rx="4" class="fill-lens stroke-lens" stroke-width="1.5"/><text x="528" y="204" text-anchor="middle" class="t-num text-lens" font-size="14">0</text></g>
+        <g data-id="d4-view-4"><rect x="560" y="174" width="56" height="48" rx="4" class="fill-lens stroke-lens" stroke-width="1.5"/><text x="588" y="204" text-anchor="middle" class="t-num text-lens" font-size="14">0</text></g>
+        <g data-id="d4-view-5"><rect x="620" y="174" width="56" height="48" rx="4" class="fill-lens stroke-lens" stroke-width="1.5"/><text x="648" y="204" text-anchor="middle" class="t-num text-lens" font-size="14">0</text></g>
+      </g>
+      <g class="t-faint" font-size="10">
+        <text x="348" y="240" text-anchor="middle">[0]</text><text x="408" y="240" text-anchor="middle">[1]</text><text x="468" y="240" text-anchor="middle">[2]</text>
+        <text x="528" y="240" text-anchor="middle">[3]</text><text x="588" y="240" text-anchor="middle">[4]</text><text x="648" y="240" text-anchor="middle">[5]</text>
+      </g>
+      <g data-id="d4-slice" data-anim opacity="0">
+        <text x="40" y="296" class="t-label text-gold">view.slice(1, 4) → new TypedArray</text>
+        <g><rect x="40" y="312" width="56" height="48" rx="4" class="fill-gold stroke-gold" stroke-width="1.5"/><text x="68" y="342" text-anchor="middle" class="t-num text-gold" font-size="14">10</text></g>
+        <g><rect x="100" y="312" width="56" height="48" rx="4" class="fill-gold stroke-gold" stroke-width="1.5"/><text x="128" y="342" text-anchor="middle" class="t-num text-gold" font-size="14">20</text></g>
+        <g><rect x="160" y="312" width="56" height="48" rx="4" class="fill-gold stroke-gold" stroke-width="1.5"/><text x="188" y="342" text-anchor="middle" class="t-num text-gold" font-size="14">30</text></g>
+        <text x="234" y="342" class="t-faint" font-size="11">independent memory — mutation doesn't propagate back</text>
+      </g>
+      <defs><marker id="d4-arr-r" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 2 L8 5 L2 8" fill="none" stroke="var(--c-mutate)" stroke-width="2"/></marker></defs>
+    </svg>
+  </div>
+  <div class="diagram-desc"><span class="step-label">step 1 of 5</span><h4 class="step-title"></h4><p class="step-text"></p><div class="step-takeaway"></div></div>
+  <div class="diagram-controls">
+    <button class="reset-btn">↺</button><button class="prev-btn">‹</button>
+    <button class="play-btn">▶</button><button class="next-btn">›</button>
+    <div class="diagram-step-pips"></div>
+    <input type="range" class="scrubber" min="0" max="4" value="0" step="1">
+    <span class="step-counter">1 / 5</span>
+    <button class="auto-toggle">Loop</button>
+  </div>
+</figure>
+
+<!-- ============================================================
+     DIAGRAM 5 — copyWithin
+     ============================================================ -->
+<figure id="d5" class="diagram">
+  <header class="diagram-head">
+    <span class="num">05</span>
+    <div>
+      <h3>copyWithin — <em>in-place, overlap-safe</em></h3>
+      <p class="lede">Copy bytes from one range to another within the same array. Behaves like memmove — overlapping source and target produce correct results.</p>
+    </div>
+  </header>
+  <div class="diagram-canvas">
+    <svg viewBox="0 0 800 380" xmlns="http://www.w3.org/2000/svg">
+      <text x="50" y="36" class="t-label">Uint8Array · 8 elements</text>
+      <g>
+        <g data-id="d5-i0"><rect x="50" y="50" width="80" height="56" rx="4" class="fill-lens stroke-lens" stroke-width="1.5"/><text x="90" y="84" text-anchor="middle" class="t-num text-lens" font-size="16">1</text></g>
+        <g data-id="d5-i1"><rect x="138" y="50" width="80" height="56" rx="4" class="fill-lens stroke-lens" stroke-width="1.5"/><text x="178" y="84" text-anchor="middle" class="t-num text-lens" font-size="16">2</text></g>
+        <g data-id="d5-i2"><rect x="226" y="50" width="80" height="56" rx="4" class="fill-lens stroke-lens" stroke-width="1.5"/><text x="266" y="84" text-anchor="middle" class="t-num text-lens" font-size="16">3</text></g>
+        <g data-id="d5-i3"><rect x="314" y="50" width="80" height="56" rx="4" class="fill-lens stroke-lens" stroke-width="1.5"/><text x="354" y="84" text-anchor="middle" class="t-num text-lens" font-size="16">4</text></g>
+        <g data-id="d5-i4"><rect x="402" y="50" width="80" height="56" rx="4" class="fill-lens stroke-lens" stroke-width="1.5"/><text x="442" y="84" text-anchor="middle" class="t-num text-lens" font-size="16">5</text></g>
+        <g data-id="d5-i5"><rect x="490" y="50" width="80" height="56" rx="4" class="fill-lens stroke-lens" stroke-width="1.5"/><text x="530" y="84" text-anchor="middle" class="t-num text-lens" font-size="16">6</text></g>
+        <g data-id="d5-i6"><rect x="578" y="50" width="80" height="56" rx="4" class="fill-lens stroke-lens" stroke-width="1.5"/><text x="618" y="84" text-anchor="middle" class="t-num text-lens" font-size="16">7</text></g>
+        <g data-id="d5-i7"><rect x="666" y="50" width="80" height="56" rx="4" class="fill-lens stroke-lens" stroke-width="1.5"/><text x="706" y="84" text-anchor="middle" class="t-num text-lens" font-size="16">8</text></g>
+      </g>
+      <g class="t-faint" font-size="10">
+        <text x="90" y="124" text-anchor="middle">[0]</text><text x="178" y="124" text-anchor="middle">[1]</text><text x="266" y="124" text-anchor="middle">[2]</text><text x="354" y="124" text-anchor="middle">[3]</text>
+        <text x="442" y="124" text-anchor="middle">[4]</text><text x="530" y="124" text-anchor="middle">[5]</text><text x="618" y="124" text-anchor="middle">[6]</text><text x="706" y="124" text-anchor="middle">[7]</text>
+      </g>
+      <text x="400" y="172" text-anchor="middle" class="t-mono" font-size="14" data-id="d5-call" data-anim>a.copyWithin(0, 3)</text>
+      <text x="400" y="192" text-anchor="middle" class="t-faint" font-size="11" data-id="d5-explain" data-anim>copy starting at index 3 to position 0</text>
+      <g data-id="d5-src" data-anim opacity="0">
+        <rect x="312" y="46" width="438" height="64" fill="none" class="stroke-mutate" stroke-width="2" stroke-dasharray="4 4" rx="4"/>
+        <text x="528" y="36" text-anchor="middle" class="t-mono text-mutate" font-size="11">source: a[3..7]</text>
+      </g>
+      <g data-id="d5-tgt" data-anim opacity="0">
+        <rect x="48" y="46" width="438" height="64" fill="none" class="stroke-source" stroke-width="2" stroke-dasharray="4 4" rx="4"/>
+        <text x="266" y="36" text-anchor="middle" class="t-mono text-source" font-size="11">target: a[0..4]</text>
+      </g>
+      <g data-id="d5-result" data-anim opacity="0">
+        <text x="50" y="234" class="t-label text-accent">after the call</text>
+        <g><rect x="50" y="248" width="80" height="56" rx="4" class="fill-mutate stroke-mutate" stroke-width="1.5"/><text x="90" y="282" text-anchor="middle" class="t-num text-mutate" font-size="16">4</text></g>
+        <g><rect x="138" y="248" width="80" height="56" rx="4" class="fill-mutate stroke-mutate" stroke-width="1.5"/><text x="178" y="282" text-anchor="middle" class="t-num text-mutate" font-size="16">5</text></g>
+        <g><rect x="226" y="248" width="80" height="56" rx="4" class="fill-mutate stroke-mutate" stroke-width="1.5"/><text x="266" y="282" text-anchor="middle" class="t-num text-mutate" font-size="16">6</text></g>
+        <g><rect x="314" y="248" width="80" height="56" rx="4" class="fill-mutate stroke-mutate" stroke-width="1.5"/><text x="354" y="282" text-anchor="middle" class="t-num text-mutate" font-size="16">7</text></g>
+        <g><rect x="402" y="248" width="80" height="56" rx="4" class="fill-mutate stroke-mutate" stroke-width="1.5"/><text x="442" y="282" text-anchor="middle" class="t-num text-mutate" font-size="16">8</text></g>
+        <g><rect x="490" y="248" width="80" height="56" rx="4" class="fill-lens stroke-lens" stroke-width="1.5"/><text x="530" y="282" text-anchor="middle" class="t-num text-lens" font-size="16">6</text></g>
+        <g><rect x="578" y="248" width="80" height="56" rx="4" class="fill-lens stroke-lens" stroke-width="1.5"/><text x="618" y="282" text-anchor="middle" class="t-num text-lens" font-size="16">7</text></g>
+        <g><rect x="666" y="248" width="80" height="56" rx="4" class="fill-lens stroke-lens" stroke-width="1.5"/><text x="706" y="282" text-anchor="middle" class="t-num text-lens" font-size="16">8</text></g>
+        <text x="400" y="346" text-anchor="middle" class="t-faint" font-size="11">length never changes · indices 5–7 untouched · no allocation</text>
+      </g>
+    </svg>
+  </div>
+  <div class="diagram-desc"><span class="step-label">step 1 of 5</span><h4 class="step-title"></h4><p class="step-text"></p><div class="step-takeaway"></div></div>
+  <div class="diagram-controls">
+    <button class="reset-btn">↺</button><button class="prev-btn">‹</button>
+    <button class="play-btn">▶</button><button class="next-btn">›</button>
+    <div class="diagram-step-pips"></div>
+    <input type="range" class="scrubber" min="0" max="4" value="0" step="1">
+    <span class="step-counter">1 / 5</span>
+    <button class="auto-toggle">Loop</button>
+  </div>
+</figure>
+
+<!-- ============================================================
+     DIAGRAM 6 — DataView surgery
+     ============================================================ -->
+<figure id="d6" class="diagram">
+  <header class="diagram-head">
+    <span class="num">06</span>
+    <div>
+      <h3>DataView surgery — <em>any size, any offset</em></h3>
+      <p class="lede">DataView lets you reach into the buffer at any byte position and read any supported numeric type, with explicit endianness.</p>
+    </div>
+  </header>
+  <div class="diagram-canvas">
+    <svg viewBox="0 0 800 380" xmlns="http://www.w3.org/2000/svg">
+      <text x="50" y="36" class="t-label">8-byte buffer</text>
+      <g>
+        <g data-id="d6-b0"><rect x="50" y="50" width="80" height="56" rx="4" class="fill-source stroke-source" stroke-width="1.5"/><text x="90" y="86" text-anchor="middle" class="t-num text-source" font-size="14">0x41</text></g>
+        <g data-id="d6-b1"><rect x="138" y="50" width="80" height="56" rx="4" class="fill-source stroke-source" stroke-width="1.5"/><text x="178" y="86" text-anchor="middle" class="t-num text-source" font-size="14">0x42</text></g>
+        <g data-id="d6-b2"><rect x="226" y="50" width="80" height="56" rx="4" class="fill-source stroke-source" stroke-width="1.5"/><text x="266" y="86" text-anchor="middle" class="t-num text-source" font-size="14">0x00</text></g>
+        <g data-id="d6-b3"><rect x="314" y="50" width="80" height="56" rx="4" class="fill-source stroke-source" stroke-width="1.5"/><text x="354" y="86" text-anchor="middle" class="t-num text-source" font-size="14">0x00</text></g>
+        <g data-id="d6-b4"><rect x="402" y="50" width="80" height="56" rx="4" class="fill-source stroke-source" stroke-width="1.5"/><text x="442" y="86" text-anchor="middle" class="t-num text-source" font-size="14">0x40</text></g>
+        <g data-id="d6-b5"><rect x="490" y="50" width="80" height="56" rx="4" class="fill-source stroke-source" stroke-width="1.5"/><text x="530" y="86" text-anchor="middle" class="t-num text-source" font-size="14">0x49</text></g>
+        <g data-id="d6-b6"><rect x="578" y="50" width="80" height="56" rx="4" class="fill-source stroke-source" stroke-width="1.5"/><text x="618" y="86" text-anchor="middle" class="t-num text-source" font-size="14">0x0F</text></g>
+        <g data-id="d6-b7"><rect x="666" y="50" width="80" height="56" rx="4" class="fill-source stroke-source" stroke-width="1.5"/><text x="706" y="86" text-anchor="middle" class="t-num text-source" font-size="14">0xDB</text></g>
+      </g>
+      <g class="t-faint" font-size="10">
+        <text x="90" y="124" text-anchor="middle">0</text><text x="178" y="124" text-anchor="middle">1</text><text x="266" y="124" text-anchor="middle">2</text><text x="354" y="124" text-anchor="middle">3</text>
+        <text x="442" y="124" text-anchor="middle">4</text><text x="530" y="124" text-anchor="middle">5</text><text x="618" y="124" text-anchor="middle">6</text><text x="706" y="124" text-anchor="middle">7</text>
+      </g>
+      <g data-id="d6-bracket" data-anim opacity="0">
+        <path d="M44 46 v -10 h 92 v 10" fill="none" class="stroke-mutate" stroke-width="2"/>
+        <text x="90" y="32" text-anchor="middle" class="t-mono text-mutate" font-size="11" data-id="d6-bracket-label">getUint8(0)</text>
+      </g>
+      <g data-id="d6-result" data-anim opacity="0">
+        <rect x="100" y="170" width="600" height="180" rx="10" class="fill-bg-elev stroke-rule" stroke-width="1"/>
+        <text x="400" y="200" text-anchor="middle" class="t-mono text-accent" font-size="13" data-id="d6-call">dv.getUint8(0)</text>
+        <text x="400" y="240" text-anchor="middle" class="t-faint" font-size="11" data-id="d6-explain">interpret 1 byte at offset 0 as unsigned 8-bit</text>
+        <text x="400" y="298" text-anchor="middle" class="t-num text-accent" font-size="48" data-id="d6-value">65</text>
+        <text x="400" y="328" text-anchor="middle" class="t-faint" font-size="11" data-id="d6-extra">= 0x41, ASCII 'A'</text>
+      </g>
+    </svg>
+  </div>
+  <div class="diagram-desc"><span class="step-label">step 1 of 6</span><h4 class="step-title"></h4><p class="step-text"></p><div class="step-takeaway"></div></div>
+  <div class="diagram-controls">
+    <button class="reset-btn">↺</button><button class="prev-btn">‹</button>
+    <button class="play-btn">▶</button><button class="next-btn">›</button>
+    <div class="diagram-step-pips"></div>
+    <input type="range" class="scrubber" min="0" max="5" value="0" step="1">
+    <span class="step-counter">1 / 6</span>
+    <button class="auto-toggle">Loop</button>
+  </div>
+</figure>
+<!-- ============================================================
+     § 4 · REFERENCE
+     ============================================================ -->
+<section id="reference">
+  <div class="section-marker">
+    <span class="num">§ 04 ──</span>
+    <h2><span class="punc">// </span>Reference <em>· every method, every overload</em></h2>
+    <span class="rule"></span>
+  </div>
+  <div class="prose">
+    <p>Organized by class. Within each class, entries are alphabetical except where construction comes first. Every entry carries the full template: signature, summary, parameters, returns, throws, description, performance, since, example, gotchas, bridge to C, source, see-also.</p>
+  </div>
+</section>
+
+<!-- ============================================================
+     CLASS · ArrayBuffer
+     ============================================================ -->
+<section class="class-block" id="ab">
+  <header class="class-head">
+    <span class="kind">CLASS</span>
+    <h2>ArrayBuffer</h2>
+    <div class="summary">A fixed-length (or resizable) raw block of bytes. The opaque storage primitive.</div>
+  </header>
+  <div class="class-intro">
+    <p>An <code>ArrayBuffer</code> represents a contiguous sequence of bytes. The bytes are zero-initialized at construction. The buffer itself is opaque — you cannot index, iterate, or read it directly. To read or write its contents, you must construct a <em>view</em>: a <code>TypedArray</code> (e.g. <code>Uint8Array</code>) or a <code>DataView</code>.</p>
+    <p>Modern ArrayBuffers can also be <em>resizable</em> by passing <code>{ maxByteLength }</code> to the constructor, and can be <em>transferred</em> between contexts (workers, ports), which <em>detaches</em> the source buffer permanently.</p>
+  </div>
+
+  <!-- ====================== Constructor ====================== -->
+  <article class="method-block" id="ab-constructor">
+    <header class="method-head">
+      <h3>new ArrayBuffer<span class="punc">(byteLength, options?)</span></h3>
+      <span class="kind-tag static">constructor</span>
+    </header>
+    <div class="signature"><span class="kw">new</span> <span class="nam">ArrayBuffer</span><span class="punc">(</span>byteLength<span class="punc">: </span><span class="typ">number</span><span class="punc">, </span>options<span class="opt">?</span><span class="punc">: { </span>maxByteLength<span class="opt">?</span><span class="punc">: </span><span class="typ">number</span><span class="punc"> })</span><span class="punc">: </span><span class="ret">ArrayBuffer</span></div>
+    <p class="summary-line">Creates a new ArrayBuffer of the given length, zero-initialized.</p>
+    <dl>
+      <dt>Parameters</dt>
+      <dd>
+        <ul class="params-list">
+          <li><span class="pname">byteLength</span> <span class="ptype">number</span> — The size in bytes. Must be a non-negative integer. Maximum is implementation-defined (typically 2 GiB − 1 on 32-bit V8, larger on 64-bit).</li>
+          <li><span class="pname">options.maxByteLength</span> <span class="ptype">number</span> <span class="popt">optional</span> — If provided, the buffer is resizable up to this length. Must be ≥ <code>byteLength</code>.</li>
+        </ul>
+      </dd>
+      <dt>Returns</dt><dd>A new zero-filled <code>ArrayBuffer</code> of length <code>byteLength</code>.</dd>
+      <dt>Throws</dt>
+      <dd>
+        <ul class="params-list">
+          <li><span class="pname">RangeError</span> — if <code>byteLength</code> is negative or exceeds the implementation limit.</li>
+          <li><span class="pname">RangeError</span> — if <code>maxByteLength</code> &lt; <code>byteLength</code>.</li>
+          <li><span class="pname">TypeError</span> — if called without <code>new</code>.</li>
+        </ul>
+      </dd>
+    </dl>
+    <div class="method-desc">
+      <p>The newly created buffer is always zero-filled — unlike Node's <code>Buffer.allocUnsafe</code>, there is no fast-but-uninitialized variant for ArrayBuffer itself. For performance-sensitive code that will overwrite every byte, this zero-fill is unavoidable in the spec.</p>
+      <p>Without <code>maxByteLength</code>, the buffer is fixed-length: its <code>byteLength</code> never changes. With <code>maxByteLength</code>, it is resizable via <code>.resize(n)</code> up to the cap.</p>
+    </div>
+    <div class="meta-row">
+      <span class="perf-On"><span class="k">perf</span> <span class="v">O(n) zero-fill</span></span>
+      <span><span class="k">since</span> ES2015 · maxByteLength: ES2024</span>
+    </div>
+    <div class="example-block">
+      <div class="example-label">example</div>
+<pre><code><span class="tk-kw">const</span> ab <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-typ">ArrayBuffer</span><span class="tk-pun">(</span><span class="tk-num">16</span><span class="tk-pun">);</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>ab<span class="tk-pun">.</span><span class="tk-prop">byteLength</span><span class="tk-pun">);</span>
+<span class="tk-out">// 16</span>
+
+<span class="tk-kw">const</span> resizable <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-typ">ArrayBuffer</span><span class="tk-pun">(</span><span class="tk-num">8</span><span class="tk-pun">, { </span>maxByteLength<span class="tk-pun">: </span><span class="tk-num">1024</span> <span class="tk-pun">});</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>resizable<span class="tk-pun">.</span><span class="tk-prop">resizable</span><span class="tk-pun">, </span>resizable<span class="tk-pun">.</span><span class="tk-prop">maxByteLength</span><span class="tk-pun">);</span>
+<span class="tk-out">// true 1024</span></code></pre>
+    </div>
+    <div class="gotchas">
+      <span class="label">gotchas</span>
+      <ul>
+        <li>Calling without <code>new</code> throws a TypeError — there is no factory form.</li>
+        <li>The maximum length is environment-defined and not constant. Don't allocate close to the limit and expect portability.</li>
+        <li>Resizable buffers may not be available in older engines; feature-test with <code>'resizable' in ArrayBuffer.prototype</code>.</li>
+      </ul>
+    </div>
+    <div class="bridge-c">
+      <span class="label">bridge to c</span>
+      <p><code>calloc(byteLength, 1)</code> — allocate-and-zero. Resizable buffers are conceptually closer to a <code>void*</code> backed by an arena that supports growth up to a cap (similar to a <code>realloc</code>-capable allocation with a fixed reservation).</p>
+    </div>
+    <div class="source-block">
+      <span class="label">source</span>
+      <ul>
+        <li>V8: <code>src/objects/js-array-buffer.cc</code> — <code>JSArrayBuffer::Setup</code></li>
+        <li>Spec: ECMA-262 §25.1</li>
+        <li>Proposal: tc39/proposal-resizablearraybuffer</li>
+      </ul>
+    </div>
+    <div class="see-also">
+      <span class="label">see also</span>
+      <a href="#sab-constructor">new SharedArrayBuffer</a>
+      <a href="#ab-resize">resize</a>
+      <a href="#ab-transfer">transfer</a>
+    </div>
+  </article>
+
+  <!-- ====================== isView ====================== -->
+  <article class="method-block" id="ab-isView">
+    <header class="method-head">
+      <h3>ArrayBuffer.isView<span class="punc">(arg)</span></h3>
+      <span class="kind-tag static">static</span>
+    </header>
+    <div class="signature"><span class="nam">ArrayBuffer.isView</span><span class="punc">(</span>arg<span class="punc">: </span><span class="typ">unknown</span><span class="punc">): </span><span class="ret">boolean</span></div>
+    <p class="summary-line">Returns true if <code>arg</code> is a TypedArray or DataView (i.e. a view over some ArrayBuffer).</p>
+    <dl>
+      <dt>Parameters</dt>
+      <dd><ul class="params-list"><li><span class="pname">arg</span> <span class="ptype">unknown</span> — any value to test.</li></ul></dd>
+      <dt>Returns</dt><dd><code>true</code> if <code>arg</code> is a view (any TypedArray instance or a DataView). <code>false</code> otherwise — including for plain <code>ArrayBuffer</code> instances themselves.</dd>
+      <dt>Throws</dt><dd>Does not throw.</dd>
+    </dl>
+    <div class="method-desc">
+      <p>Useful as a type guard at API boundaries that accept "any binary buffer view." Note carefully: it is <em>false</em> for ArrayBuffers themselves — they are containers, not views. To accept either, combine with <code>instanceof ArrayBuffer</code>.</p>
+    </div>
+    <div class="meta-row">
+      <span class="perf-O1"><span class="k">perf</span> <span class="v">O(1)</span></span>
+      <span><span class="k">since</span> ES2015</span>
+    </div>
+    <div class="example-block">
+      <div class="example-label">example</div>
+<pre><code><span class="tk-typ">ArrayBuffer</span><span class="tk-pun">.</span><span class="tk-fn">isView</span><span class="tk-pun">(</span><span class="tk-kw">new</span> <span class="tk-typ">Uint8Array</span><span class="tk-pun">(</span><span class="tk-num">8</span><span class="tk-pun">));</span>          <span class="tk-out">// true</span>
+<span class="tk-typ">ArrayBuffer</span><span class="tk-pun">.</span><span class="tk-fn">isView</span><span class="tk-pun">(</span><span class="tk-kw">new</span> <span class="tk-typ">DataView</span><span class="tk-pun">(</span><span class="tk-kw">new</span> <span class="tk-typ">ArrayBuffer</span><span class="tk-pun">(</span><span class="tk-num">8</span><span class="tk-pun">)));</span> <span class="tk-out">// true</span>
+<span class="tk-typ">ArrayBuffer</span><span class="tk-pun">.</span><span class="tk-fn">isView</span><span class="tk-pun">(</span><span class="tk-kw">new</span> <span class="tk-typ">ArrayBuffer</span><span class="tk-pun">(</span><span class="tk-num">8</span><span class="tk-pun">));</span>         <span class="tk-out">// false  (container, not view)</span>
+<span class="tk-typ">ArrayBuffer</span><span class="tk-pun">.</span><span class="tk-fn">isView</span><span class="tk-pun">([</span><span class="tk-num">1</span><span class="tk-pun">, </span><span class="tk-num">2</span><span class="tk-pun">, </span><span class="tk-num">3</span><span class="tk-pun">]);</span>                  <span class="tk-out">// false</span>
+<span class="tk-typ">ArrayBuffer</span><span class="tk-pun">.</span><span class="tk-fn">isView</span><span class="tk-pun">(</span><span class="tk-typ">Buffer</span><span class="tk-pun">.</span><span class="tk-fn">from</span><span class="tk-pun">(</span><span class="tk-str">'a'</span><span class="tk-pun">));</span>            <span class="tk-out">// true   (Buffer extends Uint8Array)</span></code></pre>
+    </div>
+    <div class="gotchas">
+      <span class="label">gotchas</span>
+      <ul>
+        <li><code>Buffer</code> in Node returns true — it's a Uint8Array subclass.</li>
+        <li>Does not return true for plain Arrays or array-like objects, even if they contain numbers.</li>
+      </ul>
+    </div>
+    <div class="bridge-c">
+      <span class="label">bridge to c</span>
+      <p>No direct analogue — in C, "view" vs "container" is conventional rather than runtime-checked. The closest analogy is a struct tag distinguishing "owner" from "borrowed pointer."</p>
+    </div>
+    <div class="source-block">
+      <span class="label">source</span>
+      <ul>
+        <li>V8: <code>src/builtins/builtins-arraybuffer.cc</code> — <code>ArrayBufferIsView</code></li>
+        <li>Spec: ECMA-262 §25.1.4.1</li>
+      </ul>
+    </div>
+    <div class="see-also">
+      <span class="label">see also</span>
+      <a href="#globals">global type predicates</a>
+    </div>
+  </article>
+
+  <!-- ====================== byteLength ====================== -->
+  <article class="method-block" id="ab-byteLength">
+    <header class="method-head">
+      <h3>byteLength</h3>
+      <span class="kind-tag prop">property · ro</span>
+    </header>
+    <div class="signature"><span class="nam">byteLength</span><span class="punc">: </span><span class="ret">number</span>  <span class="opt">// getter</span></div>
+    <p class="summary-line">The current size of the buffer in bytes.</p>
+    <dl>
+      <dt>Returns</dt><dd>A non-negative integer — the current byte length. For resizable buffers, this changes when <code>resize()</code> is called. For detached buffers, this is <code>0</code>.</dd>
+      <dt>Throws</dt><dd>Does not throw. (Returns 0 after detach rather than throwing.)</dd>
+    </dl>
+    <div class="method-desc">
+      <p>Accessor property defined on <code>ArrayBuffer.prototype</code>. Each access reads the live length. There is no setter — you cannot assign to <code>ab.byteLength = ...</code>.</p>
+    </div>
+    <div class="meta-row">
+      <span class="perf-O1"><span class="k">perf</span> <span class="v">O(1) read</span></span>
+      <span><span class="k">since</span> ES2015</span>
+    </div>
+    <div class="example-block">
+      <div class="example-label">example</div>
+<pre><code><span class="tk-kw">const</span> ab <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-typ">ArrayBuffer</span><span class="tk-pun">(</span><span class="tk-num">32</span><span class="tk-pun">);</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>ab<span class="tk-pun">.</span><span class="tk-prop">byteLength</span><span class="tk-pun">);</span>          <span class="tk-out">// 32</span>
+
+<span class="tk-kw">const</span> r <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-typ">ArrayBuffer</span><span class="tk-pun">(</span><span class="tk-num">8</span><span class="tk-pun">, { </span>maxByteLength<span class="tk-pun">: </span><span class="tk-num">64</span> <span class="tk-pun">});</span>
+r<span class="tk-pun">.</span><span class="tk-fn">resize</span><span class="tk-pun">(</span><span class="tk-num">20</span><span class="tk-pun">);</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>r<span class="tk-pun">.</span><span class="tk-prop">byteLength</span><span class="tk-pun">);</span>           <span class="tk-out">// 20</span>
+
+<span class="tk-kw">const</span> t <span class="tk-op">=</span> ab<span class="tk-pun">.</span><span class="tk-fn">transfer</span><span class="tk-pun">();</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>ab<span class="tk-pun">.</span><span class="tk-prop">byteLength</span><span class="tk-pun">);</span>          <span class="tk-out">// 0  (ab is now detached)</span></code></pre>
+    </div>
+    <div class="gotchas">
+      <span class="label">gotchas</span>
+      <ul>
+        <li>After detach, returns 0 silently rather than throwing — easy to miss.</li>
+        <li>Cached <code>byteLength</code> values become stale across <code>resize()</code> calls on resizable buffers.</li>
+      </ul>
+    </div>
+    <div class="bridge-c">
+      <span class="label">bridge to c</span>
+      <p>The stored size accompanying the pointer in any "fat pointer" struct (e.g. <code>{ void* p; size_t len; }</code>). C lets you forget the size; JS forces you to carry it.</p>
+    </div>
+    <div class="source-block">
+      <span class="label">source</span>
+      <ul>
+        <li>V8: <code>src/objects/js-array-buffer.h</code> — <code>JSArrayBuffer::byte_length</code></li>
+        <li>Spec: ECMA-262 §25.1.5.1</li>
+      </ul>
+    </div>
+    <div class="see-also">
+      <span class="label">see also</span>
+      <a href="#ab-maxByteLength">maxByteLength</a>
+      <a href="#ab-detached">detached</a>
+      <a href="#ab-resize">resize</a>
+    </div>
+  </article>
+
+  <!-- ====================== detached ====================== -->
+  <article class="method-block" id="ab-detached">
+    <header class="method-head">
+      <h3>detached</h3>
+      <span class="kind-tag prop">property · ro</span>
+    </header>
+    <div class="signature"><span class="nam">detached</span><span class="punc">: </span><span class="ret">boolean</span>  <span class="opt">// getter</span></div>
+    <p class="summary-line">True if the buffer has been detached (its contents transferred or invalidated).</p>
+    <dl>
+      <dt>Returns</dt><dd><code>true</code> after transfer or any operation that detaches the buffer; <code>false</code> otherwise.</dd>
+      <dt>Throws</dt><dd>Does not throw.</dd>
+    </dl>
+    <div class="method-desc">
+      <p>A buffer becomes detached when its bytes are moved to another buffer via <code>transfer()</code>, when it's structured-cloned with <code>transfer</code> in the transfer list, or when WebAssembly's <code>memory.grow</code> invalidates a backing memory.</p>
+      <p>Once detached, the buffer is dead: <code>byteLength</code> becomes 0, and every TypedArray or DataView over it throws TypeError on access. Use this property to detect that state before attempting reads.</p>
+    </div>
+    <div class="meta-row">
+      <span class="perf-O1"><span class="k">perf</span> <span class="v">O(1)</span></span>
+      <span><span class="k">since</span> ES2024 (Node 21+, Chrome 119+, Firefox 120+, Safari 16.4+)</span>
+    </div>
+    <div class="example-block">
+      <div class="example-label">example</div>
+<pre><code><span class="tk-kw">const</span> ab <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-typ">ArrayBuffer</span><span class="tk-pun">(</span><span class="tk-num">16</span><span class="tk-pun">);</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>ab<span class="tk-pun">.</span><span class="tk-prop">detached</span><span class="tk-pun">);</span>            <span class="tk-out">// false</span>
+
+<span class="tk-kw">const</span> moved <span class="tk-op">=</span> ab<span class="tk-pun">.</span><span class="tk-fn">transfer</span><span class="tk-pun">();</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>ab<span class="tk-pun">.</span><span class="tk-prop">detached</span><span class="tk-pun">);</span>            <span class="tk-out">// true</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>moved<span class="tk-pun">.</span><span class="tk-prop">detached</span><span class="tk-pun">);</span>         <span class="tk-out">// false</span>
+
+<span class="tk-kw">new</span> <span class="tk-typ">Uint8Array</span><span class="tk-pun">(</span>ab<span class="tk-pun">)[</span><span class="tk-num">0</span><span class="tk-pun">];</span>               <span class="tk-err">// TypeError: detached buffer</span></code></pre>
+    </div>
+    <div class="gotchas">
+      <span class="label">gotchas</span>
+      <ul>
+        <li>Older runtimes lacked this property; legacy code uses <code>try/catch</code> on view construction as a workaround.</li>
+        <li>Detachment is one-way and unrecoverable. There is no "reattach."</li>
+      </ul>
+    </div>
+    <div class="bridge-c">
+      <span class="label">bridge to c</span>
+      <p>Closest analogue: a freed pointer where <code>free()</code> nulled the variable. JS makes this state observable instead of relying on the programmer to remember.</p>
+    </div>
+    <div class="source-block">
+      <span class="label">source</span>
+      <ul>
+        <li>V8: <code>src/objects/js-array-buffer.h</code> — <code>JSArrayBuffer::was_detached</code></li>
+        <li>Spec: ECMA-262 §25.1.5.3</li>
+      </ul>
+    </div>
+    <div class="see-also">
+      <span class="label">see also</span>
+      <a href="#ab-transfer">transfer</a>
+      <a href="#ab-transferToFixedLength">transferToFixedLength</a>
+    </div>
+  </article>
+
+  <!-- ====================== maxByteLength ====================== -->
+  <article class="method-block" id="ab-maxByteLength">
+    <header class="method-head">
+      <h3>maxByteLength</h3>
+      <span class="kind-tag prop">property · ro</span>
+    </header>
+    <div class="signature"><span class="nam">maxByteLength</span><span class="punc">: </span><span class="ret">number</span>  <span class="opt">// getter</span></div>
+    <p class="summary-line">The upper bound on the buffer's size, set at construction. For non-resizable buffers, equals <code>byteLength</code>.</p>
+    <dl>
+      <dt>Returns</dt><dd>The maximum byte length the buffer can grow to via <code>resize()</code>.</dd>
+      <dt>Throws</dt><dd>Does not throw.</dd>
+    </dl>
+    <div class="method-desc">
+      <p>For a buffer constructed with <code>new ArrayBuffer(n, { maxByteLength: m })</code>, returns <code>m</code>. For a fixed-length buffer constructed without options, returns <code>byteLength</code> at construction time (and stays there).</p>
+      <p>Engines may reserve virtual address space up to <code>maxByteLength</code>, so very large values can fail allocation even when <code>byteLength</code> is small.</p>
+    </div>
+    <div class="meta-row">
+      <span class="perf-O1"><span class="k">perf</span> <span class="v">O(1)</span></span>
+      <span><span class="k">since</span> ES2024</span>
+    </div>
+    <div class="example-block">
+      <div class="example-label">example</div>
+<pre><code><span class="tk-kw">const</span> fixed <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-typ">ArrayBuffer</span><span class="tk-pun">(</span><span class="tk-num">64</span><span class="tk-pun">);</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>fixed<span class="tk-pun">.</span><span class="tk-prop">maxByteLength</span><span class="tk-pun">);</span>     <span class="tk-out">// 64</span>
+
+<span class="tk-kw">const</span> r <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-typ">ArrayBuffer</span><span class="tk-pun">(</span><span class="tk-num">64</span><span class="tk-pun">, { </span>maxByteLength<span class="tk-pun">: </span><span class="tk-num">4096</span> <span class="tk-pun">});</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>r<span class="tk-pun">.</span><span class="tk-prop">maxByteLength</span><span class="tk-pun">);</span>         <span class="tk-out">// 4096</span></code></pre>
+    </div>
+    <div class="gotchas">
+      <span class="label">gotchas</span>
+      <ul>
+        <li>Very large <code>maxByteLength</code> values may cause construction to fail with a RangeError on memory-constrained systems even though no bytes have been committed.</li>
+      </ul>
+    </div>
+    <div class="bridge-c">
+      <span class="label">bridge to c</span>
+      <p>Like a memory reservation made via <code>mmap(NULL, max, PROT_NONE, MAP_ANONYMOUS, -1, 0)</code> — address space is reserved but not committed. <code>resize()</code> is analogous to <code>mprotect</code> changing the committed portion.</p>
+    </div>
+    <div class="source-block">
+      <span class="label">source</span>
+      <ul>
+        <li>V8: <code>src/objects/js-array-buffer.h</code> — <code>JSArrayBuffer::max_byte_length</code></li>
+        <li>Spec: ECMA-262 §25.1.5.5</li>
+      </ul>
+    </div>
+    <div class="see-also">
+      <span class="label">see also</span>
+      <a href="#ab-resizable">resizable</a>
+      <a href="#ab-resize">resize</a>
+    </div>
+  </article>
+
+  <!-- ====================== resizable ====================== -->
+  <article class="method-block" id="ab-resizable">
+    <header class="method-head">
+      <h3>resizable</h3>
+      <span class="kind-tag prop">property · ro</span>
+    </header>
+    <div class="signature"><span class="nam">resizable</span><span class="punc">: </span><span class="ret">boolean</span>  <span class="opt">// getter</span></div>
+    <p class="summary-line">True if this buffer was constructed as resizable (with a <code>maxByteLength</code> option), false otherwise.</p>
+    <dl>
+      <dt>Returns</dt><dd><code>true</code> iff this buffer can be resized via <code>resize()</code>.</dd>
+      <dt>Throws</dt><dd>Does not throw.</dd>
+    </dl>
+    <div class="method-desc">
+      <p>Fixed at construction: a fixed-length buffer cannot become resizable later, and a resizable buffer cannot be made fixed. Use the constructor options at allocation time to choose.</p>
+    </div>
+    <div class="meta-row">
+      <span class="perf-O1"><span class="k">perf</span> <span class="v">O(1)</span></span>
+      <span><span class="k">since</span> ES2024</span>
+    </div>
+    <div class="example-block">
+      <div class="example-label">example</div>
+<pre><code><span class="tk-kw">new</span> <span class="tk-typ">ArrayBuffer</span><span class="tk-pun">(</span><span class="tk-num">8</span><span class="tk-pun">).</span><span class="tk-prop">resizable</span><span class="tk-pun">;</span>                            <span class="tk-out">// false</span>
+<span class="tk-kw">new</span> <span class="tk-typ">ArrayBuffer</span><span class="tk-pun">(</span><span class="tk-num">8</span><span class="tk-pun">, { </span>maxByteLength<span class="tk-pun">: </span><span class="tk-num">32</span> <span class="tk-pun">}).</span><span class="tk-prop">resizable</span><span class="tk-pun">;</span>     <span class="tk-out">// true</span></code></pre>
+    </div>
+    <div class="gotchas">
+      <span class="label">gotchas</span>
+      <ul>
+        <li>Use as a feature test for the resizable-buffer proposal: <code>'resizable' in ArrayBuffer.prototype</code>.</li>
+      </ul>
+    </div>
+    <div class="bridge-c">
+      <span class="label">bridge to c</span>
+      <p>A boolean flag stored in the buffer header — no different from any tagged-union discriminator in C.</p>
+    </div>
+    <div class="source-block">
+      <span class="label">source</span>
+      <ul>
+        <li>V8: <code>src/objects/js-array-buffer.h</code> — <code>JSArrayBuffer::is_resizable_by_js</code></li>
+        <li>Spec: ECMA-262 §25.1.5.4</li>
+      </ul>
+    </div>
+    <div class="see-also">
+      <span class="label">see also</span>
+      <a href="#ab-resize">resize</a>
+      <a href="#ab-maxByteLength">maxByteLength</a>
+    </div>
+  </article>
+
+  <!-- ====================== resize ====================== -->
+  <article class="method-block" id="ab-resize">
+    <header class="method-head">
+      <h3>resize<span class="punc">(newByteLength)</span></h3>
+      <span class="kind-tag instance">instance</span>
+    </header>
+    <div class="signature"><span class="nam">resize</span><span class="punc">(</span>newByteLength<span class="punc">: </span><span class="typ">number</span><span class="punc">): </span><span class="ret">undefined</span></div>
+    <p class="summary-line">Changes the buffer's length to <code>newByteLength</code>. Only valid on resizable buffers.</p>
+    <dl>
+      <dt>Parameters</dt>
+      <dd><ul class="params-list"><li><span class="pname">newByteLength</span> <span class="ptype">number</span> — desired new length. Must be ≥ 0 and ≤ <code>maxByteLength</code>.</li></ul></dd>
+      <dt>Returns</dt><dd><code>undefined</code>.</dd>
+      <dt>Throws</dt>
+      <dd>
+        <ul class="params-list">
+          <li><span class="pname">TypeError</span> — if the buffer is not resizable.</li>
+          <li><span class="pname">RangeError</span> — if <code>newByteLength</code> is negative or exceeds <code>maxByteLength</code>.</li>
+        </ul>
+      </dd>
+    </dl>
+    <div class="method-desc">
+      <p>Growing: bytes added at the end are zero-initialized. Shrinking: bytes beyond the new length are no longer accessible. The buffer's identity does <em>not</em> change — views constructed without a length argument (length-tracking views) update their length to match; views with explicit lengths may become out-of-bounds.</p>
+    </div>
+    <div class="meta-row">
+      <span class="perf-On"><span class="k">perf</span> <span class="v">O(delta) grow; O(1) shrink</span></span>
+      <span><span class="k">since</span> ES2024</span>
+    </div>
+    <div class="example-block">
+      <div class="example-label">example</div>
+<pre><code><span class="tk-kw">const</span> ab <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-typ">ArrayBuffer</span><span class="tk-pun">(</span><span class="tk-num">8</span><span class="tk-pun">, { </span>maxByteLength<span class="tk-pun">: </span><span class="tk-num">64</span> <span class="tk-pun">});</span>
+<span class="tk-kw">const</span> tracker <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-typ">Uint8Array</span><span class="tk-pun">(</span>ab<span class="tk-pun">);</span>              <span class="tk-cmt">// length-tracking</span>
+<span class="tk-kw">const</span> fixed   <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-typ">Uint8Array</span><span class="tk-pun">(</span>ab<span class="tk-pun">, </span><span class="tk-num">0</span><span class="tk-pun">, </span><span class="tk-num">8</span><span class="tk-pun">);</span>        <span class="tk-cmt">// fixed length</span>
+
+ab<span class="tk-pun">.</span><span class="tk-fn">resize</span><span class="tk-pun">(</span><span class="tk-num">16</span><span class="tk-pun">);</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>tracker<span class="tk-pun">.</span><span class="tk-prop">length</span><span class="tk-pun">);</span>                     <span class="tk-out">// 16  — auto-tracked</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>fixed<span class="tk-pun">.</span><span class="tk-prop">length</span><span class="tk-pun">);</span>                       <span class="tk-out">// 8   — unchanged</span>
+
+ab<span class="tk-pun">.</span><span class="tk-fn">resize</span><span class="tk-pun">(</span><span class="tk-num">4</span><span class="tk-pun">);</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>fixed<span class="tk-pun">.</span><span class="tk-prop">length</span><span class="tk-pun">);</span>                       <span class="tk-out">// 8   — but reads throw (out-of-bounds)</span></code></pre>
+    </div>
+    <div class="gotchas">
+      <span class="label">gotchas</span>
+      <ul>
+        <li>Resizing past <code>maxByteLength</code> throws RangeError, not silent truncation.</li>
+        <li>Fixed-length views that no longer fit don't error on resize — they become out-of-bounds and throw on next access.</li>
+        <li>Don't cache <code>byteLength</code> across <code>resize()</code> calls.</li>
+      </ul>
+    </div>
+    <div class="bridge-c">
+      <span class="label">bridge to c</span>
+      <p>Approximate analogue: <code>realloc(p, newSize)</code> — except that the buffer's <em>identity</em> stays stable in JS (the same ArrayBuffer object), whereas <code>realloc</code> may return a different pointer. This is enabled by V8 reserving address space up front.</p>
+    </div>
+    <div class="source-block">
+      <span class="label">source</span>
+      <ul>
+        <li>V8: <code>src/builtins/builtins-arraybuffer.cc</code> — <code>ArrayBufferPrototypeResize</code></li>
+        <li>Spec: ECMA-262 §25.1.5.7</li>
+      </ul>
+    </div>
+    <div class="see-also">
+      <span class="label">see also</span>
+      <a href="#ab-resizable">resizable</a>
+      <a href="#ab-maxByteLength">maxByteLength</a>
+      <a href="#ab-transfer">transfer</a>
+    </div>
+  </article>
+
+  <!-- ====================== slice ====================== -->
+  <article class="method-block" id="ab-slice">
+    <header class="method-head">
+      <h3>slice<span class="punc">(begin?, end?)</span></h3>
+      <span class="kind-tag instance">instance</span>
+    </header>
+    <div class="signature"><span class="nam">slice</span><span class="punc">(</span>begin<span class="opt">?</span><span class="punc">: </span><span class="typ">number</span><span class="punc">, </span>end<span class="opt">?</span><span class="punc">: </span><span class="typ">number</span><span class="punc">): </span><span class="ret">ArrayBuffer</span></div>
+    <p class="summary-line">Returns a <em>new</em> ArrayBuffer containing a copy of the bytes from <code>begin</code> (inclusive) to <code>end</code> (exclusive).</p>
+    <dl>
+      <dt>Parameters</dt>
+      <dd>
+        <ul class="params-list">
+          <li><span class="pname">begin</span> <span class="ptype">number</span> <span class="popt">optional</span> — start byte (inclusive). Defaults to 0. Negative counts from the end.</li>
+          <li><span class="pname">end</span> <span class="ptype">number</span> <span class="popt">optional</span> — end byte (exclusive). Defaults to <code>byteLength</code>. Negative counts from the end.</li>
+        </ul>
+      </dd>
+      <dt>Returns</dt><dd>A new <code>ArrayBuffer</code> of length <code>end - begin</code> containing a copy of those bytes. Independent backing memory.</dd>
+      <dt>Throws</dt>
+      <dd><ul class="params-list"><li><span class="pname">TypeError</span> — if called on a detached buffer.</li></ul></dd>
+    </dl>
+    <div class="method-desc">
+      <p>Important: this is a copy, not a view. The returned buffer has its own bytes — mutating it does not affect the original, and vice versa. For a zero-copy windowed view, construct a TypedArray with explicit <code>byteOffset</code> and <code>length</code> instead.</p>
+      <p>Out-of-range indices are clamped to <code>[0, byteLength]</code> rather than throwing. If <code>end &lt; begin</code>, the result has length 0.</p>
+    </div>
+    <div class="meta-row">
+      <span class="perf-On"><span class="k">perf</span> <span class="v">O(n) — allocates + copies</span></span>
+      <span><span class="k">since</span> ES2015</span>
+    </div>
+    <div class="example-block">
+      <div class="example-label">example</div>
+<pre><code><span class="tk-kw">const</span> ab <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-typ">ArrayBuffer</span><span class="tk-pun">(</span><span class="tk-num">16</span><span class="tk-pun">);</span>
+<span class="tk-kw">new</span> <span class="tk-typ">Uint8Array</span><span class="tk-pun">(</span>ab<span class="tk-pun">).</span><span class="tk-fn">set</span><span class="tk-pun">([</span><span class="tk-num">1</span><span class="tk-pun">,</span><span class="tk-num">2</span><span class="tk-pun">,</span><span class="tk-num">3</span><span class="tk-pun">,</span><span class="tk-num">4</span><span class="tk-pun">,</span><span class="tk-num">5</span><span class="tk-pun">,</span><span class="tk-num">6</span><span class="tk-pun">,</span><span class="tk-num">7</span><span class="tk-pun">,</span><span class="tk-num">8</span><span class="tk-pun">]);</span>
+
+<span class="tk-kw">const</span> part <span class="tk-op">=</span> ab<span class="tk-pun">.</span><span class="tk-fn">slice</span><span class="tk-pun">(</span><span class="tk-num">2</span><span class="tk-pun">, </span><span class="tk-num">5</span><span class="tk-pun">);</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>part<span class="tk-pun">.</span><span class="tk-prop">byteLength</span><span class="tk-pun">);</span>                <span class="tk-out">// 3</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span><span class="tk-kw">new</span> <span class="tk-typ">Uint8Array</span><span class="tk-pun">(</span>part<span class="tk-pun">));</span>           <span class="tk-out">// Uint8Array(3) [3, 4, 5]</span>
+
+<span class="tk-cmt">// independence — mutate part, original unchanged</span>
+<span class="tk-kw">new</span> <span class="tk-typ">Uint8Array</span><span class="tk-pun">(</span>part<span class="tk-pun">)[</span><span class="tk-num">0</span><span class="tk-pun">] </span><span class="tk-op">=</span> <span class="tk-num">99</span><span class="tk-pun">;</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span><span class="tk-kw">new</span> <span class="tk-typ">Uint8Array</span><span class="tk-pun">(</span>ab<span class="tk-pun">)[</span><span class="tk-num">2</span><span class="tk-pun">]);</span>          <span class="tk-out">// 3  — not affected</span>
+
+ab<span class="tk-pun">.</span><span class="tk-fn">slice</span><span class="tk-pun">(</span><span class="tk-op">-</span><span class="tk-num">4</span><span class="tk-pun">).</span><span class="tk-prop">byteLength</span><span class="tk-pun">;</span>                     <span class="tk-out">// 4  — last 4 bytes</span></code></pre>
+    </div>
+    <div class="gotchas">
+      <span class="label">gotchas</span>
+      <ul>
+        <li>Allocates fresh memory — not zero-copy. For hot paths, prefer constructing a TypedArray view with byteOffset/length.</li>
+        <li>Different semantics from <code>TypedArray.prototype.slice</code> (also a copy) and <code>TypedArray.prototype.subarray</code> (a view).</li>
+      </ul>
+    </div>
+    <div class="bridge-c">
+      <span class="label">bridge to c</span>
+      <p><code>void* part = malloc(end - begin); memcpy(part, src + begin, end - begin);</code> — explicit allocation and copy.</p>
+    </div>
+    <div class="source-block">
+      <span class="label">source</span>
+      <ul>
+        <li>V8: <code>src/builtins/builtins-arraybuffer.cc</code> — <code>ArrayBufferPrototypeSlice</code></li>
+        <li>Spec: ECMA-262 §25.1.5.6</li>
+      </ul>
+    </div>
+    <div class="see-also">
+      <span class="label">see also</span>
+      <a href="#ta-subarray">TypedArray.prototype.subarray</a>
+      <a href="#ta-slice">TypedArray.prototype.slice</a>
+      <a href="#ab-transfer">transfer</a>
+    </div>
+  </article>
+
+  <!-- ====================== transfer ====================== -->
+  <article class="method-block" id="ab-transfer">
+    <header class="method-head">
+      <h3>transfer<span class="punc">(newByteLength?)</span></h3>
+      <span class="kind-tag instance">instance</span>
+    </header>
+    <div class="signature"><span class="nam">transfer</span><span class="punc">(</span>newByteLength<span class="opt">?</span><span class="punc">: </span><span class="typ">number</span><span class="punc">): </span><span class="ret">ArrayBuffer</span></div>
+    <p class="summary-line">Move the buffer's bytes into a new ArrayBuffer and detach the original. Optionally resize during the move.</p>
+    <dl>
+      <dt>Parameters</dt>
+      <dd><ul class="params-list"><li><span class="pname">newByteLength</span> <span class="ptype">number</span> <span class="popt">optional</span> — desired length of the new buffer. Defaults to current <code>byteLength</code>. Extra bytes (when growing) are zero-filled; bytes beyond (when shrinking) are dropped.</li></ul></dd>
+      <dt>Returns</dt>
+      <dd>A new <code>ArrayBuffer</code> with the same bytes (resized if requested). The new buffer is <em>resizable if the original was</em>; its <code>maxByteLength</code> equals the original's. The original buffer becomes detached.</dd>
+      <dt>Throws</dt>
+      <dd>
+        <ul class="params-list">
+          <li><span class="pname">TypeError</span> — if the original is already detached.</li>
+          <li><span class="pname">RangeError</span> — if <code>newByteLength</code> exceeds <code>maxByteLength</code>.</li>
+        </ul>
+      </dd>
+    </dl>
+    <div class="method-desc">
+      <p>Detach-and-move semantics. The new buffer is a fresh ArrayBuffer object; the original is dead immediately after the call. Any TypedArray or DataView over the original throws TypeError on access afterward.</p>
+      <p>Engines may implement this as a pointer hand-off rather than a byte copy — making it O(1) for large buffers. (No spec guarantee, but the typical optimization.)</p>
+    </div>
+    <div class="meta-row">
+      <span class="perf-O1"><span class="k">perf</span> <span class="v">O(1) typical (pointer transfer)</span></span>
+      <span><span class="k">since</span> ES2024 (Node 21+, Chrome 119+, Firefox 122+)</span>
+    </div>
+    <div class="example-block">
+      <div class="example-label">example</div>
+<pre><code><span class="tk-kw">const</span> ab <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-typ">ArrayBuffer</span><span class="tk-pun">(</span><span class="tk-num">16</span><span class="tk-pun">);</span>
+<span class="tk-kw">new</span> <span class="tk-typ">Uint8Array</span><span class="tk-pun">(</span>ab<span class="tk-pun">)[</span><span class="tk-num">0</span><span class="tk-pun">] </span><span class="tk-op">=</span> <span class="tk-num">0xFF</span><span class="tk-pun">;</span>
+
+<span class="tk-kw">const</span> moved <span class="tk-op">=</span> ab<span class="tk-pun">.</span><span class="tk-fn">transfer</span><span class="tk-pun">();</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>moved<span class="tk-pun">.</span><span class="tk-prop">byteLength</span><span class="tk-pun">);</span>            <span class="tk-out">// 16</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span><span class="tk-kw">new</span> <span class="tk-typ">Uint8Array</span><span class="tk-pun">(</span>moved<span class="tk-pun">)[</span><span class="tk-num">0</span><span class="tk-pun">]);</span>    <span class="tk-out">// 0xFF — bytes preserved</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>ab<span class="tk-pun">.</span><span class="tk-prop">detached</span><span class="tk-pun">);</span>                 <span class="tk-out">// true</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>ab<span class="tk-pun">.</span><span class="tk-prop">byteLength</span><span class="tk-pun">);</span>               <span class="tk-out">// 0</span>
+
+<span class="tk-cmt">// resize during transfer</span>
+<span class="tk-kw">const</span> grown <span class="tk-op">=</span> moved<span class="tk-pun">.</span><span class="tk-fn">transfer</span><span class="tk-pun">(</span><span class="tk-num">32</span><span class="tk-pun">);</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>grown<span class="tk-pun">.</span><span class="tk-prop">byteLength</span><span class="tk-pun">);</span>            <span class="tk-out">// 32 (extra bytes are zero)</span></code></pre>
+    </div>
+    <div class="gotchas">
+      <span class="label">gotchas</span>
+      <ul>
+        <li>Every existing view over the source buffer becomes invalid the instant <code>transfer()</code> returns.</li>
+        <li>For cross-worker structured-clone interop, prefer <code>structuredClone(value, { transfer: [...] })</code> — accomplishes the same detach in a more familiar idiom.</li>
+        <li>The new buffer's <code>resizable</code>/<code>maxByteLength</code> mirror the source — to "freeze" length, use <code>transferToFixedLength</code>.</li>
+      </ul>
+    </div>
+    <div class="bridge-c">
+      <span class="label">bridge to c</span>
+      <p>Closer to a move constructor than a copy: ownership of the byte storage shifts to the new buffer object; the old object is invalidated. C has no language-level moves — moves there are conventions on top of <code>memcpy</code> + nulling the source.</p>
+    </div>
+    <div class="source-block">
+      <span class="label">source</span>
+      <ul>
+        <li>V8: <code>src/builtins/builtins-arraybuffer.cc</code> — <code>ArrayBufferPrototypeTransfer</code></li>
+        <li>Spec: ECMA-262 §25.1.5.8</li>
+      </ul>
+    </div>
+    <div class="see-also">
+      <span class="label">see also</span>
+      <a href="#ab-transferToFixedLength">transferToFixedLength</a>
+      <a href="#ab-detached">detached</a>
+      <a href="#ab-slice">slice</a>
+    </div>
+  </article>
+
+  <!-- ====================== transferToFixedLength ====================== -->
+  <article class="method-block" id="ab-transferToFixedLength">
+    <header class="method-head">
+      <h3>transferToFixedLength<span class="punc">(newByteLength?)</span></h3>
+      <span class="kind-tag instance">instance</span>
+    </header>
+    <div class="signature"><span class="nam">transferToFixedLength</span><span class="punc">(</span>newByteLength<span class="opt">?</span><span class="punc">: </span><span class="typ">number</span><span class="punc">): </span><span class="ret">ArrayBuffer</span></div>
+    <p class="summary-line">Like <code>transfer</code>, but the new buffer is always non-resizable, regardless of the source.</p>
+    <dl>
+      <dt>Parameters</dt>
+      <dd><ul class="params-list"><li><span class="pname">newByteLength</span> <span class="ptype">number</span> <span class="popt">optional</span> — same as <code>transfer</code>.</li></ul></dd>
+      <dt>Returns</dt><dd>A new fixed-length <code>ArrayBuffer</code>. The original is detached.</dd>
+      <dt>Throws</dt><dd>Same as <code>transfer</code>.</dd>
+    </dl>
+    <div class="method-desc">
+      <p>Use when you want to "lock down" a resizable buffer's size before handing it to a consumer who shouldn't see further size changes. Engines may compact the backing memory since no headroom is reserved.</p>
+    </div>
+    <div class="meta-row">
+      <span class="perf-O1"><span class="k">perf</span> <span class="v">O(1) typical</span></span>
+      <span><span class="k">since</span> ES2024</span>
+    </div>
+    <div class="example-block">
+      <div class="example-label">example</div>
+<pre><code><span class="tk-kw">const</span> r <span class="tk-op">=</span> <span class="tk-kw">new</span> <span class="tk-typ">ArrayBuffer</span><span class="tk-pun">(</span><span class="tk-num">16</span><span class="tk-pun">, { </span>maxByteLength<span class="tk-pun">: </span><span class="tk-num">1024</span> <span class="tk-pun">});</span>
+<span class="tk-kw">const</span> locked <span class="tk-op">=</span> r<span class="tk-pun">.</span><span class="tk-fn">transferToFixedLength</span><span class="tk-pun">();</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>locked<span class="tk-pun">.</span><span class="tk-prop">resizable</span><span class="tk-pun">);</span>           <span class="tk-out">// false</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>locked<span class="tk-pun">.</span><span class="tk-prop">byteLength</span><span class="tk-pun">);</span>          <span class="tk-out">// 16</span>
+<span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span>r<span class="tk-pun">.</span><span class="tk-prop">detached</span><span class="tk-pun">);</span>                 <span class="tk-out">// true</span></code></pre>
+    </div>
+    <div class="gotchas">
+      <span class="label">gotchas</span>
+      <ul>
+        <li>If you don't need to lock the size, prefer <code>transfer</code> — it preserves the resizable property which is usually what callers expect.</li>
+      </ul>
+    </div>
+    <div class="bridge-c">
+      <span class="label">bridge to c</span>
+      <p>Equivalent to <code>transfer</code> followed by "drop the reservation, only commit the live size" — analogous to remapping at the actual size.</p>
+    </div>
+    <div class="source-block">
+      <span class="label">source</span>
+      <ul>
+        <li>V8: <code>src/builtins/builtins-arraybuffer.cc</code> — <code>ArrayBufferPrototypeTransferToFixedLength</code></li>
+        <li>Spec: ECMA-262 §25.1.5.9</li>
+      </ul>
+    </div>
+    <div class="see-also">
+      <span class="label">see also</span>
+      <a href="#ab-transfer">transfer</a>
+      <a href="#ab-resize">resize</a>
+    </div>
+  </article>
+
+  <!-- ====================== Symbol.species ====================== -->
+  <article class="method-block" id="ab-species">
+    <header class="method-head">
+      <h3>ArrayBuffer[Symbol.species]</h3>
+      <span class="kind-tag static deprecated">static · legacy</span>
+    </header>
+    <div class="signature"><span class="kw">get</span> <span class="nam">ArrayBuffer[Symbol.species]</span><span class="punc">: </span><span class="ret">typeof ArrayBuffer</span></div>
+    <p class="summary-line">Returns the constructor to be used for derived buffers. By default, returns <code>ArrayBuffer</code> itself.</p>
+    <dl>
+      <dt>Returns</dt><dd>By default, the <code>ArrayBuffer</code> constructor.</dd>
+      <dt>Throws</dt><dd>Does not throw.</dd>
+    </dl>
+    <div class="method-desc">
+      <p>Part of the <code>Symbol.species</code> protocol — historically used to let subclasses of ArrayBuffer control which constructor <code>slice</code> uses. The pattern has fallen out of favor; many built-ins (Array, RegExp, Promise) have removed species hooks for performance reasons. Current TC39 direction is to <em>not</em> consult species; you may see this property exist but be effectively dead in modern engines.</p>
+    </div>
+    <div class="meta-row">
+      <span class="perf-O1"><span class="k">perf</span> <span class="v">O(1)</span></span>
+      <span><span class="k">since</span> ES2015 (deprecated direction since 2022)</span>
+    </div>
+    <div class="example-block">
+      <div class="example-label">example</div>
+<pre><code><span class="tk-fn">console</span><span class="tk-pun">.</span><span class="tk-fn">log</span><span class="tk-pun">(</span><span class="tk-typ">ArrayBuffer</span><span class="tk-pun">[</span><span class="tk-typ">Symbol</span><span class="tk-pun">.</span><span class="tk-prop">species</span><span class="tk-pun">] </span><span class="tk-op">===</span> <span class="tk-typ">ArrayBuffer</span><span class="tk-pun">);</span>  <span class="tk-out">// true</span>
+
+<span class="tk-cmt">// Subclassing override (legacy pattern):</span>
+<span class="tk-kw">class</span> <span class="tk-typ">TaggedAB</span> <span class="tk-kw">extends</span> <span class="tk-typ">ArrayBuffer</span> <span class="tk-pun">{</span>
+  <span class="tk-kw">static</span> <span class="tk-kw">get</span> <span class="tk-pun">[</span><span class="tk-typ">Symbol</span><span class="tk-pun">.</span><span class="tk-prop">species</span><span class="tk-pun">]() { </span><span class="tk-kw">return</span> <span class="tk-typ">ArrayBuffer</span><span class="tk-pun">; }</span>
+<span class="tk-pun">}</span></code></pre>
+    </div>
+    <div class="gotchas">
+      <span class="label">gotchas</span>
+      <ul>
+        <li>Don't rely on this for cross-engine behavior — TC39 has been removing species consultation.</li>
+        <li>Override only if you specifically need a subclass and accept the perf cost; usually compose instead.</li>
+      </ul>
+    </div>
+    <div class="bridge-c">
+      <span class="label">bridge to c</span>
+      <p>No analogue — this is a JS-specific subclassing hook.</p>
+    </div>
+    <div class="source-block">
+      <span class="label">source</span>
+      <ul>
+        <li>Spec: ECMA-262 §25.1.4.2</li>
+        <li>TC39: discussion on species removal</li>
+      </ul>
+    </div>
+    <div class="see-also">
+      <span class="label">see also</span>
+      <a href="#ab-slice">slice</a>
+    </div>
+  </article>
+
+  <!-- ====================== Symbol.toStringTag ====================== -->
+  <article class="method-block" id="ab-toStringTag">
+    <header class="method-head">
+      <h3>ArrayBuffer.prototype[Symbol.toStringTag]</h3>
+      <span class="kind-tag prop">property</span>
+    </header>
+    <div class="signature"><span class="nam">[Symbol.toStringTag]</span><span class="punc">: </span><span class="ret">string</span>  <span class="opt">// "ArrayBuffer"</span></div>
+    <p class="summary-line">The tag used by <code>Object.prototype.toString</code> to produce <code>"[object ArrayBuffer]"</code>.</p>
+    <dl>
+      <dt>Returns</dt><dd>The literal string <code>"ArrayBuffer"</code>.</dd>
+      <dt>Throws</dt><dd>Does not throw.</dd>
+    </dl>
+    <div class="method-desc">
+      <p>Allows generic code to brand-check an ArrayBuffer via the standard <code>Object.prototype.toString.call(x)</code> idiom, returning <code>"[object ArrayBuffer]"</code>.</p>
+    </div>
+    <div class="meta-row">
+      <span class="perf-O1"><span class="k">perf</span> <span class="v">O(1)</span></span>
+      <span><span class="k">since</span> ES2015</span>
+    </div>
+    <div class="example-block">
+      <div class="example-label">example</div>
+<pre><code><span class="tk-typ">Object</span><span class="tk-pun">.</span><span class="tk-prop">prototype</span><span class="tk-pun">.</span><span class="tk-fn">toString</span><span class="tk-pun">.</span><span class="tk-fn">call</span><span class="tk-pun">(</span><span class="tk-kw">new</span> <span class="tk-typ">ArrayBuffer</span><span class="tk-pun">(</span><span class="tk-num">0</span><span class="tk-pun">));</span>   <span class="tk-out">// "[object ArrayBuffer]"</span>
+<span class="tk-typ">ArrayBuffer</span><span class="tk-pun">.</span><span class="tk-prop">prototype</span><span class="tk-pun">[</span><span class="tk-typ">Symbol</span><span class="tk-pun">.</span><span class="tk-prop">toStringTag</span><span class="tk-pun">];</span>            <span class="tk-out">// "ArrayBuffer"</span></code></pre>
+    </div>
+    <div class="gotchas">
+      <span class="label">gotchas</span>
+      <ul>
+        <li>Cheaper than <code>instanceof</code> across realms (e.g. iframes), where each window has its own ArrayBuffer constructor.</li>
+      </ul>
+    </div>
+    <div class="bridge-c">
+      <span class="label">bridge to c</span>
+      <p>Analogous to a struct's tag field for run-time type identification — a poor man's RTTI.</p>
+    </div>
+    <div class="source-block">
+      <span class="label">source</span>
+      <ul>
+        <li>Spec: ECMA-262 §25.1.5.10</li>
+      </ul>
+    </div>
+    <div class="see-also">
+      <span class="label">see also</span>
+      <a href="#ab-isView">ArrayBuffer.isView</a>
+    </div>
+  </article>
+
+</section>
+<!-- ============================================================
+     SKELETON STUBS — sections to be populated in following turns
+     ============================================================ -->
+
+<section class="class-block" id="sab">
+  <header class="class-head">
+    <span class="kind">CLASS</span>
+    <h2>SharedArrayBuffer</h2>
+    <div class="summary">A fixed-length block of bytes shared across workers. Coordinate via Atomics.</div>
+  </header>
+  <div class="class-intro">
+    <p>Full reference coming in the next turn — constructor, growable variant, byteLength, maxByteLength, growable, grow, slice, species, toStringTag.</p>
+  </div>
+</section>
+
+<section class="class-block" id="ta-base">
+  <header class="class-head">
+    <span class="kind">CLASS</span>
+    <h2>%TypedArray%</h2>
+    <div class="summary">The abstract base for all twelve concrete typed arrays. Defines every method they share.</div>
+  </header>
+  <div class="class-intro">
+    <p>Full reference coming in the next turn — every method on the base, including: at, byteLength, byteOffset, BYTES_PER_ELEMENT, copyWithin, entries, every, fill, filter, find, findIndex, findLast, findLastIndex, forEach, includes, indexOf, join, keys, lastIndexOf, length, map, of, reduce, reduceRight, reverse, set, slice, some, sort, subarray, toLocaleString, toReversed, toSorted, toString, values, with, Symbol.iterator, Symbol.toStringTag.</p>
+  </div>
+</section>
+
+<section class="class-block" id="ta-concrete">
+  <header class="class-head">
+    <span class="kind">CLASSES</span>
+    <h2>Concrete TypedArrays · 12 of them</h2>
+    <div class="summary">Int8Array, Uint8Array, Uint8ClampedArray, Int16Array, Uint16Array, Int32Array, Uint32Array, Float16Array, Float32Array, Float64Array, BigInt64Array, BigUint64Array.</div>
+  </header>
+  <div class="class-intro">
+    <p>Full per-class entries coming in the next turn — each with its constructors (length, iterable, buffer+offset+length), BYTES_PER_ELEMENT, value-range notes, encoding behavior (especially Uint8ClampedArray's saturation and the BigInt arrays' BigInt-only values), and bridge to the corresponding C type.</p>
+  </div>
+</section>
+
+<section class="class-block" id="dv">
+  <header class="class-head">
+    <span class="kind">CLASS</span>
+    <h2>DataView</h2>
+    <div class="summary">A surgical lens over an ArrayBuffer. Any offset, any size, any endianness.</div>
+  </header>
+  <div class="class-intro">
+    <p>Full reference coming in the next turn — constructor, buffer/byteLength/byteOffset, and the get/set pairs: getInt8, getUint8, getInt16, getUint16, getInt32, getUint32, getBigInt64, getBigUint64, getFloat16, getFloat32, getFloat64 plus all twelve setters.</p>
+  </div>
+</section>
+
+<section class="class-block" id="globals">
+  <header class="class-head">
+    <span class="kind">GLOBALS</span>
+    <h2>Global helpers</h2>
+    <div class="summary">structuredClone, postMessage transfer lists, isView idioms, cross-realm tests.</div>
+  </header>
+  <div class="class-intro">
+    <p>Helpers and idioms that work with all of the above. Coming in the final turn.</p>
+  </div>
+</section>
+
+<section id="recipes">
+  <div class="section-marker">
+    <span class="num">§ 05 ──</span>
+    <h2><span class="punc">// </span>Recipes <em>· idioms</em></h2>
+    <span class="rule"></span>
+  </div>
+  <div class="prose">
+    <p>Coming in the final turn — end-to-end patterns combining multiple methods: parse a PNG header, build a fixed-format binary record, zero-copy window for network send, detect detachment, safely resize tracked views, cross-type aliasing for SIMD-style work.</p>
+  </div>
+</section>
+
+<section id="footguns">
+  <div class="section-marker">
+    <span class="num">§ 06 ──</span>
+    <h2><span class="punc">// </span>Footguns <em>· consolidated</em></h2>
+    <span class="rule"></span>
+  </div>
+  <div class="prose">
+    <p>Coming in the final turn — alignment errors with typed-array constructors, host endianness assumptions, subarray vs slice confusion, detached-view access, BigInt vs Number mixing, Uint8ClampedArray surprises in canvas code.</p>
+  </div>
+</section>
+
+<section id="bridge">
+  <div class="section-marker">
+    <span class="num">§ 07 ──</span>
+    <h2><span class="punc">// </span>Bridge <em>to C/C++</em></h2>
+    <span class="rule"></span>
+  </div>
+  <div class="prose">
+    <p>Coming in the final turn — consolidated C analogues for every concept: void* + size, typed pointer casts, union types, memmove vs memcpy, mmap + mprotect for resizable buffers, threading + mutex for SharedArrayBuffer.</p>
+  </div>
+</section>
+
+<section id="source">
+  <div class="section-marker">
+    <span class="num">§ 08 ──</span>
+    <h2><span class="punc">// </span>Source <em>pointers</em></h2>
+    <span class="rule"></span>
+  </div>
+  <div class="prose">
+    <p>Coming in the final turn — concrete file paths and function names in V8 (<code>src/objects/js-array-buffer.cc</code>, <code>src/builtins/builtins-arraybuffer.cc</code>, the typed-array builtins family), the ECMA-262 section references, and the relevant TC39 proposal repos.</p>
+  </div>
+</section>
+
+<section id="xref">
+  <div class="section-marker">
+    <span class="num">§ 09 ──</span>
+    <h2><span class="punc">// </span>Cross <em>references</em></h2>
+    <span class="rule"></span>
+  </div>
+  <div class="prose">
+    <p>Coming in the final turn — links to the deep-dive's relevant diagrams and to ref-02 through ref-06 for the layers built on top of this one (encoding, Blob/File, streams, Node Buffer).</p>
+  </div>
+</section>
+
+<section id="index">
+  <div class="section-marker">
+    <span class="num">§ 10 ──</span>
+    <h2><span class="punc">// </span>Index <em>of names</em></h2>
+    <span class="rule"></span>
+  </div>
+  <div class="prose">
+    <p>Coming in the final turn — every API name with anchor link, in alphabetical order, for direct lookup.</p>
+  </div>
+</section>
+
+<section id="notes">
+  <div class="section-marker">
+    <span class="num">§ 11 ──</span>
+    <h2><span class="punc">// </span>Working <em>notes</em></h2>
+    <span class="rule"></span>
+  </div>
+  <div class="prose">
+    <p>Coming in the final turn — observations gathered during the build.</p>
+  </div>
+</section>
+
+</main>
+</div>
+
+<!-- ============================================================
+     STATUS LINE — Neovim-style, bottom of viewport
+     ============================================================ -->
+<footer class="statusline">
+  <div class="sl-mode">NORMAL</div>
+  <div class="sl-section" id="sl-section">~/ref01/§hero</div>
+  <div class="sl-spacer"></div>
+  <div class="sl-right">
+    <span><span class="k">file</span> <span class="v">buffer-view.html</span></span>
+    <span><span class="k">spec</span> <span class="v">ECMA-262 §25.1</span></span>
+    <span><span class="doc-pos" id="sl-pos">0%</span></span>
+  </div>
+</footer>
+
+<!-- Floating tooltip for SVG hover discovery -->
+<div id="tooltip" role="tooltip"></div>
+<script>
+'use strict';
+
+/* ============================================================
+   TOC TOGGLE (mobile / explorer pane)
+   ============================================================ */
+const tocToggleBtn = document.getElementById('tocToggle');
+if (tocToggleBtn) {
+  tocToggleBtn.addEventListener('click', () => {
+    document.getElementById('toc').classList.toggle('is-open');
+  });
+}
+
+/* ============================================================
+   STATUS LINE + SCROLLSPY
+   ============================================================ */
+(function() {
+  const slSection = document.getElementById('sl-section');
+  const slPos     = document.getElementById('sl-pos');
+  const tocLinks  = Array.from(document.querySelectorAll('.toc a[data-toc]'));
+  const sections  = tocLinks.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+
+  function nameFromHash(hash) {
+    const link = tocLinks.find(a => a.getAttribute('href') === hash);
+    if (!link) return hash.replace('#','');
+    const t = link.textContent.replace(/^[\s·\d◆⬢▸]+/, '').trim();
+    return t || hash.replace('#','');
+  }
+
+  function onScroll() {
+    const total = document.documentElement.scrollHeight - window.innerHeight;
+    const pct = total > 0 ? Math.min(100, Math.round((window.scrollY / total) * 100)) : 0;
+    if (slPos) slPos.textContent = pct + '%';
+
+    const fromTop = window.scrollY + 120;
+    let activeIdx = 0;
+    for (let i = 0; i < sections.length; i++) {
+      if (sections[i] && sections[i].offsetTop <= fromTop) activeIdx = i;
+    }
+    tocLinks.forEach((a, i) => a.classList.toggle('is-current', i === activeIdx));
+    if (slSection && sections[activeIdx]) {
+      const id = sections[activeIdx].id;
+      slSection.textContent = `~/ref01/§${id}`;
+    }
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+  onScroll();
+})();
+
+/* ============================================================
+   TOOLTIP — for SVG elements with data-tip
+   ============================================================ */
+(function() {
+  const tip = document.getElementById('tooltip');
+  let active = null;
+  document.addEventListener('mouseover', e => {
+    const t = e.target.closest('[data-tip]');
+    if (!t) return;
+    active = t;
+    tip.textContent = t.getAttribute('data-tip');
+    tip.classList.add('is-visible');
+    tip.style.left = e.clientX + 'px';
+    tip.style.top = e.clientY + 'px';
+  });
+  document.addEventListener('mousemove', e => {
+    if (!active) return;
+    tip.style.left = e.clientX + 'px';
+    tip.style.top = e.clientY + 'px';
+  });
+  document.addEventListener('mouseout', e => {
+    if (!active) return;
+    if (e.relatedTarget && active.contains(e.relatedTarget)) return;
+    active = null;
+    tip.classList.remove('is-visible');
+  });
+})();
+
+/* ============================================================
+   SEARCH — methods + diagrams index
+   ============================================================ */
+(function() {
+  const input = document.getElementById('search');
+  const out   = document.getElementById('searchResults');
+  if (!input || !out) return;
+
+  // Build index from method-block headers and diagram heads
+  const items = [];
+  document.querySelectorAll('.method-block').forEach(el => {
+    const h = el.querySelector('.method-head h3');
+    const id = el.id;
+    if (h && id) {
+      items.push({
+        name: h.textContent.trim(),
+        id,
+        kind: 'method',
+        cls: (el.closest('.class-block') || {}).id || ''
+      });
+    }
+  });
+  document.querySelectorAll('.class-block').forEach(el => {
+    const h = el.querySelector('.class-head h2');
+    if (h && el.id) items.push({ name: h.textContent.trim(), id: el.id, kind: 'class' });
+  });
+  document.querySelectorAll('.diagram').forEach(el => {
+    const h = el.querySelector('.diagram-head h3');
+    if (h && el.id) items.push({
+      name: h.textContent.replace(/\s+—\s+.*$/, '').trim(),
+      id: el.id, kind: 'diagram'
+    });
+  });
+
+  function render(query) {
+    if (!query) { out.classList.remove('is-open'); out.innerHTML = ''; return; }
+    const q = query.toLowerCase();
+    const matches = items.filter(it => it.name.toLowerCase().includes(q)).slice(0, 20);
+    if (!matches.length) {
+      out.innerHTML = '<div class="empty">no matches</div>';
+    } else {
+      out.innerHTML = matches.map(m =>
+        `<a href="#${m.id}"><span>${m.name}</span><span class="meta">${m.kind}${m.cls ? ' · ' + m.cls : ''}</span></a>`
+      ).join('');
+    }
+    out.classList.add('is-open');
+  }
+  input.addEventListener('input', e => render(e.target.value.trim()));
+  input.addEventListener('focus', () => { if (input.value) render(input.value.trim()); });
+  document.addEventListener('click', e => {
+    if (!out.contains(e.target) && e.target !== input) out.classList.remove('is-open');
+  });
+  // / focuses search
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && !['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) {
+      e.preventDefault(); input.focus();
+    } else if (e.key === 'Escape' && document.activeElement === input) {
+      input.blur(); out.classList.remove('is-open');
+    }
+  });
+})();
+
+/* ============================================================
+   DIAGRAM CLASS — step-through animation engine
+   ============================================================ */
+class Diagram {
+  constructor(el, steps) {
+    this.el = el;
+    this.svg = el.querySelector('svg');
+    this.steps = steps;
+    this.current = 0;
+    this.playing = false;
+    this.loop = false;
+    this.playTimer = null;
+    this.cache = new Map();
+    this.pips = [];
+    this.cacheInitial();
+    this.buildPips();
+    this.bindControls();
+    this.goTo(0);
+  }
+  cacheInitial() {
+    this.svg.querySelectorAll('[data-anim], [data-id]').forEach(el => {
+      const entry = { style: el.getAttribute('style') || '' };
+      if (el.tagName.toLowerCase() === 'text') entry.text = el.textContent;
+      this.cache.set(el, entry);
+    });
+  }
+  reset() {
+    this.cache.forEach((init, el) => {
+      el.setAttribute('style', init.style);
+      if (init.text !== undefined) el.textContent = init.text;
+    });
+  }
+  set(target, props) {
+    let els;
+    if (target.startsWith('[') || target.startsWith('.') || target.startsWith('#') || target.includes(' ')) {
+      els = this.svg.querySelectorAll(target);
+    } else {
+      els = this.svg.querySelectorAll(`[data-id="${target}"]`);
+    }
+    els.forEach(el => {
+      for (const k in props) {
+        const v = props[k];
+        if (k === 'text') {
+          if (el.tagName.toLowerCase() === 'text') el.textContent = v;
+          else { const t = el.querySelector('text'); if (t) t.textContent = v; }
+        } else if (k === 'rectFill') {
+          const r = el.tagName.toLowerCase() === 'rect' ? el : el.querySelector('rect');
+          if (r) r.style.fill = v;
+        } else if (k === 'rectStroke') {
+          const r = el.tagName.toLowerCase() === 'rect' ? el : el.querySelector('rect');
+          if (r) r.style.stroke = v;
+        } else if (k === 'textFill') {
+          const t = el.tagName.toLowerCase() === 'text' ? el : el.querySelector('text');
+          if (t) t.style.fill = v;
+        } else {
+          el.style[k] = v;
+        }
+      }
+    });
+  }
+  show(t) { this.set(t, { opacity: 1, transform: 'scale(1)' }); }
+  hide(t) { this.set(t, { opacity: 0 }); }
+  goTo(n) {
+    n = Math.max(0, Math.min(n, this.steps.length - 1));
+    this.current = n;
+    this.reset();
+    for (let i = 0; i <= n; i++) if (this.steps[i]?.apply) this.steps[i].apply(this);
+    this.updateUI();
+  }
+  next() {
+    if (this.current < this.steps.length - 1) this.goTo(this.current + 1);
+    else if (this.loop) this.goTo(0);
+    else this.pause();
+  }
+  prev() { if (this.current > 0) this.goTo(this.current - 1); }
+  play() {
+    if (this.playing) return;
+    this.playing = true;
+    this.playBtn.classList.add('is-playing');
+    this.playBtn.textContent = '⏸';
+    this.playTimer = setInterval(() => this.next(), 1800);
+  }
+  pause() {
+    this.playing = false;
+    if (this.playBtn) { this.playBtn.classList.remove('is-playing'); this.playBtn.textContent = '▶'; }
+    if (this.playTimer) { clearInterval(this.playTimer); this.playTimer = null; }
+  }
+  togglePlay() { this.playing ? this.pause() : this.play(); }
+  buildPips() {
+    const c = this.el.querySelector('.diagram-step-pips');
+    if (!c) return;
+    c.innerHTML = '';
+    for (let i = 0; i < this.steps.length; i++) {
+      const pip = document.createElement('button');
+      pip.className = 'pip';
+      pip.setAttribute('aria-label', `Step ${i + 1}`);
+      pip.addEventListener('click', () => { this.pause(); this.goTo(i); });
+      c.appendChild(pip);
+      this.pips.push(pip);
+    }
+  }
+  updateUI() {
+    const desc = this.el.querySelector('.diagram-desc');
+    const step = this.steps[this.current];
+    desc.querySelector('.step-label').textContent = `step ${this.current + 1} of ${this.steps.length}`;
+    desc.querySelector('.step-title').textContent = step.title || '';
+    desc.querySelector('.step-text').textContent = step.text || '';
+    desc.querySelector('.step-takeaway').textContent = step.takeaway || '';
+    const counter = this.el.querySelector('.step-counter');
+    if (counter) counter.textContent = `${this.current + 1} / ${this.steps.length}`;
+    const scrub = this.el.querySelector('.scrubber');
+    if (scrub) scrub.value = this.current;
+    this.pips.forEach((pip, i) => {
+      pip.classList.toggle('is-active', i === this.current);
+      pip.classList.toggle('is-past', i < this.current);
+    });
+    const prev = this.el.querySelector('.prev-btn');
+    const next = this.el.querySelector('.next-btn');
+    if (prev) prev.disabled = this.current === 0;
+    if (next) next.disabled = !this.loop && this.current === this.steps.length - 1;
+  }
+  bindControls() {
+    const q = sel => this.el.querySelector(sel);
+    q('.reset-btn').addEventListener('click', () => { this.pause(); this.goTo(0); });
+    q('.prev-btn').addEventListener('click', () => { this.pause(); this.prev(); });
+    q('.next-btn').addEventListener('click', () => { this.pause(); this.next(); });
+    this.playBtn = q('.play-btn');
+    this.playBtn.addEventListener('click', () => this.togglePlay());
+    q('.scrubber').addEventListener('input', e => { this.pause(); this.goTo(+e.target.value); });
+    const auto = q('.auto-toggle');
+    if (auto) {
+      auto.addEventListener('click', () => {
+        this.loop = !this.loop;
+        auto.classList.toggle('is-on', this.loop);
+        this.updateUI();
+      });
+    }
+  }
+}
+
+function register(id, steps) {
+  const el = document.getElementById(id);
+  if (el) new Diagram(el, steps);
+}
+
+/* ============================================================
+   STEP DATA — diagrams 1 through 6
+   ============================================================ */
+
+/* ---------- D1 — Container vs view ---------- */
+register('d1', [
+  {
+    title: 'A buffer exists, alone',
+    text: 'An ArrayBuffer of 16 bytes is allocated. It is opaque storage — no methods to read or write its bytes directly.',
+    takeaway: 'storage first, lens later.',
+    apply: d => {}
+  },
+  {
+    title: 'Add a Uint8Array view',
+    text: 'A Uint8Array constructed over the buffer is a view: 16 elements, one byte per element. No new memory; same bytes.',
+    takeaway: 'Uint8Array = the default byte-wide lens.',
+    apply: d => { d.set('d1-l1', { opacity: 1 }); d.set('d1-arr', { opacity: 0.7 }); }
+  },
+  {
+    title: 'Add a Uint32Array view',
+    text: 'A second view over the same 16 bytes — but with 4-byte elements, so only 4 indexable slots. Different view, same memory.',
+    takeaway: 'multiple views over one buffer is the norm, not the exception.',
+    apply: d => { d.set('d1-l1', { opacity: 1 }); d.set('d1-l2', { opacity: 1 }); d.set('d1-arr', { opacity: 0.7 }); }
+  },
+  {
+    title: 'Add a DataView',
+    text: 'A DataView treats the buffer as a target for surgical reads and writes at any byte offset, any size, with explicit endianness.',
+    takeaway: 'DataView is for protocols and file formats.',
+    apply: d => { d.set('d1-l1', { opacity: 1 }); d.set('d1-l2', { opacity: 1 }); d.set('d1-l3', { opacity: 1 }); d.set('d1-arr', { opacity: 0.7 }); }
+  },
+  {
+    title: 'All three see the same bytes',
+    text: 'Each view observes the same 16 bytes underneath. A write through any view changes the underlying buffer; the next read through any other view sees the change.',
+    takeaway: 'views are pointers; the buffer is the storage.',
+    apply: d => { d.set('d1-l1', { opacity: 1 }); d.set('d1-l2', { opacity: 1 }); d.set('d1-l3', { opacity: 1 }); d.set('d1-arr', { opacity: 0.7 }); d.set('d1-note', { opacity: 1 }); }
+  },
+  {
+    title: 'The three-role model',
+    text: 'Container, indexable lens, surgical lens. Every binary-data workflow in JS rests on these three primitives — Blob, File, fetch body, Buffer, streams all build on top.',
+    takeaway: 'foundation of everything binary.',
+    apply: d => { d.set('d1-l1', { opacity: 1 }); d.set('d1-l2', { opacity: 1 }); d.set('d1-l3', { opacity: 1 }); d.set('d1-arr', { opacity: 0.7 }); d.set('d1-note', { opacity: 1 }); }
+  }
+]);
+
+/* ---------- D2 — Element layout ---------- */
+register('d2', [
+  { title: '16 raw bytes', text: 'Storage exists. No views yet — no way to index into it.', takeaway: 'bytes are addressable by offset.', apply: d => {} },
+  {
+    title: 'Uint8Array: 1 byte per element',
+    text: 'BYTES_PER_ELEMENT = 1. Sixteen bytes give 16 slots. view[i] reads byte at offset i.',
+    takeaway: '1 byte × 16 slots = 16 bytes.',
+    apply: d => { d.set('d2-u8', { opacity: 1 }); }
+  },
+  {
+    title: 'Uint16Array: 2 bytes per element',
+    text: 'BYTES_PER_ELEMENT = 2. Sixteen bytes give 8 slots. view[i] reads bytes at offsets i×2 and i×2+1 (combined as a 16-bit int).',
+    takeaway: '2 bytes × 8 slots = 16 bytes.',
+    apply: d => { d.set('d2-u8', { opacity: 1 }); d.set('d2-u16', { opacity: 1 }); }
+  },
+  {
+    title: 'Uint32Array: 4 bytes per element',
+    text: 'BYTES_PER_ELEMENT = 4. Sixteen bytes give 4 slots. view[1] is bytes 4–7, not byte 1. Common indexing surprise.',
+    takeaway: '4 bytes × 4 slots = 16 bytes.',
+    apply: d => { d.set('d2-u8', { opacity: 1 }); d.set('d2-u16', { opacity: 1 }); d.set('d2-u32', { opacity: 1 }); }
+  },
+  {
+    title: 'BigUint64Array: 8 bytes per element',
+    text: 'BYTES_PER_ELEMENT = 8. Sixteen bytes give 2 slots. Values are BigInt (the 123n literals), not Number — JSON serialization needs a custom replacer.',
+    takeaway: 'index times BYTES_PER_ELEMENT equals byte offset. Always.',
+    apply: d => { d.set('d2-u8', { opacity: 1 }); d.set('d2-u16', { opacity: 1 }); d.set('d2-u32', { opacity: 1 }); d.set('d2-u64', { opacity: 1 }); }
+  }
+]);
+
+/* ---------- D3 — byteOffset windows ---------- */
+register('d3', [
+  { title: 'The buffer', text: 'An ArrayBuffer of 16 bytes. Three numbers — buffer, byteOffset, length — determine each view.', takeaway: 'views are (buffer, offset, length) triples.', apply: d => {} },
+  {
+    title: 'Full-coverage view',
+    text: 'new Uint8Array(ab) — offset 0, length 16. Covers the whole buffer. The simple case.',
+    takeaway: 'default offset is 0, default length is byteLength.',
+    apply: d => { d.set('d3-v1', { opacity: 1 }); }
+  },
+  {
+    title: 'Windowed view',
+    text: 'new Uint8Array(ab, 4, 8) — start at byte 4, expose 8 bytes. Skips the head, ignores the tail.',
+    takeaway: 'view does not have to cover everything.',
+    apply: d => { d.set('d3-v1', { opacity: 1 }); d.set('d3-v2', { opacity: 1 }); }
+  },
+  {
+    title: 'Wider type at a higher offset',
+    text: 'new Uint32Array(ab, 8, 2) — start at byte 8, expose 2 uint32 elements (= 8 bytes). View into the tail half, four-bytes-at-a-time.',
+    takeaway: 'different types, different windows, same storage.',
+    apply: d => { d.set('d3-v1', { opacity: 1 }); d.set('d3-v2', { opacity: 1 }); d.set('d3-v3', { opacity: 1 }); }
+  },
+  {
+    title: 'Alignment is required',
+    text: 'For multi-byte types (Uint16, Uint32, Float64, etc.) the byteOffset must be a multiple of BYTES_PER_ELEMENT. Misaligned construction throws RangeError.',
+    takeaway: 'Uint32 needs offsets divisible by 4. Uint16 by 2. And so on.',
+    apply: d => { d.set('d3-v1', { opacity: 1 }); d.set('d3-v2', { opacity: 1 }); d.set('d3-v3', { opacity: 1 }); d.set('d3-align', { opacity: 1 }); }
+  }
+]);
+
+/* ---------- D4 — set vs slice ---------- */
+register('d4', [
+  { title: 'A source array and a target view', text: 'src is [10, 20, 30]. view is a 6-element Uint8Array, all zeros.', takeaway: 'set writes into; slice reads from.', apply: d => {} },
+  {
+    title: 'view.set(src, 1)',
+    text: 'Copies src into view starting at offset 1. Three writes — view[1]=10, view[2]=20, view[3]=30. view itself stays the same length and identity.',
+    takeaway: 'set is "memcpy in" — destination is the receiver.',
+    apply: d => {
+      d.set('d4-set-arr', { opacity: 1 });
+      d.set('d4-view-1', { 'fill-opacity': 1 });
+      d.set('d4-view-1 text', { text: '10', fill: 'var(--tn-yellow)' });
+      d.set('d4-view-2 text', { text: '20', fill: 'var(--tn-yellow)' });
+      d.set('d4-view-3 text', { text: '30', fill: 'var(--tn-yellow)' });
+    }
+  },
+  {
+    title: 'view.slice(1, 4)',
+    text: 'Reads three elements from view, builds a NEW TypedArray with its own buffer containing [10, 20, 30]. Independent memory.',
+    takeaway: 'slice is "copy out" — caller receives a fresh array.',
+    apply: d => {
+      d.set('d4-set-arr', { opacity: 1 });
+      d.set('d4-view-1 text', { text: '10', fill: 'var(--tn-yellow)' });
+      d.set('d4-view-2 text', { text: '20', fill: 'var(--tn-yellow)' });
+      d.set('d4-view-3 text', { text: '30', fill: 'var(--tn-yellow)' });
+      d.set('d4-slice', { opacity: 1 });
+    }
+  },
+  {
+    title: 'They are different operations',
+    text: 'set is for assembling data into a pre-allocated buffer; slice is for extracting a new buffer from existing data. Conflate them and you write subtle bugs.',
+    takeaway: 'set has no return; slice gives you back a new array.',
+    apply: d => {
+      d.set('d4-set-arr', { opacity: 1 });
+      d.set('d4-view-1 text', { text: '10', fill: 'var(--tn-yellow)' });
+      d.set('d4-view-2 text', { text: '20', fill: 'var(--tn-yellow)' });
+      d.set('d4-view-3 text', { text: '30', fill: 'var(--tn-yellow)' });
+      d.set('d4-slice', { opacity: 1 });
+    }
+  },
+  {
+    title: 'Compare with subarray',
+    text: 'For zero-copy "window" semantics use view.subarray(1, 4) — same memory, no allocation. slice always allocates and copies.',
+    takeaway: 'subarray = view; slice = copy.',
+    apply: d => {
+      d.set('d4-set-arr', { opacity: 1 });
+      d.set('d4-view-1 text', { text: '10', fill: 'var(--tn-yellow)' });
+      d.set('d4-view-2 text', { text: '20', fill: 'var(--tn-yellow)' });
+      d.set('d4-view-3 text', { text: '30', fill: 'var(--tn-yellow)' });
+      d.set('d4-slice', { opacity: 1 });
+    }
+  }
+]);
+
+/* ---------- D5 — copyWithin ---------- */
+register('d5', [
+  { title: 'Eight elements, sequential values', text: '[1, 2, 3, 4, 5, 6, 7, 8]. The call below copies a range from inside the same array to another position inside it.', takeaway: 'in-place, no allocation.', apply: d => {} },
+  {
+    title: 'Identify the source range',
+    text: 'copyWithin(0, 3) — source starts at index 3 and goes to the end. That selects [4, 5, 6, 7, 8].',
+    takeaway: 'second arg = source start; default end = length.',
+    apply: d => { d.set('d5-src', { opacity: 1 }); }
+  },
+  {
+    title: 'Identify the target range',
+    text: 'First arg is the target start: 0. The 5 source elements would land at indices 0–4. But length never changes — only the first 5 slots are affected.',
+    takeaway: 'first arg = target start.',
+    apply: d => { d.set('d5-src', { opacity: 1 }); d.set('d5-tgt', { opacity: 1 }); }
+  },
+  {
+    title: 'After the copy',
+    text: 'Indices 0–4 now hold [4, 5, 6, 7, 8]. Indices 5–7 are untouched — they still hold [6, 7, 8] from before. Total length is unchanged.',
+    takeaway: 'overlap is handled correctly — behaves like memmove.',
+    apply: d => { d.set('d5-src', { opacity: 1 }); d.set('d5-tgt', { opacity: 1 }); d.set('d5-result', { opacity: 1 }); }
+  },
+  {
+    title: 'When to use it',
+    text: 'Buffer compaction (slide unread data to the front of a ring buffer). Inserting fixed-size headers. Shifting array contents without allocating a temporary. The "no allocation" guarantee is the value proposition.',
+    takeaway: 'in-place range copy, length-preserving, zero-alloc.',
+    apply: d => { d.set('d5-src', { opacity: 1 }); d.set('d5-tgt', { opacity: 1 }); d.set('d5-result', { opacity: 1 }); }
+  }
+]);
+
+/* ---------- D6 — DataView surgery ---------- */
+register('d6', [
+  { title: 'Eight bytes', text: 'A buffer holding 0x41 0x42 0x00 0x00 0x40 0x49 0x0F 0xDB. The same bytes will be read four different ways without ever changing.', takeaway: 'bytes are static; the decoder varies.', apply: d => {} },
+  {
+    title: 'getUint8(0) — one byte',
+    text: 'Read offset 0 as an unsigned 8-bit integer. 0x41 = 65 decimal = ASCII "A".',
+    takeaway: 'no endianness on a single byte.',
+    apply: d => {
+      d.set('d6-bracket', { opacity: 1 });
+      d.set('d6-bracket-label', { text: 'getUint8(0)' });
+      d.set('d6-result', { opacity: 1 });
+      d.set('d6-call', { text: 'dv.getUint8(0)' });
+      d.set('d6-explain', { text: 'one byte at offset 0 as unsigned 8-bit' });
+      d.set('d6-value', { text: '65' });
+      d.set('d6-extra', { text: "= 0x41, ASCII 'A'" });
+    }
+  },
+  {
+    title: 'getUint16(0, false) — big-endian',
+    text: 'Two bytes at offset 0, decoded big-endian. (0x41 << 8) | 0x42 = 16706.',
+    takeaway: 'big-endian: high byte first.',
+    apply: d => {
+      d.set('d6-bracket', { opacity: 1 });
+      d.set('d6-bracket-label', { text: 'getUint16(0, false)' });
+      d.set('[data-id="d6-bracket"] path', { d: 'M44 46 v -10 h 190 v 10' });
+      d.set('d6-result', { opacity: 1 });
+      d.set('d6-call', { text: 'dv.getUint16(0, false)  // BE' });
+      d.set('d6-explain', { text: 'two bytes, big-endian' });
+      d.set('d6-value', { text: '16706' });
+      d.set('d6-extra', { text: '= 0x4142' });
+    }
+  },
+  {
+    title: 'getUint16(0, true) — little-endian',
+    text: 'Same two bytes, low byte first. (0x42 << 8) | 0x41 = 16961.',
+    takeaway: 'flip the flag, different number — bytes never moved.',
+    apply: d => {
+      d.set('d6-bracket', { opacity: 1 });
+      d.set('d6-bracket-label', { text: 'getUint16(0, true)' });
+      d.set('[data-id="d6-bracket"] path', { d: 'M44 46 v -10 h 190 v 10' });
+      d.set('d6-result', { opacity: 1 });
+      d.set('d6-call', { text: 'dv.getUint16(0, true)   // LE' });
+      d.set('d6-explain', { text: 'same two bytes, low byte first' });
+      d.set('d6-value', { text: '16961' });
+      d.set('d6-extra', { text: '= 0x4241' });
+    }
+  },
+  {
+    title: 'getFloat32(4) — IEEE 754',
+    text: 'Read four bytes at offset 4 as a single-precision float, big-endian. The bytes 0x40 0x49 0x0F 0xDB are π.',
+    takeaway: 'same bits + different decoder = different value.',
+    apply: d => {
+      d.set('d6-bracket', { opacity: 1 });
+      d.set('d6-bracket-label', { text: 'getFloat32(4)' });
+      d.set('[data-id="d6-bracket"] path', { d: 'M396 46 v -10 h 370 v 10' });
+      d.set('d6-result', { opacity: 1 });
+      d.set('d6-call', { text: 'dv.getFloat32(4, false)' });
+      d.set('d6-explain', { text: 'four bytes as IEEE 754 single-precision, BE' });
+      d.set('d6-value', { text: '3.1415927' });
+      d.set('d6-extra', { text: 'sign=0, exp=128, mantissa=0x490FDB' });
+    }
+  },
+  {
+    title: 'Why DataView exists',
+    text: 'Network protocols and file formats fix endianness in their spec. PNG: BE. WAV: LE. Most TCP/IP: BE. The TypedArray family always uses host endianness — wrong for spec interop. DataView is the answer.',
+    takeaway: 'use DataView at every protocol boundary.',
+    apply: d => {
+      d.set('d6-bracket', { opacity: 1 });
+      d.set('d6-bracket-label', { text: 'getFloat32(4)' });
+      d.set('[data-id="d6-bracket"] path', { d: 'M396 46 v -10 h 370 v 10' });
+      d.set('d6-result', { opacity: 1 });
+      d.set('d6-call', { text: 'dv.getFloat32(4, false)' });
+      d.set('d6-explain', { text: 'four bytes as IEEE 754 single-precision, BE' });
+      d.set('d6-value', { text: '3.1415927' });
+      d.set('d6-extra', { text: 'sign=0, exp=128, mantissa=0x490FDB' });
+    }
+  }
+]);
+
+</script>
+</body>
+</html>

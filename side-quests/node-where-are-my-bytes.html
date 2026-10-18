@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where are my bytes right now? — custody across the Node.js stack</title>
+<style>
+:root{
+  --hw:#a98ad4; --kern:#5cc4e8; --node:#f0a848; --js:#a9dd5e;
+  --copy:#ff8a6b; --view:#7fd6c8; --ptr:#c9b8ff;
+  --ink:#0f1116; --plane:#161923; --raise:#1e2230; --line:#2b3140;
+  --text:#e7eaf2; --dim:#a7b0c4; --faint:#8f97ab;
+  --mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  --body:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 8px 24px rgba(0,0,0,.35);
+}
+html[data-theme="light"]{
+  --hw:#6a4aa0; --kern:#0f6d90; --node:#9a5b00; --js:#3f6b12;
+  --copy:#b53b1e; --view:#0d6f62; --ptr:#5b45a8;
+  --ink:#f2f3f7; --plane:#ffffff; --raise:#f7f8fb; --line:#d5d9e3;
+  --text:#12151c; --dim:#48505f; --faint:#5a6272;
+  --shadow:0 1px 2px rgba(16,20,30,.06), 0 8px 24px rgba(16,20,30,.08);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto} *{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+body{
+  margin:0;background:var(--ink);color:var(--text);
+  font-family:var(--body);font-size:16px;line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:inherit}
+/* ---------- header ---------- */
+.bar{
+  position:sticky;top:0;z-index:60;background:color-mix(in srgb,var(--ink) 88%,transparent);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line);
+}
+.bar-in{max-width:1120px;margin:0 auto;padding:10px 22px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.brand{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
+.brand b{color:var(--text);font-weight:600}
+.spacer{flex:1 1 auto}
+.pathsel{display:flex;gap:0;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--plane)}
+.pathsel button{
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.05em;padding:7px 12px;border:0;
+  background:transparent;color:var(--dim);cursor:pointer;border-right:1px solid var(--line);
+}
+.pathsel button:last-child{border-right:0}
+.pathsel button[aria-pressed="true"]{background:var(--raise);color:var(--text);box-shadow:inset 0 -2px 0 var(--node)}
+button:focus-visible,a:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--node);outline-offset:2px;border-radius:5px}
+.tbtn{font-family:var(--mono);font-size:11.5px;padding:7px 11px;border:1px solid var(--line);border-radius:7px;background:var(--plane);color:var(--dim);cursor:pointer}
+/* ---------- shell ---------- */
+.wrap{max-width:1120px;margin:0 auto;padding:0 22px 120px}
+.hero{padding:70px 0 44px;border-bottom:1px solid var(--line)}
+.eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--faint);margin:0 0 18px}
+h1{font-family:var(--mono);font-weight:600;font-size:clamp(28px,4.6vw,46px);line-height:1.12;letter-spacing:-.02em;margin:0 0 20px}
+h1 em{font-style:normal;color:var(--node)}
+.lede{font-size:18px;color:var(--dim);max-width:62ch;margin:0 0 8px}
+.lede b{color:var(--text);font-weight:600}
+section{padding:56px 0;border-bottom:1px solid var(--line);scroll-margin-top:76px}
+h2{font-family:var(--mono);font-size:20px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px;display:flex;gap:12px;align-items:baseline}
+h2 .num{color:var(--faint);font-size:12px;letter-spacing:.1em}
+.sub{color:var(--faint);font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;margin:0 0 26px}
+p{max-width:70ch}
+.dim{color:var(--dim)}
+code{font-family:var(--mono);font-size:.9em;background:var(--raise);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+h3{font-family:var(--mono);font-size:14px;font-weight:600;letter-spacing:.02em;margin:30px 0 10px}
+ul.pts{list-style:none;padding:0;margin:14px 0;max-width:74ch}
+ul.pts li{position:relative;padding-left:20px;margin:9px 0;color:var(--dim)}
+ul.pts li::before{content:"";position:absolute;left:2px;top:.72em;width:7px;height:1px;background:var(--faint)}
+ul.pts li b{color:var(--text);font-weight:600}
+/* ---------- owner colouring ---------- */
+.o-hw{--o:var(--hw)} .o-kern{--o:var(--kern)} .o-node{--o:var(--node)} .o-js{--o:var(--js)}
+.chip{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+  border:1px solid var(--o,var(--line));color:var(--o,var(--dim));border-radius:999px;padding:2px 8px;white-space:nowrap;
+}
+.verb{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:3px;white-space:nowrap}
+.v-copy{background:color-mix(in srgb,var(--copy) 16%,transparent);color:var(--copy);border:1px solid color-mix(in srgb,var(--copy) 45%,transparent)}
+.v-view{background:color-mix(in srgb,var(--view) 16%,transparent);color:var(--view);border:1px solid color-mix(in srgb,var(--view) 45%,transparent)}
+.v-ptr{background:color-mix(in srgb,var(--ptr) 16%,transparent);color:var(--ptr);border:1px solid color-mix(in srgb,var(--ptr) 45%,transparent)}
+.v-none{background:transparent;color:var(--faint);border:1px solid var(--line)}
+/* ---------- figure frame ---------- */
+figure{margin:26px 0;border:1px solid var(--line);border-radius:12px;background:var(--plane);box-shadow:var(--shadow);overflow:hidden}
+figcaption{border-top:1px solid var(--line);padding:11px 16px;font-family:var(--mono);font-size:11.5px;color:var(--faint);line-height:1.55}
+.fighead{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--raise)}
+.figtitle{font-family:var(--mono);font-size:11.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim)}
+.figbody{padding:18px 16px}
+.ctrl{font-family:var(--mono);font-size:11.5px;padding:6px 11px;border:1px solid var(--line);border-radius:6px;background:var(--plane);color:var(--text);cursor:pointer}
+.ctrl:hover{border-color:var(--node)}
+.ctrl[disabled]{opacity:.4;cursor:not-allowed}
+.ctrl.on{border-color:var(--node);color:var(--node)}
+/* ---------- the custody column ---------- */
+.stepgrid{display:grid;grid-template-columns:minmax(280px,1fr) minmax(280px,1.05fr);gap:18px}
+@media(max-width:820px){.stepgrid{grid-template-columns:1fr}}
+.stack{display:flex;flex-direction:column;gap:3px}
+.lyr{
+  display:grid;grid-template-columns:26px 1fr auto;gap:10px;align-items:center;
+  border:1px solid var(--line);border-left:3px solid var(--o,var(--line));border-radius:6px;
+  padding:8px 10px;background:var(--raise);cursor:pointer;text-align:left;color:inherit;font:inherit;
+  transition:background .18s,border-color .18s,transform .18s;
+}
+.lyr .ix{font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+.lyr .nm{font-family:var(--mono);font-size:12.5px;color:var(--dim);line-height:1.35}
+.lyr[data-state="lit"]{background:color-mix(in srgb,var(--o) 15%,var(--raise));border-color:var(--o);transform:translateX(4px)}
+.lyr[data-state="lit"] .nm{color:var(--text)}
+.lyr[data-state="past"] .nm{color:var(--faint)}
+.lyr[data-state="past"]{opacity:.72}
+.sep{display:flex;align-items:center;gap:10px;margin:10px 0 6px;font-family:var(--mono);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--faint)}
+.sep::before,.sep::after{content:"";height:1px;background:var(--line);flex:1}
+.xmark{display:flex;align-items:center;gap:8px;margin:4px 0;font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--copy)}
+.xmark::before,.xmark::after{content:"";height:1px;flex:1;background:color-mix(in srgb,var(--copy) 50%,transparent)}
+.panel{border:1px solid var(--line);border-radius:8px;background:var(--raise);padding:14px 15px}
+.panel h4{font-family:var(--mono);font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);margin:0 0 10px;font-weight:500}
+.panel .who{font-family:var(--mono);font-size:15px;color:var(--text);margin:0 0 10px;line-height:1.4}
+.panel .what{color:var(--dim);font-size:14.5px;margin:0 0 14px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13px;border-top:1px solid var(--line);padding-top:12px}
+.kv dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);padding-top:3px}
+.kv dd{margin:0;color:var(--dim);font-family:var(--mono);font-size:12.5px;line-height:1.5}
+/* ---------- ledger ---------- */
+.ledger{margin-top:14px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.ledger table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11.5px}
+.ledger th{text-align:left;padding:8px 11px;color:var(--faint);font-weight:500;letter-spacing:.09em;text-transform:uppercase;font-size:10px;background:var(--raise);border-bottom:1px solid var(--line)}
+.ledger td{padding:7px 11px;border-bottom:1px solid var(--line);color:var(--dim);vertical-align:top}
+.ledger tr:last-child td{border-bottom:0}
+.ledger tr.new td{animation:slidein .3s ease}
+@keyframes slidein{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.tally{display:flex;gap:14px;flex-wrap:wrap;padding:9px 11px;border-top:1px solid var(--line);background:var(--raise);font-family:var(--mono);font-size:11px;color:var(--faint)}
+.tally b{color:var(--text);font-weight:600}
+/* ---------- tables ---------- */
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px;margin:6px 0}
+.tbl th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:500;padding:9px 12px;border-bottom:1px solid var(--line)}
+.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);color:var(--dim);vertical-align:top}
+.tbl td:first-child{color:var(--text)}
+.tbl tr:last-child td{border-bottom:0}
+.tbl code{background:transparent;border:0;padding:0;color:var(--dim)}
+.scroll{overflow-x:auto}
+/* ---------- svg ---------- */
+.svgfig{display:block;width:100%;height:auto}
+.svgfig text{font-family:var(--mono);fill:var(--dim)}
+.svgfig .t-lab{font-size:11px}
+.svgfig .t-sm{font-size:9.5px;fill:var(--faint)}
+.svgfig .t-hd{font-size:11px;fill:var(--text)}
+/* ---------- pin instrument ---------- */
+.slab{position:relative;height:46px;border:1px solid var(--node);border-radius:5px;background:color-mix(in srgb,var(--node) 8%,transparent);overflow:hidden}
+.slab .used{position:absolute;top:0;bottom:0;left:0;background:color-mix(in srgb,var(--js) 55%,transparent);transition:width .3s ease}
+.slab .lbl{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+.meters{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+@media(max-width:640px){.meters{grid-template-columns:1fr}}
+.meter{border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--raise)}
+.meter .big{font-family:var(--mono);font-size:24px;color:var(--text);line-height:1.1}
+.meter .cap{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);margin-top:5px}
+input[type=range]{width:100%;accent-color:var(--node)}
+/* ---------- cascade ---------- */
+.casc{display:flex;flex-direction:column;gap:6px}
+.cascrow{display:grid;grid-template-columns:190px 1fr auto;gap:12px;align-items:center}
+@media(max-width:640px){.cascrow{grid-template-columns:120px 1fr auto}}
+.cascrow .nm{font-family:var(--mono);font-size:11.5px;color:var(--dim);line-height:1.3}
+.tank{position:relative;height:22px;border:1px solid var(--line);border-radius:4px;background:var(--plane);overflow:hidden}
+.tank .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--o,var(--dim));opacity:.62;transition:width .45s ease}
+.tank .mark{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--copy)}
+.cascrow .amt{font-family:var(--mono);font-size:11px;color:var(--faint);min-width:74px;text-align:right}
+.verdict{margin-top:14px;border-left:3px solid var(--o,var(--line));padding:10px 14px;background:var(--raise);border-radius:0 8px 8px 0;font-family:var(--mono);font-size:12.5px;color:var(--dim);line-height:1.6}
+/* ---------- claims ---------- */
+.claims{display:flex;flex-direction:column;gap:8px}
+.claim{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--raise);text-align:left}
+.claim .txt{font-size:14px;color:var(--dim)}
+.claim button{font-family:var(--mono);font-size:11px;padding:5px 12px;border:1px solid var(--line);border-radius:5px;background:var(--plane);color:var(--dim);cursor:pointer}
+.claim button.picked{border-color:var(--node);color:var(--text)}
+.claim[data-result="right"]{border-color:color-mix(in srgb,var(--js) 55%,transparent)}
+.claim[data-result="wrong"]{border-color:color-mix(in srgb,var(--copy) 55%,transparent)}
+.why{grid-column:1/-1;font-size:13px;color:var(--faint);border-top:1px solid var(--line);padding-top:9px;margin-top:2px;display:none}
+.claim[data-result] .why{display:block}
+/* ---------- misc ---------- */
+.note{border-left:3px solid var(--node);background:var(--raise);padding:12px 16px;border-radius:0 8px 8px 0;margin:22px 0;color:var(--dim);font-size:14.5px}
+.note b{color:var(--text)}
+.legend{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 0}
+footer{padding:44px 0 0;color:var(--faint);font-family:var(--mono);font-size:11.5px}
+.toc{display:flex;gap:8px;flex-wrap:wrap;margin:26px 0 0;padding:0;list-style:none}
+.toc a{font-family:var(--mono);font-size:11.5px;color:var(--dim);text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:5px 10px;display:inline-block}
+.toc a:hover{border-color:var(--node);color:var(--text)}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="bar-in">
+    <span class="brand"><b>Byte custody</b> &nbsp;/&nbsp; Node.js</span>
+    <span class="spacer"></span>
+    <div class="pathsel" role="group" aria-label="Which data path to trace">
+      <button type="button" data-path="http" aria-pressed="true">HTTP req &rarr; res</button>
+      <button type="button" data-path="tcp" aria-pressed="false">raw TCP socket</button>
+      <button type="button" data-path="fs" aria-pressed="false">file streams</button>
+    </div>
+    <button type="button" class="tbtn" id="themeBtn" aria-label="Switch to light theme">light</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="hero">
+  <p class="eyebrow">A map of who is holding the data, at every layer, at every instant</p>
+  <h1>Where are my <em>bytes</em> right now?</h1>
+  <p class="lede">Every layer of a Node program has something it calls a buffer, and they are not the same thing &mdash; some of them <b>store</b> your bytes, some only <b>point at</b> them, and one of them holds <b>nothing at all</b> while appearing to do the most work.</p>
+  <p class="lede">This page answers one question in one way: pick a moment in the journey, and it tells you which layer physically holds the data, who owns that memory, and whether what you are looking at is a copy, a window, or an address.</p>
+  <ul class="toc">
+    <li><a href="#s0">0 &middot; The short answer</a></li>
+    <li><a href="#s1">1 &middot; Three territories</a></li>
+    <li><a href="#s2">2 &middot; Follow the bytes</a></li>
+    <li><a href="#s3">3 &middot; Copy, window, address</a></li>
+    <li><a href="#s4">4 &middot; In moves, out duplicates</a></li>
+    <li><a href="#s5">5 &middot; Three kinds of full</a></li>
+    <li><a href="#s6">6 &middot; What req and res really are</a></li>
+    <li><a href="#s7">7 &middot; What libuv keeps</a></li>
+    <li><a href="#s8">8 &middot; How to see each layer</a></li>
+    <li><a href="#s9">9 &middot; Mark the claims</a></li>
+  </ul>
+</div>
+
+<section id="s0">
+  <h2><span class="num">00</span> The short answer</h2>
+  <p class="sub">Three rules that decide every case</p>
+
+  <p>The confusion is not really about buffers. It is about <b>ownership</b>. Once you know which side of an ownership boundary a piece of memory sits on, everything else &mdash; whether it copies, whether two things can see the same bytes, whether freeing one frees the other &mdash; follows from that.</p>
+
+  <ul class="pts">
+    <li><b>Crossing an ownership boundary copies.</b> Kernel memory and your process's memory are separate address spaces with a syscall between them. Bytes cannot be shared across that line, only transferred. Inbound that happens once; outbound it happens once.</li>
+    <li><b>Inside your process, nothing copies unless you ask for it.</b> The parser, the readable queue and the chunk your callback receives are all looking at one block of memory. They are windows at different offsets, not successive copies.</li>
+    <li><b>libuv stores none of your bytes.</b> On the way in it fills memory that Node handed it. On the way out it holds a list of addresses pointing into memory JavaScript still owns. It has queues; it does not have a byte store.</li>
+  </ul>
+
+  <figure>
+    <div class="fighead"><span class="figtitle">The whole answer in one shape</span></div>
+    <div class="figbody">
+      <svg class="svgfig" viewBox="0 0 860 250" role="img" aria-label="Two dashed ownership boundaries separate hardware, the kernel and your process. Only crossings of those boundaries copy.">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g>
+          <rect x="18" y="14" width="824" height="62" rx="8" fill="none" stroke="var(--js)" stroke-opacity=".55"/>
+          <text class="t-hd" x="34" y="40">your process</text>
+          <text class="t-sm" x="34" y="58">JavaScript objects, stream queues, the block the read landed in</text>
+          <text class="t-sm" x="720" y="40" text-anchor="end" fill="var(--js)">one address space</text>
+        </g>
+        <line x1="18" y1="98" x2="842" y2="98" stroke="var(--copy)" stroke-dasharray="6 5" stroke-opacity=".8"/>
+        <text class="t-sm" x="34" y="92" fill="var(--copy)">SYSCALL BOUNDARY &mdash; the only place a copy happens</text>
+        <g>
+          <rect x="18" y="112" width="824" height="62" rx="8" fill="none" stroke="var(--kern)" stroke-opacity=".55"/>
+          <text class="t-hd" x="34" y="138">the kernel</text>
+          <text class="t-sm" x="34" y="156">per-socket receive and send queues, the page cache</text>
+          <text class="t-sm" x="720" y="138" text-anchor="end" fill="var(--kern)">another address space</text>
+        </g>
+        <line x1="18" y1="196" x2="842" y2="196" stroke="var(--hw)" stroke-dasharray="6 5" stroke-opacity=".7"/>
+        <text class="t-sm" x="34" y="190" fill="var(--hw)">DMA BOUNDARY &mdash; the device writes straight into memory the driver mapped</text>
+        <g>
+          <rect x="18" y="210" width="824" height="30" rx="8" fill="none" stroke="var(--hw)" stroke-opacity=".55"/>
+          <text class="t-hd" x="34" y="230">the device</text>
+          <text class="t-sm" x="720" y="230" text-anchor="end" fill="var(--hw)">rings the driver owns</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption>Everything people call &ldquo;a buffer&rdquo; sits in one of these three bands. Two things live in the top band and get confused with each other constantly: the block the operating system wrote into, and the queue a stream keeps. They are both in your process, and one holds windows onto the other.</figcaption>
+  </figure>
+
+  <div class="note"><b>The count, for the path you have selected:</b> <span id="countLine">bytes come to rest in <b>4</b> places on the way in and <b>5</b> on the way out, and exactly <b>2</b> of those transitions are copies.</span></div>
+</section>
+
+<section id="s1">
+  <h2><span class="num">01</span> Three territories, and what each one calls a buffer</h2>
+  <p class="sub">Same word, four owners</p>
+
+  <p>Colour is doing the work on this page: every box, chip and bar is tinted by <b>who owns the memory</b>, and the tint gets warmer the closer the memory is to your code. If two things share a colour they can see each other's memory directly. If they don't, something has to copy.</p>
+
+  <div class="legend">
+    <span class="chip o-hw">device &middot; driver</span>
+    <span class="chip o-kern">kernel</span>
+    <span class="chip o-node">Node's native side</span>
+    <span class="chip o-js">JavaScript</span>
+  </div>
+
+  <div class="scroll">
+  <table class="tbl" style="margin-top:22px">
+    <thead><tr><th>Called a buffer</th><th>What it actually is</th><th>Owner</th><th>Sized by</th></tr></thead>
+    <tbody>
+      <tr><td>NIC ring / device queue</td><td>Fixed slots the device writes into by DMA</td><td><span class="chip o-hw">driver</span></td><td>the driver, at boot</td></tr>
+      <tr><td>Socket receive queue</td><td>Reassembled, in-order stream bytes waiting for you to read them</td><td><span class="chip o-kern">kernel</span></td><td>autotuned, capped by the socket option</td></tr>
+      <tr><td>Socket send queue</td><td>Bytes already handed over but not yet acknowledged by the peer</td><td><span class="chip o-kern">kernel</span></td><td>autotuned, capped by the socket option</td></tr>
+      <tr><td>Page cache</td><td>File contents the kernel is holding on behalf of every process</td><td><span class="chip o-kern">kernel</span></td><td>free memory</td></tr>
+      <tr><td>The read block</td><td>A fixed-size chunk of process memory Node hands to the OS to fill</td><td><span class="chip o-node">Node native</span></td><td>a constant, roughly 64&nbsp;KB</td></tr>
+      <tr><td>The write queue</td><td>A list of <em>addresses</em> and lengths waiting for the socket to become writable</td><td><span class="chip o-node">libuv</span></td><td>however much you wrote</td></tr>
+      <tr><td>A readable stream's queue</td><td>An array of chunk objects that have arrived but not been consumed</td><td><span class="chip o-js">JavaScript</span></td><td>whatever arrived before you read</td></tr>
+      <tr><td>A writable stream's queue</td><td>An array of chunk objects accepted but not yet handed down</td><td><span class="chip o-js">JavaScript</span></td><td>whatever you wrote before it drained</td></tr>
+      <tr><td>A chunk in your callback</td><td>A window: an offset and a length into one of the blocks above</td><td><span class="chip o-js">JavaScript</span></td><td>what the parser or the read produced</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note">Two rows above are the ones that get merged in most people's heads. <b>The read block</b> is memory the operating system filled; <b>a stream's queue</b> is a JavaScript array of chunks. The queue does not contain bytes &mdash; it contains objects that <em>point into</em> blocks. One block can be pointed at by several queued chunks at once, and it stays alive as long as any of them does.</div>
+</section>
+<section id="s2">
+  <h2><span class="num">02</span> Follow the bytes</h2>
+  <p class="sub">Step through one journey and watch custody change hands</p>
+
+  <p>This is the instrument the rest of the page explains. Step through a single journey and at every stop it tells you three things: <b>who holds it</b>, <b>what kind of holding that is</b>, and <b>what you could type to see it</b>. The ledger underneath fills as you go, so by the end you have the copy count for that path rather than a feeling about it.</p>
+
+  <figure>
+    <div class="fighead">
+      <span class="figtitle" id="stepTitle">Custody &mdash; HTTP request and response</span>
+      <span class="spacer" style="flex:1"></span>
+      <button type="button" class="ctrl" id="stepPrev">&larr; back</button>
+      <button type="button" class="ctrl" id="stepPlay">play</button>
+      <button type="button" class="ctrl" id="stepNext">forward &rarr;</button>
+      <button type="button" class="ctrl" id="stepReset">reset</button>
+    </div>
+    <div class="figbody">
+      <div class="stepgrid">
+        <div class="stack" id="stack" role="list"></div>
+        <div>
+          <div class="panel" id="stopPanel">
+            <h4>Who holds it now</h4>
+            <p class="who" id="stopWho">&mdash;</p>
+            <p class="what" id="stopWhat">Press forward to start the journey.</p>
+            <dl class="kv">
+              <dt>Holding</dt><dd id="stopVerb">&mdash;</dd>
+              <dt>Freed when</dt><dd id="stopFree">&mdash;</dd>
+              <dt>Visible as</dt><dd id="stopObs">&mdash;</dd>
+            </dl>
+          </div>
+          <div class="ledger">
+            <table>
+              <thead><tr><th>Stop</th><th>Owner</th><th>Holding</th></tr></thead>
+              <tbody id="ledgerBody"><tr><td colspan="3" style="color:var(--faint)">empty</td></tr></tbody>
+            </table>
+            <div class="tally" id="tally"><span>copies <b>0</b></span><span>windows <b>0</b></span><span>addresses <b>0</b></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption>Every stop is a place bytes can physically be found. A stop marked <span class="verb v-copy">copy</span> means new memory was written; <span class="verb v-view">window</span> means no new memory at all, only a different offset and length onto memory that already existed.</figcaption>
+  </figure>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03</span> Copy, window, address</h2>
+  <p class="sub">The three kinds of holding, and why only one of them costs memory</p>
+
+  <p>&ldquo;Where are my bytes&rdquo; is ambiguous because there are three quite different ways a layer can be holding something, and only one of them means the bytes are actually there.</p>
+
+  <div class="scroll">
+  <table class="tbl">
+    <thead><tr><th>Kind</th><th>What exists</th><th>Costs</th><th>Where it happens</th></tr></thead>
+    <tbody>
+      <tr><td><span class="verb v-copy">copy</span></td><td>A second set of the same bytes in different memory</td><td>The full length, twice over, until one is released</td><td>Only at an ownership boundary, or when you ask for it</td></tr>
+      <tr><td><span class="verb v-view">window</span></td><td>An object recording an offset and a length into memory that already exists</td><td>A few dozen bytes for the object, whatever the length</td><td>Everywhere inside your process</td></tr>
+      <tr><td><span class="verb v-ptr">address</span></td><td>A note of where the bytes are, held by a layer that will read them later</td><td>Nothing &mdash; but the target must stay alive until it is done</td><td>The native write queue</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>The consequence people get bitten by</h3>
+  <p>Because a chunk in your callback is a window and not a copy, the block underneath it stays alive for exactly as long as you keep that chunk. A small window can pin a large block.</p>
+
+  <figure>
+    <div class="fighead">
+      <span class="figtitle">A small window pins a whole block</span>
+      <span class="spacer" style="flex:1"></span>
+      <button type="button" class="ctrl on" id="pinKeep">keep the window</button>
+      <button type="button" class="ctrl" id="pinCopy">copy it out</button>
+    </div>
+    <div class="figbody">
+      <p style="margin:0 0 6px;font-family:var(--mono);font-size:11.5px;color:var(--faint)">The block the operating system filled &mdash; 65,536 bytes</p>
+      <div class="slab"><div class="used" id="pinUsed" style="width:1%"></div><div class="lbl" id="pinLbl">your chunk: 640 bytes</div></div>
+      <label for="pinRange" style="display:block;font-family:var(--mono);font-size:11px;color:var(--faint);margin:16px 0 6px">how much of the block your chunk covers</label>
+      <input type="range" id="pinRange" min="1" max="100" value="1" aria-label="Chunk size as a percentage of the block">
+      <div class="meters">
+        <div class="meter"><div class="big" id="pinLogical">640 B</div><div class="cap">what you think you kept</div></div>
+        <div class="meter"><div class="big" id="pinReal">64.0 KB</div><div class="cap">what is actually still allocated</div></div>
+      </div>
+      <div class="verdict o-node" id="pinVerdict">Keeping the window keeps the block. Retain a thousand small chunks from a thousand connections and you are holding a thousand whole blocks, not a thousand small strings.</div>
+    </div>
+    <figcaption>Copying the chunk out &mdash; turning it into a string, or into memory of its own &mdash; is what releases the block. That copy is one you asked for, and it is often the right call.</figcaption>
+  </figure>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04</span> Inbound moves. Outbound duplicates.</h2>
+  <p class="sub">Why the answer to &ldquo;where is it&rdquo; is sometimes one place and sometimes two</p>
+
+  <p>The two syscall crossings look symmetrical and are not. This is the single fact that makes the question answerable, because it tells you when the bytes are in one place and when they are in several at once.</p>
+
+  <ul class="pts">
+    <li><b>Reading is a move.</b> Once the kernel has copied the socket's queued bytes into your block, it drops its own copy immediately &mdash; that space is what the peer is allowed to send more into. Just after the read there is exactly one copy, and it is yours.</li>
+    <li><b>Writing is a duplicate.</b> When you hand bytes to the kernel, it copies them into the send queue and <em>keeps</em> them, because the peer may not acknowledge and the bytes may need sending again. Your copy and the kernel's copy now both exist, and yours is released on your schedule, not the network's.</li>
+    <li><b>So a stalled write is expensive twice.</b> The kernel's send queue is full of unacknowledged bytes, and your queue is full of the ones it wouldn't take &mdash; two lots of memory for one lot of data.</li>
+  </ul>
+
+  <figure>
+    <div class="fighead">
+      <span class="figtitle">The same bytes, counted at one instant</span>
+      <span class="spacer" style="flex:1"></span>
+      <button type="button" class="ctrl on" id="dirIn">reading</button>
+      <button type="button" class="ctrl" id="dirOut">writing</button>
+    </div>
+    <div class="figbody">
+      <svg class="svgfig" viewBox="0 0 860 210" role="img" aria-label="A comparison of how many places hold the same bytes just after a read versus just after a write.">
+        <text class="t-sm" x="18" y="20" id="dirCap">just after the read call returns</text>
+        <g id="dirIn1">
+          <rect x="18" y="34" width="390" height="70" rx="8" fill="none" stroke="var(--kern)" stroke-opacity=".5" stroke-dasharray="5 4"/>
+          <text class="t-lab" id="dirKernTitle" x="34" y="60" fill="var(--kern)">kernel receive queue</text>
+          <text class="t-sm" x="34" y="80" id="dirInKernNote">released &mdash; the window reopens</text>
+          <rect x="452" y="34" width="390" height="70" rx="8" fill="none" stroke="var(--node)" stroke-opacity=".7"/>
+          <text class="t-lab" id="dirProcTitle" x="468" y="60" fill="var(--node)">your block</text>
+          <text class="t-sm" x="468" y="80" id="dirInProcNote">holds the only copy</text>
+          <line x1="412" y1="69" x2="446" y2="69" stroke="var(--copy)" marker-end="url(#ah)" color="var(--copy)"/>
+        </g>
+        <g id="dirCount">
+          <text class="t-hd" x="18" y="140">copies in existence</text>
+          <text x="18" y="182" style="font-size:34px;fill:var(--text);font-family:var(--mono)" id="dirNum">1</text>
+          <text class="t-sm" x="70" y="182" id="dirNote">one owner, one set of bytes</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption>The dashed frame means the bytes are gone from there; the solid frame means they are present. Switching to writing turns both frames solid, which is the whole point.</figcaption>
+  </figure>
+</section>
+<section id="s5">
+  <h2><span class="num">05</span> Three kinds of full</h2>
+  <p class="sub">One word, backpressure, naming three mechanisms with completely different teeth</p>
+
+  <p>Every layer that queues has a notion of being too full, and they are not the same notion. Knowing which one you are looking at tells you whether something will stop you, slow you, or quietly let you run out of memory.</p>
+
+  <ul class="pts">
+    <li><b>Enforced, at the far end.</b> The receiving kernel advertises how much room its receive queue has. When that reaches zero the sending kernel stops transmitting. Nothing in either application gets a say; this is the only limit in the whole stack that physically halts the producer.</li>
+    <li><b>Opportunistic, in the middle.</b> The native side offers bytes to the kernel and the kernel takes what fits. Whatever it refuses stays queued as addresses and is retried when the socket reports it can accept more. Nothing is dropped, nothing is capped &mdash; the queue simply grows.</li>
+    <li><b>Advisory, at the top.</b> A writable stream compares its queue against a threshold and returns false when it is over. <b>It still accepts the chunk.</b> Nothing enforces the threshold; ignoring the answer costs you memory, not correctness.</li>
+  </ul>
+
+  <figure>
+    <div class="fighead">
+      <span class="figtitle">Stall one end and watch it back up</span>
+      <span class="spacer" style="flex:1"></span>
+      <button type="button" class="ctrl on" id="bpWrite">you keep writing</button>
+      <button type="button" class="ctrl" id="bpRead">you stop reading</button>
+      <button type="button" class="ctrl" id="bpRun">run</button>
+      <button type="button" class="ctrl" id="bpReset">reset</button>
+    </div>
+    <div class="figbody">
+      <div class="casc" id="casc"></div>
+      <div class="verdict" id="bpVerdict">Press run. Each bar fills only once the one below it has no more room, so the order in which they fill is the order in which the pressure travels.</div>
+    </div>
+    <figcaption>The red mark on a bar is a threshold that reports but does not stop. A bar with no mark has a hard ceiling: when it is full, the layer below it refuses, and that refusal is what pushes the pressure upward.</figcaption>
+  </figure>
+
+  <div class="note">This is why the two ends behave so differently when your code stalls. <b>Stop reading</b> and the pressure reaches an enforced limit within one round trip &mdash; the sender is physically stopped and your memory stays flat. <b>Ignore a write returning false</b> and the pressure has nowhere to go but your own heap, because everything above the kernel accepts whatever it is given.</div>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06</span> What the request and response objects really are</h2>
+  <p class="sub">Neither one is what its base class suggests</p>
+
+  <p>The request object is a readable stream that <b>nothing ever pulls from</b>. A normal readable asks its source for more when it runs low. This one doesn't: the HTTP parser pushes into it as bytes are parsed, and its queue is a place things are put, not a place things are fetched from. Its only real control is being able to say &ldquo;stop asking the socket for more&rdquo; when it is over its threshold.</p>
+
+  <p>The more surprising half is where the parser sits. On an HTTP connection the parser is attached <b>below</b> the socket's own stream machinery, so incoming bytes go from the read straight into parsing. The socket's readable queue is not in the path at all &mdash; it exists, it is empty, and reading from it is not how the request body reaches you.</p>
+
+  <figure>
+    <div class="fighead"><span class="figtitle">The same socket, two different paths through it</span></div>
+    <div class="figbody">
+      <svg class="svgfig" viewBox="0 0 860 300" role="img" aria-label="On a raw TCP socket bytes pass through the socket's own readable queue. On an HTTP connection the parser is attached lower and the socket queue is bypassed.">
+        <text class="t-hd" x="18" y="20">raw TCP socket</text>
+        <text class="t-hd" x="452" y="20">HTTP connection</text>
+        <line x1="430" y1="8" x2="430" y2="290" stroke="var(--line)"/>
+
+        <rect x="18" y="34" width="330" height="40" rx="6" fill="none" stroke="var(--node)" stroke-opacity=".65"/>
+        <text class="t-lab" x="34" y="59" fill="var(--node)">the read fills a block</text>
+        <line x1="183" y1="80" x2="183" y2="98" stroke="var(--dim)" marker-end="url(#ah)" color="var(--dim)"/>
+        <rect x="18" y="104" width="330" height="40" rx="6" fill="none" stroke="var(--js)" stroke-opacity=".65"/>
+        <text class="t-lab" x="34" y="129" fill="var(--js)">the socket's readable queue</text>
+        <line x1="183" y1="150" x2="183" y2="168" stroke="var(--dim)" marker-end="url(#ah)" color="var(--dim)"/>
+        <rect x="18" y="174" width="330" height="40" rx="6" fill="none" stroke="var(--js)" stroke-opacity=".65"/>
+        <text class="t-lab" x="34" y="199" fill="var(--js)">your data handler</text>
+        <text class="t-sm" x="18" y="240">one queue, and you read from it</text>
+
+        <rect x="452" y="34" width="330" height="40" rx="6" fill="none" stroke="var(--node)" stroke-opacity=".65"/>
+        <text class="t-lab" x="468" y="59" fill="var(--node)">the read fills a block</text>
+        <line x1="617" y1="80" x2="617" y2="98" stroke="var(--dim)" marker-end="url(#ah)" color="var(--dim)"/>
+        <rect x="452" y="104" width="330" height="40" rx="6" fill="none" stroke="var(--node)" stroke-opacity=".65"/>
+        <text class="t-lab" x="468" y="129" fill="var(--node)">the parser reads it in place</text>
+        <line x1="617" y1="150" x2="617" y2="168" stroke="var(--dim)" marker-end="url(#ah)" color="var(--dim)"/>
+        <rect x="452" y="174" width="330" height="40" rx="6" fill="none" stroke="var(--js)" stroke-opacity=".65"/>
+        <text class="t-lab" x="468" y="199" fill="var(--js)">the request object's queue</text>
+        <rect x="452" y="230" width="330" height="48" rx="6" fill="none" stroke="var(--line)" stroke-dasharray="5 4"/>
+        <text class="t-sm" x="468" y="249">the socket's own readable queue</text>
+        <text class="t-sm" x="468" y="266">present, empty, never in the path</text>
+      </svg>
+    </div>
+    <figcaption>Both columns start with the same block of memory. What differs is which layer is allowed to look at it first, and therefore which queue ends up holding windows onto it.</figcaption>
+  </figure>
+
+  <h3>The response object is two queues, not one</h3>
+  <p>The response is not a plain writable stream either. It sits <b>above</b> the socket and keeps a pending list of its own, because it has work to do that the socket knows nothing about: turning the status line and headers into bytes, deciding chunked framing, and grouping small writes so they leave as one segment rather than several.</p>
+
+  <ul class="pts">
+    <li><b>Your string is encoded here.</b> Passing a string rather than bytes means an encode step, which is a copy &mdash; a deliberate one, and unavoidable, since only bytes go on the wire.</li>
+    <li><b>Its pending list is a separate place bytes can sit</b> from the socket's writable queue. Both can be non-empty at once, and they are counted separately.</li>
+    <li><b>Ending the response is not the same as the bytes leaving.</b> It means no more application data is coming. Everything below still has to drain.</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07</span> What libuv actually keeps</h2>
+  <p class="sub">The layer that appears to move all the data and stores almost none of it</p>
+
+  <p>This is the layer worth being precise about, because &ldquo;libuv buffers the data&rdquo; is the assumption that makes everything else hard to reason about. Split it by direction and it becomes simple.</p>
+
+  <div class="scroll">
+  <table class="tbl">
+    <thead><tr><th></th><th>Reading</th><th>Writing</th></tr></thead>
+    <tbody>
+      <tr><td>Who supplies the memory</td><td>Node does, on demand, when the socket becomes readable</td><td>You did &mdash; it is the memory your chunk already points at</td></tr>
+      <tr><td>What libuv holds</td><td>Nothing after the callback returns</td><td>A queue of addresses and lengths</td></tr>
+      <tr><td>Does it copy</td><td>No &mdash; it passes your memory to the OS to fill</td><td>No &mdash; it passes your addresses to the OS to read from</td></tr>
+      <tr><td>What must stay alive</td><td>The block, for as long as anything windows onto it</td><td>Your chunk, until the write completes</td></tr>
+      <tr><td>How full it can get</td><td>Not a queue at all &mdash; one block per readable event</td><td>Unbounded; it is the pending-write backlog</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <figure>
+    <div class="fighead"><span class="figtitle">A pending write, drawn honestly</span></div>
+    <div class="figbody">
+      <svg class="svgfig" viewBox="0 0 860 250" role="img" aria-label="The native write queue holds addresses pointing back into JavaScript-owned memory, not copies of it.">
+        <rect x="18" y="26" width="500" height="76" rx="8" fill="none" stroke="var(--js)" stroke-opacity=".6"/>
+        <text class="t-hd" x="34" y="50">memory JavaScript still owns</text>
+        <rect x="34" y="62" width="140" height="26" rx="4" fill="none" stroke="var(--js)" stroke-opacity=".45"/>
+        <text class="t-sm" x="46" y="79">chunk A</text>
+        <rect x="186" y="62" width="140" height="26" rx="4" fill="none" stroke="var(--js)" stroke-opacity=".45"/>
+        <text class="t-sm" x="198" y="79">chunk B</text>
+        <rect x="338" y="62" width="140" height="26" rx="4" fill="none" stroke="var(--js)" stroke-opacity=".45"/>
+        <text class="t-sm" x="350" y="79">chunk C</text>
+
+        <rect x="18" y="150" width="500" height="60" rx="8" fill="none" stroke="var(--node)" stroke-opacity=".65"/>
+        <text class="t-hd" x="34" y="174">the pending write queue</text>
+        <text class="t-sm" x="34" y="194">three entries, each an address and a length</text>
+        <path d="M104,150 C104,126 104,112 104,90" fill="none" stroke="var(--ptr)" stroke-opacity=".85" marker-end="url(#ah)" color="var(--ptr)"/>
+        <path d="M204,150 C204,126 240,112 256,90" fill="none" stroke="var(--ptr)" stroke-opacity=".85" marker-end="url(#ah)" color="var(--ptr)"/>
+        <path d="M304,150 C304,126 380,112 408,90" fill="none" stroke="var(--ptr)" stroke-opacity=".85" marker-end="url(#ah)" color="var(--ptr)"/>
+        <text class="t-sm" x="530" y="176" fill="var(--ptr)">arrows are addresses,</text>
+        <text class="t-sm" x="530" y="192" fill="var(--ptr)">not transfers</text>
+
+        <rect x="560" y="26" width="282" height="76" rx="8" fill="none" stroke="var(--kern)" stroke-opacity=".5" stroke-dasharray="5 4"/>
+        <text class="t-hd" x="576" y="50" fill="var(--kern)">kernel send queue</text>
+        <text class="t-sm" x="576" y="70">took what fit, refused the rest &mdash;</text>
+        <text class="t-sm" x="576" y="86">which is why the queue below exists</text>
+      </svg>
+    </div>
+    <figcaption>Nothing was copied downward here. The bytes are still in one place, in your process, referred to from below. Release those chunks before the write completes and you would be handing the operating system the address of memory that is gone &mdash; which is precisely why the runtime holds a reference for you until the callback fires.</figcaption>
+  </figure>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08</span> How to see each layer</h2>
+  <p class="sub">Turning the model into something you can check at three in the morning</p>
+
+  <p>Every layer that holds anything can be observed, and the numbers disagree with each other in useful ways. If your process memory is climbing, the layer whose number is climbing with it is the one holding your data.</p>
+
+  <div class="scroll">
+  <table class="tbl">
+    <thead><tr><th>Layer</th><th>What to look at</th><th>What a large number there means</th></tr></thead>
+    <tbody>
+      <tr><td><span class="chip o-js">JS</span> readable queue</td><td>The stream's readable length</td><td>Data arrived faster than your handler consumed it</td></tr>
+      <tr><td><span class="chip o-js">JS</span> writable queue</td><td>The stream's writable length</td><td>You are writing faster than the layer below accepts &mdash; the classic ignored return value</td></tr>
+      <tr><td><span class="chip o-js">JS</span> response pending list</td><td>The response's output size</td><td>Headers or body written before the socket could take them</td></tr>
+      <tr><td><span class="chip o-node">native</span> write queue</td><td>The handle's write queue size</td><td>The kernel refused; the socket is not writable yet</td></tr>
+      <tr><td><span class="chip o-kern">kernel</span> receive queue</td><td>Send queue and receive queue columns in a socket listing</td><td>Bytes have arrived that nothing in your process has read</td></tr>
+      <tr><td><span class="chip o-kern">kernel</span> send queue</td><td>The same listing, sending side</td><td>Bytes handed over and not yet acknowledged &mdash; a slow or distant peer</td></tr>
+      <tr><td><span class="chip o-node">native</span> blocks</td><td>Total process memory minus the JS heap</td><td>Blocks are being pinned by windows you are still holding</td></tr>
+      <tr><td><span class="chip o-js">JS</span> your own retention</td><td>A heap snapshot, looking at what keeps chunks reachable</td><td>You are accumulating chunks instead of streaming them</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note">The pair worth internalising: <b>a JS queue growing while the native and kernel numbers stay near zero</b> means the bottleneck is you, not the network. <b>The native and kernel numbers pinned high</b> means the peer or the link is the bottleneck and your queue is the symptom. They call for opposite fixes.</div>
+</section>
+
+<section id="s9">
+  <h2><span class="num">09</span> Mark the claims</h2>
+  <p class="sub">Some of these are true</p>
+
+  <p>Answer before revealing. The ones you get wrong are the layers your model is still merging.</p>
+
+  <div class="claims" id="claims"></div>
+</section>
+
+<footer>
+  <p>Built from your layered walkthrough. Ownership labels are conceptual throughout &mdash; every &ldquo;the block&rdquo;, &ldquo;the pending list&rdquo; and &ldquo;the write queue&rdquo; here names a real structure, but the page deliberately does not name the source symbols.</p>
+</footer>
+</div>
+<script>
+(function () {
+  "use strict";
+
+  var VERB = {
+    copy: { cls: "v-copy", label: "copy" },
+    view: { cls: "v-view", label: "window" },
+    ptr:  { cls: "v-ptr",  label: "address" },
+    none: { cls: "v-none", label: "holds nothing" }
+  };
+
+  var PATHS = {
+    http: {
+      title: "Custody \u2014 HTTP request and response",
+      stops: [
+        { own:"hw", dir:"in", name:"the receive ring", who:"The network card, into memory the driver mapped",
+          what:"Frames land in fixed slots by direct memory access. Nothing has looked at them yet, and nothing has decided which connection they belong to.",
+          verb:"copy", free:"As soon as the driver has handed the frame up", obs:"driver ring statistics" },
+        { own:"kern", dir:"in", xing:false, name:"the socket receive queue", who:"The kernel, in kernel memory",
+          what:"Segments have been checked, put back in order and joined into one continuous stream of bytes belonging to this connection. This is the first place the data looks like what you sent.",
+          verb:"copy", free:"The moment your process reads it \u2014 which is what reopens the window", obs:"the receive queue column of a socket listing" },
+        { own:"node", dir:"in", xing:true, name:"the block Node supplied", who:"Node's native side, in your process",
+          what:"When the socket becomes readable, the runtime hands the operating system a fixed block of process memory and asks it to fill it. This crossing is a copy, and it is the only one on the way in.",
+          verb:"copy", free:"When nothing windows onto it any more", obs:"process memory outside the JS heap" },
+        { own:"node", dir:"in", name:"the HTTP parser", who:"Nobody \u2014 the parser stores no bytes",
+          what:"It reads the block where it lies, recording offsets as it recognises the method, the path and each header. The only thing it carries between reads is a half-finished token that straddled the end of a block.",
+          verb:"none", free:"\u2014", obs:"nothing to look at; it is a position, not a store" },
+        { own:"js", dir:"in", name:"the request object's queue", who:"JavaScript, as windows onto the block above",
+          what:"Body bytes are pushed in as chunk objects. Each records an offset and a length into the block the read filled. The queue holds no bytes of its own, and one block can be referenced by several queued chunks.",
+          verb:"view", free:"When you consume the chunk and drop it", obs:"the readable length of the request" },
+        { own:"js", dir:"in", name:"your handler", who:"You",
+          what:"Whatever you keep, you keep. Hold the chunk and you hold the whole block behind it; turn it into a string and you have made a copy that lives in the JS heap while the block goes free.",
+          verb:"view", free:"When your last reference goes", obs:"a heap snapshot" },
+        { own:"js", dir:"out", name:"the response pending list", who:"JavaScript, above the socket",
+          what:"The status line and headers are turned into bytes here, framing is decided, and small writes are grouped so they leave together. If you passed a string, encoding it into bytes is a copy, and it happens at this stop.",
+          verb:"copy", free:"When the socket accepts it", obs:"the output size of the response" },
+        { own:"js", dir:"out", name:"the socket's writable queue", who:"JavaScript",
+          what:"The same chunk objects, moved from one list to the next. Nothing is copied here \u2014 what changes is which layer is responsible for them.",
+          verb:"view", free:"When the write below completes", obs:"the writable length of the socket" },
+        { own:"node", dir:"out", name:"the pending write queue", who:"libuv, holding addresses only",
+          what:"A list of where the bytes are and how many, waiting for the socket to say it can take more. Your memory has not moved and has not been duplicated; it has been pointed at, and it must stay alive until the write reports done.",
+          verb:"ptr", free:"When the write completes", obs:"the write queue size on the handle" },
+        { own:"kern", dir:"out", xing:true, name:"the socket send queue", who:"The kernel, keeping its own copy",
+          what:"The kernel copies in what fits and holds on to it, because an unacknowledged byte may have to be sent again. This is the outbound crossing, and unlike the inbound one it leaves the bytes existing in two places at once.",
+          verb:"copy", free:"When the peer acknowledges", obs:"the send queue column of a socket listing" },
+        { own:"hw", dir:"out", name:"the transmit ring", who:"The network card",
+          what:"Segments are handed to the device and put on the wire. The kernel still has its copy until the acknowledgement comes back.",
+          verb:"copy", free:"After transmission", obs:"driver ring statistics" }
+      ]
+    },
+    tcp: {
+      title: "Custody \u2014 a raw TCP socket",
+      stops: [
+        { own:"hw", dir:"in", name:"the receive ring", who:"The network card, into memory the driver mapped",
+          what:"Identical to any other connection \u2014 nothing at this level knows or cares what protocol you are speaking.",
+          verb:"copy", free:"As soon as the driver has handed the frame up", obs:"driver ring statistics" },
+        { own:"kern", dir:"in", name:"the socket receive queue", who:"The kernel, in kernel memory",
+          what:"Ordered, joined-up stream bytes for this connection, waiting to be read.",
+          verb:"copy", free:"The moment your process reads it", obs:"the receive queue column of a socket listing" },
+        { own:"node", dir:"in", xing:true, name:"the block Node supplied", who:"Node's native side, in your process",
+          what:"The same fixed block of process memory, filled by the same read. With no parser attached, what comes out of it goes straight to the stream layer.",
+          verb:"copy", free:"When nothing windows onto it any more", obs:"process memory outside the JS heap" },
+        { own:"js", dir:"in", name:"the socket's readable queue", who:"JavaScript, as windows onto the block above",
+          what:"Here the socket's own queue is the one in the path \u2014 the difference from an HTTP connection, where a parser sits below this and it never fills.",
+          verb:"view", free:"When you consume the chunk", obs:"the readable length of the socket" },
+        { own:"js", dir:"in", name:"your data handler", who:"You",
+          what:"A window onto the block. Arbitrary bytes \u2014 there is no framing here, so a message split across two reads arrives as two chunks and rejoining them is your job.",
+          verb:"view", free:"When your last reference goes", obs:"a heap snapshot" },
+        { own:"js", dir:"out", name:"the socket's writable queue", who:"JavaScript",
+          what:"With no response object above it, what you write goes straight into this queue. One JS-level queue on this path rather than two.",
+          verb:"view", free:"When the write below completes", obs:"the writable length of the socket" },
+        { own:"node", dir:"out", name:"the pending write queue", who:"libuv, holding addresses only",
+          what:"Addresses and lengths pointing back into your memory, waiting for writability.",
+          verb:"ptr", free:"When the write completes", obs:"the write queue size on the handle" },
+        { own:"kern", dir:"out", xing:true, name:"the socket send queue", who:"The kernel, keeping its own copy",
+          what:"Copied in and retained until acknowledged. Two copies exist from here until the peer confirms.",
+          verb:"copy", free:"When the peer acknowledges", obs:"the send queue column of a socket listing" },
+        { own:"hw", dir:"out", name:"the transmit ring", who:"The network card",
+          what:"Onto the wire.",
+          verb:"copy", free:"After transmission", obs:"driver ring statistics" }
+      ]
+    },
+    fs: {
+      title: "Custody \u2014 reading and writing a file",
+      stops: [
+        { own:"hw", dir:"in", name:"the device", who:"The drive and its controller",
+          what:"Blocks are fetched and handed up. On a warm file this stop never happens at all, which is the first thing that makes files different from sockets.",
+          verb:"copy", free:"Immediately", obs:"device queue depth" },
+        { own:"kern", dir:"in", name:"the page cache", who:"The kernel, on behalf of every process",
+          what:"File contents the kernel is holding in memory. It is not per-connection and not yours \u2014 a second reader gets the same pages without touching the device.",
+          verb:"copy", free:"Under memory pressure, at the kernel's discretion", obs:"cached memory, system-wide" },
+        { own:"node", dir:"in", xing:true, name:"the block a pool thread filled", who:"Node's native side, in your process",
+          what:"The crossing is a copy as always, but here it is performed by a worker thread rather than the event loop. The loop is free while the read is in progress, and the result is queued back to it when the thread finishes.",
+          verb:"copy", free:"When nothing windows onto it any more", obs:"process memory outside the JS heap" },
+        { own:"js", dir:"in", name:"the read stream's queue", who:"JavaScript, as windows onto the block above",
+          what:"Chunks are pushed in as reads complete. The stream keeps requesting the next read while its queue is under threshold, and stops when it is over \u2014 which is what makes a file stream bounded.",
+          verb:"view", free:"When you consume the chunk", obs:"the readable length of the stream" },
+        { own:"js", dir:"in", name:"your handler", who:"You",
+          what:"A window. Concatenating every chunk to rebuild the file is the copy that undoes the entire point of streaming it.",
+          verb:"view", free:"When your last reference goes", obs:"a heap snapshot" },
+        { own:"js", dir:"out", name:"the write stream's queue", who:"JavaScript",
+          what:"Chunks accepted but not yet handed to a thread. This queue has a threshold that reports and does not stop, exactly like a socket's.",
+          verb:"view", free:"When the write below completes", obs:"the writable length of the stream" },
+        { own:"node", dir:"out", name:"the pending write request", who:"Node's native side, holding an address",
+          what:"A worker thread is given where the bytes are and how many. Your memory must stay alive until it reports back \u2014 the same rule as a socket write, on a different thread.",
+          verb:"ptr", free:"When the write completes", obs:"the pool queue" },
+        { own:"kern", dir:"out", xing:true, name:"the page cache", who:"The kernel",
+          what:"The crossing copies your bytes into cached pages and returns. Your callback firing means the kernel accepted the data, not that it has reached the platter \u2014 that happens later unless you explicitly ask to wait for it.",
+          verb:"copy", free:"When written back", obs:"dirty page counters" },
+        { own:"hw", dir:"out", name:"the device", who:"The drive",
+          what:"Written back on the kernel's schedule, or when something forces it.",
+          verb:"copy", free:"After the write completes", obs:"device queue depth" }
+      ]
+    }
+  };
+
+  var state = { path: "http", i: -1, playing: null };
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------- theme ---------- */
+  var themeBtn = $("themeBtn");
+  themeBtn.addEventListener("click", function () {
+    var next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    themeBtn.textContent = next === "dark" ? "light" : "dark";
+    themeBtn.setAttribute("aria-label", "Switch to " + (next === "dark" ? "light" : "dark") + " theme");
+  });
+
+  /* ---------- the stack ---------- */
+  function buildStack() {
+    var stops = PATHS[state.path].stops;
+    var host = $("stack");
+    host.innerHTML = "";
+    var lastDir = null;
+    stops.forEach(function (s, ix) {
+      if (lastDir === "in" && s.dir === "out") {
+        var sep = document.createElement("div");
+        sep.className = "sep";
+        sep.textContent = "your code answers";
+        host.appendChild(sep);
+      }
+      lastDir = s.dir;
+      if (s.xing) {
+        var xm = document.createElement("div");
+        xm.className = "xmark";
+        xm.textContent = "ownership boundary \u2014 a copy happens here";
+        host.appendChild(xm);
+      }
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "lyr o-" + s.own;
+      b.setAttribute("role", "listitem");
+      b.dataset.ix = String(ix);
+      b.innerHTML =
+        '<span class="ix">' + (ix + 1) + "</span>" +
+        '<span class="nm">' + s.name + "</span>" +
+        '<span class="verb ' + VERB[s.verb].cls + '">' + VERB[s.verb].label + "</span>";
+      b.addEventListener("click", function () { goTo(ix); });
+      host.appendChild(b);
+    });
+  }
+
+  function paintStack() {
+    var kids = $("stack").querySelectorAll(".lyr");
+    for (var k = 0; k < kids.length; k++) {
+      var el = kids[k];
+      if (state.i < 0) { el.removeAttribute("data-state"); continue; }
+      if (k < state.i) el.setAttribute("data-state", "past");
+      else if (k === state.i) el.setAttribute("data-state", "lit");
+      else el.removeAttribute("data-state");
+    }
+  }
+
+  function paintPanel() {
+    var stops = PATHS[state.path].stops;
+    if (state.i < 0) {
+      $("stopWho").textContent = "\u2014";
+      $("stopWhat").textContent = "Press forward to start the journey.";
+      $("stopVerb").textContent = "\u2014";
+      $("stopFree").textContent = "\u2014";
+      $("stopObs").textContent = "\u2014";
+      return;
+    }
+    var s = stops[state.i];
+    $("stopWho").textContent = s.who;
+    $("stopWhat").textContent = s.what;
+    $("stopVerb").innerHTML = '<span class="verb ' + VERB[s.verb].cls + '">' + VERB[s.verb].label + "</span>" +
+      (s.xing ? ' <span style="color:var(--copy)">crosses an ownership boundary</span>' : "");
+    $("stopFree").textContent = s.free;
+    $("stopObs").textContent = s.obs;
+  }
+
+  function paintLedger() {
+    var stops = PATHS[state.path].stops;
+    var body = $("ledgerBody");
+    body.innerHTML = "";
+    if (state.i < 0) {
+      body.innerHTML = '<tr><td colspan="3" style="color:var(--faint)">empty</td></tr>';
+    } else {
+      for (var k = 0; k <= state.i; k++) {
+        var s = stops[k];
+        var tr = document.createElement("tr");
+        if (k === state.i) tr.className = "new";
+        tr.innerHTML =
+          "<td>" + s.name + "</td>" +
+          '<td><span class="chip o-' + s.own + '">' + ownerLabel(s.own) + "</span></td>" +
+          '<td><span class="verb ' + VERB[s.verb].cls + '">' + VERB[s.verb].label + "</span></td>";
+        body.appendChild(tr);
+      }
+    }
+    var c = 0, v = 0, p = 0;
+    for (var j = 0; j <= state.i; j++) {
+      var vb = stops[j].verb;
+      if (vb === "copy") c++; else if (vb === "view") v++; else if (vb === "ptr") p++;
+    }
+    $("tally").innerHTML = "<span>copies <b>" + c + "</b></span><span>windows <b>" + v +
+      "</b></span><span>addresses <b>" + p + "</b></span>";
+  }
+
+  function ownerLabel(o) {
+    return o === "hw" ? "device" : o === "kern" ? "kernel" : o === "node" ? "native" : "JavaScript";
+  }
+
+  function goTo(ix) {
+    var stops = PATHS[state.path].stops;
+    state.i = Math.max(-1, Math.min(stops.length - 1, ix));
+    paintStack(); paintPanel(); paintLedger();
+    $("stepPrev").disabled = state.i < 0;
+    $("stepNext").disabled = state.i >= stops.length - 1;
+  }
+
+  function stopPlay() {
+    if (state.playing) { clearInterval(state.playing); state.playing = null; }
+    $("stepPlay").textContent = "play";
+    $("stepPlay").classList.remove("on");
+  }
+
+  $("stepNext").addEventListener("click", function () { stopPlay(); goTo(state.i + 1); });
+  $("stepPrev").addEventListener("click", function () { stopPlay(); goTo(state.i - 1); });
+  $("stepReset").addEventListener("click", function () { stopPlay(); goTo(-1); });
+  $("stepPlay").addEventListener("click", function () {
+    if (state.playing) { stopPlay(); return; }
+    $("stepPlay").textContent = "pause";
+    $("stepPlay").classList.add("on");
+    state.playing = setInterval(function () {
+      if (state.i >= PATHS[state.path].stops.length - 1) { stopPlay(); return; }
+      goTo(state.i + 1);
+    }, 1500);
+  });
+
+  /* ---------- the count sentence ---------- */
+  function paintCount() {
+    var stops = PATHS[state.path].stops;
+    var inRest = 0, outRest = 0, xings = 0, ptrs = 0;
+    stops.forEach(function (s) {
+      var rests = s.verb === "copy" || s.verb === "view";
+      if (rests && s.dir === "in") inRest++;
+      if (rests && s.dir === "out") outRest++;
+      if (s.xing) xings++;
+      if (s.verb === "ptr") ptrs++;
+    });
+    $("countLine").innerHTML = "bytes come to rest in <b>" + inRest + "</b> places on the way in and <b>" +
+      outRest + "</b> on the way out, they are pointed at from <b>" + ptrs +
+      "</b> more without being moved, and exactly <b>" + xings +
+      "</b> of those transitions cross an ownership boundary.";
+  }
+
+  /* ---------- path switching ---------- */
+  function setPath(p) {
+    state.path = p;
+    var btns = document.querySelectorAll(".pathsel button");
+    for (var k = 0; k < btns.length; k++) {
+      btns[k].setAttribute("aria-pressed", btns[k].dataset.path === p ? "true" : "false");
+    }
+    $("stepTitle").textContent = PATHS[p].title;
+    stopPlay();
+    buildStack();
+    goTo(-1);
+    paintCount();
+  }
+  Array.prototype.forEach.call(document.querySelectorAll(".pathsel button"), function (b) {
+    b.addEventListener("click", function () { setPath(b.dataset.path); });
+  });
+
+  /* ---------- the pinning instrument ---------- */
+  var BLOCK = 65536;
+  var pin = { keep: true, pct: 1 };
+  function fmt(n) {
+    if (n >= 1024 * 1024) return (n / 1048576).toFixed(1) + " MB";
+    if (n >= 1024) return (n / 1024).toFixed(1) + " KB";
+    return n + " B";
+  }
+  function paintPin() {
+    var logical = Math.max(1, Math.round(BLOCK * pin.pct / 100));
+    var real = pin.keep ? BLOCK : logical;
+    $("pinUsed").style.width = pin.pct + "%";
+    $("pinLbl").textContent = "your chunk: " + fmt(logical);
+    $("pinLogical").textContent = fmt(logical);
+    $("pinReal").textContent = fmt(real);
+    $("pinKeep").classList.toggle("on", pin.keep);
+    $("pinCopy").classList.toggle("on", !pin.keep);
+    $("pinVerdict").textContent = pin.keep
+      ? "Keeping the window keeps the block. Retain a thousand small chunks from a thousand connections and you are holding a thousand whole blocks, not a thousand small strings."
+      : "Copying it out costs you the length of the chunk once, and releases " + fmt(BLOCK - logical) +
+        " that you were holding for no reason. Below roughly half the block, this trade is almost always worth it.";
+    $("pinVerdict").className = "verdict " + (pin.keep ? "o-node" : "o-js");
+  }
+  $("pinRange").addEventListener("input", function (e) { pin.pct = Number(e.target.value); paintPin(); });
+  $("pinKeep").addEventListener("click", function () { pin.keep = true; paintPin(); });
+  $("pinCopy").addEventListener("click", function () { pin.keep = false; paintPin(); });
+
+  /* ---------- direction instrument ---------- */
+  function paintDir(reading) {
+    $("dirIn").classList.toggle("on", reading);
+    $("dirOut").classList.toggle("on", !reading);
+    var kern = document.querySelector("#dirIn1 rect");
+    var line = document.querySelector("#dirIn1 line");
+    if (reading) {
+      kern.setAttribute("stroke-dasharray", "5 4");
+      kern.setAttribute("stroke-opacity", ".5");
+      $("dirCap").textContent = "just after the read call returns";
+      $("dirKernTitle").textContent = "kernel receive queue";
+      $("dirInKernNote").textContent = "released \u2014 the window reopens";
+      $("dirProcTitle").textContent = "your block";
+      $("dirInProcNote").textContent = "holds the only copy";
+      $("dirNum").textContent = "1";
+      $("dirNote").textContent = "one owner, one set of bytes";
+      line.setAttribute("marker-end", "url(#ah)");
+      line.removeAttribute("marker-start");
+    } else {
+      kern.removeAttribute("stroke-dasharray");
+      kern.setAttribute("stroke-opacity", ".85");
+      $("dirCap").textContent = "just after the write call returns";
+      $("dirKernTitle").textContent = "kernel send queue";
+      $("dirInKernNote").textContent = "keeps its copy until acknowledged";
+      $("dirProcTitle").textContent = "your chunk";
+      $("dirInProcNote").textContent = "still holds it too, on your schedule";
+      $("dirNum").textContent = "2";
+      $("dirNote").textContent = "two owners, same bytes, released independently";
+      line.removeAttribute("marker-end");
+      line.setAttribute("marker-start", "url(#ah)");
+    }
+  }
+  $("dirIn").addEventListener("click", function () { paintDir(true); });
+  $("dirOut").addEventListener("click", function () { paintDir(false); });
+
+  /* ---------- the cascade ---------- */
+  var CASC = {
+    write: {
+      rows: [
+        { nm:"your writable queue", own:"js", mark:32, note:"reports, does not stop" },
+        { nm:"the pending write queue", own:"node", note:"addresses, no ceiling" },
+        { nm:"the kernel send queue", own:"kern", note:"hard ceiling" },
+        { nm:"the room the peer advertises", own:"kern", inverse:true, note:"hard, and at the far end" }
+      ],
+      steps: [
+        { row:3, to:0,   text:"The peer is not reading. The room it advertises falls to zero, and the sending kernel stops transmitting. This is the only limit in the stack that physically stops anything." },
+        { row:2, to:100, text:"With nothing leaving, the kernel send queue fills to its ceiling and starts refusing what the native layer offers it." },
+        { row:1, to:100, text:"Refused bytes stay queued as addresses. Nothing is dropped and nothing is capped \u2014 the list simply grows, still pointing into your memory." },
+        { row:0, to:100, text:"Now your own queue is over its threshold. Every write returns false from here on \u2014 and every one of them is still accepted. If your code ignores the answer, this bar is the one that keeps climbing, in your heap, until the process dies." }
+      ],
+      verdict:"Pressure travelled upward, and stopped at the only layer with no ceiling: yours."
+    },
+    read: {
+      rows: [
+        { nm:"your readable queue", own:"js", mark:60, note:"reports, does not stop" },
+        { nm:"asking the OS for more", own:"node", note:"a switch, not a store" },
+        { nm:"the kernel receive queue", own:"kern", note:"hard ceiling" },
+        { nm:"the room you advertise", own:"kern", inverse:true, note:"hard, and the sender obeys it" }
+      ],
+      steps: [
+        { row:0, to:100, text:"You stopped consuming. Chunks keep arriving and the queue climbs past its threshold." },
+        { row:1, to:0,   text:"Over threshold, the stream stops asking the operating system for more. This layer stores nothing \u2014 it flips off, and that is the whole of its contribution." },
+        { row:2, to:100, text:"Nobody is draining the socket, so the kernel receive queue fills to its ceiling. Note where the bytes are now: in kernel memory, not in yours." },
+        { row:3, to:0,   text:"The room you advertise reaches zero and the sender stops transmitting. Your process memory never moved. This is backpressure that is enforced rather than requested, and you got it by doing nothing." }
+      ],
+      verdict:"Pressure travelled downward and out, and was absorbed by a layer that can genuinely refuse."
+    }
+  };
+  var bp = { mode: "write", ix: 0, timer: null };
+
+  function buildCasc() {
+    var cfg = CASC[bp.mode];
+    var host = $("casc");
+    host.innerHTML = "";
+    cfg.rows.forEach(function (r, ix) {
+      var row = document.createElement("div");
+      row.className = "cascrow o-" + r.own;
+      var mark = r.mark ? '<div class="mark" style="left:' + r.mark + '%"></div>' : "";
+      row.innerHTML =
+        '<div class="nm">' + r.nm + '<br><span style="color:var(--faint);font-size:10px">' + r.note + "</span></div>" +
+        '<div class="tank"><div class="fill" data-fill="' + ix + '"></div>' + mark + "</div>" +
+        '<div class="amt" data-amt="' + ix + '">' + (r.inverse ? "room: full" : "empty") + "</div>";
+      host.appendChild(row);
+    });
+    cfg.rows.forEach(function (r, ix) {
+      if (r.inverse) {
+        host.querySelector('[data-fill="' + ix + '"]').style.width = "100%";
+      }
+    });
+  }
+
+  function cascReset() {
+    if (bp.timer) { clearInterval(bp.timer); bp.timer = null; }
+    bp.ix = 0;
+    $("bpRun").textContent = "run";
+    $("bpRun").classList.remove("on");
+    buildCasc();
+    $("bpVerdict").className = "verdict";
+    $("bpVerdict").textContent = "Press run. Each bar changes only once the layer next to it has no more room, so the order in which they move is the order the pressure travels.";
+  }
+
+  function cascStep() {
+    var cfg = CASC[bp.mode];
+    if (bp.ix >= cfg.steps.length) {
+      clearInterval(bp.timer); bp.timer = null;
+      $("bpRun").textContent = "run again";
+      $("bpRun").classList.remove("on");
+      $("bpVerdict").textContent = cfg.verdict;
+      $("bpVerdict").className = "verdict o-" + (bp.mode === "write" ? "js" : "kern");
+      bp.ix = 0;
+      return;
+    }
+    var st = cfg.steps[bp.ix];
+    var row = cfg.rows[st.row];
+    var fill = $("casc").querySelector('[data-fill="' + st.row + '"]');
+    var amt = $("casc").querySelector('[data-amt="' + st.row + '"]');
+    fill.style.width = st.to + "%";
+    if (row.inverse) amt.textContent = st.to === 0 ? "room: none" : "room: full";
+    else amt.textContent = st.to >= 100 ? (row.own === "node" ? "growing" : "full") : (st.to === 0 ? "off" : st.to + "%");
+    if (row.own === "node" && !row.inverse && st.to === 0) amt.textContent = "off";
+    $("bpVerdict").textContent = st.text;
+    $("bpVerdict").className = "verdict o-" + row.own;
+    bp.ix++;
+  }
+
+  $("bpRun").addEventListener("click", function () {
+    if (bp.timer) { clearInterval(bp.timer); bp.timer = null; $("bpRun").textContent = "run"; $("bpRun").classList.remove("on"); return; }
+    if (bp.ix === 0) buildCasc();
+    $("bpRun").textContent = "pause";
+    $("bpRun").classList.add("on");
+    cascStep();
+    bp.timer = setInterval(cascStep, 2100);
+  });
+  $("bpReset").addEventListener("click", cascReset);
+  $("bpWrite").addEventListener("click", function () {
+    bp.mode = "write";
+    $("bpWrite").classList.add("on"); $("bpRead").classList.remove("on");
+    cascReset();
+  });
+  $("bpRead").addEventListener("click", function () {
+    bp.mode = "read";
+    $("bpRead").classList.add("on"); $("bpWrite").classList.remove("on");
+    cascReset();
+  });
+
+  /* ---------- claims ---------- */
+  var CLAIMS = [
+    { t:"libuv keeps its own copy of incoming bytes before Node sees them.", a:false,
+      w:"It has no byte store on the read side. When the socket is readable it asks the layer above for memory, hands that to the operating system to fill, and holds nothing once the callback returns." },
+    { t:"On an HTTP server, the request body passes through the socket's own readable queue.", a:false,
+      w:"The parser is attached below the socket's stream machinery, so the read goes straight into parsing. The socket's readable queue exists and stays empty. On a raw TCP socket it is the queue in the path \u2014 same object, different wiring." },
+    { t:"The chunk your handler receives is usually a window onto a larger block rather than memory of its own.", a:true,
+      w:"It records an offset and a length into the block the read filled, which is why a small chunk can keep a much larger allocation alive." },
+    { t:"Just after a successful read, the same bytes exist in both the kernel's queue and your process.", a:false,
+      w:"The kernel releases its copy as the read completes \u2014 that release is exactly what reopens the window to the sender. Reading moves; it does not duplicate." },
+    { t:"Just after a successful write, the same bytes exist in both your process and the kernel's queue.", a:true,
+      w:"The kernel must keep them until the peer acknowledges, in case they have to be sent again. Your copy is released on your schedule, so both exist at once." },
+    { t:"A writable stream returning false has refused the chunk.", a:false,
+      w:"It accepted it and told you the queue is over threshold. The threshold reports; it does not cap. Ignoring the answer is paid for in memory." },
+    { t:"The HTTP parser accumulates the whole message before handing it over.", a:false,
+      w:"It reads the block where it lies and reports offsets. The only thing it carries between reads is a token that straddled the end of one." },
+    { t:"The response object queues bytes in a place separate from the socket's writable queue.", a:true,
+      w:"It sits above the socket with a pending list of its own, because it has framing and grouping work to do that the socket knows nothing about. Both lists can be non-empty at once." },
+    { t:"If you stop reading from a socket, the remote sender is eventually stopped without your code doing anything.", a:true,
+      w:"The room you advertise falls to zero and the sending kernel stops transmitting. It is the one enforced limit in the chain, and you get it by not reading." },
+    { t:"A stream's threshold is a cap on how large its queue can grow.", a:false,
+      w:"It is a line the queue is compared against. Nothing stops the queue crossing it, and on the write side it will keep growing for as long as you keep writing." }
+  ];
+
+  (function buildClaims() {
+    var host = $("claims");
+    CLAIMS.forEach(function (c, ix) {
+      var d = document.createElement("div");
+      d.className = "claim";
+      d.innerHTML =
+        '<span class="txt">' + c.t + "</span>" +
+        '<button type="button" data-v="true">true</button>' +
+        '<button type="button" data-v="false">false</button>' +
+        '<div class="why">' + c.w + "</div>";
+      Array.prototype.forEach.call(d.querySelectorAll("button"), function (b) {
+        b.addEventListener("click", function () {
+          var picked = b.dataset.v === "true";
+          Array.prototype.forEach.call(d.querySelectorAll("button"), function (x) { x.classList.remove("picked"); });
+          b.classList.add("picked");
+          d.setAttribute("data-result", picked === c.a ? "right" : "wrong");
+        });
+      });
+      host.appendChild(d);
+    });
+  })();
+
+  /* ---------- boot ---------- */
+  buildStack();
+  goTo(-1);
+  paintCount();
+  paintPin();
+  paintDir(true);
+  cascReset();
+})();
+</script>
+</body>
+</html>

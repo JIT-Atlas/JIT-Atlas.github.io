@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Two answers to one question · Next.js 16 vs TanStack Start</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..600&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --r:6px; --maxw:1400px;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:'Hanken Grotesk',-apple-system,BlinkMacSystemFont,sans-serif;
+  --serif:'Fraunces',Georgia,'Times New Roman',serif;
+}
+html[data-theme="dark"]{
+  --bg:#0a0c11; --bg2:#0f131b; --panel:#141a25; --panel2:#1c2433;
+  --ink:#eef2f9; --ink2:#a8b3c4; --ink3:#6e7a8d;
+  --line:#212a39; --line2:#33415b;
+  --next:#69a4ff; --next-soft:rgba(105,164,255,.15); --next-line:rgba(105,164,255,.42);
+  --tan:#ff8159; --tan-soft:rgba(255,129,89,.15); --tan-line:rgba(255,129,89,.42);
+  --server:#54d6a0; --server-soft:rgba(84,214,160,.15);
+  --client:#c79bff; --client-soft:rgba(199,155,255,.15);
+  --warn:#ffce5e; --warn-soft:rgba(255,206,94,.14);
+  --grid:rgba(255,255,255,.022);
+  --shadow:0 22px 54px -26px rgba(0,0,0,.9);
+  --orb1:rgba(105,164,255,.16); --orb2:rgba(255,129,89,.13); --orb3:rgba(199,155,255,.10);
+}
+html[data-theme="light"]{
+  --bg:#f7f8fb; --bg2:#eef1f7; --panel:#ffffff; --panel2:#f3f6fc;
+  --ink:#10151f; --ink2:#3c4658; --ink3:#737e91;
+  --line:#e2e7f0; --line2:#cdd6e6;
+  --next:#2563d6; --next-soft:rgba(37,99,214,.10); --next-line:rgba(37,99,214,.35);
+  --tan:#d9531f; --tan-soft:rgba(217,83,31,.10); --tan-line:rgba(217,83,31,.35);
+  --server:#108a5c; --server-soft:rgba(16,138,92,.10);
+  --client:#7c4dd6; --client-soft:rgba(124,77,214,.10);
+  --warn:#b88500; --warn-soft:rgba(184,133,0,.12);
+  --grid:rgba(16,21,31,.03);
+  --shadow:0 20px 44px -24px rgba(31,55,120,.28);
+  --orb1:rgba(37,99,214,.10); --orb2:rgba(217,83,31,.08); --orb3:rgba(124,77,214,.07);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scrollbar-gutter:stable;overflow-x:clip}
+body{
+  margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:15.5px;line-height:1.65;-webkit-font-smoothing:antialiased;
+  transition:background-color .3s,color .3s;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:44px 44px;
+}
+body.fs-lock{overflow:hidden}
+::selection{background:var(--tan-soft);color:var(--ink)}
+.mono{font-family:var(--mono)}
+code{font-family:var(--mono)}
+main{min-width:0}
+img,svg,table{max-width:100%}
+
+/* ambient orbs */
+.orb{position:fixed;border-radius:50%;filter:blur(80px);z-index:0;pointer-events:none;opacity:.9}
+.orb1{width:520px;height:520px;background:var(--orb1);top:-160px;left:-120px}
+.orb2{width:480px;height:480px;background:var(--orb2);top:40%;right:-160px}
+.orb3{width:440px;height:440px;background:var(--orb3);bottom:-160px;left:30%}
+
+/* header */
+header.top{position:sticky;top:0;z-index:60;background:color-mix(in srgb,var(--bg) 86%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);transition:transform .3s ease,background .25s,box-shadow .25s,border-color .25s}
+header.top.retracted{transform:translateY(-100%)}
+header.top.scrolled{background:color-mix(in srgb,var(--bg) 97%,transparent);border-bottom-color:var(--line2);box-shadow:0 8px 24px -16px rgba(0,0,0,.55)}
+header.top.scrolled .top-inner{padding-top:6px;padding-bottom:6px}
+.top-inner{transition:padding .25s}
+.top-inner{max-width:var(--maxw);margin:0 auto;padding:9px 24px;display:flex;align-items:center;gap:14px;min-height:40px}
+.brand{font-family:var(--mono);font-weight:500;font-size:12px;display:flex;align-items:center;gap:9px;color:var(--ink2)}
+.brand .vs{color:var(--ink3)} .brand .nx{color:var(--next)} .brand .ts{color:var(--tan)}
+.brand .dot{width:7px;height:7px;border-radius:50%;background:var(--tan);box-shadow:0 0 0 3px var(--tan-soft);animation:pulse 3.4s infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 6px transparent}}
+.top-spacer{flex:1}
+.tbtn{font-family:var(--mono);font-size:11px;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);padding:5px 11px;border-radius:4px;cursor:pointer;display:flex;align-items:center;gap:7px;transition:.16s;min-width:76px;justify-content:center}
+.tbtn:hover{color:var(--ink);border-color:var(--tan)}
+.tbtn svg{width:13px;height:13px}
+
+/* shell */
+.shell{position:relative;z-index:1;max-width:var(--maxw);margin:0 auto;padding:0 24px}
+@media(max-width:680px){.shell{padding:0 16px}}
+
+/* reveal */
+.reveal{opacity:0;transform:translateY(26px);transition:opacity .65s ease,transform .65s ease}
+.reveal.vis{opacity:1;transform:none}
+
+/* sections / type */
+section.block{padding:60px 0;border-bottom:1px solid var(--line)}
+section.block:last-child{border-bottom:none}
+.kicker{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin:0 0 16px;display:flex;align-items:center;gap:10px}
+.kicker .ix{color:var(--tan);font-weight:700}
+.kicker .ln{flex:1;height:1px;background:var(--line);max-width:120px}
+h1.hero-h{font-family:var(--serif);font-weight:560;font-size:clamp(40px,6.4vw,78px);line-height:1.0;letter-spacing:-.02em;margin:6px 0 26px;font-optical-sizing:auto}
+h1.hero-h em{font-style:italic;font-weight:480}
+.hero-h .nx{color:var(--next)} .hero-h .ts{color:var(--tan)}
+h2{font-family:var(--serif);font-weight:520;font-size:clamp(28px,3.6vw,40px);line-height:1.08;letter-spacing:-.015em;margin:0 0 18px}
+h2 em{font-style:italic;font-weight:460}
+h2 .nx{color:var(--next)} h2 .ts{color:var(--tan)}
+h3{font-family:var(--serif);font-weight:560;font-size:21px;letter-spacing:-.01em;margin:0 0 8px}
+.lead{font-size:18.5px;line-height:1.62;color:var(--ink2);max-width:74ch;margin:0 0 8px}
+.lead strong{color:var(--ink);font-weight:600}
+p{max-width:74ch}
+p .nx{color:var(--next);font-weight:600} p .ts{color:var(--tan);font-weight:600}
+.term{border-bottom:1px dashed var(--line2);cursor:help}
+strong{color:var(--ink)}
+em.i{font-family:var(--serif);font-style:italic}
+.note{font-family:var(--mono);font-size:12px;color:var(--ink3);border-left:2px solid var(--line2);padding:3px 0 3px 13px;margin:18px 0;max-width:70ch;line-height:1.6}
+
+/* panels */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px}
+.bar{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3);margin-bottom:16px}
+.bar .grow{flex:1}
+.dot-nx,.dot-ts,.dot-sv,.dot-cl{width:9px;height:9px;border-radius:2px;display:inline-block;flex-shrink:0}
+.dot-nx{background:var(--next)} .dot-ts{background:var(--tan)}
+.dot-sv{background:var(--server)} .dot-cl{background:var(--client)}
+
+/* hero poles with animated mini-svg */
+.poles{display:grid;grid-template-columns:1fr 56px 1fr;gap:0;align-items:stretch;margin-top:8px}
+.pole{border:1px solid var(--line);background:var(--panel);padding:22px;border-radius:12px}
+.pole.nx{border-color:var(--next-line)} .pole.ts{border-color:var(--tan-line)}
+.pole .pname{font-family:var(--mono);font-size:13px;font-weight:700;display:flex;align-items:center;gap:9px;margin-bottom:4px}
+.pole.nx .pname{color:var(--next)} .pole.ts .pname{color:var(--tan)}
+.pole .pver{font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-bottom:14px}
+.pole .pmotto{font-family:var(--serif);font-style:italic;font-size:19px;line-height:1.3;color:var(--ink);margin-bottom:12px}
+.pole .panim{margin:0 0 14px}
+.pole .pdesc{font-size:13.5px;color:var(--ink2);line-height:1.55;margin:0}
+.poles .mid{display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-style:italic;font-size:22px;color:var(--ink3)}
+@media(max-width:720px){.poles{grid-template-columns:1fr}.poles .mid{padding:12px 0}}
+.flow-dot{animation:travel 2.6s ease-in-out infinite}
+@keyframes travel{0%,100%{opacity:.25}50%{opacity:1}}
+
+/* where it runs */
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden;background:var(--panel)}
+.seg button{font-family:var(--mono);font-size:12px;background:transparent;color:var(--ink2);border:none;padding:9px 16px;cursor:pointer;transition:.15s;white-space:nowrap}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on.nx{background:var(--next);color:#fff}
+.seg button.on.ts{background:var(--tan);color:#fff}
+.seg button:not(.on):hover{color:var(--ink)}
+.runrow{display:grid;grid-template-columns:1fr;gap:9px;margin-top:18px}
+.runitem{display:grid;grid-template-columns:170px 1fr;gap:14px;align-items:center;border:1px solid var(--line);border-radius:9px;padding:11px 14px;background:var(--bg2)}
+.runitem .rk{font-family:var(--mono);font-size:12.5px;color:var(--ink);font-weight:500}
+.runitem .rv{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;vertical-align:middle;line-height:1;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;padding:3px 9px;border-radius:999px;font-weight:600}
+.chip.server{color:var(--server);background:var(--server-soft);border:1px solid color-mix(in srgb,var(--server) 40%,transparent)}
+.chip.client{color:var(--client);background:var(--client-soft);border:1px solid color-mix(in srgb,var(--client) 40%,transparent)}
+.chip.both{color:var(--warn);background:var(--warn-soft);border:1px solid color-mix(in srgb,var(--warn) 40%,transparent)}
+.runitem .rn{font-size:12.5px;color:var(--ink2);line-height:1.45}
+.caplegend{display:flex;flex-wrap:nowrap;align-items:center;gap:7px 11px;white-space:nowrap}
+.caplegend .lg{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.caplegend .sep{color:var(--ink3);opacity:.6}
+@media(max-width:620px){.runitem{grid-template-columns:1fr;gap:7px}}
+
+/* ── side-by-side default-placement table ── */
+.runtable{display:flex;flex-direction:column;gap:9px;margin-top:18px}
+.runhead,.runrow2{display:grid;grid-template-columns:minmax(120px,1fr) 1.5fr 1.5fr;gap:12px;align-items:stretch}
+.runhead{padding:2px 2px 4px}
+.runhead .rhead{font-family:var(--mono);font-size:11.5px;display:flex;align-items:center;gap:8px}
+.runhead .rhead .pdot{width:8px;height:8px;border-radius:50%;flex:none}
+.runhead .rhead.nx{color:var(--next)} .runhead .rhead.nx .pdot{background:var(--next)}
+.runhead .rhead.ts{color:var(--tan)} .runhead .rhead.ts .pdot{background:var(--tan)}
+.runrow2 .rk{font-family:var(--mono);font-size:12.5px;color:var(--ink);font-weight:500;display:flex;align-items:center}
+.runcell{border:1px solid var(--line);border-radius:9px;padding:10px 13px;background:var(--bg2);display:flex;flex-direction:column;gap:7px}
+.runcell.nx{border-left:2px solid color-mix(in srgb,var(--next) 50%,transparent)}
+.runcell.ts{border-left:2px solid color-mix(in srgb,var(--tan) 50%,transparent)}
+.runcell .chips{display:flex;gap:6px;flex-wrap:wrap}
+.runcell .rn{font-size:12px;color:var(--ink2);line-height:1.45}
+.cellfw{display:none;font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase}
+.cellfw.nx{color:var(--next)} .cellfw.ts{color:var(--tan)}
+@media(max-width:760px){
+  .runhead{display:none}
+  .runrow2{grid-template-columns:1fr;gap:8px;border:1px solid var(--line);border-radius:9px;padding:12px 14px;background:var(--bg2)}
+  .runrow2 .rk{margin-bottom:2px}
+  .runcell{background:transparent;border:none;border-left:2px solid;border-radius:0;padding:6px 0 6px 11px}
+  .runcell.nx{border-left-color:color-mix(in srgb,var(--next) 50%,transparent)}
+  .runcell.ts{border-left-color:color-mix(in srgb,var(--tan) 50%,transparent)}
+  .cellfw{display:block}
+}
+
+/* fork figure */
+.forkfig{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:18px;overflow:hidden}
+.forkfig svg{display:block;width:100%;height:auto}
+
+/* stack anatomy */
+.stacks{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+@media(max-width:820px){.stacks{grid-template-columns:1fr}}
+.stack .layers{display:flex;flex-direction:column;gap:8px}
+.layer{border:1px solid var(--line);border-radius:9px;padding:12px 14px;background:var(--bg2);cursor:pointer;transition:.16s;text-align:left;width:100%;font-family:inherit}
+.layer:hover{border-color:var(--ink3)}
+.layer .lt{display:flex;align-items:baseline;gap:9px;justify-content:space-between}
+.layer .ln{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink)}
+.layer .lk{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);white-space:nowrap}
+.layer .ld{font-size:12.5px;color:var(--ink2);line-height:1.5;margin-top:0;max-height:0;overflow:hidden;opacity:0;transition:max-height .28s ease,opacity .2s,margin-top .2s}
+.layer.open .ld{max-height:180px;opacity:1;margin-top:8px}
+.stack.nx .layer.open{border-color:var(--next-line);background:var(--next-soft)}
+.stack.ts .layer.open{border-color:var(--tan-line);background:var(--tan-soft)}
+.stack.nx .layer .lk{color:var(--next)} .stack.ts .layer .lk{color:var(--tan)}
+
+/* ============ FLOW PLAYER (marquee) ============ */
+.fp-toggle{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.packet{border:1px solid var(--line);border-radius:10px;background:var(--bg2);padding:14px 16px;margin-bottom:18px;overflow-x:auto}
+.packet-lbl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin-bottom:11px}
+.ptrack{display:flex;align-items:center;gap:8px;min-width:max-content}
+.pnode{font-family:var(--mono);font-size:10.5px;border:1px solid var(--line2);border-radius:7px;padding:6px 10px;color:var(--ink3);background:var(--panel);transition:.25s;white-space:nowrap}
+.pnode.active{color:#fff;border-color:transparent}
+.pnode.active.next{background:var(--next)} .pnode.active.tan{background:var(--tan)}
+.pnode.done{color:var(--ink2);border-color:var(--line2)}
+.parrow{color:var(--ink3);font-size:11px;transition:.25s}
+.parrow.done{color:var(--ink)}
+.figure{border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden}
+.fig-bar{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:11.5px;color:var(--ink3)}
+.fig-bar .title{color:var(--ink2)} .fig-bar .grow{flex:1}
+.fbtn{font-family:var(--mono);font-size:10.5px;border:1px solid var(--line2);background:var(--bg2);color:var(--ink2);padding:5px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:.15s}
+.fbtn:hover{color:var(--ink);border-color:var(--tan)}
+.fbtn svg{width:12px;height:12px}
+.fbtn.on{color:var(--tan);border-color:var(--tan-line);background:var(--tan-soft)}
+.canvas{padding:8px}
+.canvas svg{display:block;width:100%;height:auto}
+.canvas.inspect{cursor:grab}
+.canvas.inspect:active{cursor:grabbing}
+.fnode circle{transition:r .25s ease}
+.fnode.active .ring{filter:drop-shadow(0 0 8px currentColor)}
+.hlabel{opacity:.5;transition:opacity .25s}
+.hlabel.on{opacity:1}
+.player{display:flex;align-items:center;gap:12px;padding:13px 16px;border-top:1px solid var(--line)}
+.pbtn{width:34px;height:34px;border-radius:50%;border:1px solid var(--line2);background:var(--bg2);color:var(--ink2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s;flex-shrink:0}
+.pbtn:hover{color:var(--ink);border-color:var(--tan)}
+.pbtn svg{width:15px;height:15px}
+.pbtn.play{background:var(--tan);border-color:var(--tan);color:#fff;width:40px;height:40px}
+.pbtn.play svg{width:17px;height:17px}
+.scrub{flex:1;height:8px;border-radius:999px;background:var(--line);position:relative;cursor:pointer}
+.scrub .fill{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:var(--tan);width:0;transition:width .3s}
+.scrub .ticks{position:absolute;inset:0;display:flex;justify-content:space-between;padding:0 2px;align-items:center}
+.scrub .tk{width:3px;height:3px;border-radius:50%;background:var(--ink3);opacity:.5}
+.stepno{font-family:var(--mono);font-size:11.5px;color:var(--ink3);min-width:56px;text-align:right}
+.fp-caption{padding:6px 16px 18px;min-height:104px}
+.fp-caption .cn{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin-bottom:7px}
+.fp-caption .cn .lane{color:var(--ink2)}
+.fp-caption .ch{font-family:var(--serif);font-size:21px;font-weight:540;margin:0 0 5px;line-height:1.2}
+.fp-caption .cb{font-size:13.5px;color:var(--ink2);margin:0;line-height:1.5;max-width:80ch}
+.fp-caption .more{margin-top:10px;font-family:var(--mono);font-size:11px;background:transparent;border:1px solid var(--line2);color:var(--ink2);padding:6px 12px;border-radius:6px;cursor:pointer;transition:.15s}
+.fp-caption .more:hover{color:var(--tan);border-color:var(--tan-line)}
+
+/* modal */
+.scrim{position:fixed;inset:0;z-index:90;background:rgba(3,5,10,.66);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;pointer-events:none;transition:opacity .22s}
+.scrim.open{opacity:1;pointer-events:auto}
+.modal{width:min(640px,100%);max-height:86vh;overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--shadow);transform:translateY(14px) scale(.98);transition:transform .24s}
+.scrim.open .modal{transform:none}
+.mhead{display:flex;align-items:flex-start;gap:12px;padding:20px 22px 14px;border-bottom:1px solid var(--line)}
+.mtag{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:4px 9px;border-radius:999px;background:var(--bg2);color:var(--ink3);white-space:nowrap}
+.mtag.next{color:var(--next);background:var(--next-soft)} .mtag.tan{color:var(--tan);background:var(--tan-soft)}
+.mhwrap{flex:1;min-width:0}
+.mlane{font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-top:6px}
+.mtitle{font-family:var(--serif);font-size:23px;font-weight:560;line-height:1.15;margin:7px 0 0}
+.mclose{width:30px;height:30px;border-radius:8px;border:1px solid var(--line2);background:var(--bg2);color:var(--ink2);cursor:pointer;flex-shrink:0;font-size:15px;line-height:1}
+.mclose:hover{color:var(--ink);border-color:var(--tan)}
+.mbody{padding:18px 22px 24px}
+.mbody p{font-size:14.5px;color:var(--ink2);line-height:1.6;margin:0 0 14px}
+.mwhere{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;padding:5px 11px;border-radius:999px;margin-bottom:14px}
+.mwhere.server{color:var(--server);background:var(--server-soft)}
+.mwhere.network{color:var(--warn);background:var(--warn-soft)}
+.mwhere.browser{color:var(--client);background:var(--client-soft)}
+.mcode{margin:0;background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding:13px 15px;font-family:var(--mono);font-size:12px;line-height:1.6;color:var(--ink2);overflow:auto;white-space:pre-wrap}
+
+/* code flip */
+.codetabs{display:inline-flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden;margin-bottom:14px}
+.codetabs button{font-family:var(--mono);font-size:12px;background:transparent;color:var(--ink2);border:none;padding:9px 16px;cursor:pointer;transition:.15s}
+.codetabs button+button{border-left:1px solid var(--line)}
+.codetabs button.on.nx{background:var(--next);color:#fff}
+.codetabs button.on.ts{background:var(--tan);color:#fff}
+pre.code{margin:0;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow:auto;font-family:var(--mono);font-size:12.5px;line-height:1.62;color:var(--ink2)}
+pre.code .c{color:var(--ink3);font-style:italic}
+pre.code .k{color:var(--tan)} pre.code .s{color:var(--server)} pre.code .f{color:var(--next)}
+pre.code.hidden{display:none}
+.codecap{font-family:var(--mono);font-size:11.5px;color:var(--ink3);margin-top:11px;line-height:1.55;max-width:74ch}
+
+/* ── side-by-side code panes ── */
+.codesplit{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+@media(max-width:1024px){.codesplit{grid-template-columns:1fr}}
+.codepane{min-width:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg2)}
+.codepane.nx{border-top:3px solid var(--next)}
+.codepane.ts{border-top:3px solid var(--tan)}
+.codepane .ph{display:flex;align-items:center;gap:9px;padding:11px 15px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:12px;color:var(--ink2)}
+.codepane .ph .pdot{width:8px;height:8px;border-radius:50%;flex:none}
+.codepane.nx .ph .pdot{background:var(--next)} .codepane.ts .ph .pdot{background:var(--tan)}
+.codepane.nx .ph .pfw{color:var(--next)} .codepane.ts .ph .pfw{color:var(--tan)}
+.codepane .ph .psub{color:var(--ink3);font-size:11px}
+.codepane pre.code{border:none;border-radius:0;background:transparent;margin:0;font-size:12px;white-space:pre-wrap;overflow-wrap:break-word}
+.codepane .codecap{padding:0 15px 14px;margin-top:11px}
+
+/* ── clickable code annotations: tap any line → explanation ── */
+.codebar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.codebar .codetabs{margin-bottom:0}
+.codebar .grow{flex:1}
+.anno-hint{color:var(--ink3);font-size:11px;font-family:var(--mono);white-space:nowrap;opacity:.85}
+@media(max-width:680px){.codebar .anno-hint{display:none}}
+.anno-mode{display:inline-flex;border:1px solid var(--line2);border-radius:20px;overflow:hidden;flex:none}
+.anno-mode button{font-family:var(--mono);font-size:10.5px;color:var(--ink3);background:transparent;border:none;padding:4px 11px;cursor:pointer;transition:color .15s,background .15s;white-space:nowrap}
+.anno-mode button.on{background:var(--tan-soft);color:var(--tan)}
+.anno-mode button:not(.on):hover{color:var(--ink2)}
+@media(max-width:680px){.anno-mode button{font-size:10px;padding:3px 8px}}
+#codeNext{--anno:var(--next)} #codeTan{--anno:var(--tan)}
+pre.code .cline,pre.anno-code .cline{border-radius:3px;transition:background .12s,box-shadow .12s}
+pre.code .cline:hover,pre.anno-code .cline:hover{cursor:pointer;background:color-mix(in srgb,var(--anno,var(--tan)) 13%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--anno,var(--tan)) 26%,transparent)}
+pre.code .cline.blk-hl,pre.anno-code .cline.blk-hl{background:color-mix(in srgb,var(--anno,var(--tan)) 13%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--anno,var(--tan)) 22%,transparent);cursor:pointer}
+body.anno-block pre.code .cline:hover,body.anno-block pre.anno-code .cline:hover{background:none;box-shadow:none;cursor:pointer}
+pre.anno-code{font-family:var(--mono);font-size:12px;line-height:1.62;background:var(--bg2);border:1px solid var(--line);border-left:3px solid var(--tan);border-radius:8px;padding:11px 13px;margin:0 0 13px;white-space:pre-wrap;word-break:break-word;color:var(--ink2);overflow-x:auto}
+pre.anno-code.nx{border-left-color:var(--next);--anno:var(--next)}
+pre.anno-code.ts{border-left-color:var(--tan);--anno:var(--tan)}
+pre.anno-code .c{color:var(--ink3);font-style:italic}
+pre.anno-code .k{color:var(--tan)} pre.anno-code .s{color:var(--server)} pre.anno-code .f{color:var(--next)}
+.anno-text{font-size:14.5px;line-height:1.65;color:var(--ink)}
+.anno-text.loading{color:var(--ink3);font-style:italic}
+.anno-text p{margin:0 0 10px} .anno-text p:last-child{margin:0}
+.anno-text strong{color:var(--ink);font-weight:650}
+.anno-text code.anno-ref{font-family:var(--mono);font-size:.9em;color:var(--ink);background:color-mix(in srgb,var(--ink) 7%,transparent);border-radius:5px;padding:1px 5px;white-space:nowrap}
+.anno-text code.anno-ref .c{color:var(--ink3);font-style:italic}
+.anno-text code.anno-ref .k{color:var(--tan)} .anno-text code.anno-ref .s{color:var(--server)} .anno-text code.anno-ref .f{color:var(--next)}
+.anno-codebar{display:flex;align-items:center;gap:12px;margin:0 0 8px}
+.anno-codebar .anno-hint{flex:1;white-space:normal}
+.anno-drill{border-top:1px dashed var(--line2);margin-top:16px;padding-top:14px}
+.anno-drill-h{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px}
+
+/* deploy checker (bd2-style) */
+.deploy{background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:24px;box-shadow:var(--shadow)}
+.dchips{display:flex;flex-wrap:wrap;gap:9px;margin:4px 0 20px}
+.dchip{font-family:var(--mono);font-size:12px;border:1px solid var(--line2);background:var(--bg2);color:var(--ink2);padding:8px 14px;border-radius:8px;cursor:pointer;transition:.15s}
+.dchip:hover{color:var(--ink);border-color:var(--ink3)}
+.dchip.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.dgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:720px){.dgrid{grid-template-columns:1fr}}
+.dcard{border:1px solid var(--line);border-radius:11px;padding:18px;background:var(--bg2)}
+.dcard.nx{border-top:3px solid var(--next)} .dcard.ts{border-top:3px solid var(--tan)}
+.dcard .dh{font-family:var(--mono);font-size:12px;font-weight:700;display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.dcard.nx .dh{color:var(--next)} .dcard.ts .dh{color:var(--tan)}
+.dbadge{font-family:var(--mono);font-size:10px;letter-spacing:.04em;text-transform:uppercase;padding:3px 9px;border-radius:999px;font-weight:700}
+.dbadge.native{color:var(--server);background:var(--server-soft)}
+.dbadge.supported{color:var(--next);background:var(--next-soft)}
+.dbadge.partial{color:var(--warn);background:var(--warn-soft)}
+.dnote{font-size:13.5px;color:var(--ink2);line-height:1.5;margin:10px 0 0}
+.dbar{height:8px;border-radius:999px;background:var(--line);overflow:hidden;margin-top:14px}
+.dbar .dfill{height:100%;width:0;border-radius:999px;transition:width .6s cubic-bezier(.3,.7,.2,1)}
+.dcard.nx .dfill{background:var(--next)} .dcard.ts .dfill{background:var(--tan)}
+.dverdict{margin-top:18px;border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:var(--panel2);font-size:14px;color:var(--ink2);line-height:1.5}
+.dverdict b{color:var(--ink)}
+
+/* design intent */
+.intent{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+@media(max-width:820px){.intent{grid-template-columns:1fr}}
+.icard{border:1px solid var(--line);border-radius:12px;padding:22px;background:var(--panel)}
+.icard.nx{border-top:3px solid var(--next)} .icard.ts{border-top:3px solid var(--tan)}
+.icard h3 .nx{color:var(--next)} .icard h3 .ts{color:var(--tan)}
+.icard ul{margin:14px 0 0;padding:0;list-style:none}
+.icard li{position:relative;padding:7px 0 7px 22px;font-size:14px;color:var(--ink2);line-height:1.5;border-top:1px solid var(--line)}
+.icard li:first-child{border-top:none}
+.icard li::before{content:"→";position:absolute;left:0;top:7px;font-family:var(--mono);font-size:12px}
+.icard.nx li::before{color:var(--next)} .icard.ts li::before{color:var(--tan)}
+.icard li b{color:var(--ink)}
+
+/* decision engine */
+.engine{background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:24px;box-shadow:var(--shadow)}
+.estatements{display:flex;flex-direction:column;margin:4px 0 22px}
+.est{display:flex;align-items:center;gap:14px;padding:12px 0;border-top:1px solid var(--line);cursor:pointer;user-select:none}
+.est:first-child{border-top:none}
+.est .box{width:20px;height:20px;border-radius:5px;border:1.5px solid var(--line2);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:.16s;color:transparent;font-size:12px;font-weight:700}
+.est:hover .box{border-color:var(--ink3)}
+.est.on .box{color:#fff}
+.est.on.lean-nx .box{background:var(--next);border-color:var(--next)}
+.est.on.lean-ts .box{background:var(--tan);border-color:var(--tan)}
+.est .etx{font-size:14.5px;color:var(--ink2);line-height:1.45;flex:1}
+.est.on .etx{color:var(--ink)}
+.est .epole{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:999px;flex-shrink:0;opacity:.5;transition:.16s}
+.est.on .epole{opacity:1}
+.epole.nx{color:var(--next);background:var(--next-soft)} .epole.ts{color:var(--tan);background:var(--tan-soft)}
+.meterhead{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:9px}
+.meterhead .l{color:var(--tan)} .meterhead .r{color:var(--next)}
+.meter{position:relative;height:14px;border-radius:999px;background:linear-gradient(90deg,var(--tan-soft),var(--line),var(--next-soft));border:1px solid var(--line)}
+.meter .center{position:absolute;left:50%;top:-4px;bottom:-4px;width:1px;background:var(--line2)}
+.needle{position:absolute;top:-5px;width:4px;height:24px;border-radius:3px;background:var(--ink);left:50%;transform:translateX(-50%);transition:left .5s cubic-bezier(.2,.7,.2,1),background .3s}
+.verdict{margin-top:20px;border:1px solid var(--line);border-radius:10px;padding:16px 18px;background:var(--bg2);min-height:84px}
+.verdict .vlabel{font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);margin-bottom:7px}
+.verdict .vtitle{font-family:var(--serif);font-size:22px;font-weight:560;margin-bottom:5px}
+.verdict .vtitle.nx{color:var(--next)} .verdict .vtitle.ts{color:var(--tan)} .verdict .vtitle.even{color:var(--ink)}
+.verdict .vbody{font-size:14px;color:var(--ink2);line-height:1.55}
+.ereset{margin-top:16px;font-family:var(--mono);font-size:11px;background:transparent;border:1px solid var(--line2);color:var(--ink3);padding:7px 13px;border-radius:6px;cursor:pointer;transition:.15s}
+.ereset:hover{color:var(--ink);border-color:var(--tan)}
+
+/* scorecard */
+.scoretable{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px}
+.scoretable th,.scoretable td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+.scoretable thead th{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);border-bottom:1px solid var(--line2)}
+.scoretable thead th.nx{color:var(--next)} .scoretable thead th.ts{color:var(--tan)}
+.scoretable td:first-child{font-family:var(--mono);font-size:12px;color:var(--ink);font-weight:500;white-space:nowrap}
+.scoretable td{color:var(--ink2);line-height:1.5}
+.scoretable tbody tr:hover{background:var(--bg2)}
+.scoretable code{font-size:11.5px;color:var(--ink);background:var(--bg2);border:1px solid var(--line);padding:1px 5px;border-radius:4px}
+
+.foot{padding:48px 0 80px;color:var(--ink3);font-size:13px;line-height:1.7;font-family:var(--mono)}
+.foot .srcs{margin-top:14px;font-size:11.5px}
+
+#tip{position:fixed;z-index:95;max-width:280px;background:var(--panel2);border:1px solid var(--line2);border-radius:8px;padding:9px 12px;font-size:12.5px;line-height:1.5;color:var(--ink2);box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .15s;font-family:var(--sans)}
+#tip.show{opacity:1}
+#tip b{color:var(--ink);font-family:var(--mono);font-size:11.5px}
+</style>
+</head>
+<body>
+
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+<div class="orb orb3"></div>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="brand"><span class="dot"></span><span class="nx">Next.js&nbsp;16</span><span class="vs">&nbsp;vs&nbsp;</span><span class="ts">TanStack&nbsp;Start</span></div>
+    <div class="top-spacer"></div>
+    <button class="tbtn" id="themeBtn">
+      <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>
+      <span id="themeTxt">DARK</span>
+    </button>
+  </div>
+</header>
+
+<div class="shell" id="shell">
+  <main>
+
+    <!-- 00 -->
+    <section class="block reveal vis" id="intro" style="border-bottom:none">
+      <p class="kicker"><span class="ix">00</span> An explorable architecture comparison <span class="ln"></span></p>
+      <h1 class="hero-h">Two answers to<br>the <em>same</em> question.</h1>
+      <p class="lead"><strong>Next.js 16</strong> and <strong>TanStack Start</strong> are both full-stack React frameworks, asked the same thing: <em class="i">where should the work of your app happen?</em> Their answers run opposite directions. Next starts on the <span class="nx">server</span> and pushes outward; TanStack starts on the <span class="ts">client</span> and reaches back. Almost every difference — caching, deployment, type-safety, mental model — falls out of that one choice. Everything below is clickable.</p>
+
+      <div class="poles" style="margin-top:30px">
+        <div class="pole nx">
+          <div class="pname"><span class="dot-nx"></span>Next.js 16</div>
+          <div class="pver">v16.2 · React 19.2 · by Vercel</div>
+          <div class="pmotto">Server-first by default.</div>
+          <div class="panim">
+            <svg viewBox="0 0 300 56" width="100%" height="56" font-family="var(--mono)">
+              <rect x="4" y="10" width="120" height="36" rx="8" fill="var(--next-soft)" stroke="var(--next-line)"/>
+              <text x="64" y="26" text-anchor="middle" font-size="9" fill="var(--next)" font-weight="700">SERVER</text>
+              <text x="64" y="38" text-anchor="middle" font-size="8" fill="var(--ink3)">renders the work</text>
+              <line x1="124" y1="28" x2="186" y2="28" stroke="var(--line2)" stroke-width="1.5" stroke-dasharray="3 4"/>
+              <circle cx="124" cy="28" r="4" fill="var(--next)" class="flow-dot"/>
+              <rect x="186" y="14" width="110" height="28" rx="8" fill="var(--bg2)" stroke="var(--line)"/>
+              <text x="241" y="26" text-anchor="middle" font-size="9" fill="var(--ink2)" font-weight="700">browser</text>
+              <text x="241" y="37" text-anchor="middle" font-size="7.5" fill="var(--ink3)">gets a result</text>
+            </svg>
+          </div>
+          <p class="pdesc">Built around React Server Components. Render on the server, ship the minimum JavaScript, opt pieces back into dynamic with explicit caching. Opinionated, batteries-included, tuned for content and scale.</p>
+        </div>
+        <div class="mid"><em>vs</em></div>
+        <div class="pole ts">
+          <div class="pname"><span class="dot-ts"></span>TanStack Start</div>
+          <div class="pver">v1.0 RC · Vite + Nitro · TanStack Router</div>
+          <div class="pmotto">Client-first, 100% server-capable.</div>
+          <div class="panim">
+            <svg viewBox="0 0 300 56" width="100%" height="56" font-family="var(--mono)">
+              <rect x="4" y="14" width="104" height="28" rx="8" fill="var(--bg2)" stroke="var(--line)"/>
+              <text x="56" y="26" text-anchor="middle" font-size="9" fill="var(--ink2)" font-weight="700">server</text>
+              <text x="56" y="37" text-anchor="middle" font-size="7.5" fill="var(--ink3)">SSR + RPC</text>
+              <line x1="108" y1="28" x2="170" y2="28" stroke="var(--line2)" stroke-width="1.5" stroke-dasharray="3 4"/>
+              <circle cx="170" cy="28" r="4" fill="var(--tan)" class="flow-dot"/>
+              <rect x="176" y="10" width="120" height="36" rx="8" fill="var(--tan-soft)" stroke="var(--tan-line)"/>
+              <text x="236" y="26" text-anchor="middle" font-size="9" fill="var(--tan)" font-weight="700">BROWSER</text>
+              <text x="236" y="38" text-anchor="middle" font-size="8" fill="var(--ink3)">runs the app</text>
+            </svg>
+          </div>
+          <p class="pdesc">A type-safe SPA that grew a server. Keep React's classic client model, then add server functions and SSR where you need them. Composable, portable, obsessed with end-to-end types.</p>
+        </div>
+      </div>
+      <p class="note">Reflects Next.js 16.2 and TanStack Start v1.0 Release Candidate, as of June 2026. Both move fast — pin versions and check release notes before committing.</p>
+    </section>
+
+    <!-- 01 -->
+    <section class="block reveal" id="split">
+      <p class="kicker"><span class="ix">01</span> The one split everything follows from <span class="ln"></span></p>
+      <h2>Where does the <em class="ts">work</em> live?</h2>
+      <p class="lead">A web app does a handful of jobs: match a route, fetch data, render the first screen, hydrate, then handle clicks and mutations. The frameworks disagree about the <em class="i">default</em> home for each job. Read across each row to see where the two place the same work.</p>
+
+      <div class="panel" style="margin-top:22px">
+        <div class="bar"><span>default placement of work</span><span class="grow"></span></div>
+        <div class="runtable" id="runRow"></div>
+        <p class="codecap caplegend" style="margin-top:16px"><span class="lg"><span class="chip server">server</span> runs before/around the response</span><span class="sep">·</span><span class="lg"><span class="chip client">client</span> runs in the browser</span><span class="sep">·</span><span class="lg"><span class="chip both">both</span> isomorphic</span></p>
+      </div>
+    </section>
+
+    <!-- 02 -->
+    <section class="block reveal" id="stacks">
+      <p class="kicker"><span class="ix">02</span> The machinery under each name <span class="ln"></span></p>
+      <h2>What they're <em>built on</em>.</h2>
+      <p class="lead">Neither framework is one thing. Next.js is a tightly integrated Vercel toolchain; TanStack Start is a composition of independent libraries that also stand on their own. Tap any layer to expand it.</p>
+      <div class="stacks" style="margin-top:24px">
+        <div class="panel stack nx"><div class="bar"><span class="dot-nx"></span><span>Next.js 16 stack</span></div><div class="layers" id="nxLayers"></div></div>
+        <div class="panel stack ts"><div class="bar"><span class="dot-ts"></span><span>TanStack Start stack</span></div><div class="layers" id="tsLayers"></div></div>
+      </div>
+      <p class="note">The shape is the point: Next.js owns its bundler, compiler and caching model end to end. TanStack Start borrows best-in-class tools — Vite, Nitro, Router — then wires them together.</p>
+    </section>
+
+    <!-- 03 LIVE TRACE PLAYER -->
+    <section class="block reveal" id="trace">
+      <p class="kicker"><span class="ix">03</span> One request, frame by frame <span class="ln"></span></p>
+      <h2>The <em class="nx">live</em> <em class="ts">trace</em>.</h2>
+      <p class="lead">Press play and watch a single request travel three swim-lanes — <span style="color:var(--server)">Server</span>, the <span style="color:var(--warn)">Network</span>, and the <span style="color:var(--client)">Browser</span>. Scrub it, step it, or click any node to crack it open. Toggle the framework to see how Next front-loads the server while TanStack hands off to the browser early.</p>
+
+      <div class="fp-toggle" style="margin-top:22px">
+        <div class="seg" id="fwSeg">
+          <button class="nx on" data-fw="next">Next.js 16</button>
+          <button class="ts" data-fw="tan">TanStack Start</button>
+        </div>
+        <span class="codecap" style="margin:0">lanes are shared infrastructure · the moving token is the framework</span>
+      </div>
+
+      <div class="packet">
+        <div class="packet-lbl">the round trip, condensed</div>
+        <div class="ptrack" id="ptrack"></div>
+      </div>
+
+      <div class="figure" id="flowFig">
+        <div class="fig-bar">
+          <span class="title" id="figTitle">▶ GET /users/42 · server → stream → paint → interactive</span>
+          <span class="grow"></span>
+          <button class="fbtn" id="inspectBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" id="flowCanvas">
+          <svg id="flowSvg" viewBox="0 0 1180 372" preserveAspectRatio="xMidYMid meet"><g id="flowVP"></g></svg>
+        </div>
+        <div class="player">
+          <button class="pbtn" id="fpPrev" title="step back"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17V7l-7 5zM8 7h-2v10h2z"/></svg></button>
+          <button class="pbtn play" id="fpPlay" title="play/pause"><svg id="fpPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg></button>
+          <button class="pbtn" id="fpNext" title="step forward"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 7v10l7-5zM16 7h2v10h-2z"/></svg></button>
+          <div class="scrub" id="fpScrub"><div class="fill" id="fpFill"></div><div class="ticks" id="fpTicks"></div></div>
+          <span class="stepno" id="fpStepNo">01 / 08</span>
+        </div>
+        <div class="fp-caption">
+          <div class="cn"><span id="capN">FRAME 01</span> · <span class="lane" id="capLane">—</span></div>
+          <p class="ch" id="capH">Press play to trace the request</p>
+          <p class="cb" id="capB">Each frame highlights as the request moves down its lane.</p>
+          <button class="more" id="capMore">Open full detail ↗</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 04 CODE -->
+    <section class="block reveal" id="code">
+      <p class="kicker"><span class="ix">04</span> The same feature in both <span class="ln"></span></p>
+      <h2>Read a user, then <em>change</em> their name.</h2>
+      <p class="lead">The clearest way to feel a framework is to write the same thing twice — load data on the server, mutate it from the client — in each idiom. Same job, two philosophies of how server and client talk.</p>
+      <div style="margin-top:22px">
+        <div class="codebar">
+          <span class="anno-hint">tap any line in either pane for an explanation</span>
+          <span class="grow"></span>
+          <span class="anno-mode" role="group" aria-label="annotation granularity">
+            <button type="button" data-mode="line" class="on">per line</button>
+            <button type="button" data-mode="block">by block</button>
+          </span>
+        </div>
+        <div class="codesplit">
+          <div class="codepane nx">
+            <div class="ph"><span class="pdot"></span><span class="pfw">Next.js 16</span><span class="psub">· RSC + Server Action</span></div>
+            <pre class="code" id="codeNext" data-label="Next.js · RSC + Server Action"><span class="c">// app/users/[id]/page.tsx — a React Server Component</span>
+<span class="k">import</span> { updateName } <span class="k">from</span> <span class="s">'./actions'</span>
+
+<span class="k">export default async function</span> <span class="f">Page</span>({ params }) {
+  <span class="k">const</span> { id } = <span class="k">await</span> params  <span class="c">// params is async in v16</span>
+  <span class="k">const</span> user = <span class="k">await</span> getUser(id)  <span class="c">// runs on the server, no fetch()</span>
+
+  <span class="k">return</span> (
+    &lt;form action={updateName}&gt;  <span class="c">// progressive-enhancement form</span>
+      &lt;input name="name" defaultValue={user.name} /&gt;
+      &lt;input type="hidden" name="id" value={user.id} /&gt;
+      &lt;button&gt;Save&lt;/button&gt;
+    &lt;/form&gt;
+  )
+}
+
+<span class="c">// app/users/[id]/actions.ts</span>
+<span class="s">'use server'</span>  <span class="c">// this whole module is server-only</span>
+<span class="k">export async function</span> <span class="f">updateName</span>(form: FormData) {
+  <span class="k">await</span> db.user.update({
+    where: { id: String(form.get(<span class="s">'id'</span>)) },
+    data:  { name: String(form.get(<span class="s">'name'</span>)) },
+  })
+}</pre>
+            <p class="codecap" id="codeCapNext"></p>
+          </div>
+          <div class="codepane ts">
+            <div class="ph"><span class="pdot"></span><span class="pfw">TanStack Start</span><span class="psub">· loader + server fn</span></div>
+            <pre class="code" id="codeTan" data-label="TanStack · loader + server fn"><span class="c">// src/routes/users.$id.tsx</span>
+<span class="k">import</span> { createFileRoute } <span class="k">from</span> <span class="s">'@tanstack/react-router'</span>
+<span class="k">import</span> { createServerFn } <span class="k">from</span> <span class="s">'@tanstack/react-start'</span>
+
+<span class="c">// server fns are RPC in the browser, direct calls on the server</span>
+<span class="k">const</span> getUser = createServerFn({ method: <span class="s">'GET'</span> })
+  .validator((id: string) =&gt; id)  <span class="c">// runtime + type validation</span>
+  .handler(({ data: id }) =&gt; db.user.find(id))
+
+<span class="k">const</span> updateName = createServerFn({ method: <span class="s">'POST'</span> })
+  .validator((d: { id: string; name: string }) =&gt; d)
+  .handler(({ data }) =&gt; db.user.update(data.id, { name: data.name }))
+
+<span class="k">export const</span> Route = createFileRoute(<span class="s">'/users/$id'</span>)({
+  loader: ({ params }) =&gt; getUser({ data: params.id }),  <span class="c">// SSR + client</span>
+  component: <span class="f">User</span>,
+})
+
+<span class="k">function</span> <span class="f">User</span>() {
+  <span class="k">const</span> user = Route.useLoaderData()  <span class="c">// fully typed, no generics</span>
+  <span class="k">return</span> &lt;button onClick={() =&gt; updateName({ data: { id: user.id, name: <span class="s">'New'</span> } })}&gt;
+    {user.name}
+  &lt;/button&gt;
+}</pre>
+            <p class="codecap" id="codeCapTan"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 05 DEPLOY -->
+    <section class="block reveal" id="deploy">
+      <p class="kicker"><span class="ix">05</span> Where each can actually run <span class="ln"></span></p>
+      <h2>Deploy <em>anywhere</em>?</h2>
+      <p class="lead">Runtime portability is one of the sharpest differences. Next.js is happiest on Vercel's Node + Edge; TanStack Start builds through Nitro for almost any target. Pick a deploy target and see how each framework reaches it.</p>
+
+      <div class="deploy" style="margin-top:24px">
+        <div class="dchips" id="dchips"></div>
+        <div class="dgrid">
+          <div class="dcard nx">
+            <div class="dh"><span class="dot-nx"></span>Next.js 16 <span class="dbadge native" id="nxBadge" style="margin-left:auto">—</span></div>
+            <p class="dnote" id="nxNote">Pick a target above.</p>
+            <div class="dbar"><div class="dfill" id="nxFill"></div></div>
+          </div>
+          <div class="dcard ts">
+            <div class="dh"><span class="dot-ts"></span>TanStack Start <span class="dbadge native" id="tsBadge" style="margin-left:auto">—</span></div>
+            <p class="dnote" id="tsNote">Pick a target above.</p>
+            <div class="dbar"><div class="dfill" id="tsFill"></div></div>
+          </div>
+        </div>
+        <div class="dverdict" id="dVerdict">Select a deploy target to compare. <b>native</b> = first-class · <b>supported</b> = via official adapter · <b>partial</b> = with caveats.</div>
+      </div>
+    </section>
+
+    <!-- 06 INTENT -->
+    <section class="block reveal" id="intent">
+      <p class="kicker"><span class="ix">06</span> Why each was built this way <span class="ln"></span></p>
+      <h2>What each was <em>designed</em> to solve.</h2>
+      <p class="lead">Architectures are answers to specific pain. Next.js 16 is a course-correction on its own past; TanStack Start is a reaction to where the React ecosystem went.</p>
+      <div class="intent" style="margin-top:24px">
+        <div class="icard nx">
+          <h3><span class="nx">Next.js 16</span> — tame the server-first model it created</h3>
+          <ul>
+            <li><b>End implicit caching.</b> v16 flips to <em class="i">dynamic by default</em>, with an explicit <code style="font-family:var(--mono);font-size:12px">use cache</code> directive when you opt in.</li>
+            <li><b>Finish Partial Prerendering.</b> Cache Components ship a static shell instantly and stream dynamic holes through Suspense.</li>
+            <li><b>Make builds fast.</b> Turbopack (Rust) is the stable default: 2–5× faster builds, ~10× Fast Refresh, on-disk caching.</li>
+            <li><b>Ship less client JS.</b> Lean fully into React Server Components; the React Compiler removes manual memoization.</li>
+          </ul>
+        </div>
+        <div class="icard ts">
+          <h3><span class="ts">TanStack Start</span> — keep React's client soul, add a server</h3>
+          <ul>
+            <li><b>Escape RSC complexity.</b> A path without the <code style="font-family:var(--mono);font-size:12px">'use client'</code> boundary dance and its hydration mismatches.</li>
+            <li><b>Total type safety.</b> Types flow unbroken from the URL through loaders to server functions — all checked at compile time.</li>
+            <li><b>Deploy anywhere.</b> Vite + Nitro means the same app runs on Node, Cloudflare, Netlify, Vercel or static output.</li>
+            <li><b>Reward the TanStack stack.</b> Compose naturally with Query and Router as one coherent client-first system.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 07 CHOOSE -->
+    <section class="block reveal" id="choose">
+      <p class="kicker"><span class="ix">07</span> Match the tool to your goal <span class="ln"></span></p>
+      <h2>How to <em class="ts">choose</em>.</h2>
+      <p class="lead">There's no winner in the abstract — only a fit for <em class="i">your</em> project. Tick the statements that are true for what you're building. The needle leans toward the framework whose design those goals reward.</p>
+      <div class="engine" style="margin-top:24px">
+        <div class="estatements" id="estatements"></div>
+        <div>
+          <div class="meterhead"><span class="l">◂ TanStack Start</span><span class="r">Next.js 16 ▸</span></div>
+          <div class="meter"><div class="center"></div><div class="needle" id="needle"></div></div>
+        </div>
+        <div class="verdict" id="verdict">
+          <div class="vlabel">your lean</div>
+          <div class="vtitle even" id="vtitle">Nothing selected yet</div>
+          <div class="vbody" id="vbody">Tick the goals above that match your project. With nothing selected, both frameworks are equally valid starting points.</div>
+        </div>
+        <button class="ereset" id="eReset">reset all</button>
+      </div>
+    </section>
+
+    <!-- 08 SHEET -->
+    <section class="block reveal" id="sheet">
+      <p class="kicker"><span class="ix">08</span> Side by side, no spin <span class="ln"></span></p>
+      <h2>The <em>honest</em> sheet.</h2>
+      <p class="lead">A flat comparison of the dimensions that actually decide projects — including where TanStack is still catching up.</p>
+      <div style="overflow-x:auto;margin-top:18px">
+        <table class="scoretable">
+          <thead><tr><th>Dimension</th><th class="nx">Next.js 16</th><th class="ts">TanStack Start</th></tr></thead>
+          <tbody>
+            <tr><td>Mental model</td><td>Server-first via React Server Components; <code>'use client'</code> for interactivity</td><td>Client-first SPA; <code>createServerFn</code> reaches the server as typed RPC</td></tr>
+            <tr><td>Maturity</td><td>Stable, mature; v16.2, years in production</td><td>v1.0 Release Candidate — feature-complete, API stable, still young</td></tr>
+            <tr><td>Bundler / dev</td><td>Turbopack (Rust), stable default; webpack via flag</td><td>Vite (also Rsbuild); instant HMR, huge plugin ecosystem</td></tr>
+            <tr><td>Routing</td><td>App Router, file-based; <code>proxy.ts</code> for edge middleware</td><td>TanStack Router; file-based, fully type-safe, URL-as-state</td></tr>
+            <tr><td>Type safety</td><td>Good; route params/loaders typed, RSC props inferred</td><td>Best-in-class; types flow URL → loader → server fn end to end</td></tr>
+            <tr><td>Data &amp; caching</td><td>Cache Components: <code>use cache</code> + PPR; dynamic by default</td><td>Router loaders + SWR; pairs with TanStack Query for client cache</td></tr>
+            <tr><td>RSC support</td><td>Core paradigm — fully supported today</td><td>Not yet; in active development as a non-breaking v1.x addition</td></tr>
+            <tr><td>Built-in optimizations</td><td>Image, Font, script optimization, i18n — batteries included</td><td>Minimal; bring your own (no direct Image/Font equivalents)</td></tr>
+            <tr><td>Runtime / deploy</td><td>Node + Edge; smoothest on Vercel, self-hostable</td><td>Nitro universal: Node, Cloudflare, Netlify, Vercel, static (Node ≥22.12)</td></tr>
+            <tr><td>Ecosystem</td><td>Huge community, many examples, Vercel enterprise backing</td><td>Smaller but fast-growing (~15% adoption, ~50% interested, early 2026)</td></tr>
+            <tr><td>Best at</td><td>Content/SEO sites, commerce, scale, RSC-native apps</td><td>App-like products, dashboards, type-safe data UIs, portable deploys</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="foot reveal">
+      <div>Built as an explorable comparison · architecture over hype.</div>
+      <div class="srcs">Sources: Next.js blog &amp; v16 upgrade docs (nextjs.org), TanStack Start docs &amp; v1 RC announcement (tanstack.com), TanStack/router release notes, DeepWiki Start architecture. Version facts current to June 2026; verify before adopting.</div>
+    </div>
+
+  </main>
+</div>
+
+<!-- modal -->
+<div class="scrim" id="scrim">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="mhead">
+      <div class="mhwrap">
+        <span class="mtag" id="mTag">FRAME</span>
+        <div class="mtitle" id="mTitle">—</div>
+        <div class="mlane" id="mLane"></div>
+      </div>
+      <button class="mclose" id="mClose">✕</button>
+    </div>
+    <div class="mbody" id="mBody"></div>
+  </div>
+</div>
+
+<div id="tip"></div>
+
+<script>window.__N16_OFFLINE__={"l:// app/users/[id]/page.tsx — a React Server Component":"The file path *is* the route: in the App Router, `app/users/[id]/page.tsx` serves `/users/42`, and the bracketed `[id]` segment is the dynamic param. Because there is no `'use client'` directive, this file is a **React Server Component** by default — it renders on the server and ships none of its own JavaScript to the browser.","b:// app/users/[id]/page.tsx — a React Server Component":"The file path *is* the route: in the App Router, `app/users/[id]/page.tsx` serves `/users/42`, and the bracketed `[id]` segment is the dynamic param. Because there is no `'use client'` directive, this file is a **React Server Component** by default — it renders on the server and ships none of its own JavaScript to the browser.","l:import { updateName } from './actions'":"Imports a server action into the page. Because the actions module is marked `'use server'`, this import never pulls the function's body into a client bundle — the compiler replaces it with a serializable **reference** that a form can post to, while the real code stays on the server.","b:import { updateName } from './actions'":"Imports a server action into the page. Because the actions module is marked `'use server'`, this import never pulls the function's body into a client bundle — the compiler replaces it with a serializable **reference** that a form can post to, while the real code stays on the server.","l:export default async function Page({ params }) {":"The default export of a `page.tsx` is the route's UI. It is an `async` function — something only Server Components are allowed to be — so it can `await` data inline. Route information arrives as the `params` prop.","b:export default async function Page({ params }) {":"The default export of a `page.tsx` is the route's UI. It is an `async` function — something only Server Components are allowed to be — so it can `await` data inline. Route information arrives as the `params` prop.","l:const { id } = await params // params is async in v16":"In Next.js 15+/16, `params` is a **Promise**, so you must `await` it before destructuring `id`. Making route props async lets the framework start rendering work before every piece of request information has resolved; older code that read `params.id` synchronously is the single most common v16 migration fix.","b:const { id } = await params // params is async in v16":"In Next.js 15+/16, `params` is a **Promise**, so you must `await` it before destructuring `id`. Making route props async lets the framework start rendering work before every piece of request information has resolved; older code that read `params.id` synchronously is the single most common v16 migration fix.","l:const user = await getUser(id) // runs on the server, no fetch()":"Data loading happens *inside* the component, on the server: `getUser(id)` can talk to the database or an internal service directly. There is no API route to define and no client `fetch()` — the awaited result is rendered straight into the HTML/RSC payload before anything reaches the browser.","b:export default async function Page({ params }) { const { id } = await params // params is async in v16 const user = await getUser(id) // runs on the server, no fetch() return ( <form action={updateName}> // progressive-enhancement form <input name=\"name\" defaultValue={user.name} /> <input type=\"hidden\" name=\"id\" value={user.id} /> <button>Save<\/button> <\/form> ) }":"The whole page as a unit: an async **Server Component** that awaits its `params`, loads the user directly on the server, and returns a plain HTML form whose `action` points at a server function. Data access and markup live in one place, none of this component's code ships to the browser, and mutation flows back through the form rather than a hand-written API. It is the server-first philosophy in nine lines: the server is the default, the client is something you opt into.","l:return (":"Begins the returned JSX. Because this is a Server Component, the tree below is rendered on the server into the RSC payload and HTML — the browser receives the *result* of this markup, not the component that produced it.","l:<form action={updateName}> // progressive-enhancement form":"Binds the form's `action` to a **server function** instead of a URL. Before JavaScript loads, this is a plain HTML `POST` that Next routes to `updateName` — it works with JS disabled. Once hydrated, React upgrades the same form to submit without a full page reload. That is the progressive-enhancement contract.","b:<form action={updateName}> // progressive-enhancement form":"Binds the form's `action` to a **server function** instead of a URL. Before JavaScript loads, this is a plain HTML `POST` that Next routes to `updateName` — it works with JS disabled. Once hydrated, React upgrades the same form to submit without a full page reload. That is the progressive-enhancement contract.","l:<input name=\"name\" defaultValue={user.name} />":"An **uncontrolled** input seeded with the server-loaded value via `defaultValue` — no `useState`, no `onChange`. The `name=\"name\"` attribute is what places the typed value into the `FormData` object the server action receives.","b:<input name=\"name\" defaultValue={user.name} />":"An **uncontrolled** input seeded with the server-loaded value via `defaultValue` — no `useState`, no `onChange`. The `name=\"name\"` attribute is what places the typed value into the `FormData` object the server action receives.","l:<input type=\"hidden\" name=\"id\" value={user.id} />":"A hidden field that smuggles the record's `id` along with the submission, so the action knows *which* row to update. It's the classic HTML-form pattern — state travels in the form itself, not in client memory.","b:<input type=\"hidden\" name=\"id\" value={user.id} />":"A hidden field that smuggles the record's `id` along with the submission, so the action knows *which* row to update. It's the classic HTML-form pattern — state travels in the form itself, not in client memory.","l:<button>Save<\/button>":"The submit button. Pressing it serializes the surrounding form and invokes the server action — over a plain POST before hydration, or an enhanced submission after. No `onClick` handler is needed.","l:<\/form>":"Closes the form. Everything about this mutation — the trigger, the payload, the destination — is declared in the markup above; there is no client-side submit logic at all.","l:)":"Closes the `return (...)`. The component has now produced its complete server-rendered description of the page.","l:}":"Closes the enclosing block — the end of the function body opened above.","l:// app/users/[id]/actions.ts":"The second file: a sibling module that exists purely to hold **server actions** for this route. Keeping actions in their own file is the conventional way to mark a whole module server-only.","b:// app/users/[id]/actions.ts":"The second file: a sibling module that exists purely to hold **server actions** for this route. Keeping actions in their own file is the conventional way to mark a whole module server-only.","l:'use server' // this whole module is server-only":"The `'use server'` directive at the top of the module marks **every export** as a server action. Their bodies are never bundled for the browser; clients only receive opaque, callable references. This single string is the security boundary that lets the next lines touch the database directly.","b:'use server' // this whole module is server-only":"The `'use server'` directive at the top of the module marks **every export** as a server action. Their bodies are never bundled for the browser; clients only receive opaque, callable references. This single string is the security boundary that lets the next lines touch the database directly.","l:export async function updateName(form: FormData) {":"The server action itself. Its signature is dictated by the form contract: it receives the raw `FormData` of the submission. Next wires the form's HTTP `POST` to this function — you never write the endpoint, the routing, or the deserialization.","b:export async function updateName(form: FormData) { await db.user.update({ where: { id: String(form.get('id')) }, data: { name: String(form.get('name')) }, }) }":"The mutation end to end: pull `id` and `name` out of the posted `FormData`, then update the row with a direct `db` call. There is no API route, no JSON parsing, and no client code — the body runs only on the server. The trade-off is visible in the `String(...)` casts: a form boundary is **stringly typed**, which is exactly the seam TanStack's `validator` replaces with inferred, checked types.","l:await db.user.update({":"A direct database call from inside the action. This is safe precisely because `'use server'` guarantees the module can never be bundled for the client — credentials and queries stay server-side by construction.","b:await db.user.update({ where: { id: String(form.get('id')) }, data: { name: String(form.get('name')) }, })":"The update call as a unit: a `where` clause identifying the row from the hidden `id` field, and a `data` clause carrying the new `name`. Both values come off `FormData` as strings — hence the explicit casts — because an HTML form can only transport text. That looseness is the price of the zero-JS progressive-enhancement path.","l:where: { id: String(form.get('id')) },":"Reads the hidden input back out of the submission. `form.get` returns `FormDataEntryValue | null`, so the `String(...)` cast both converts and narrows it before it's used to locate the row.","b:where: { id: String(form.get('id')) },":"Reads the hidden input back out of the submission. `form.get` returns `FormDataEntryValue | null`, so the `String(...)` cast both converts and narrows it before it's used to locate the row.","l:data: { name: String(form.get('name')) },":"The new value, read from the visible text input by its `name` attribute — same `FormData`-to-string story. This object is what actually gets written to the database.","b:data: { name: String(form.get('name')) },":"The new value, read from the visible text input by its `name` attribute — same `FormData`-to-string story. This object is what actually gets written to the database.","l:})":"Closes the call begun above — the inner `}` ends the object argument and the `)` ends the function call.","l:// src/routes/users.$id.tsx":"File-based routing, TanStack style: `users.$id.tsx` serves `/users/42`, with `$id` as the dynamic param (Next spells the same idea `[id]`). One file holds the route's config, its `loader`, and its component — the route is a self-contained unit.","b:// src/routes/users.$id.tsx":"File-based routing, TanStack style: `users.$id.tsx` serves `/users/42`, with `$id` as the dynamic param (Next spells the same idea `[id]`). One file holds the route's config, its `loader`, and its component — the route is a self-contained unit.","l:import { createFileRoute } from '@tanstack/react-router'":"Imports the route factory from **TanStack Router** — the standalone, fully type-safe router that Start is built on top of. Start adds the server side; the routing brain is this independent library.","b:import { createFileRoute } from '@tanstack/react-router'":"Imports the route factory from **TanStack Router** — the standalone, fully type-safe router that Start is built on top of. Start adds the server side; the routing brain is this independent library.","l:import { createServerFn } from '@tanstack/react-start'":"The one primitive Start adds for server work: `createServerFn` defines a typed **server function** you can call from anywhere in the app. It's the entire seam between client and server in this framework.","b:import { createServerFn } from '@tanstack/react-start'":"The one primitive Start adds for server work: `createServerFn` defines a typed **server function** you can call from anywhere in the app. It's the entire seam between client and server in this framework.","l:// server fns are RPC in the browser, direct calls on the server":"Names the compile-time split at the heart of server functions: the **same call-site** compiles two ways. In the client bundle, the function body is stripped and replaced by a `fetch`-backed stub (an RPC); on the server, it's just a direct function call. You write one program; the bundler splits it.","b:// server fns are RPC in the browser, direct calls on the server":"Names the compile-time split at the heart of server functions: the **same call-site** compiles two ways. In the client bundle, the function body is stripped and replaced by a `fetch`-backed stub (an RPC); on the server, it's just a direct function call. You write one program; the bundler splits it.","l:const getUser = createServerFn({ method: 'GET' })":"Declares a server function with `GET` semantics, signalling a read — which lets the framework treat calls like cacheable, prefetchable requests. The value returned is a **builder**: the `.validator(...).handler(...)` chain below finishes the definition.","b:const getUser = createServerFn({ method: 'GET' })":"Declares a server function with `GET` semantics, signalling a read — which lets the framework treat calls like cacheable, prefetchable requests. The value returned is a **builder**: the `.validator(...).handler(...)` chain below finishes the definition.","l:.validator((id: string) => id) // runtime + type validation":"The validator does double duty: it checks input **at runtime** (reject bad payloads at the boundary) and it *defines the input type* — whatever this function accepts and returns becomes the typed `data` the handler sees and the type the client call is checked against. One declaration, inference end to end.","b:.validator((id: string) => id) // runtime + type validation":"The validator does double duty: it checks input **at runtime** (reject bad payloads at the boundary) and it *defines the input type* — whatever this function accepts and returns becomes the typed `data` the handler sees and the type the client call is checked against. One declaration, inference end to end.","l:.handler(({ data: id }) => db.user.find(id))":"The server-only body. It destructures the already-validated `data` and queries the database directly. This code is **stripped from the client bundle** at build time — in the browser, calling `getUser` triggers the RPC stub instead.","b:.handler(({ data: id }) => db.user.find(id))":"The server-only body. It destructures the already-validated `data` and queries the database directly. This code is **stripped from the client bundle** at build time — in the browser, calling `getUser` triggers the RPC stub instead.","l:const updateName = createServerFn({ method: 'POST' })":"The mutation twin, declared with `POST` semantics. From the browser this becomes a typed RPC call — no hand-written API route, no endpoint string, no manual `fetch` — and on the server it's an ordinary function.","b:const updateName = createServerFn({ method: 'POST' })":"The mutation twin, declared with `POST` semantics. From the browser this becomes a typed RPC call — no hand-written API route, no endpoint string, no manual `fetch` — and on the server it's an ordinary function.","l:.validator((d: { id: string; name: string }) => d)":"Declares the mutation's exact input shape: `{ id, name }`, both strings. The client call `updateName({ data })` is **type-checked against this at compile time**, and a malformed payload is rejected at runtime — contrast with the Next sample's untyped `FormData` and `String(...)` casts.","b:.validator((d: { id: string; name: string }) => d)":"Declares the mutation's exact input shape: `{ id, name }`, both strings. The client call `updateName({ data })` is **type-checked against this at compile time**, and a malformed payload is rejected at runtime — contrast with the Next sample's untyped `FormData` and `String(...)` casts.","l:.handler(({ data }) => db.user.update(data.id, { name: data.name }))":"Performs the update with data that is already validated and already typed — `data.id` and `data.name` need no casts. Like every handler body, it runs only on the server and never ships to the browser.","b:.handler(({ data }) => db.user.update(data.id, { name: data.name }))":"Performs the update with data that is already validated and already typed — `data.id` and `data.name` need no casts. Like every handler body, it runs only on the server and never ships to the browser.","l:export const Route = createFileRoute('/users/$id')({":"The route is a **value**, not just a file: `createFileRoute` takes the path as a literal string (the router's type system keys off it, which is how `params.id` below is typed) and a config object that follows.","b:export const Route = createFileRoute('/users/$id')({ loader: ({ params }) => getUser({ data: params.id }), // SSR + client component: User, })":"The route definition as a unit: a `loader` that fetches the user and a `component` to render once it resolves. The loader calls the server function — during SSR it runs on the server as a direct call; on later client-side navigations it runs in the browser as an RPC. **Same code, both environments.** The loader's return type flows automatically into `useLoaderData`, so the component below is fully typed without writing a single generic.","l:loader: ({ params }) => getUser({ data: params.id }), // SSR + client":"The isomorphic data hook of the route. On first paint it runs during SSR; on in-app navigations it runs in the browser, where `getUser` becomes a typed RPC. `params.id` is inferred as a string straight from the `'/users/$id'` path literal — mistype the param name and it's a compile error.","b:loader: ({ params }) => getUser({ data: params.id }), // SSR + client":"The isomorphic data hook of the route. On first paint it runs during SSR; on in-app navigations it runs in the browser, where `getUser` becomes a typed RPC. `params.id` is inferred as a string straight from the `'/users/$id'` path literal — mistype the param name and it's a compile error.","l:component: User,":"Points the route at its component. The router renders `User` once the loader has resolved, so the component can read its data synchronously — no loading branches needed for the initial render.","l:function User() {":"A plain React component — and in Start, *every* component is a client component; there are no React Server Components here. Interactivity is the default, which is the client-first half of this comparison.","b:function User() { const user = Route.useLoaderData() // fully typed, no generics return <button onClick={() => updateName({ data: { id: user.id, name: 'New' } })}> {user.name} <\/button> }":"The component as a unit: it reads the loader's result — fully typed — via `Route.useLoaderData()`, and renders a button whose `onClick` fires the `updateName` server function directly. The mutation is an **imperative, typed RPC from an event handler**, where the Next sample used a declarative `<form action>`. No form, no API route, no `FormData`: the client calls the server like a local async function and the framework handles the wire.","l:const user = Route.useLoaderData() // fully typed, no generics":"Pulls this route's loader result. Because the hook hangs off the specific `Route` object, TypeScript already knows the exact return type of the loader — no `useLoaderData<User>()` generics, no casts. This is the end-to-end inference the validator chain set up.","l:return <button onClick={() => updateName({ data: { id: user.id, name: 'New' } })}>":"The mutation from an event handler: `updateName(...)` is called like a local async function, and the framework serializes it into a typed `POST` behind the scenes. The `data` payload is compile-time checked against the validator's `{ id, name }` shape — pass a number for `name` and the build fails.","b:return <button onClick={() => updateName({ data: { id: user.id, name: 'New' } })}>":"The mutation from an event handler: `updateName(...)` is called like a local async function, and the framework serializes it into a typed `POST` behind the scenes. The `data` payload is compile-time checked against the validator's `{ id, name }` shape — pass a number for `name` and the build fails.","l:{user.name}":"Interpolates the loaded user's name as the button label — loader data rendered directly, no intermediate state.","b:{user.name}":"Interpolates the loaded user's name as the button label — loader data rendered directly, no intermediate state.","l:<\/button>":"Closes the button, which here is both the display *and* the mutation trigger — tap the name, fire the RPC."};</script>
+
+<script>
+const SVGNS="http://www.w3.org/2000/svg";
+function el(tag,attrs,html){const e=document.createElementNS(SVGNS,tag);for(const k in (attrs||{}))e.setAttribute(k,attrs[k]);if(html!=null)e.innerHTML=html;return e;}
+function hel(html){const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstElementChild;}
+function plate(cx,cy,text,color,fs){
+  fs=fs||9;const w=Math.max(58,text.length*(fs*0.62)+16),h=fs+11;
+  return `<rect x="${(cx-w/2).toFixed(1)}" y="${(cy-h/2).toFixed(1)}" width="${w.toFixed(1)}" height="${h}" rx="6" fill="var(--panel)" stroke="var(--line)"/>`+
+         `<text x="${cx}" y="${(cy+fs*0.34).toFixed(1)}" text-anchor="middle" font-size="${fs}" fill="${color}" font-family="'JetBrains Mono',monospace">${text}</text>`;
+}
+// append a plate (rect + centered text) as real SVG nodes — reliable, unlike innerHTML on SVG
+function plateInto(parent,cx,cy,text,color,fs){
+  fs=fs||9;const w=Math.max(58,text.length*(fs*0.62)+16),h=fs+11;
+  parent.appendChild(el('rect',{x:(cx-w/2).toFixed(1),y:(cy-h/2).toFixed(1),width:w.toFixed(1),height:h,rx:6,fill:'var(--panel)',stroke:'var(--line)'}));
+  const t=el('text',{x:cx,y:(cy+fs*0.34).toFixed(1),'text-anchor':'middle','font-size':fs,fill:color,'font-family':"'JetBrains Mono',monospace"});
+  t.textContent=text;
+  parent.appendChild(t);
+  return parent;
+}
+
+/* ---------- 01 where it runs ---------- */
+const RUN_ITEMS=[
+  {k:"Route matching",next:["both"],nnote:"matched on the server during render",t:["both"],tnote:"server for the first request, client thereafter"},
+  {k:"Initial render",next:["server"],nnote:"Server Components render to HTML on the server",t:["server"],tnote:"first paint is SSR'd on the server"},
+  {k:"Data fetching",next:["server"],nnote:"fetched inside Server Components — never reaches the client",t:["both"],tnote:"loaders run on server for SSR, client on navigation"},
+  {k:"Interactivity / hydration",next:["client"],nnote:"only 'use client' islands hydrate",t:["client"],tnote:"the whole app hydrates and runs client-side"},
+  {k:"Mutations",next:["server"],nnote:"Server Actions post to the server",t:["server"],tnote:"createServerFn calls the server via typed RPC"},
+  {k:"Client state / UI logic",next:["client"],nnote:"lives in Client Components only",t:["client"],tnote:"the natural home — it's a client app first"},
+];
+const runRow=document.getElementById('runRow');
+function chipsHTML(arr){ return arr.map(w=>`<span class="chip ${w}">${w}</span>`).join(''); }
+function renderRun(){
+  let html='<div class="runhead"><div></div>'+
+    '<div class="rhead nx"><span class="pdot"></span>Next.js 16 · server-first</div>'+
+    '<div class="rhead ts"><span class="pdot"></span>TanStack Start · client-first</div></div>';
+  RUN_ITEMS.forEach(it=>{
+    html+=`<div class="runrow2"><div class="rk">${it.k}</div>`+
+      `<div class="runcell nx"><span class="cellfw nx">Next.js</span><div class="chips">${chipsHTML(it.next)}</div><span class="rn">${it.nnote}</span></div>`+
+      `<div class="runcell ts"><span class="cellfw ts">TanStack</span><div class="chips">${chipsHTML(it.t)}</div><span class="rn">${it.tnote}</span></div>`+
+    `</div>`;
+  });
+  runRow.innerHTML=html;
+}
+renderRun();
+
+/* ---------- 02 stacks ---------- */
+const NX_STACK=[
+  {n:"React 19.2 + Server Components",k:"render model",d:"Components render on the server by default; mark interactive pieces with 'use client'. The paradigm everything else serves."},
+  {n:"Turbopack",k:"bundler · rust",d:"Stable, default bundler in v16. 2–5× faster builds, ~10× faster Fast Refresh, on-disk filesystem caching. Webpack still works behind a flag."},
+  {n:"React Compiler",k:"build-time",d:"Auto-memoizes components and hooks — removing most manual useMemo / useCallback. Opt in with reactCompiler: true."},
+  {n:"Cache Components",k:"caching model",d:"The 'use cache' directive plus Partial Prerendering. Dynamic by default; cache explicitly. Static shell streams instantly, dynamic holes fill via Suspense."},
+  {n:"App Router + proxy.ts",k:"routing · edge",d:"File-based App Router. Edge middleware now lives in proxy.ts (renamed from middleware.ts) for auth, redirects and rewrites."},
+  {n:"Node + Edge runtimes",k:"deploy",d:"Runs as a full Node server or in lightweight Edge isolates. Smoothest on Vercel; self-hostable anywhere Node runs."},
+];
+const TS_STACK=[
+  {n:"TanStack Router",k:"routing core",d:"The heart of Start. File-based, fully type-safe routing with loaders, search-param validation and URL-as-state. Usable on its own too."},
+  {n:"Vite (or Rsbuild)",k:"bundler · dev",d:"Powers dev and build. Instant HMR, fast cold starts, the entire Vite plugin ecosystem. The DX many developers come for."},
+  {n:"Nitro",k:"server engine",d:"The universal server layer. Handles SSR, routing and asset serving, and targets Node, Cloudflare, Netlify, Vercel and static output from one codebase."},
+  {n:"Server Functions",k:"rpc",d:"createServerFn defines server-only logic. In the browser it resolves to an RPC call; on the server it's a direct call — one definition, split at build time."},
+  {n:"TanStack Query",k:"data · optional",d:"The usual companion for client-side fetching, caching and SWR revalidation. Not required, but the ecosystem assumes it's nearby."},
+  {n:"Node ≥ 22.12 · any host",k:"deploy",d:"Requires modern Node for dev and build, then deploys through Nitro to almost any runtime — no single-vendor assumption."},
+];
+function renderStack(mountId,data){
+  const mount=document.getElementById(mountId);
+  data.forEach((l,i)=>{
+    const node=hel(`<button class="layer ${i===0?'open':''}"><div class="lt"><span class="ln">${l.n}</span><span class="lk">${l.k}</span></div><div class="ld">${l.d}</div></button>`);
+    node.onclick=()=>node.classList.toggle('open');
+    mount.appendChild(node);
+  });
+}
+renderStack('nxLayers',NX_STACK);renderStack('tsLayers',TS_STACK);
+
+/* ============================================================
+   03 — FLOW PLAYER (swimlane)
+   ============================================================ */
+const LANES=[
+  {short:"SERVER",sub:"before/around the response",color:"var(--server)",cls:"server"},
+  {short:"NETWORK",sub:"one HTTP response",color:"var(--warn)",cls:"network"},
+  {short:"BROWSER",sub:"paint → hydrate → interact",color:"var(--client)",cls:"browser"},
+];
+const laneY=[104,200,296];
+const LANE_SUB=["renders","one trip","paints"];
+const NEXT_FRAMES=[
+  {n:1,lane:0,lbl:"Request",t:"Request hits the Next.js server",d:"A GET for /users/42 lands on a Node process or an Edge isolate. From here the server owns the work.",code:null},
+  {n:2,lane:0,lbl:"proxy.ts",t:"proxy.ts runs at the edge",d:"Middleware (renamed proxy.ts in v16) handles auth, redirects and rewrites before any rendering happens.",code:"// proxy.ts\nexport function proxy(req) {\n  // auth, redirects, rewrites\n}"},
+  {n:3,lane:0,lbl:"RSC render",t:"Server Components render",d:"RSCs execute on the server. Cached 'use cache' segments are reused; dynamic code runs per-request. Their JavaScript never ships to the browser.",code:"'use cache'   // opt a segment into the cache"},
+  {n:4,lane:0,lbl:"PPR stream",t:"Partial Prerendering streams the shell",d:"The static shell is emitted immediately; dynamic holes resolve through Suspense and stream in as they're ready.",code:null},
+  {n:5,lane:1,lbl:"Stream HTML",t:"HTML + RSC payload streams",d:"One response carries HTML plus the Flight/RSC payload, streamed to the browser as it becomes available.",code:null},
+  {n:6,lane:2,lbl:"Paint · FCP",t:"The shell paints — First Contentful Paint",d:"The browser shows content fast, with minimal JavaScript shipped. Not interactive yet.",code:null},
+  {n:7,lane:2,lbl:"Hydrate",t:"Client islands hydrate",d:"Only 'use client' components hydrate, React-Compiler-optimized — no manual memoization needed.",code:null},
+  {n:8,lane:2,lbl:"Interactive",t:"Interactive — Time To Interactive",d:"Clicks now work. Navigation uses incremental prefetch + RSC payloads — no full page reload.",code:null},
+];
+const TAN_FRAMES=[
+  {n:1,lane:0,lbl:"Request",t:"Request hits Nitro",d:"The universal server engine receives the request on whatever host you deployed to — Node, Cloudflare, Netlify, etc.",code:null},
+  {n:2,lane:0,lbl:"Loaders",t:"Router matches + loaders run",d:"TanStack Router matches the route; its loaders run on the server for this first request, fully typed.",code:"loader: ({ params }) =>\n  getUser({ data: params.id })"},
+  {n:3,lane:0,lbl:"SSR render",t:"Full-document SSR",d:"The matched route renders to HTML on the server, with streaming support.",code:null},
+  {n:4,lane:1,lbl:"Stream HTML",t:"HTML streams to the browser",d:"The server response carries the rendered document to the client.",code:null},
+  {n:5,lane:2,lbl:"Hydrate app",t:"The client app hydrates",d:"The whole application hydrates — a client-first SPA that was server-rendered for the first paint.",code:null},
+  {n:6,lane:2,lbl:"Interactive",t:"Interactive — Time To Interactive",d:"From here the app runs client-first. Router and Query own data and navigation.",code:null},
+  {n:7,lane:2,lbl:"Query cache",t:"Loaders + Query manage data",d:"Subsequent data is fetched and cached on the client with stale-while-revalidate.",code:null},
+  {n:8,lane:2,lbl:"Server fn RPC",t:"Mutation → server function (RPC)",d:"A mutation calls createServerFn — a typed RPC that executes directly on the server and returns. The one seam back to the server.",code:"updateName({ data: { id, name } })\n// typed RPC → runs on the server"},
+];
+
+let FRAMES=NEXT_FRAMES, curFw='next', step=0, playing=false, playT=null;
+let fpNodes=[], fpLabels=[], fpToken=null, nodeCX=i=>0, progPath=null, progLen=0, cumLen=[];
+let userInteracted=false;
+const flowVP=document.getElementById('flowVP');
+const ptrack=document.getElementById('ptrack');
+const LANE_TINT=['var(--server-soft)','var(--warn-soft)','var(--client-soft)'];
+
+function buildPlayer(fw){
+  pause(); curFw=fw; FRAMES = fw==='next'?NEXT_FRAMES:TAN_FRAMES;
+  flowVP.innerHTML=''; ptrack.innerHTML=''; flowVP.removeAttribute('transform');
+  const W=1180,x0=168,lw=W-x0-40,laneH=54,R=16;
+  const fwColor=fw==='next'?'var(--next)':'var(--tan)';
+  nodeCX=i=>x0+40+(lw-80)*(i/(FRAMES.length-1));
+  // lane bands (zone tint) + short left-rail labels
+  LANES.forEach((L,li)=>{
+    flowVP.appendChild(el('rect',{x:x0,y:laneY[li]-laneH/2,width:lw,height:laneH,rx:11,fill:LANE_TINT[li],'fill-opacity':.35,stroke:'var(--line)'}));
+    flowVP.appendChild(el('text',{x:x0-14,y:laneY[li]-1,'text-anchor':'end','font-size':10.5,'font-weight':700,fill:L.color,'letter-spacing':1,'font-family':"'JetBrains Mono',monospace"},L.short));
+    flowVP.appendChild(el('text',{x:x0-14,y:laneY[li]+12,'text-anchor':'end','font-size':8.5,fill:'var(--ink3)','font-family':"'JetBrains Mono',monospace"},LANE_SUB[li]));
+  });
+  // build path + per-node incremental segments
+  const pts=FRAMES.map((f,i)=>[nodeCX(i),laneY[f.lane]]);
+  const segD=[]; let acc='M '+pts[0][0]+' '+pts[0][1]; segD.push(acc);
+  for(let i=1;i<pts.length;i++){const[ax,ay]=pts[i-1],[bx,by]=pts[i],mx=(ax+bx)/2;acc+=` C ${mx} ${ay}, ${mx} ${by}, ${bx} ${by}`;segD.push(acc);}
+  const fullD=segD[segD.length-1];
+  flowVP.appendChild(el('path',{d:fullD,fill:'none',stroke:'var(--line2)','stroke-width':2,'stroke-dasharray':'4 6','stroke-linecap':'round'}));
+  // progress trail (fills along the path as the token advances)
+  progPath=el('path',{d:fullD,fill:'none',stroke:fwColor,'stroke-width':2.6,'stroke-linecap':'round'});
+  flowVP.appendChild(progPath);
+  progLen=progPath.getTotalLength();
+  const tmp=el('path',{}); flowVP.appendChild(tmp);
+  cumLen=segD.map(d=>{tmp.setAttribute('d',d);return tmp.getTotalLength();}); flowVP.removeChild(tmp);
+  progPath.style.transition='stroke-dashoffset .55s cubic-bezier(.5,0,.3,1)';
+  progPath.setAttribute('stroke-dasharray',progLen);
+  progPath.setAttribute('stroke-dashoffset',progLen);
+  // nodes + labels (labels always shown, dimmed; placed outside the bands)
+  fpNodes=[];fpLabels=[];
+  FRAMES.forEach((f,i)=>{
+    const X=nodeCX(i),Y=laneY[f.lane],below=(f.lane===2);
+    const edge=below?Y+laneH/2:Y-laneH/2, ly=below?edge+20:edge-20;
+    const lg=el('g',{class:'hlabel'});
+    lg.appendChild(el('line',{x1:X,y1:below?Y+R:Y-R,x2:X,y2:below?ly-9:ly+9,stroke:'var(--line2)','stroke-width':1.1}));
+    plateInto(lg,X,ly,f.lbl,'var(--ink2)',9);
+    flowVP.appendChild(lg);fpLabels.push(lg);
+    const g=el('g',{class:'fnode',transform:`translate(${X},${Y})`});
+    g.style.cursor='pointer';g.style.color=fwColor;
+    g.appendChild(el('circle',{class:'ring',r:R,fill:'var(--panel)',stroke:fwColor,'stroke-width':2}));
+    const num=el('text',{class:'num',y:4,'text-anchor':'middle','font-size':11,'font-weight':700,fill:fwColor,'font-family':"'JetBrains Mono',monospace"});
+    num.textContent=String(f.n).padStart(2,'0');
+    g.appendChild(num);
+    g.addEventListener('click',()=>{setStep(i);openFrame(f);});
+    flowVP.appendChild(g);fpNodes.push(g);
+    if(i>0)ptrack.appendChild(hel(`<span class="parrow" data-arrow="${i}">›</span>`));
+    ptrack.appendChild(hel(`<span class="pnode ${fw}" data-pn="${i}">${f.lbl}</span>`));
+  });
+  // token
+  fpToken=el('g',{},`<circle r="13" fill="${fwColor}" opacity=".22"/><circle r="6.5" fill="${fwColor}"/>`);
+  fpToken.style.transition='transform .55s cubic-bezier(.5,0,.3,1)';
+  flowVP.appendChild(fpToken);
+  const ticks=document.getElementById('fpTicks');ticks.innerHTML='';
+  FRAMES.forEach(()=>{const t=document.createElement('div');t.className='tk';ticks.appendChild(t);});
+  document.getElementById('figTitle').textContent = fw==='next'
+    ? '▶ GET /users/42 · server → stream → paint → interactive'
+    : '▶ GET /users/42 · nitro → SSR → hydrate → client-first';
+  step=0;setStep(0);
+}
+function setStep(i){
+  step=Math.max(0,Math.min(FRAMES.length-1,i));
+  const f=FRAMES[step], fwColor=curFw==='next'?'var(--next)':'var(--tan)';
+  fpNodes.forEach((n,k)=>{
+    const ring=n.querySelector('.ring'),num=n.querySelector('.num');
+    n.classList.toggle('active',k===step);
+    if(k<step){ring.setAttribute('fill',fwColor);ring.setAttribute('r',13);num.setAttribute('fill','var(--bg)');n.style.opacity='1';}
+    else if(k===step){ring.setAttribute('fill','var(--panel)');ring.setAttribute('r',19);num.setAttribute('fill',fwColor);n.style.opacity='1';}
+    else{ring.setAttribute('fill','var(--panel)');ring.setAttribute('r',16);num.setAttribute('fill',fwColor);n.style.opacity='.5';}
+  });
+  fpLabels.forEach((L,k)=>{
+    L.classList.toggle('on',k===step);
+    const r=L.querySelector('rect'),t=L.querySelector('text');
+    if(t)t.setAttribute('fill',k===step?fwColor:'var(--ink2)');
+    if(r)r.setAttribute('stroke',k===step?fwColor:'var(--line)');
+  });
+  const tx=nodeCX(step),ty=laneY[f.lane];
+  fpToken.setAttribute('transform',`translate(${tx},${ty})`);
+  if(progPath)progPath.setAttribute('stroke-dashoffset',progLen-cumLen[step]);
+  document.getElementById('capN').textContent='FRAME '+String(f.n).padStart(2,'0');
+  document.getElementById('capLane').textContent=LANES[f.lane].short+' · '+LANES[f.lane].sub;
+  document.getElementById('capH').textContent=f.t;
+  document.getElementById('capB').textContent=f.d;
+  document.getElementById('fpStepNo').textContent=String(f.n).padStart(2,'0')+' / '+String(FRAMES.length).padStart(2,'0');
+  document.getElementById('fpFill').style.width=(step/(FRAMES.length-1)*100)+'%';
+  document.getElementById('capMore').onclick=()=>openFrame(f);
+  ptrack.querySelectorAll('.pnode').forEach(n=>{const j=+n.dataset.pn;n.classList.toggle('active',j===step);n.classList.toggle('done',j<step);});
+  ptrack.querySelectorAll('.parrow').forEach(a=>{const j=+a.dataset.arrow;a.classList.toggle('done',j<=step);});
+}
+function play(){playing=true;updatePI();if(step>=FRAMES.length-1)setStep(0);playT=setInterval(()=>{if(step>=FRAMES.length-1){pause();return;}setStep(step+1);},1500);}
+function pause(){playing=false;clearInterval(playT);updatePI();}
+function updatePI(){const i=document.getElementById('fpPlayIcon');if(i)i.innerHTML=playing?'<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>':'<path d="M7 5v14l12-7z"/>';}
+document.getElementById('fpPlay').onclick=()=>{playing?pause():play();};
+document.getElementById('fpNext').onclick=()=>{pause();setStep(step+1);};
+document.getElementById('fpPrev').onclick=()=>{pause();setStep(step-1);};
+document.getElementById('fpScrub').onclick=e=>{pause();const r=e.currentTarget.getBoundingClientRect();setStep(Math.round((e.clientX-r.left)/r.width*(FRAMES.length-1)));};
+document.querySelectorAll('#fwSeg button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#fwSeg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');buildPlayer(b.dataset.fw);});
+
+/* inspect / pan-zoom */
+(function(){
+  const svg=document.getElementById('flowSvg'),canvas=document.getElementById('flowCanvas'),btn=document.getElementById('inspectBtn');
+  let on=false,scale=1,tx=0,ty=0,drag=false,sx=0,sy=0;
+  function apply(){flowVP.setAttribute('transform',`translate(${tx},${ty}) scale(${scale})`);}
+  btn.onclick=()=>{on=!on;canvas.classList.toggle('inspect',on);btn.classList.toggle('on',on);btn.lastChild.textContent=on?' Exit':' Inspect';if(!on){scale=1;tx=0;ty=0;apply();}};
+  svg.addEventListener('wheel',e=>{if(!on)return;e.preventDefault();const d=e.deltaY<0?1.12:0.89;scale=Math.max(0.6,Math.min(4,scale*d));apply();},{passive:false});
+  svg.addEventListener('pointerdown',e=>{if(!on)return;drag=true;sx=e.clientX;sy=e.clientY;try{svg.setPointerCapture(e.pointerId);}catch(_){}});
+  svg.addEventListener('pointermove',e=>{if(!drag)return;tx+=e.clientX-sx;ty+=e.clientY-sy;sx=e.clientX;sy=e.clientY;apply();});
+  svg.addEventListener('pointerup',()=>{drag=false;});svg.addEventListener('pointerleave',()=>{drag=false;});
+})();
+
+buildPlayer('next');
+// The first synchronous build can race layout/webfont load, leaving some SVG <text> unpainted
+// until a later rebuild. Repaint once layout and fonts have settled (unless the user already acted).
+(function ensureFirstPaint(){
+  const refresh=()=>{ if(!userInteracted) buildPlayer(curFw); };
+  const trace=document.getElementById('trace');
+  if(trace) trace.addEventListener('pointerdown',()=>{userInteracted=true;},{capture:true,once:true});
+  requestAnimationFrame(()=>requestAnimationFrame(refresh));
+  window.addEventListener('load',()=>requestAnimationFrame(refresh));
+  if(document.fonts&&document.fonts.ready&&typeof document.fonts.ready.then==='function') document.fonts.ready.then(refresh);
+})();
+
+/* ---------- modal ---------- */
+const scrim=document.getElementById('scrim');
+function openFrame(f){
+  const tag=document.getElementById('mTag');
+  tag.className='mtag '+curFw;
+  tag.textContent=(curFw==='next'?'NEXT.JS':'TANSTACK')+' · FRAME '+String(f.n).padStart(2,'0');
+  document.getElementById('mTitle').textContent=f.t;
+  document.getElementById('mLane').textContent='Lane — '+LANES[f.lane].short.toLowerCase()+' · '+LANES[f.lane].sub;
+  const L=LANES[f.lane];
+  let html=`<span class="mwhere ${L.cls}">${L.short==='SERVER'?'⚙':L.short==='NETWORK'?'⇄':'🖥'} runs in the ${L.short.toLowerCase()}</span><p>${f.d}</p>`;
+  if(f.code)html+=`<pre class="mcode">${f.code.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre>`;
+  const other = curFw==='next'
+    ? "In TanStack Start, the equivalent stage runs client-first once hydrated — the server's role ends earlier."
+    : "In Next.js, the equivalent stage stays on the server longer — Server Components keep rendering server-side.";
+  html+=`<p style="color:var(--ink3);font-size:13px;border-top:1px solid var(--line);padding-top:13px;margin-top:4px"><b style="color:var(--ink2)">Contrast:</b> ${other}</p>`;
+  document.getElementById('mBody').innerHTML=html;
+  scrim.classList.add('open');document.body.classList.add('fs-lock');
+}
+function closeModal(){scrim.classList.remove('open');document.body.classList.remove('fs-lock');}
+document.getElementById('mClose').onclick=closeModal;
+scrim.addEventListener('click',e=>{if(e.target===scrim)closeModal();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
+
+/* ---------- 04 code captions (side by side) ---------- */
+const CODE_CAP={
+  next:"Server-first: getUser runs on the server inside the component itself — no API route, no fetch(). The form posts to a 'use server' action. The server is the default; the client is the exception you opt into.",
+  tan:"Client-first: the route is a typed object. createServerFn is the only seam to the server — typed, validated RPC. The loader feeds SSR and client navigation alike, and useLoaderData is fully inferred with zero generics."
+};
+document.getElementById('codeCapNext').textContent=CODE_CAP.next;
+document.getElementById('codeCapTan').textContent=CODE_CAP.tan;
+
+/* ---------- 05 deploy checker ---------- */
+const W_={native:100,supported:72,partial:44};
+const TARGETS=[
+  {id:'node',name:'Node server',nx:{s:'native',n:'First-class. A long-lived Node process or serverless Node functions.'},ts:{s:'native',n:"First-class via Nitro's Node preset (Node ≥22.12)."}},
+  {id:'vercel',name:'Vercel',nx:{s:'native',n:'Home turf. Zero-config; every feature is tuned for it.'},ts:{s:'supported',n:"Supported through Nitro's Vercel preset."}},
+  {id:'cf',name:'Cloudflare Workers',nx:{s:'supported',n:'The Edge runtime targets V8 isolates for middleware and edge functions.'},ts:{s:'native',n:'A core target — Nitro builds straight for Workers.'}},
+  {id:'netlify',name:'Netlify',nx:{s:'supported',n:'Supported via the official Next runtime adapter.'},ts:{s:'native',n:'First-class Nitro preset.'}},
+  {id:'static',name:'Static export',nx:{s:'partial',n:'output: export gives a fully static site, but you lose server features.'},ts:{s:'native',n:'Prerender to static with server functions baked in (srvx).'}},
+  {id:'self',name:'Self-host anywhere',nx:{s:'supported',n:'Runs anywhere Node runs — you operate the server yourself.'},ts:{s:'native',n:'Nitro targets almost any runtime; portability is the whole point.'}},
+];
+const dchips=document.getElementById('dchips');
+TARGETS.forEach((t,i)=>{
+  const c=hel(`<button class="dchip${i===0?' on':''}" data-t="${t.id}">${t.name}</button>`);
+  c.onclick=()=>{dchips.querySelectorAll('.dchip').forEach(x=>x.classList.remove('on'));c.classList.add('on');renderDeploy(t);};
+  dchips.appendChild(c);
+});
+function renderDeploy(t){
+  document.getElementById('nxBadge').className='dbadge '+t.nx.s;document.getElementById('nxBadge').textContent=t.nx.s;
+  document.getElementById('tsBadge').className='dbadge '+t.ts.s;document.getElementById('tsBadge').textContent=t.ts.s;
+  document.getElementById('nxNote').textContent=t.nx.n;
+  document.getElementById('tsNote').textContent=t.ts.n;
+  // animate after reset
+  const nf=document.getElementById('nxFill'),tf=document.getElementById('tsFill');
+  nf.style.width='0';tf.style.width='0';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{nf.style.width=W_[t.nx.s]+'%';tf.style.width=W_[t.ts.s]+'%';}));
+  const dn=W_[t.nx.s],dt=W_[t.ts.s];
+  let v;
+  if(dt>dn)v=`For <b>${t.name}</b>, <b style="color:var(--tan)">TanStack Start</b> has the cleaner path — Nitro treats it as a native target, while Next.js gets there through an adapter or with caveats.`;
+  else if(dn>dt)v=`For <b>${t.name}</b>, <b style="color:var(--next)">Next.js</b> leads — it's the most polished route, while TanStack Start reaches it via Nitro's adapter.`;
+  else v=`For <b>${t.name}</b>, both are <b>first-class</b>. Either deploys cleanly — pick on other criteria.`;
+  document.getElementById('dVerdict').innerHTML=v;
+}
+renderDeploy(TARGETS[0]);
+
+/* ---------- 07 decision engine ---------- */
+const STATEMENTS=[
+  {t:"It's a content-heavy or SEO-critical site — marketing, blog, docs, commerce.",w:3},
+  {t:"I need React Server Components in production today.",w:3},
+  {t:"I want a mature ecosystem, lots of examples and enterprise support.",w:2},
+  {t:"I want batteries-included optimizations — Image, Font, built-in middleware.",w:2},
+  {t:"My team wants strong conventions and an opinionated happy path.",w:1},
+  {t:"End-to-end, compile-time type safety across routes, loaders and server calls is a top priority.",w:-3},
+  {t:"I'm already invested in TanStack Query and/or Router.",w:-3},
+  {t:"It's an app-like, highly interactive product — dashboard, editor, internal tool.",w:-2},
+  {t:"I want maximum deployment portability and to avoid platform lock-in.",w:-2},
+  {t:"I prefer Vite's dev experience and a client-first mental model.",w:-2},
+];
+const estatements=document.getElementById('estatements');
+const estate=STATEMENTS.map(()=>false);
+STATEMENTS.forEach((s,i)=>{
+  const lean=s.w>0?'nx':'ts',pole=s.w>0?'Next':'TanStack';
+  const row=hel(`<div class="est lean-${lean}" data-i="${i}"><span class="box">✓</span><span class="etx">${s.t}</span><span class="epole ${lean}">${pole}</span></div>`);
+  row.onclick=()=>{estate[i]=!estate[i];row.classList.toggle('on',estate[i]);recompute();};
+  estatements.appendChild(row);
+});
+const needle=document.getElementById('needle'),vtitle=document.getElementById('vtitle'),vbody=document.getElementById('vbody');
+function recompute(){
+  let sum=0,mp=0,mn=0;
+  STATEMENTS.forEach((s,i)=>{if(s.w>0)mp+=s.w;else mn+=Math.abs(s.w);if(estate[i])sum+=s.w;});
+  let pct=sum>=0?50+(sum/mp)*50:50-(Math.abs(sum)/mn)*50;
+  needle.style.left=Math.max(2,Math.min(98,pct))+'%';
+  const any=estate.some(Boolean);
+  if(!any){needle.style.background='var(--ink)';vtitle.className='vtitle even';vtitle.textContent='Nothing selected yet';vbody.textContent='Tick the goals above that match your project. With nothing selected, both frameworks are equally valid starting points.';return;}
+  if(sum>2){needle.style.background='var(--next)';vtitle.className='vtitle nx';vtitle.textContent='Lean: Next.js 16';vbody.innerHTML='Your goals reward a <strong>server-first, batteries-included</strong> framework. Next.js gives you RSC, mature tooling, built-in optimizations and the deepest ecosystem — the safer bet for content, SEO and scale.';}
+  else if(sum<-2){needle.style.background='var(--tan)';vtitle.className='vtitle ts';vtitle.textContent='Lean: TanStack Start';vbody.innerHTML='Your goals reward a <strong>client-first, type-safe, portable</strong> framework. TanStack Start gives you end-to-end types, Vite\'s DX and deploy-anywhere freedom — ideal for app-like products and TanStack-native teams.';}
+  else{needle.style.background='var(--ink)';vtitle.className='vtitle even';vtitle.textContent='Genuinely a toss-up';vbody.innerHTML='Your priorities pull both ways. Decide on a <strong>tiebreaker</strong>: need RSC or maximum ecosystem today → Next.js; want strict type-safety, Vite and portability → TanStack Start.';}
+}
+document.getElementById('eReset').onclick=()=>{estate.fill(false);document.querySelectorAll('.est').forEach(r=>r.classList.remove('on'));recompute();};
+recompute();
+
+/* ---------- tooltips ---------- */
+const TERMS={
+  "RSC":"React Server Components — components that render on the server and never ship their JavaScript to the browser.",
+  "PPR":"Partial Prerendering — serve a static page shell instantly, then stream the dynamic parts in through Suspense.",
+  "Nitro":"A universal server engine that lets one app deploy to Node, Cloudflare, Netlify, Vercel and more.",
+  "SWR":"stale-while-revalidate — show cached data immediately, then refetch in the background to update it.",
+  "RPC":"Remote Procedure Call — calling a server function from the client as if it were local; the framework handles the network.",
+  "Turbopack":"Next.js's Rust-based bundler, stable and default in v16 — much faster builds and Fast Refresh than webpack.",
+  "Vite":"A fast build tool and dev server with instant hot module replacement; the foundation of TanStack Start."
+};
+const tip=document.getElementById('tip');
+function showTip(e,txt,label){tip.innerHTML=(label?('<b>'+label+'</b><br>'):'')+txt;tip.classList.add('show');moveTip(e);}
+function moveTip(e){const p=12;let x=e.clientX+p,y=e.clientY+p;const r=tip.getBoundingClientRect();if(x+r.width>innerWidth-8)x=e.clientX-r.width-p;if(y+r.height>innerHeight-8)y=e.clientY-r.height-p;tip.style.left=x+'px';tip.style.top=y+'px';}
+function hideTip(){tip.classList.remove('show');}
+function tagTerms(root){
+  const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{acceptNode(n){
+    if(!n.nodeValue.trim())return NodeFilter.FILTER_REJECT;
+    const p=n.parentElement;if(!p)return NodeFilter.FILTER_REJECT;
+    if(['SCRIPT','STYLE','CODE','PRE','A','BUTTON'].includes(p.tagName))return NodeFilter.FILTER_REJECT;
+    if(p.closest('.term, .est, .layer, .runitem, table'))return NodeFilter.FILTER_REJECT;
+    return NodeFilter.FILTER_ACCEPT;
+  }});
+  const keys=Object.keys(TERMS).sort((a,b)=>b.length-a.length);
+  const targets=[];let node;while(node=walker.nextNode())targets.push(node);
+  targets.forEach(n=>{
+    let html=n.nodeValue,changed=false;
+    keys.forEach(k=>{const re=new RegExp('\\b('+k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')\\b');if(re.test(html)&&!changed){html=html.replace(re,'<span class="term" data-term="'+k+'">$1</span>');changed=true;}});
+    if(changed){const span=document.createElement('span');span.innerHTML=html;n.parentNode.replaceChild(span,n);}
+  });
+  root.querySelectorAll('.term[data-term]').forEach(t=>{const k=t.dataset.term;t.addEventListener('mouseenter',e=>showTip(e,TERMS[k],k));t.addEventListener('mousemove',moveTip);t.addEventListener('mouseleave',hideTip);});
+}
+
+/* ---------- theme · scrollspy · reveal · toc ---------- */
+const headerTop=document.querySelector('header.top');
+let lastY=window.scrollY, hdrH=64;
+const onScroll=()=>{
+  const y=window.scrollY;
+  if(headerTop){
+    hdrH=headerTop.offsetHeight||hdrH;
+    headerTop.classList.toggle('scrolled', y>4);
+    // retract when scrolling down past the header; reveal on any upward scroll or near the top
+    if(y>hdrH && y>lastY+4) headerTop.classList.add('retracted');
+    else if(y<lastY-4 || y<=hdrH) headerTop.classList.remove('retracted');
+  }
+  lastY=y;
+};
+window.addEventListener('scroll',onScroll,{passive:true}); onScroll();
+const root=document.documentElement,themeBtn=document.getElementById('themeBtn');
+const sun='<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/>';
+const moon='<path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/>';
+function setTheme(t){root.setAttribute('data-theme',t);document.getElementById('themeTxt').textContent=t.toUpperCase();document.getElementById('themeIcon').innerHTML=t==='dark'?sun:moon;}
+if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)setTheme('light');
+themeBtn.onclick=()=>setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+
+const rev=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('vis');}),{threshold:0.06});
+document.querySelectorAll('.reveal').forEach(s=>rev.observe(s));
+
+
+/* ---------- clickable code annotations: tap any line → explanation ---------- */
+(function initCodeAnnotations(){
+  const pres=[...document.querySelectorAll('pre.code')];
+  if(!pres.length) return;
+
+  let mode='line';
+  const blank=l=>l.replace(/<[^>]*>/g,'').trim()==='';
+  function wrap(pre){
+    const html=pre.innerHTML;
+    if(!html || html.indexOf('class="cline"')!==-1) return; // already wrapped
+    pre.__li=null; pre.__pairs=null;
+    pre.innerHTML = html.split('\n').map((l,i)=> blank(l) ? l : '<span class="cline" data-li="'+i+'">'+l+'</span>').join('\n');
+  }
+  pres.forEach(pre=>{ wrap(pre); new MutationObserver(()=>wrap(pre)).observe(pre,{childList:true,subtree:true,characterData:true}); });
+
+  function linesOf(pre){ if(!pre.__li) pre.__li=pre.textContent.split('\n'); return pre.__li; }
+  function stripNC(s){ return s.replace(/\/\/.*$/,'').replace(/"(?:[^"\\]|\\.)*"/g,'""').replace(/'(?:[^'\\]|\\.)*'/g,"''").replace(/`(?:[^`\\]|\\.)*`/g,'``'); }
+  function pairsOf(pre){ if(pre.__pairs) return pre.__pairs; const lines=linesOf(pre),st=[],pairs=[];
+    lines.forEach((ln,i)=>{ const s=stripNC(ln); for(let c=0;c<s.length;c++){ const ch=s[c]; if(ch==='{') st.push(i); else if(ch==='}'){ const o=st.pop(); if(o!=null) pairs.push([o,i]); } } });
+    pre.__pairs=pairs; return pairs; }
+  function blockRange(pre,li){ let best=null; pairsOf(pre).forEach(p=>{ if(p[0]<=li&&li<=p[1]){ if(!best||(p[1]-p[0])<(best[1]-best[0])) best=p; } }); return best||[li,li]; }
+  function clinesIn(pre,s,e){ return [...pre.querySelectorAll('.cline')].filter(c=>{const i=+c.dataset.li;return i>=s&&i<=e;}); }
+  function blockHTML(pre,s,e){ const m={}; pre.querySelectorAll('.cline').forEach(c=>m[c.dataset.li]=c.innerHTML); const o=[]; for(let i=s;i<=e;i++) o.push(m[i]!=null?m[i]:''); return o.join('\n'); }
+  function clearHL(pre){ pre.querySelectorAll('.cline.blk-hl').forEach(c=>c.classList.remove('blk-hl')); }
+
+  function modeCtlHTML(){ return '<span class="anno-mode" role="group" aria-label="annotation granularity">'+
+    '<button type="button" data-mode="line"'+(mode==='line'?' class="on"':'')+'>per line</button>'+
+    '<button type="button" data-mode="block"'+(mode==='block'?' class="on"':'')+'>by block</button></span>'; }
+  function setMode(m){ mode=m; document.body.classList.toggle('anno-block', m==='block');
+    document.querySelectorAll('.anno-mode button').forEach(b=>b.classList.toggle('on', b.dataset.mode===m));
+    if(m!=='block') document.querySelectorAll('.cline.blk-hl').forEach(c=>c.classList.remove('blk-hl')); }
+  document.addEventListener('click', e=>{ const b=e.target.closest&&e.target.closest('.anno-mode button'); if(b){ e.stopPropagation(); setMode(b.dataset.mode); } });
+
+  const codePre=el=>el&&el.closest&&el.closest('pre.code, pre.anno-code');
+  document.addEventListener('mouseover', e=>{ if(mode!=='block') return; const cl=e.target.closest&&e.target.closest('.cline'); if(!cl) return; const pre=codePre(cl); if(!pre||pre.classList.contains('anno-leaf')) return; clearHL(pre); const r=blockRange(pre,+cl.dataset.li); clinesIn(pre,r[0],r[1]).forEach(c=>c.classList.add('blk-hl')); });
+  document.addEventListener('mouseout', e=>{ if(mode!=='block') return; const pre=codePre(e.target); if(pre && (!e.relatedTarget || !pre.contains(e.relatedTarget))) clearHL(pre); });
+
+  function fwOf(pre){ return pre.id==='codeNext' ? 'next' : pre.id==='codeTan' ? 'tan' : (pre.classList.contains('nx')?'next':'tan'); }
+  function labelFor(pre){
+    if(pre.dataset.label) return pre.dataset.label;
+    return fwOf(pre)==='next' ? 'Next.js · RSC + Server Action' : 'TanStack · loader + server fn';
+  }
+
+  function normLines(s){ return s.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(l=>l.length); }
+  function offKey(code,isBlock){ return (isBlock?'b:':'l:')+normLines(code).join(' '); }
+  const OFFLINE=(typeof window!=='undefined'&&window.__N16_OFFLINE__)?window.__N16_OFFLINE__:{};
+  // enumeration helper (used to pre-bake offline explanations; harmless at runtime)
+  window.__annoEnum=function(){ const out=[],seen={};
+    function add(pre){ const ls=linesOf(pre);
+      [...pre.querySelectorAll('.cline')].forEach(cl=>{ const li=+cl.dataset.li, lt=cl.textContent;
+        if(lt.trim()){ const k=offKey(lt,false); if(!seen[k]){seen[k]=1; out.push({key:k, code:lt, label:labelFor(pre), block:false});} }
+        const r=blockRange(pre,li), bt=ls.slice(r[0],r[1]+1).join('\n'), bk=offKey(bt,true);
+        if(!seen[bk]){ seen[bk]=1; out.push({key:bk, code:bt, label:labelFor(pre), block:true}); } });
+    }
+    document.querySelectorAll('pre.code').forEach(pre=>{ if(pre.querySelector('.cline')) add(pre); });
+    return out; };
+
+  async function explain(label,code,full,isBlock){
+    const ok=OFFLINE[offKey(code,isBlock)]; if(ok) return ok;
+    const ask=isBlock
+      ? 'Explain what this whole block does as a unit (it is a complete function, route, or call): its purpose and the key steps, in 3-5 short, concrete sentences. Do not walk through every token.'
+      : 'Explain what THIS line does and why it matters, in 2-3 short, concrete sentences.';
+    const prompt='This is '+(isBlock?'a block':'one line')+' from a TypeScript/TSX code sample titled "'+label+'" in an interactive page comparing Next.js 16 (server-first: React Server Components + Server Actions) with TanStack Start (client-first: typed loaders + server functions). Both samples implement the same feature: load a user, then change their name.\n\nThe full snippet, for context:\n```tsx\n'+full+'\n```\n\n'+ask+' Assume the reader knows React and basic TypeScript. Where it sharpens the point, contrast with how the other framework does the same thing. Do not restate the whole snippet or add a preamble — return only the explanation. Whenever you mention a code identifier, function name, property, keyword, or expression, wrap it in single backticks (for example: `createServerFn`, `params.id`, `FormData`).\n\n'+(isBlock?'Block':'Line')+':\n```tsx\n'+code+'\n```';
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
+    if(!res.ok) throw new Error('http '+res.status);
+    const data=await res.json();
+    return (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
+  }
+
+  function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function hiRef(c){
+    let s=escHtml(c);
+    if(/^\s*\/\//.test(c)) return '<span class="c">'+s+'</span>';
+    s=s.replace(/('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")/g,'<span class="s">$1</span>');
+    s=s.replace(/\b(import|from|export|default|async|function|await|const|return|new)\b(?![^<]*<\/span>)/g,'<span class="k">$1</span>');
+    s=s.replace(/(\/\/[^<]*)$/,'<span class="c">$1</span>');
+    return s;
+  }
+  function renderExplanation(t){
+    t=t.trim(); const re=/`([^`]+)`/g; const md=s=>escHtml(s).replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+    let out='', last=0, m;
+    while((m=re.exec(t))){ out+=md(t.slice(last,m.index)); out+='<code class="anno-ref">'+hiRef(m[1])+'</code>'; last=re.lastIndex; }
+    out+=md(t.slice(last));
+    return out.split(/\n{2,}/).map(p=>'<p>'+p.replace(/\n/g,' ')+'</p>').join('');
+  }
+  const escAttr=s=>s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+
+  function openAnno(label,fw,isBlock,codeHTML){
+    const tag=document.getElementById('mTag');
+    tag.className='mtag '+fw;
+    tag.textContent='ANNOTATION · '+(fw==='next'?'NEXT.JS':'TANSTACK');
+    document.getElementById('mTitle').textContent=isBlock?'What this block does':'What this line does';
+    document.getElementById('mLane').textContent=label;
+    const cls=fw==='next'?'nx':'ts';
+    document.getElementById('mBody').innerHTML=
+      (isBlock?'<div class="anno-codebar"><span class="anno-hint">tap a line inside the block for a deeper look</span>'+modeCtlHTML()+'</div>':'')+
+      '<pre class="anno-code '+cls+(isBlock?'':' anno-leaf')+'" data-fw="'+fw+'" data-label="'+escAttr(label)+'">'+codeHTML+'</pre>'+
+      '<div class="anno-text loading" id="annoText">'+(isBlock?'Explaining this block…':'Explaining this line…')+'</div>';
+    const mpre=document.querySelector('#mBody pre.anno-code'); if(mpre&&isBlock) wrap(mpre);
+    scrim.classList.add('open');document.body.classList.add('fs-lock');
+  }
+
+  let reqId=0;
+  document.addEventListener('click', async (e)=>{
+    const cl=e.target.closest&&e.target.closest('.cline'); if(!cl) return;
+    const pre=codePre(cl); if(!pre || pre.classList.contains('anno-leaf')) return;
+    const sel=window.getSelection&&window.getSelection(); if(sel&&!sel.isCollapsed) return; // let text selection work
+    const inModal=pre.classList.contains('anno-code');
+    const label=labelFor(pre); const fw=inModal?(pre.dataset.fw||'tan'):fwOf(pre);
+    const full=inModal?pre.textContent:linesOf(pre).join('\n');
+    const my=++reqId; const isBlock=(mode==='block');
+    let codeHTML, codeText;
+    if(isBlock){ const r=blockRange(pre,+cl.dataset.li); codeHTML=blockHTML(pre,r[0],r[1]); codeText=linesOf(pre).slice(r[0],r[1]+1).join('\n'); }
+    else { codeHTML=cl.innerHTML; codeText=cl.textContent; }
+    if(!codeText.trim()) return;
+    if(inModal){
+      const body=document.getElementById('mBody');
+      let drill=body.querySelector('.anno-drill');
+      if(!drill){ drill=document.createElement('div'); drill.className='anno-drill'; body.appendChild(drill); }
+      const cls=fw==='next'?'nx':'ts';
+      drill.innerHTML='<div class="anno-drill-h">'+(isBlock?'this block':'this line')+'</div><pre class="anno-code anno-leaf '+cls+'">'+codeHTML+'</pre><div class="anno-text loading" id="annoDText">'+(isBlock?'Explaining this block…':'Explaining this line…')+'</div>';
+      try{ drill.scrollIntoView({block:'nearest'}); }catch(_){ }
+      try{ const text=await explain(label,codeText,full,isBlock); if(my!==reqId) return; const el=document.getElementById('annoDText'); if(el){ el.classList.remove('loading'); el.innerHTML=renderExplanation(text||'No explanation returned.'); } }
+      catch(err){ if(my!==reqId) return; const el=document.getElementById('annoDText'); if(el){ el.classList.remove('loading'); el.textContent='Explanations for this selection are generated live by the model — they load while this page is open in the Claude app.'; } }
+      return;
+    }
+    openAnno(label,fw,isBlock,codeHTML);
+    try{
+      const text=await explain(label,codeText,full,isBlock); if(my!==reqId) return;
+      const el=document.getElementById('annoText'); if(el){ el.classList.remove('loading'); el.innerHTML=renderExplanation(text||'No explanation was returned — try another '+(isBlock?'block':'line')+'.'); }
+    }catch(err){
+      if(my!==reqId) return; const el=document.getElementById('annoText');
+      if(el){ el.classList.remove('loading'); el.textContent='Explanations for this selection are generated live by the model, so they only load while this page is open inside the Claude app. In a downloaded or offline copy they can\u2019t load.'; }
+    }
+  });
+})();
+
+tagTerms(document.querySelector('main'));
+</script>
+</body>
+</html>

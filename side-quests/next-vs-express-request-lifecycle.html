@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Express decorates Node · Next extends the Web — the request lifecycle, mapped</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#eef2fb;
+    --panel:#ffffff;
+    --panel-2:#eef1f8;
+    --panel-brd:rgba(20,22,40,.10);
+    --panel-shadow:0 18px 50px -24px rgba(40,55,110,.30);
+    --code-bg:#f6f7fc;
+    --t-text:#2a2c33;
+    --t-cm:#9aa0ad;
+    --t-kw:#d6336c;
+    --t-ty:#5e5ce6;
+    --t-str:#1da94f;
+    --t-fn:#0a84ff;
+    --ink:#1c1c1e;
+    --muted:#43454d;
+    --faint:#7c7c86;
+    --rule:rgba(20,22,40,.12);
+    --rule-soft:rgba(20,22,40,.07);
+    --accent:#ff375f;     /* annotations / request token */
+    --client:#8a8f9c;     /* neutral — client + runtime edges */
+    --node:#5e5ce6;       /* indigo — Node lineage */
+    --express:#1da94f;    /* green — Express */
+    --next:#0a84ff;       /* blue — Next / Web */
+    --runtime:#b6892b;    /* amber — runtime boundary */
+    --node-soft:rgba(94,92,230,.13);
+    --express-soft:rgba(29,169,79,.13);
+    --next-soft:rgba(10,132,255,.13);
+    --runtime-soft:rgba(182,137,43,.14);
+    --client-soft:rgba(138,143,156,.14);
+    --shadow:0 18px 50px -20px rgba(40,55,110,.42);
+  }
+  [data-theme="dark"]{
+    --paper:#000000;
+    --panel:#070708;
+    --panel-2:#151517;
+    --panel-brd:rgba(255,255,255,.085);
+    --panel-shadow:0 22px 60px -26px rgba(0,0,0,.9);
+    --code-bg:#0a0a0c;
+    --t-text:#e7e8ee;
+    --t-cm:#6b7180;
+    --t-kw:#ff7a93;
+    --t-ty:#9b99ff;
+    --t-str:#46d977;
+    --t-fn:#5aa6ff;
+    --ink:#f5f5f7;
+    --muted:rgba(235,235,245,.74);
+    --faint:rgba(235,235,245,.5);
+    --rule:rgba(255,255,255,.10);
+    --rule-soft:rgba(255,255,255,.06);
+    --accent:#ff6482;
+    --client:#9aa0ad;
+    --node:#7d7aff;
+    --express:#34c759;
+    --next:#409cff;
+    --runtime:#e0b350;
+    --node-soft:rgba(125,122,255,.17);
+    --express-soft:rgba(52,199,89,.16);
+    --next-soft:rgba(64,156,255,.16);
+    --runtime-soft:rgba(224,179,80,.15);
+    --client-soft:rgba(154,160,173,.14);
+    --shadow:0 18px 50px -20px rgba(0,0,0,.7);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--paper);color:var(--ink);
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;line-height:1.6;
+    letter-spacing:-.011em;-webkit-font-smoothing:antialiased;overflow-x:hidden;position:relative;
+  }
+  body::before{
+    content:"";position:fixed;inset:-10%;z-index:-2;pointer-events:none;
+    background:
+      radial-gradient(38% 46% at 8% 4%, rgba(94,92,230,.28), transparent 72%),
+      radial-gradient(40% 48% at 95% 3%, rgba(255,55,95,.18), transparent 72%),
+      radial-gradient(44% 50% at 93% 97%, rgba(10,132,255,.26), transparent 72%),
+      radial-gradient(42% 46% at 3% 98%, rgba(29,200,140,.2), transparent 72%);
+    filter:saturate(108%);
+  }
+  body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--paper);opacity:.62}
+  [data-theme="dark"] body::before{
+    background:
+      radial-gradient(38% 46% at 8% 4%, rgba(94,92,230,.16), transparent 70%),
+      radial-gradient(40% 48% at 95% 3%, rgba(255,55,95,.09), transparent 70%),
+      radial-gradient(44% 50% at 93% 97%, rgba(10,132,255,.14), transparent 70%),
+      radial-gradient(42% 46% at 3% 98%, rgba(29,200,140,.09), transparent 70%);
+  }
+  [data-theme="dark"] body::after{opacity:.76}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+  code,.mono{font-family:'JetBrains Mono',monospace}
+
+  .panel{background:var(--panel);border:1px solid var(--panel-brd);border-radius:22px;box-shadow:var(--panel-shadow)}
+  [data-theme="dark"] .panel{
+    background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,0) 16%),var(--panel);
+    box-shadow:var(--panel-shadow),inset 0 1px 0 rgba(255,255,255,.09);
+  }
+
+  /* ---- theme toggle / skip ---- */
+  .theme-toggle{position:fixed;top:18px;right:18px;z-index:60;width:44px;height:44px;border-radius:50%;
+    border:1px solid var(--panel-brd);background:var(--panel);color:var(--ink);cursor:pointer;font-size:16px;
+    display:grid;place-items:center;transition:transform .2s;box-shadow:var(--panel-shadow)}
+  .theme-toggle:hover{transform:scale(1.07)}
+  .skip{position:absolute;left:-999px;top:0;background:var(--panel);color:var(--ink);padding:10px 16px;border-radius:10px;z-index:80;border:1px solid var(--panel-brd)}
+  .skip:focus{left:18px;top:18px}
+  :focus-visible{outline:2.5px solid var(--accent);outline-offset:3px;border-radius:8px}
+
+  /* ---- header ---- */
+  header{padding:74px 0 26px;position:relative}
+  .kicker{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--accent)}
+  h1{font-weight:600;font-size:clamp(34px,6.2vw,72px);line-height:.99;letter-spacing:-.018em;margin:16px 0 0;max-width:18ch}
+  h1 .dec{color:var(--express)} h1 .ext{color:var(--next)}
+  .lede{max-width:680px;color:var(--muted);font-size:clamp(15px,2vw,18px);margin-top:22px}
+  .lede b{color:var(--ink);font-weight:600}
+  .lede code{background:var(--panel-2);border:1px solid var(--rule);border-radius:5px;padding:1px 6px;font-size:.9em}
+  .opline{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}
+  .opcard{flex:1 1 280px;border-radius:16px;padding:15px 17px;border:1px solid var(--panel-brd);background:var(--panel-2);border-left:3px solid var(--c)}
+  .opcard.amp{--c:var(--express)} .opcard.ex{--c:var(--next)}
+  .opcard .sym{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:var(--c)}
+  .opcard p{font-size:13.5px;color:var(--muted);margin-top:4px} .opcard p b{color:var(--ink);font-weight:600}
+  .opcard code{font-family:'JetBrains Mono',monospace;background:var(--panel);border:1px solid var(--panel-brd);border-radius:5px;padding:0 5px;font-size:.86em}
+
+  /* ---- sections ---- */
+  section{padding:54px 0;border-top:1px solid var(--rule)}
+  .figlabel{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-bottom:14px;display:flex;align-items:center;gap:10px}
+  .figlabel::before{content:"";width:26px;height:1.5px;background:var(--accent)}
+  h2{font-weight:600;font-size:clamp(25px,3.6vw,40px);line-height:1.05;letter-spacing:-.012em;margin-bottom:12px;max-width:20ch}
+  .subhead{color:var(--muted);max-width:720px;margin-bottom:26px;font-size:15.5px}
+  .subhead code,.note code,.tag-note code{background:var(--panel-2);border:1px solid var(--rule);border-radius:5px;padding:1px 6px;font-size:.88em}
+  .subhead em{color:var(--ink);font-style:italic}
+
+  /* ---- legend ---- */
+  .legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin-bottom:20px;font-size:12.5px;color:var(--muted);align-items:center}
+  .dot{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  .dot.client{background:var(--client)} .dot.node{background:var(--node)} .dot.express{background:var(--express)}
+  .dot.web{background:var(--next)} .dot.next{background:var(--next);opacity:.55;border:1px solid var(--next)} .dot.runtime{background:var(--runtime)}
+
+  /* ---- foundation strip ---- */
+  .found{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;border-radius:18px;overflow:hidden;border:1px solid var(--panel-brd);background:var(--panel)}
+  .fstep{flex:1 1 0;min-width:150px;padding:16px 16px;position:relative;display:flex;flex-direction:column;gap:4px;border-right:1px solid var(--rule)}
+  .fstep:last-child{border-right:0}
+  .fstep .ft{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:13px}
+  .fstep .fd{font-size:12.5px;color:var(--muted);line-height:1.4}
+  .fstep .arr{position:absolute;right:-9px;top:50%;transform:translateY(-50%);z-index:2;color:var(--accent);font-size:15px;background:var(--paper);border-radius:50%;width:18px;height:18px;display:grid;place-items:center}
+  .fstep:last-child .arr{display:none}
+  .fstep.c-node{border-top:3px solid var(--node)} .fstep.c-client{border-top:3px solid var(--client)}
+  @media(max-width:720px){.fstep{flex:1 1 100%;border-right:0;border-bottom:1px solid var(--rule)}.fstep .arr{right:50%;top:auto;bottom:-9px;transform:translateX(50%) rotate(90deg)}}
+
+  /* ---- the fork (svg) ---- */
+  .forkwrap{padding:8px 4px 0}
+  .fork-svg{width:100%;height:auto;display:block}
+  .fk-box{fill:var(--panel);stroke:var(--panel-brd);stroke-width:1.5}
+  .fk-node{stroke:var(--node)} .fk-web{stroke:var(--next)}
+  .fk-line{stroke:var(--rule);stroke-width:2;fill:none}
+  .fk-line-node{stroke:var(--node)} .fk-line-web{stroke:var(--next)}
+  .fk-t{font-family:'JetBrains Mono',monospace;fill:var(--ink)}
+  .fk-sub{font-family:'JetBrains Mono',monospace;fill:var(--muted)}
+  .fk-node-t{fill:var(--node)} .fk-web-t{fill:var(--next)} .fk-accent{fill:var(--accent)}
+  .fk-chip-node{fill:var(--node-soft);stroke:var(--node);stroke-width:1}
+  .fk-chip-web{fill:var(--next-soft);stroke:var(--next);stroke-width:1}
+  .fork-cap{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}
+  .fork-cap .cap{border-radius:14px;padding:14px 16px;border:1px solid var(--panel-brd);background:var(--panel-2);border-left:3px solid var(--c)}
+  .fork-cap .cap.n{--c:var(--node)} .fork-cap .cap.w{--c:var(--next)}
+  .fork-cap .cap h4{font-size:14.5px;font-weight:600;margin-bottom:3px} .fork-cap .cap.n h4{color:var(--node)} .fork-cap .cap.w h4{color:var(--next)}
+  .fork-cap .cap p{font-size:13px;color:var(--muted)} .fork-cap .cap code{font-family:'JetBrains Mono',monospace;font-size:.85em;background:var(--panel);border:1px solid var(--panel-brd);padding:0 5px;border-radius:5px}
+  @media(max-width:720px){.fork-cap{grid-template-columns:1fr}}
+
+  /* ---- lifecycle player ---- */
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+  .tab{font-family:'Inter',sans-serif;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--panel-brd);background:var(--panel);color:var(--muted);
+    padding:9px 16px;border-radius:999px;transition:.16s;display:flex;align-items:center;gap:8px}
+  .tab .tdot{width:9px;height:9px;border-radius:3px}
+  .tab[data-k="express"] .tdot{background:var(--express)} .tab[data-k="app"] .tdot{background:var(--next)} .tab[data-k="pages"] .tdot{background:var(--node)}
+  .tab:hover{color:var(--ink)}
+  .tab.active{color:var(--ink);border-color:var(--ac);box-shadow:inset 0 0 0 1px var(--ac)}
+  .tab.active[data-k="express"]{--ac:var(--express)} .tab.active[data-k="app"]{--ac:var(--next)} .tab.active[data-k="pages"]{--ac:var(--node)}
+  .runtime-pill{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted);margin:14px 0 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .runtime-pill .rp{background:var(--panel-2);border:1px solid var(--rule);border-radius:999px;padding:3px 10px}
+
+  .player{display:grid;grid-template-columns:1fr;gap:0}
+  .flow{position:relative;padding-left:34px}
+  .rail{position:absolute;left:13px;top:14px;bottom:14px;width:2px;background:var(--rule);border-radius:2px}
+  .token{position:absolute;left:7px;width:14px;height:14px;border-radius:50%;background:var(--accent);
+    box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent);transition:top .42s cubic-bezier(.4,0,.2,1);opacity:0;z-index:5}
+  .token.on{opacity:1}
+  .stage{position:relative;border:1px solid var(--panel-brd);background:var(--panel);border-radius:14px;margin-bottom:9px;
+    border-left:3px solid var(--c);transition:box-shadow .25s,transform .2s,opacity .25s;opacity:.62}
+  .stage::before{content:"";position:absolute;left:-27px;top:18px;width:11px;height:11px;border-radius:50%;background:var(--panel);border:2px solid var(--c);transition:.25s;z-index:3}
+  .stage.c-client{--c:var(--client)} .stage.c-node{--c:var(--node)} .stage.c-express{--c:var(--express)}
+  .stage.c-web{--c:var(--next)} .stage.c-next{--c:var(--next)} .stage.c-runtime{--c:var(--runtime)}
+  .stage.touched{opacity:1}
+  .stage.current{opacity:1;box-shadow:0 0 0 2px var(--c),0 14px 34px -18px var(--c)}
+  .stage.current::before{background:var(--c);box-shadow:0 0 0 4px color-mix(in srgb,var(--c) 22%,transparent)}
+  .st-head{display:flex;align-items:center;gap:11px;padding:13px 15px;cursor:pointer;user-select:none}
+  .st-title{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:14px;flex:1;min-width:0}
+  .st-chip{font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap;
+    background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--c)}
+  .stage.c-next .st-chip.shape{background:transparent;border:1px solid var(--node);color:var(--node)}
+  .st-caret{color:var(--faint);font-size:12px;transition:transform .2s}
+  .stage.open .st-caret{transform:rotate(90deg)}
+  .st-body{display:none;padding:0 15px 15px;animation:fade .25s ease}
+  .stage.open .st-body{display:block}
+  .st-d{font-size:13.5px;color:var(--muted);line-height:1.55;border-top:1px dashed var(--rule);padding-top:11px}
+  .st-d b{color:var(--ink);font-weight:600}
+  .st-code{margin-top:10px;background:var(--code-bg);border:1px solid var(--panel-brd);border-radius:10px;padding:10px 12px;
+    font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t-text);overflow-x:auto;white-space:pre;line-height:1.6}
+
+  .pcontrols{display:flex;gap:10px;align-items:center;margin:16px 0 8px;flex-wrap:wrap}
+  .pbtn{font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--panel-brd);
+    background:var(--panel);color:var(--ink);padding:10px 16px;border-radius:999px;transition:.16s}
+  .pbtn:hover{transform:translateY(-1px)}
+  .pbtn.primary{background:var(--accent);color:#fff;border-color:transparent;min-width:128px;box-shadow:0 8px 20px -8px var(--accent)}
+  .pbtn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+  .pind{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);margin-left:auto}
+  .verdict{margin-top:14px;border-radius:14px;padding:14px 16px;border:1px solid var(--panel-brd);background:var(--panel-2);
+    border-left:3px solid var(--c);font-size:13.5px;color:var(--ink)}
+  .verdict.c-express{--c:var(--express)} .verdict.c-app{--c:var(--next)} .verdict.c-pages{--c:var(--node)}
+  .verdict b{font-weight:600} .verdict code{font-family:'JetBrains Mono',monospace;font-size:.86em;background:var(--panel);border:1px solid var(--panel-brd);padding:0 5px;border-radius:5px}
+  .verdict .ok{color:var(--express);font-weight:600} .verdict .no{color:var(--accent);font-weight:600}
+
+  /* ---- provenance inspector ---- */
+  .inspector{border:1px solid var(--panel-brd);border-radius:20px;overflow:hidden;background:var(--panel);box-shadow:var(--panel-shadow)}
+  .prow{display:grid;grid-template-columns:160px 1fr 1fr 1fr;align-items:stretch}
+  .prow.head{background:var(--panel-2);border-bottom:1px solid var(--panel-brd)}
+  .prow.head > div{padding:12px 15px;font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:600}
+  .prow.head .h-node{color:var(--node)} .prow.head .h-express{color:var(--express)} .prow.head .h-next{color:var(--next)}
+  .pitem{border-bottom:1px solid var(--rule)} .pitem:last-child{border-bottom:0}
+  .pitem .prow{cursor:pointer;transition:background .15s} .pitem:hover .prow,.pitem.open .prow{background:var(--panel-2)}
+  .pcell{padding:12px 15px;border-left:1px solid var(--rule);display:flex;flex-direction:column;gap:7px;min-width:0}
+  .pcell:first-child{border-left:0}
+  .pkey{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:7px}
+  .pkey .req{color:var(--faint)}
+  .pcode{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);word-break:break-word;line-height:1.45}
+  .badge{display:inline-flex;align-items:center;gap:4px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;padding:3px 8px;border-radius:999px;width:fit-content}
+  .badge.native{background:var(--node);color:#fff}
+  .badge.inh-node{color:var(--node);border:1.3px solid var(--node);background:transparent}
+  .badge.inh-web{color:var(--next);border:1.3px solid var(--next);background:transparent}
+  .badge.dec{background:var(--express);color:#fff}
+  .badge.ext{background:var(--next);color:#fff}
+  .badge.none{color:var(--faint);border:1.3px dashed var(--faint);background:transparent}
+  .pdetail{display:none;padding:0 15px 16px;background:var(--panel-2);border-top:1px dashed var(--rule)}
+  .pitem.open .pdetail{display:block;animation:fade .28s ease}
+  .pd-pattern{font-size:13.5px;color:var(--ink);padding:13px 0 2px;display:flex;gap:9px;align-items:flex-start}
+  .pd-pattern .ar{color:var(--accent);font-family:'JetBrains Mono',monospace;font-weight:700}
+  .pd-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-top:9px}
+  .pd-card{background:color-mix(in srgb,var(--tc) 7%,var(--panel));border:1px solid color-mix(in srgb,var(--tc) 30%,transparent);border-radius:11px;padding:12px}
+  .pd-card.node{--tc:var(--node)} .pd-card.express{--tc:var(--express)} .pd-card.next{--tc:var(--next)}
+  .pd-card .who{font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:600;color:var(--tc);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px}
+  .pd-card .desc{font-size:13px;color:var(--muted);line-height:1.5} .pd-card .desc b{color:var(--ink);font-weight:600}
+  .pd-card .desc code{font-family:'JetBrains Mono',monospace;font-size:.9em;background:var(--panel);border:1px solid var(--rule);padding:0 4px;border-radius:4px}
+  @media(max-width:760px){.prow{grid-template-columns:1fr 1fr}.prow.head{display:none}
+    .pcell:first-child{grid-column:1/-1;border-bottom:1px solid var(--rule)}.pcell{border-left:0;border-top:1px solid var(--rule-soft)}.pcell:nth-child(2){border-top:0}
+    .pd-grid{grid-template-columns:1fr}}
+
+  /* ---- peel ---- */
+  .twogrid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:840px){.twogrid{grid-template-columns:1fr}}
+  .peelcard{padding:20px}
+  .pc-title{font-size:20px;font-weight:600;margin-bottom:1px}
+  .peelcard.dec .pc-title{color:var(--express)} .peelcard.ext .pc-title{color:var(--next)}
+  .pc-sub{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);margin-bottom:15px}
+  .stack{display:flex;flex-direction:column;gap:8px}
+  .layer{border-radius:10px;padding:11px 13px;border:1px solid var(--rule)}
+  .layer.basel{background:var(--node-soft);border-color:color-mix(in srgb,var(--node) 40%,transparent)}
+  .peelcard.ext .layer.basel{background:var(--next-soft);border-color:color-mix(in srgb,var(--next) 40%,transparent)}
+  .layer.addl{background:var(--express-soft);border-color:color-mix(in srgb,var(--express) 45%,transparent)}
+  .peelcard.ext .layer.addl{background:var(--next-soft);border-color:color-mix(in srgb,var(--next) 45%,transparent)}
+  .layer-tag{font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:600;margin-bottom:8px}
+  .layer.basel .layer-tag{color:var(--node)} .peelcard.ext .layer.basel .layer-tag{color:var(--next)}
+  .layer.addl .layer-tag{color:var(--express)} .peelcard.ext .layer.addl .layer-tag{color:var(--next)}
+  .props{display:flex;flex-wrap:wrap;gap:6px}
+  .ptok{font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--panel);border:1px solid var(--rule);border-radius:7px;padding:3px 8px;color:var(--ink)}
+  .ptok .g{color:var(--accent);font-size:10.5px}
+  .deco-wrap{overflow:hidden;transition:max-height .45s cubic-bezier(.4,0,.2,1),opacity .35s,margin-top .35s;max-height:160px;opacity:1;margin-top:8px}
+  .deco-wrap.hidden{max-height:0;opacity:0;margin-top:0}
+  .peelbtn{margin-top:14px;font-size:13px;font-weight:600;cursor:pointer;width:100%;
+    border:1px solid color-mix(in srgb,var(--express) 50%,transparent);background:var(--express-soft);color:var(--express);padding:10px 16px;border-radius:999px;transition:.16s}
+  .peelbtn:hover{background:var(--express);color:#fff;border-color:transparent}
+  .assert{margin-top:14px;display:flex;flex-direction:column;gap:7px}
+  .assert .a{font-family:'JetBrains Mono',monospace;font-size:12px;display:flex;gap:8px;align-items:baseline;color:var(--muted);flex-wrap:wrap}
+  .assert .a .ok{color:var(--express);font-weight:600} .assert .a .no{color:var(--accent);font-weight:600}
+  .note{margin-top:14px;font-size:13px;color:var(--muted);border-left:2px solid var(--accent);padding-left:12px}
+  .note b{color:var(--ink)} .note code{font-family:'JetBrains Mono',monospace;font-size:.9em;background:var(--panel-2);border:1px solid var(--rule);padding:0 4px;border-radius:4px}
+
+  /* ---- mutate vs return stepper ---- */
+  .scol{padding:20px;display:flex;flex-direction:column}
+  .scol.mut{border-top:4px solid var(--node)} .scol.imm{border-top:4px solid var(--next)}
+  .sc-title{font-size:20px;font-weight:600} .scol.mut .sc-title{color:var(--node)} .scol.imm .sc-title{color:var(--next)}
+  .sc-sub{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted);margin-bottom:14px}
+  .sline{font-family:'JetBrains Mono',monospace;font-size:12.5px;padding:8px 11px;border-radius:11px;background:var(--panel-2);border:1px solid var(--rule);margin-bottom:7px;opacity:.34;transition:.3s;white-space:pre}
+  .sline.on{opacity:1;border-color:var(--tc);box-shadow:inset 0 0 0 1px var(--tc)}
+  .scol.mut .sline.on{--tc:var(--node)} .scol.imm .sline.on{--tc:var(--next)}
+  .sline .ln{color:var(--faint)} .sline .kw{color:var(--t-kw);font-weight:600} .sline .cm{color:var(--t-cm);font-style:italic}
+  .sobj{margin-top:auto;padding-top:14px}
+  .sobj-card{background:var(--panel-2);border:1px dashed var(--rule);border-radius:14px;padding:14px;min-height:150px;transition:.3s}
+  .sobj-card.pulse{animation:opulse .45s ease}
+  .sobj-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+  .sobj-name{font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:600} .scol.mut .sobj-name{color:var(--node)} .scol.imm .sobj-name{color:var(--next)}
+  .mcount{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--node);background:var(--node-soft);padding:3px 9px;border-radius:999px}
+  .sobj-rows{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+  .sobj-rows .k{color:var(--ink)} .sempty{color:var(--faint);font-style:italic}
+  .sbadge{display:inline-block;margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:3px 9px;border-radius:999px}
+  .sbadge.flushed{background:var(--node-soft);color:var(--node)} .sbadge.born{background:var(--next-soft);color:var(--next)} .sbadge.returned{background:var(--express-soft);color:var(--express)}
+
+  /* ---- prototype chain ---- */
+  .mech{padding:20px} .mech.dec{border-top:4px solid var(--express)} .mech.ext{border-top:4px solid var(--next)}
+  .mech-title{font-size:19px;font-weight:600} .mech.dec .mech-title{color:var(--express)} .mech.ext .mech-title{color:var(--next)}
+  .mech-sub{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:14px}
+  .codeblk{background:var(--code-bg);border:1px solid var(--panel-brd);border-radius:12px;padding:13px;font-size:12px;margin-bottom:14px;
+    font-family:'JetBrains Mono',monospace;color:var(--t-text);overflow-x:auto;white-space:pre;line-height:1.65}
+  .codeblk .kw{color:var(--t-kw);font-weight:600} .codeblk .ty{color:var(--t-ty);font-weight:600} .codeblk .cm{color:var(--t-cm);font-style:italic} .codeblk .str{color:var(--t-str)} .codeblk .fn{color:var(--t-fn)}
+  .clabel{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:7px}
+  .clink{font-family:'JetBrains Mono',monospace;font-size:12px;border:1px solid var(--rule);border-radius:8px;padding:8px 11px;background:var(--panel);border-left:3px solid var(--c)}
+  .clink.tc-node{--c:var(--node)} .clink.tc-express{--c:var(--express)} .clink.tc-web{--c:var(--next)} .clink.tc-obj{--c:var(--faint)}
+  .clink b{font-weight:600;color:var(--ink)} .clink .anno{color:var(--muted);font-size:10.5px}
+  .carrow{text-align:center;color:var(--accent);font-size:13px;line-height:1.1;margin:3px 0}
+
+  /* ---- declaration merging ---- */
+  .mech .note{margin-top:0}
+
+  /* ---- patterns ---- */
+  .pat{padding:22px;border-top:3px solid var(--tc)} .pat.d{--tc:var(--express)} .pat.e{--tc:var(--next)}
+  .pat h3{font-size:21px;font-weight:600;margin-bottom:3px;color:var(--tc)}
+  .pat .tagline{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted);margin-bottom:14px}
+  .pat ul{list-style:none;display:flex;flex-direction:column;gap:9px}
+  .pat li{font-size:13.6px;color:var(--muted);padding-left:18px;position:relative;line-height:1.5}
+  .pat li::before{content:"›";position:absolute;left:0;color:var(--tc);font-weight:700}
+  .pat li.cost::before{content:"✕";color:var(--accent)} .pat li b{color:var(--ink);font-weight:600}
+  .pat li code{font-family:'JetBrains Mono',monospace;font-size:.88em;background:var(--panel-2);border:1px solid var(--rule);padding:0 4px;border-radius:4px}
+
+  /* ---- comparison tables ---- */
+  .tablewrap{overflow-x:auto;border:1px solid var(--panel-brd);border-radius:18px;background:var(--panel);box-shadow:var(--panel-shadow);margin-bottom:18px}
+  table{border-collapse:collapse;width:100%;min-width:560px;font-size:13.5px}
+  thead th{text-align:left;padding:13px 15px;font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);background:var(--panel-2);border-bottom:1px solid var(--panel-brd);font-weight:600}
+  thead th.h-node{color:var(--node)} thead th.h-express{color:var(--express)} thead th.h-next{color:var(--next)}
+  tbody td{padding:12px 15px;border-bottom:1px solid var(--rule);color:var(--muted);vertical-align:top}
+  tbody tr:last-child td{border-bottom:0} tbody td:first-child{color:var(--ink);font-weight:600}
+  tbody code{font-family:'JetBrains Mono',monospace;font-size:.88em;background:var(--panel-2);border:1px solid var(--rule);padding:0 5px;border-radius:5px}
+
+  /* ---- why / portability ---- */
+  .portgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:4px}
+  @media(max-width:760px){.portgrid{grid-template-columns:1fr 1fr}}
+  .port{border-radius:14px;padding:15px;border:1px solid var(--panel-brd);background:var(--panel-2);border-top:3px solid var(--next)}
+  .port .pt{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:13px;color:var(--next)} .port .pp{font-size:12.5px;color:var(--muted);margin-top:4px}
+
+  /* ---- footer ---- */
+  footer{padding:54px 0 90px;border-top:1px solid var(--rule);color:var(--muted);font-size:13.5px}
+  footer .big{font-size:clamp(20px,3vw,30px);color:var(--ink);line-height:1.28;font-weight:500;margin-bottom:16px;max-width:24ch}
+  footer .big em{font-style:italic;color:var(--accent)}
+  footer code{font-family:'JetBrains Mono',monospace;background:var(--panel-2);border:1px solid var(--rule);border-radius:5px;padding:1px 6px;font-size:.92em}
+  footer .src{margin-top:18px;font-size:12.5px;color:var(--faint);line-height:1.7}
+  footer .src a{color:var(--next);text-decoration:none} footer .src a:hover{text-decoration:underline}
+
+  @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  @keyframes opulse{0%{box-shadow:0 0 0 0 var(--node-soft)}100%{box-shadow:0 0 0 12px transparent}}
+  header,section{animation:rise .6s both}
+
+  @media(prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+    .token{transition:none!important}
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#lifecycles">Skip to the lifecycle diagrams</a>
+<button class="theme-toggle" id="themeToggle" aria-label="Toggle light or dark theme">◐</button>
+
+<header>
+  <div class="wrap">
+    <div class="kicker">the request lifecycle · decorate vs extend · mapped end to end</div>
+    <h1>Express <span class="dec">decorates</span> Node.<br>Next <span class="ext">extends</span> the Web.</h1>
+    <p class="lede">There are only two ways to give a request object more power, and each framework picked one. Express takes Node's <code>IncomingMessage</code> and glues new keys onto the very same instance — <b>same object, more properties</b>. Next.js App Router doesn't touch Node's object at all: <code>NextRequest</code> is a subclass of the Web platform's <code>Request</code>. This page traces a request through all three lifecycles, then opens up the machinery underneath.</p>
+    <div class="opline">
+      <div class="opcard amp"><span class="sym">&amp; &nbsp;decoration</span><p><b>Additive.</b> <code>IncomingMessage &amp; { … }</code> — every Node property survives, Express just layers more on. <code>req instanceof IncomingMessage</code> stays true.</p></div>
+      <div class="opcard ex"><span class="sym">extends &nbsp;extension</span><p><b>A new foundation.</b> <code>class NextRequest extends Request</code> — a different lineage, which is why the same handler runs in a bare V8 isolate at the Edge.</p></div>
+    </div>
+  </div>
+</header>
+
+<!-- ============ FOUNDATION ============ -->
+<section id="foundation">
+<div class="wrap">
+  <div class="figlabel">§ 1 · the foundation</div>
+  <h2>Every request starts as the same two Node objects.</h2>
+  <p class="subhead">Before any framework, Node's HTTP server parses the raw bytes and hands you a readable request and a writable response. Frameworks decide what to do with these two.</p>
+  <div class="found">
+    <div class="fstep c-client"><span class="ft">client</span><span class="fd">raw HTTP bytes over TCP</span><span class="arr">›</span></div>
+    <div class="fstep c-node"><span class="ft">network + parser</span><span class="fd">Node reads method, URL, headers; body becomes a stream</span><span class="arr">›</span></div>
+    <div class="fstep c-node"><span class="ft">IncomingMessage</span><span class="fd">readable request stream — <code>req</code></span><span class="arr">›</span></div>
+    <div class="fstep c-node"><span class="ft">ServerResponse</span><span class="fd">writable response stream — <code>res</code></span></div>
+  </div>
+  <p class="note" style="margin-top:16px"><b>What Node does not give you:</b> <code>req.params</code>, a parsed <code>req.query</code>, an already-read <code>req.body</code>, <code>res.json()</code>, <code>res.status()</code>, routing, or middleware. That is the job frameworks take on — and the next section is the fork in how they take it.</p>
+</div>
+</section>
+
+<!-- ============ THE FORK ============ -->
+<section id="fork">
+<div class="wrap">
+  <div class="figlabel">§ 2 · the fork</div>
+  <h2>Two camps, not three.</h2>
+  <p class="subhead">There are three route styles, but only two lineages for the object your handler receives. The whole question is: <em>does the public request descend from Node's <code>IncomingMessage</code>, or is it a Web <code>Request</code>?</em></p>
+
+  <div class="panel forkwrap">
+    <svg class="fork-svg" viewBox="0 0 1000 360" role="img" aria-label="A request forks into two lineages: Node-shaped (Express and Pages API) via the ampersand decoration operator, and Web-shaped (App Router) via the extends operator.">
+      <!-- top: incoming -->
+      <rect class="fk-box" x="400" y="14" width="200" height="46" rx="12"/>
+      <text class="fk-t" x="500" y="36" text-anchor="middle" font-size="14" font-weight="600">incoming HTTP request</text>
+      <text class="fk-sub" x="500" y="52" text-anchor="middle" font-size="11">parsed by the runtime</text>
+
+      <!-- question -->
+      <text class="fk-accent" x="500" y="92" text-anchor="middle" font-size="12" font-family="'JetBrains Mono',monospace" font-weight="600">which lineage is the public req object?</text>
+
+      <!-- branch lines -->
+      <path class="fk-line fk-line-node" d="M500 100 C 500 130, 270 120, 270 152"/>
+      <path class="fk-line fk-line-web" d="M500 100 C 500 130, 730 120, 730 152"/>
+
+      <!-- LEFT: node-shaped -->
+      <rect class="fk-box fk-node" x="70" y="154" width="400" height="172" rx="16"/>
+      <text class="fk-node-t" x="90" y="182" font-size="15" font-weight="700" font-family="'JetBrains Mono',monospace">&amp; &nbsp;DECORATION → Node-shaped</text>
+      <text class="fk-sub" x="90" y="202" font-size="12" font-family="'JetBrains Mono',monospace">type Req = IncomingMessage &amp; { … }</text>
+      <!-- chips -->
+      <rect class="fk-chip-node" x="90" y="216" width="118" height="30" rx="8"/>
+      <text class="fk-node-t" x="149" y="235" text-anchor="middle" font-size="12.5" font-weight="600" font-family="'JetBrains Mono',monospace">Express</text>
+      <rect class="fk-chip-node" x="218" y="216" width="172" height="30" rx="8"/>
+      <text class="fk-node-t" x="304" y="235" text-anchor="middle" font-size="12.5" font-weight="600" font-family="'JetBrains Mono',monospace">Next Pages API</text>
+      <text class="fk-t" x="90" y="272" font-size="12.5" font-family="'JetBrains Mono',monospace">same instance · base untouched · mutate then end</text>
+      <text class="fk-node-t" x="90" y="304" font-size="12.5" font-weight="600" font-family="'JetBrains Mono',monospace">req instanceof IncomingMessage → true</text>
+
+      <!-- RIGHT: web-shaped -->
+      <rect class="fk-box fk-web" x="530" y="154" width="400" height="172" rx="16"/>
+      <text class="fk-web-t" x="550" y="182" font-size="15" font-weight="700" font-family="'JetBrains Mono',monospace">extends → Web-shaped</text>
+      <text class="fk-sub" x="550" y="202" font-size="12" font-family="'JetBrains Mono',monospace">class NextRequest extends Request</text>
+      <rect class="fk-chip-web" x="550" y="216" width="190" height="30" rx="8"/>
+      <text class="fk-web-t" x="645" y="235" text-anchor="middle" font-size="12.5" font-weight="600" font-family="'JetBrains Mono',monospace">Next App Router</text>
+      <text class="fk-t" x="550" y="272" font-size="12.5" font-family="'JetBrains Mono',monospace">a new value · Fetch base · build then return</text>
+      <text class="fk-web-t" x="550" y="304" font-size="12.5" font-weight="600" font-family="'JetBrains Mono',monospace">req instanceof IncomingMessage → false</text>
+    </svg>
+  </div>
+
+  <div class="fork-cap">
+    <div class="cap n"><h4>Node-shaped (Express · Pages API)</h4><p>Express and the older <code>pages/api/*</code> routes both receive Node's object, widened with extras. The body is a stream you (or middleware) drain; the response is a writable stream you mutate, then <code>end()</code>.</p></div>
+    <div class="cap w"><h4>Web-shaped (App Router)</h4><p>App Router <code>route.ts</code> handlers receive a Web <code>Request</code> / <code>NextRequest</code> and <em>return</em> a <code>Response</code>. No Node object is involved — so the same handler runs on Node or at the Edge.</p></div>
+  </div>
+</div>
+</section>
+
+<!-- ============ LIFECYCLE PLAYER ============ -->
+<section id="lifecycles">
+<div class="wrap">
+  <div class="figlabel">§ 3 · the lifecycles, end to end</div>
+  <h2>Run a request down the stack.</h2>
+  <p class="subhead">Pick a framework, then press <em>run</em> to send a request through every stage — or step through it. Each stage is colored by which world owns it; click any stage to read what happens there.</p>
+
+  <div class="legend" aria-hidden="true">
+    <span><span class="dot client"></span>client / network</span>
+    <span><span class="dot node"></span>Node lineage</span>
+    <span><span class="dot express"></span>Express layer</span>
+    <span><span class="dot web"></span>Web / Next · Fetch lineage</span>
+    <span><span class="dot runtime"></span>runtime boundary</span>
+  </div>
+
+  <div class="tabs" role="tablist" aria-label="Choose a framework lifecycle">
+    <button class="tab active" role="tab" aria-selected="true" data-k="express"><span class="tdot"></span>Express</button>
+    <button class="tab" role="tab" aria-selected="false" data-k="app"><span class="tdot"></span>Next App Router</button>
+    <button class="tab" role="tab" aria-selected="false" data-k="pages"><span class="tdot"></span>Next Pages API</button>
+  </div>
+
+  <div class="runtime-pill" id="runtimePill"></div>
+
+  <div class="player">
+    <div class="flow" id="flow">
+      <div class="rail"></div>
+      <div class="token" id="token"></div>
+      <!-- stages injected -->
+    </div>
+  </div>
+
+  <div class="pcontrols">
+    <button class="pbtn primary" id="runBtn">▶ run request</button>
+    <button class="pbtn" id="stepBtn">step ›</button>
+    <button class="pbtn" id="backBtn">‹ back</button>
+    <button class="pbtn" id="resetBtn">↺ reset</button>
+    <span class="pind" id="pInd">stage 0 / 0</span>
+  </div>
+
+  <div class="verdict" id="verdict"></div>
+</div>
+</section>
+
+<!-- ============ REQUEST PROVENANCE ============ -->
+<section id="req-provenance">
+<div class="wrap">
+  <div class="figlabel">§ 4 · property provenance — request</div>
+  <h2>Where does each <code>req</code> property come from?</h2>
+  <p class="subhead">Click any row. The same-named property arrives by a different <em>mechanism</em> in each world — and the badges cluster to prove the thesis: <b style="color:var(--node)">indigo</b> = the untouched base, <b style="color:var(--express)">green</b> = Express decoration, <b style="color:var(--next)">blue</b> = Next's Web lineage.</p>
+  <div class="legend">
+    <span><span class="badge native">native</span> the base owns it</span>
+    <span><span class="badge inh-node">inherited</span> passed through</span>
+    <span><span class="badge dec">＋ decorates</span> Express adds it</span>
+    <span><span class="badge ext">＋ extends</span> Next's subclass adds it</span>
+    <span><span class="badge none">—</span> do it by hand</span>
+  </div>
+  <div class="inspector" id="inspectorReq">
+    <div class="prow head">
+      <div>property</div><div class="h-node">IncomingMessage</div><div class="h-express">Express req</div><div class="h-next">NextRequest</div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ============ THE PROOF / PEEL ============ -->
+<section id="proof">
+<div class="wrap">
+  <div class="figlabel">§ 5 · the proof</div>
+  <h2>Same base, layered. Vs. a different base, subclassed.</h2>
+  <p class="subhead">On the left, toggle Express's decoration on and off — the Node layer underneath stays <em>exactly</em> the same. On the right, the base itself is different; there is no Node object hiding below.</p>
+  <div class="twogrid">
+    <div class="panel peelcard dec">
+      <div class="pc-title">Express · decoration</div>
+      <div class="pc-sub">req &nbsp;=&nbsp; IncomingMessage &amp; { extras }</div>
+      <div class="stack">
+        <div class="layer basel">
+          <div class="layer-tag">🔒 from IncomingMessage · never mutated</div>
+          <div class="props"><span class="ptok">method</span><span class="ptok">url <span class="g">"/users/7?tab=info"</span></span><span class="ptok">headers</span></div>
+        </div>
+        <div class="deco-wrap" id="decoWrap">
+          <div class="layer addl">
+            <div class="layer-tag">＋ Express decoration layer</div>
+            <div class="props"><span class="ptok">query <span class="g">getter→url</span></span><span class="ptok">params <span class="g">assigned</span></span><span class="ptok">body <span class="g">middleware</span></span></div>
+          </div>
+        </div>
+      </div>
+      <button class="peelbtn" id="peelBtn">▾ remove the decoration layer</button>
+      <div class="assert">
+        <div class="a"><code>req instanceof IncomingMessage</code> →&nbsp;<span class="ok">true</span></div>
+        <div class="a"><code>req.url</code> after decoration →&nbsp;<span class="ok">unchanged</span></div>
+      </div>
+      <div class="note"><b>The point:</b> <code>req.query</code> is a getter that <em>reads</em> <code>req.url</code> and parses it. It never writes back. Decoration only ever adds.</div>
+    </div>
+    <div class="panel peelcard ext">
+      <div class="pc-title">Next · extension</div>
+      <div class="pc-sub">class NextRequest extends Request</div>
+      <div class="stack">
+        <div class="layer basel">
+          <div class="layer-tag">⬢ from Web Request · the Fetch standard</div>
+          <div class="props"><span class="ptok">method</span><span class="ptok">url <span class="g">full absolute URL</span></span><span class="ptok">headers <span class="g">Headers</span></span><span class="ptok">.json()</span></div>
+        </div>
+        <div class="layer addl">
+          <div class="layer-tag">＋ added by the subclass</div>
+          <div class="props"><span class="ptok">nextUrl <span class="g">NextURL</span></span><span class="ptok">cookies <span class="g">RequestCookies</span></span></div>
+        </div>
+      </div>
+      <div class="assert" style="margin-top:42px">
+        <div class="a"><code>nextReq instanceof Request</code> →&nbsp;<span class="ok">true</span></div>
+        <div class="a"><code>nextReq instanceof IncomingMessage</code> →&nbsp;<span class="no">false</span></div>
+      </div>
+      <div class="note"><b>The point:</b> a whole different lineage — which is exactly why the same code runs in a bare V8 isolate at the Edge.</div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ============ RESPONSE PROVENANCE ============ -->
+<section id="res-provenance">
+<div class="wrap">
+  <div class="figlabel">§ 6 · property provenance — response</div>
+  <h2>Where does each <code>res</code> power come from?</h2>
+  <p class="subhead">The same inspector, the other direction. Notice that Next's response verbs are mostly <b style="color:var(--next)">static factories</b> (they build a value) where Express's are <b style="color:var(--express)">instance methods</b> (they mutate one).</p>
+  <div class="legend">
+    <span><span class="badge native">native</span> the base owns it</span>
+    <span><span class="badge inh-web">inherited</span> from the Web base</span>
+    <span><span class="badge dec">＋ decorates</span> Express adds it</span>
+    <span><span class="badge ext">＋ extends</span> Next's subclass adds it</span>
+    <span><span class="badge none">—</span> do it by hand</span>
+  </div>
+  <div class="inspector" id="inspectorRes">
+    <div class="prow head">
+      <div>capability</div><div class="h-node">ServerResponse</div><div class="h-express">Express res</div><div class="h-next">NextResponse</div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ============ MUTATE VS RETURN ============ -->
+<section id="mutate-return">
+<div class="wrap">
+  <div class="figlabel">§ 7 · the behavioural consequence</div>
+  <h2>You <span style="color:var(--node)">poke</span> a stream. You <span style="color:var(--next)">return</span> a value.</h2>
+  <p class="subhead">This is what the type difference <em>causes</em>. A decorated <code>ServerResponse</code> is a writable stream, so you mutate it step by step. A <code>NextResponse</code> is-a Web <code>Response</code> — an immutable value — so you build it whole and hand it back. Step through both.</p>
+  <div class="twogrid">
+    <div class="panel scol mut">
+      <div class="sc-title">Node / Express</div>
+      <div class="sc-sub">one ServerResponse · mutated in place</div>
+      <div id="mutLines"></div>
+      <div class="sobj"><div class="sobj-card" id="mutObj">
+        <div class="sobj-head"><span class="sobj-name">res ⟳ (writable stream)</span><span class="mcount" id="mutCount">0 writes</span></div>
+        <div class="sobj-rows" id="mutRows"></div>
+      </div></div>
+    </div>
+    <div class="panel scol imm">
+      <div class="sc-title">Next.js</div>
+      <div class="sc-sub">a Response value · built once, returned</div>
+      <div id="immLines"></div>
+      <div class="sobj"><div class="sobj-card" id="immObj">
+        <div class="sobj-rows" id="immRows"><span class="sempty">nothing constructed yet</span></div>
+      </div></div>
+    </div>
+  </div>
+  <div class="pcontrols">
+    <button class="pbtn" id="mPrev">‹ back</button>
+    <button class="pbtn primary" id="mNext">advance ›</button>
+    <button class="pbtn" id="mReset">↺ reset</button>
+    <span class="pind" id="mInd">step 0 / 4</span>
+  </div>
+  <div class="note" style="margin-top:16px"><b>One honest seam:</b> a Next response isn't <em>totally</em> frozen — its <code>headers</code> and <code>cookies</code> are mutable views you may set <em>before</em> returning. But the body and status are fixed at construction, and you never re-open a stream to <code>write()</code> again.</div>
+</div>
+</section>
+
+<!-- ============ PROTOTYPE CHAINS ============ -->
+<section id="prototype">
+<div class="wrap">
+  <div class="figlabel">§ 8 · under the hood, at runtime</div>
+  <h2>Decoration is a prototype swap. Extension is a superclass.</h2>
+  <p class="subhead">"Decorate vs extend" isn't only a metaphor — it's two literal JavaScript mechanisms. Express re-points the object's prototype at its own augmented one; Next's <code>class … extends</code> fixes the chain at construction via <code>super()</code>. Follow the <code>[[Prototype]]</code> links.</p>
+  <div class="twogrid">
+    <div class="panel mech dec">
+      <div class="mech-title">Express · prototype augmentation</div>
+      <div class="mech-sub">lib/express.js + lib/request.js (simplified)</div>
+      <div class="codeblk"><span class="cm">// 1. make an Express request proto that</span>
+<span class="cm">//    inherits from Node's prototype:</span>
+app.<span class="fn">request</span> = Object.<span class="fn">create</span>(
+  http.<span class="ty">IncomingMessage</span>.prototype
+);
+<span class="cm">// 2. define getters on it</span>
+Object.<span class="fn">defineProperty</span>(app.request, <span class="str">'query'</span>, {
+  <span class="kw">get</span>() { <span class="kw">return</span> parseQs(<span class="kw">this</span>.url); }
+});
+<span class="cm">// 3. per request, re-point the proto:</span>
+Object.<span class="fn">setPrototypeOf</span>(req, app.request);</div>
+      <div class="clabel">Object.getPrototypeOf(req) walks:</div>
+      <div class="clink tc-obj"><b>req</b> <span class="anno">— the live IncomingMessage instance</span></div>
+      <div class="carrow">▼ __proto__</div>
+      <div class="clink tc-express"><b>app.request</b> <span class="anno">— Express's getters (query, …) live HERE</span></div>
+      <div class="carrow">▼ __proto__</div>
+      <div class="clink tc-node"><b>IncomingMessage.prototype</b> <span class="anno">— method, url, headers</span></div>
+      <div class="carrow">▼ __proto__</div>
+      <div class="clink tc-node"><b>Readable.prototype</b> <span class="anno">→ Stream → EventEmitter → Object</span></div>
+      <div class="note"><b>Inserted, not replaced.</b> Express slips one link <em>between</em> the instance and Node's prototype, so <code>req instanceof IncomingMessage</code> stays <code>true</code>.</div>
+    </div>
+    <div class="panel mech ext">
+      <div class="mech-title">Next · class extends</div>
+      <div class="mech-sub">set once by super(), at construction</div>
+      <div class="codeblk"><span class="cm">// a normal ES class — the chain is fixed</span>
+<span class="cm">// the moment `new` runs.</span>
+<span class="kw">class</span> <span class="ty">NextRequest</span> <span class="kw">extends</span> <span class="ty">Request</span> {
+  <span class="kw">constructor</span>(input, init) {
+    <span class="kw">super</span>(input, init);   <span class="cm">// becomes a real Request</span>
+    <span class="kw">this</span>.nextUrl = <span class="kw">new</span> <span class="ty">NextURL</span>(input);
+  }
+}
+<span class="kw">const</span> req = <span class="kw">new</span> <span class="ty">NextRequest</span>(webRequest);</div>
+      <div class="clabel">Object.getPrototypeOf(req) walks:</div>
+      <div class="clink tc-obj"><b>req</b> <span class="anno">— the NextRequest instance</span></div>
+      <div class="carrow">▼ __proto__</div>
+      <div class="clink tc-web"><b>NextRequest.prototype</b> <span class="anno">— nextUrl, cookies</span></div>
+      <div class="carrow">▼ __proto__</div>
+      <div class="clink tc-web"><b>Request.prototype</b> <span class="anno">— Web Fetch: url, headers, .json()</span></div>
+      <div class="carrow">▼ __proto__</div>
+      <div class="clink tc-obj"><b>Object.prototype</b> <span class="anno">— no Node anywhere on this chain</span></div>
+      <div class="note"><b>A separate lineage entirely.</b> Nowhere is <code>IncomingMessage</code>, so <code>req instanceof IncomingMessage</code> is <code>false</code> — and nothing needs a Node runtime.</div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ============ DECLARATION MERGING ============ -->
+<section id="declaration">
+<div class="wrap">
+  <div class="figlabel">§ 9 · the same split, in the type system</div>
+  <h2>How you'd add <code>req.user</code> yourself.</h2>
+  <p class="subhead">The runtime split has an exact mirror in TypeScript. Because Express decorates a shared interface, you extend it by <em>re-opening</em> it — declaration merging. Because <code>NextRequest</code> is a sealed class, there's no interface to merge into.</p>
+  <div class="twogrid">
+    <div class="panel mech dec">
+      <div class="mech-title">Express · declaration merging</div>
+      <div class="mech-sub">re-open the global Express.Request interface</div>
+      <div class="codeblk"><span class="cm">// types/express.d.ts</span>
+<span class="kw">declare</span> <span class="kw">global</span> {
+  <span class="kw">namespace</span> <span class="ty">Express</span> {
+    <span class="kw">interface</span> <span class="ty">Request</span> {     <span class="cm">// re-opening it!</span>
+      user?: <span class="ty">User</span>;          <span class="cm">// merged in</span>
+    }
+  }
+}
+<span class="cm">// now typed everywhere — no cast:</span>
+app.<span class="fn">use</span>((req, _res, next) => {
+  req.user = lookup(req);
+  next();
+});</div>
+      <div class="note"><b>This is exactly how <code>@types/express</code> adds <code>query</code> and <code>body</code>.</b> An open interface you keep widening — <code>&amp;</code> by another name.</div>
+    </div>
+    <div class="panel mech ext">
+      <div class="mech-title">Next · no interface to merge</div>
+      <div class="mech-sub">the class is sealed — wrap or carry context</div>
+      <div class="codeblk"><span class="cm">// You CAN'T `declare` extra props onto a</span>
+<span class="cm">// class instance the same way. Options:</span>
+
+<span class="cm">// A) a typed wrapper / discriminated value</span>
+<span class="kw">type</span> <span class="ty">Authed</span> = { req: <span class="ty">NextRequest</span>; user: <span class="ty">User</span> };
+
+<span class="cm">// B) carry it out-of-band (no req mutation)</span>
+<span class="kw">import</span> { <span class="ty">AsyncLocalStorage</span> } <span class="kw">from</span> <span class="str">'async_hooks'</span>;
+<span class="kw">const</span> ctx = <span class="kw">new</span> <span class="ty">AsyncLocalStorage</span>&lt;<span class="ty">User</span>&gt;();
+<span class="cm">// ...later: ctx.getStore()</span></div>
+      <div class="note"><b>The sealed shape is the feature.</b> You can't quietly bolt <code>user</code> onto the request, so request state stays predictable.</div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ============ PATTERNS + TABLES ============ -->
+<section id="patterns">
+<div class="wrap">
+  <div class="figlabel">§ 10 · the two patterns, in the abstract</div>
+  <h2>You've seen these before.</h2>
+  <p class="subhead">This isn't a Node-vs-Next quirk — it's two classic ways to add capability to an object, each making a different trade.</p>
+  <div class="twogrid">
+    <div class="panel pat d">
+      <h3>Decoration <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--muted)">(&amp;)</span></h3>
+      <div class="tagline">keep the instance · widen it · stay compatible</div>
+      <ul>
+        <li><b>Identity is preserved.</b> <code>req instanceof IncomingMessage</code> stays true, so every Node-based tool still works on it.</li>
+        <li><b>Additive &amp; lazy.</b> <code>query</code> is a getter computed from <code>url</code>; nothing is overwritten.</li>
+        <li><b>Composable.</b> each middleware can assign more (<code>body</code>, <code>user</code>, <code>cookies</code>) as the request flows.</li>
+        <li class="cost"><b>The cost:</b> the object is mutable and untyped at the edges — <code>req.body</code> is <code>unknown</code> until some middleware ran.</li>
+      </ul>
+    </div>
+    <div class="panel pat e">
+      <h3>Extension <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--muted)">(extends)</span></h3>
+      <div class="tagline">new type · new base · new guarantees</div>
+      <ul>
+        <li><b>A real subclass.</b> <code>NextRequest</code> is-a <code>Request</code> — it inherits the whole Fetch contract for free.</li>
+        <li><b>Different foundation.</b> built on the Web standard, not Node, so it isn't tied to a Node process.</li>
+        <li><b>Stable shape.</b> <code>nextUrl</code> and <code>cookies</code> are always there with known types — no "did the middleware run?" doubt.</li>
+        <li class="cost"><b>The cost:</b> you can't reuse the Node/Express ecosystem; <code>instanceof IncomingMessage</code> is false.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 style="margin-top:40px;font-size:clamp(20px,3vw,28px)">The three styles, side by side.</h2>
+  <p class="subhead">Request object, then response model.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Style</th><th>Public request</th><th class="h-node">Underlying model</th><th>Body access</th><th>Params / query</th></tr></thead>
+      <tbody>
+        <tr><td>Express</td><td><code>req</code></td><td>Node <code>IncomingMessage</code> + extras</td><td><code>req.body</code> after middleware</td><td><code>req.params</code>, <code>req.query</code></td></tr>
+        <tr><td>Next App Router</td><td><code>request</code></td><td>Web <code>Request</code> / <code>NextRequest</code></td><td><code>await request.json()</code></td><td>arg <code>params</code>, <code>request.nextUrl.searchParams</code></td></tr>
+        <tr><td>Next Pages API</td><td><code>req</code></td><td>Node <code>IncomingMessage</code> + extras</td><td><code>req.body</code> via parser</td><td><code>req.query</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Style</th><th>Public response model</th><th>How you respond</th></tr></thead>
+      <tbody>
+        <tr><td>Express</td><td>Node <code>ServerResponse</code> + extras</td><td><code>res.status(200).json(data)</code></td></tr>
+        <tr><td>Next App Router</td><td>Web <code>Response</code> / <code>NextResponse</code></td><td><code>return Response.json(data, { status: 200 })</code></td></tr>
+        <tr><td>Next Pages API</td><td>Node <code>ServerResponse</code> + extras</td><td><code>res.status(200).json(data)</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</section>
+
+<!-- ============ WHY WEB ============ -->
+<section id="why">
+<div class="wrap">
+  <div class="figlabel">§ 11 · why Next moved toward Web APIs</div>
+  <h2>One handler shape, many runtimes.</h2>
+  <p class="subhead">Coupling the public API to Node's <code>IncomingMessage</code> ties you to a Node process. Modeling it as a Web <code>Request</code> / <code>Response</code> gives App Router a single abstraction that travels.</p>
+  <div class="portgrid">
+    <div class="port"><div class="pt">Node runtime</div><div class="pp">adapts the platform request into a Web Request</div></div>
+    <div class="port"><div class="pt">Edge runtime</div><div class="pp">runs in a bare V8 isolate — no Node needed</div></div>
+    <div class="port"><div class="pt">maps to fetch()</div><div class="pp">the same Request/Response you already use client-side</div></div>
+    <div class="port"><div class="pt">Web Streams</div><div class="pp">streaming responses without Node-specific plumbing</div></div>
+  </div>
+</div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p class="big">Express asks: <em>"what else can I hang on this object?"</em><br>Next asks: <em>"what should this object have been from birth?"</em></p>
+    <p>Decoration = <code>NodeReq &amp; { … }</code> · same instance, more keys, base untouched.<br>
+       Extension = <code>class NextRequest extends Request</code> · a new type on the Web's foundation.</p>
+    <p class="src">Companion to <em>express-next-request-maps.md</em>. Mechanisms: <b>native</b> · <b>getter</b> (lazy, derived) · <b>assigned</b> (by middleware) · <b>inherited</b> (from the base class).<br>
+      Sources: <a href="https://nodejs.org/api/http.html">Node HTTP</a> · <a href="https://expressjs.com/en/api.html">Express API</a> · <a href="https://nextjs.org/docs/app/api-reference/file-conventions/route">Route Handlers</a> · <a href="https://nextjs.org/docs/app/api-reference/functions/next-request">NextRequest</a> · <a href="https://nextjs.org/docs/pages/building-your-application/routing/api-routes">Pages API Routes</a></p>
+  </div>
+</footer>
+
+<script>
+"use strict";
+
+/* ============================================================
+   LIFECYCLE DATA  (k = lineage: client|node|express|web|next|runtime)
+   ============================================================ */
+const LIFE = {
+  express: {
+    label: "Express", vc: "c-express",
+    runtime: ["runtime", "always Node.js", "req stays Node's IncomingMessage end to end"],
+    verdict: 'Node-shaped the whole way down. <code>req</code> is Node\'s <b>IncomingMessage</b> with Express additions; <code>res</code> is Node\'s <b>ServerResponse</b> with Express additions. <code>req instanceof IncomingMessage</code> → <span class="ok">true</span>.',
+    stages: [
+      {t:"client", k:"client", chip:"client", d:"The browser opens a connection and sends an HTTP request."},
+      {t:"Node TCP / socket", k:"node", chip:"Node", d:"Node accepts the TCP connection at the network layer."},
+      {t:"Node HTTP parser", k:"node", chip:"Node", d:"Node parses the request line and headers, and exposes the body as a <b>readable stream</b>.", c:"// method · url · headers · body stream"},
+      {t:"IncomingMessage + ServerResponse", k:"node", chip:"Node · the pair", d:"Node's raw objects: a readable <code>req</code> and a writable <code>res</code>. Every framework starts here."},
+      {t:"Express app(req, res)", k:"express", chip:"Express", d:"The Express application function receives those <b>exact same instances</b> — it does not wrap or replace them.", c:"const app = express(); app(req, res)"},
+      {t:"Express decorates req / res", k:"express", chip:"Express · & ", d:"Express widens the same objects: <code>req.params</code>, <code>req.query</code> (a getter), <code>req.body</code>, plus <code>res.status()</code>, <code>res.json()</code>, <code>res.send()</code>.", c:"req.query · req.params · res.status().json()"},
+      {t:"Middleware stack", k:"express", chip:"Express", d:"Each middleware reads and may mutate <code>req</code>/<code>res</code>, then calls <code>next()</code>. This is where 'same object, more properties' is most visible.", c:"app.use((req, res, next) => { …; next() })"},
+      {t:"Router matches method + path", k:"express", chip:"Express", d:"The router matches the URL against your routes and <b>assigns</b> <code>req.params</code>.", c:"app.get('/users/:id', handler)"},
+      {t:"Route handler runs", k:"express", chip:"Express", d:"Your handler executes with the fully decorated <code>req</code>/<code>res</code>."},
+      {t:"res.status(201).json(data)", k:"express", chip:"Express · sugar", d:"Ergonomic sugar over Node: set <code>statusCode</code>, set <code>Content-Type</code>, <code>JSON.stringify</code>, <code>end()</code>.", c:"res.statusCode = 201;\nres.setHeader('Content-Type','application/json');\nres.end(JSON.stringify(data));"},
+      {t:"Node ServerResponse writes bytes", k:"node", chip:"Node", d:"The underlying writable stream flushes the response to the socket."},
+      {t:"client receives response", k:"client", chip:"client", d:"The browser gets the HTTP response."}
+    ]
+  },
+  app: {
+    label: "Next App Router", vc: "c-app",
+    runtime: ["runtime", "Node.js OR Edge", "the same handler runs on either"],
+    verdict: 'Web-shaped at the public boundary. Your handler receives a Web <b>Request</b> / <b>NextRequest</b> and <b>returns</b> a <b>Response</b>. There is no Node object underneath — <code>req instanceof IncomingMessage</code> → <span class="no">false</span>.',
+    stages: [
+      {t:"client", k:"client", chip:"client", d:"The browser sends an HTTP request."},
+      {t:"deployment / runtime boundary", k:"runtime", chip:"fork · Node | Edge", d:"The request lands in either a <b>Node.js</b> runtime or an <b>Edge</b> (V8 isolate) runtime. The handler code is the same either way."},
+      {t:"Next.js adapter layer", k:"next", chip:"Next", d:"Next normalizes the incoming platform request into Web API shape — regardless of which runtime received it."},
+      {t:"Web Request", k:"web", chip:"Web · Fetch", d:"A standard Fetch <b>Request</b>: <code>url</code> is a full absolute URL, <code>headers</code> is a <b>Headers</b> instance, and the body is read via async methods.", c:"request.url · request.headers.get('…') · await request.json()"},
+      {t:"NextRequest extends Request", k:"next", chip:"Next · extends", d:"Next subclasses the Web Request, adding <code>cookies</code> (RequestCookies) and <code>nextUrl</code> (NextURL).", c:"class NextRequest extends Request { nextUrl; cookies }"},
+      {t:"Route Handler GET(request, ctx)", k:"next", chip:"Next", d:"Your handler receives the <code>request</code> plus a context object carrying route <code>params</code> — params are an <b>argument</b>, not a property on the request.", c:"export async function GET(request, { params }) {}"},
+      {t:"your code reads the request", k:"next", chip:"your code", d:"Read <code>request.nextUrl.searchParams</code>, <code>request.cookies</code>, <code>await request.json()</code> — all Web APIs.", c:"const id = (await params).id;\nconst tab = request.nextUrl.searchParams.get('tab');"},
+      {t:"return Response / NextResponse", k:"web", chip:"Web · return", d:"You <b>build a response value and return it</b>. Status and body are set at construction — you don't mutate a handed-in <code>res</code>.", c:"return NextResponse.json(data, { status: 201 })"},
+      {t:"Next adapter converts the response", k:"next", chip:"Next", d:"Next translates the returned Web Response into the runtime's native output."},
+      {t:"runtime writes HTTP response", k:"runtime", chip:"Node | Edge", d:"Node or the Edge runtime serializes the response onto the wire."},
+      {t:"client receives response", k:"client", chip:"client", d:"The browser gets the HTTP response."}
+    ]
+  },
+  pages: {
+    label: "Next Pages API", vc: "c-pages",
+    runtime: ["runtime", "always Node.js", "Node-shaped, like Express"],
+    verdict: 'The older, Node-shaped Next model. <code>req</code>/<code>res</code> are Node\'s <b>IncomingMessage</b>/<b>ServerResponse</b> with Next additions — closer to Express than to App Router. <code>req instanceof IncomingMessage</code> → <span class="ok">true</span>.',
+    stages: [
+      {t:"client", k:"client", chip:"client", d:"The browser sends an HTTP request."},
+      {t:"Node.js runtime", k:"node", chip:"Node", d:"Pages API routes always run on Node — there is no Edge variant for this lifecycle."},
+      {t:"Node HTTP parser", k:"node", chip:"Node", d:"Node parses the request and exposes the body as a stream."},
+      {t:"IncomingMessage + ServerResponse", k:"node", chip:"Node · the pair", d:"The same raw Node objects Express starts from."},
+      {t:"Next Pages API adapter", k:"next", chip:"Next · & ", d:"Next enhances the Node objects: <code>req.cookies</code>, <code>req.query</code>, <code>req.body</code> (auto-parsed), plus <code>res.status()</code>, <code>res.json()</code>, <code>res.send()</code>.", c:"req.query · req.cookies · res.status().json()"},
+      {t:"file-system route match", k:"next", chip:"Next", d:"Next maps the URL to a file on disk — the route is created by the filesystem, not by <code>app.get()</code>.", c:"pages/api/users/[id].ts"},
+      {t:"NextApiRequest + NextApiResponse", k:"next", chip:"Next · Node-shaped", d:"Typed views over Node's objects — an intersection, not a subclass.", c:"type NextApiRequest = IncomingMessage & { query; cookies; body }"},
+      {t:"default export handler(req, res)", k:"next", chip:"Next", d:"Your handler is a default export that receives <code>req</code> and <code>res</code> — the Express-style signature.", c:"export default function handler(req, res) {}"},
+      {t:"your code reads req", k:"next", chip:"your code", d:"Read <code>req.method</code>, <code>req.query</code>, <code>req.cookies</code>, <code>req.body</code> — all properties on the object.", c:"const { id } = req.query;"},
+      {t:"res.status(201).json(data)", k:"next", chip:"Next · sugar", d:"Same mutate-then-end model as Express, over Node's <code>ServerResponse</code>.", c:"res.status(201).json(data)"},
+      {t:"Node ServerResponse writes bytes", k:"node", chip:"Node", d:"The writable stream flushes the response."},
+      {t:"client receives response", k:"client", chip:"client", d:"The browser gets the HTTP response."}
+    ]
+  }
+};
+
+/* ---------- lifecycle player ---------- */
+const flow = document.getElementById("flow");
+const token = document.getElementById("token");
+const runBtn = document.getElementById("runBtn");
+const stepBtn = document.getElementById("stepBtn");
+const backBtn = document.getElementById("backBtn");
+const resetBtn = document.getElementById("resetBtn");
+const pInd = document.getElementById("pInd");
+const verdictEl = document.getElementById("verdict");
+const runtimePill = document.getElementById("runtimePill");
+
+let curKey = "express";
+let stageEls = [];
+let pos = -1;            // -1 = nothing lit yet
+let timer = null;
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+
+function buildLifecycle(key){
+  stopPlay();
+  curKey = key;
+  const data = LIFE[key];
+  // runtime pill
+  const [rk, a, b] = data.runtime;
+  runtimePill.innerHTML = `<span class="rp" style="border-color:color-mix(in srgb,var(--${rk}) 45%,transparent);color:var(--${rk})">runtime: ${a}</span><span>${b}</span>`;
+  // stages
+  flow.querySelectorAll(".stage").forEach(n => n.remove());
+  data.stages.forEach((s, i) => {
+    const el = document.createElement("div");
+    el.className = "stage c-" + s.k;
+    el.innerHTML =
+      `<div class="st-head" role="button" tabindex="0" aria-expanded="false">
+         <span class="st-title">${esc(s.t)}</span>
+         <span class="st-chip">${esc(s.chip)}</span>
+         <span class="st-caret">▶</span>
+       </div>
+       <div class="st-body">
+         <div class="st-d">${s.d}</div>
+         ${s.c ? `<div class="st-code">${esc(s.c)}</div>` : ""}
+       </div>`;
+    const head = el.querySelector(".st-head");
+    const toggle = () => {
+      const open = el.classList.toggle("open");
+      head.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+    head.addEventListener("click", toggle);
+    head.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+    });
+    flow.appendChild(el);
+  });
+  stageEls = Array.from(flow.querySelectorAll(".stage"));
+  // verdict
+  verdictEl.className = "verdict " + data.vc;
+  verdictEl.innerHTML = `<b>Verdict — ${data.label}:</b> ${data.verdict}`;
+  resetPlay();
+}
+
+function paint(){
+  stageEls.forEach((el, i) => {
+    el.classList.toggle("touched", i <= pos && pos >= 0);
+    el.classList.toggle("current", i === pos);
+  });
+  // token position
+  if (pos >= 0 && stageEls[pos]) {
+    const el = stageEls[pos];
+    const head = el.querySelector(".st-head");
+    const top = el.offsetTop + (head.offsetHeight / 2) - 7;
+    token.style.top = top + "px";
+    token.classList.add("on");
+    // auto-open current, auto-close the previous current
+    stageEls.forEach((s, i) => {
+      if (i === pos) { s.classList.add("open"); s.querySelector(".st-head").setAttribute("aria-expanded","true"); }
+    });
+  } else {
+    token.classList.remove("on");
+  }
+  const n = stageEls.length;
+  pInd.textContent = `stage ${Math.max(0, pos + 1)} / ${n}`;
+  backBtn.disabled = pos < 0;
+  stepBtn.disabled = pos >= n - 1;
+  if (pos >= n - 1) { runBtn.textContent = "▶ run again"; }
+}
+
+function goTo(i){
+  const n = stageEls.length;
+  pos = Math.max(-1, Math.min(n - 1, i));
+  paint();
+}
+function stepFwd(){
+  if (pos < stageEls.length - 1){ stageEls.forEach(s=>s.classList.remove("open")); goTo(pos + 1); }
+}
+function stepBack(){
+  if (pos >= 0){ stageEls.forEach(s=>s.classList.remove("open")); goTo(pos - 1); }
+}
+function resetPlay(){ stopPlay(); stageEls.forEach(s=>s.classList.remove("open")); pos = -1; runBtn.textContent = "▶ run request"; paint(); }
+
+function play(){
+  stopPlay();
+  if (pos >= stageEls.length - 1) { stageEls.forEach(s=>s.classList.remove("open")); pos = -1; }
+  runBtn.textContent = "⏸ pause";
+  const tick = () => {
+    if (pos >= stageEls.length - 1){ stopPlay(); runBtn.textContent = "▶ run again"; return; }
+    stageEls.forEach(s=>s.classList.remove("open"));
+    goTo(pos + 1);
+  };
+  tick();
+  timer = setInterval(tick, reduceMotion ? 650 : 1000);
+}
+function stopPlay(){ if (timer){ clearInterval(timer); timer = null; } if (runBtn.textContent === "⏸ pause") runBtn.textContent = "▶ run request"; }
+
+runBtn.addEventListener("click", () => { if (timer) stopPlay(); else play(); });
+stepBtn.addEventListener("click", () => { stopPlay(); stepFwd(); });
+backBtn.addEventListener("click", () => { stopPlay(); stepBack(); });
+resetBtn.addEventListener("click", resetPlay);
+
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(t => { t.classList.remove("active"); t.setAttribute("aria-selected","false"); });
+    tab.classList.add("active"); tab.setAttribute("aria-selected","true");
+    buildLifecycle(tab.dataset.k);
+  });
+});
+
+/* ============================================================
+   PROVENANCE INSPECTORS  (req + res)
+   ============================================================ */
+const REQ_ROWS = [
+  { key:"method", pattern:"Identical everywhere — a primitive every base already provides.",
+    node:{b:"native",t:"native",c:'req.method → "GET"',d:"A plain string on the base object."},
+    express:{b:"inh-node",t:"inherited",c:"req.method",d:"Express <b>didn't add this</b> — it's the Node property, passed straight through."},
+    next:{b:"inh-web",t:"inherited",c:"req.method",d:"Inherited from the Web <b>Request</b> — same name, different ancestor."} },
+  { key:"url", pattern:"Express leaves it raw and never rewrites it; Next's is a full URL because Web Request says so.",
+    node:{b:"native",t:"native",c:'req.url → "/users/7?tab=info"',d:"Raw path + query. No origin, no parsing."},
+    express:{b:"inh-node",t:"inherited",c:'req.url → "/users/7?tab=info"',d:"<b>NOT mutated.</b> Express reads it to compute <code>query</code>; it never overwrites it."},
+    next:{b:"inh-web",t:"inherited",c:'req.url → "https://site/users/7?tab=info"',d:"A <b>full absolute URL</b> string — Web Request semantics, not a bare path."} },
+  { key:"headers", pattern:"A plain lowercased object in Node-land; a proper Headers instance on the Web base.",
+    node:{b:"native",t:"native",c:"req.headers['user-agent']",d:"Plain object, keys lowercased."},
+    express:{b:"inh-node",t:"inherited",c:"req.get('User-Agent')",d:"Same object + a case-insensitive <code>.get()</code> helper bolted on."},
+    next:{b:"inh-web",t:"inherited",c:"req.headers.get('user-agent')",d:"A Web <b>Headers</b> instance — you must use <code>.get()</code>, not bracket access."} },
+  { key:"query", pattern:"The signature decoration: a getter that parses url. Next has no .query — you go through nextUrl.",
+    node:{b:"none",t:"—",c:"new URL(req.url, base).searchParams",d:"Doesn't exist. Parse the URL string yourself."},
+    express:{b:"dec",t:"＋ getter",c:"req.query.tab → 'info'",d:"<b>A getter</b> on the Express prototype that parses <code>this.url</code> (via <code>qs</code>). Lazy &amp; derived."},
+    next:{b:"none",t:"— → nextUrl",c:"req.nextUrl.searchParams.get('tab')",d:"No <code>req.query</code>. The parsed URL lives on <code>nextUrl</code> instead."} },
+  { key:"params", pattern:"Route params are assigned onto the Express instance by the router; Next passes them as an argument, not on req.",
+    node:{b:"none",t:"—",c:"—",d:"Routing isn't Node's job, so there are no params."},
+    express:{b:"dec",t:"＋ assigned",c:"req.params.id → '7'",d:"<b>Assigned onto the instance</b> by the router after matching <code>/users/:id</code>."},
+    next:{b:"none",t:"— (fn arg)",c:"({ params }) => params.id",d:"App Router hands params to your handler as an argument — <b>not</b> on the request object."} },
+  { key:"body", pattern:"A stream you drain → a value middleware assigns → an inherited async method.",
+    node:{b:"none",t:"stream",c:"req.on('data', …)",d:"It <b>is</b> a Readable stream. Collect chunks, then <code>JSON.parse</code>."},
+    express:{b:"dec",t:"＋ assigned",c:"req.body",d:"<b>Assigned by</b> <code>express.json()</code> middleware. Without it, <code>req.body</code> is <code>undefined</code>."},
+    next:{b:"inh-web",t:"inherited",c:"await req.json()",d:"Async methods inherited from the Web <b>Body</b> mixin. Reads the stream — once."} },
+  { key:"cookies", pattern:"Express needs middleware to assign it; Next builds it into the subclass — no middleware needed.",
+    node:{b:"none",t:"raw string",c:"req.headers.cookie",d:"One raw header string like <code>'sid=abc; t=dark'</code>. Parse it yourself."},
+    express:{b:"dec",t:"＋ assigned",c:"req.cookies.sid",d:"<b>Assigned by</b> the separate <code>cookie-parser</code> middleware."},
+    next:{b:"ext",t:"＋ getter",c:"req.cookies.get('sid')",d:"A <b>RequestCookies</b> store the subclass adds. Built in — no middleware."} },
+  { key:"nextUrl", pattern:"The headline of the extension: a property that only exists because NextRequest is its own class.",
+    node:{b:"none",t:"—",c:"—",d:"Doesn't exist."},
+    express:{b:"none",t:"—",c:"—",d:"Doesn't exist."},
+    next:{b:"ext",t:"＋ getter",c:"req.nextUrl.pathname → '/users/7'",d:"A parsed <b>NextURL</b> object — the defining addition of the <code>extends Request</code> subclass."} }
+];
+
+const RES_ROWS = [
+  { key:"status", pattern:"A mutable field you assign → a chainable setter → a value fixed at construction.",
+    node:{b:"native",t:"native",c:"res.statusCode = 201",d:"A writable field on the stream. Change it any time before <code>end()</code>."},
+    express:{b:"dec",t:"＋ setter",c:"res.status(201)",d:"<b>Setter</b> that writes <code>statusCode</code> and returns <code>res</code>, so it chains."},
+    next:{b:"ext",t:"＋ in init",c:"NextResponse.json(d, { status: 201 })",d:"Status is set <b>at construction</b> and read-only after — it's part of the value."} },
+  { key:"headers", pattern:"setHeader on a stream → an alias helper → a Web Headers object on the response.",
+    node:{b:"native",t:"native",c:"res.setHeader('X-A','1')",d:"Imperative — and must run <b>before</b> the body is written."},
+    express:{b:"dec",t:"＋ alias",c:"res.set('X-A','1')",d:"A chainable alias over <code>setHeader</code>; same underlying call."},
+    next:{b:"inh-web",t:"inherited",c:"res.headers.set('X-A','1')",d:"A Web <b>Headers</b> instance inherited from Response — a mutable view you tweak before returning."} },
+  { key:"json", pattern:"Stringify by hand → a helper that stringifies & ends → a static factory that BUILDS a response.",
+    node:{b:"none",t:"—",c:"res.end(JSON.stringify(d))",d:"No <code>.json()</code>. Stringify and set <code>Content-Type</code> yourself."},
+    express:{b:"dec",t:"＋ method",c:"res.json(d)",d:"Sets the type, stringifies, ends. The convenience that defines Express."},
+    next:{b:"ext",t:"＋ static",c:"return NextResponse.json(d)",d:"A <b>static factory</b> — it returns a finished Response that you hand back."} },
+  { key:"redirect", pattern:"Hand-write 302 + Location → one helper → a static factory needing an absolute URL.",
+    node:{b:"none",t:"—",c:"res.writeHead(302, { Location })",d:"Set the status and <code>Location</code> header by hand."},
+    express:{b:"dec",t:"＋ method",c:"res.redirect('/login')",d:"302 by default; sets <code>Location</code> and ends for you."},
+    next:{b:"ext",t:"＋ static",c:"NextResponse.redirect(new URL('/login', req.url))",d:"Static factory — and it requires an <b>absolute</b> URL."} },
+  { key:"cookie", pattern:"Serialize a Set-Cookie string → a helper → a ResponseCookies store on the response.",
+    node:{b:"none",t:"—",c:"res.setHeader('Set-Cookie', '…')",d:"Build the cookie string and set the header yourself."},
+    express:{b:"dec",t:"＋ method",c:"res.cookie('sid','abc', { httpOnly:true })",d:"Built-in setter (for writing; <code>cookie-parser</code> was only for reading)."},
+    next:{b:"ext",t:"＋ store",c:"res.cookies.set('sid','abc')",d:"A <b>ResponseCookies</b> store the subclass adds. Set it before returning <code>res</code>."} },
+  { key:"body / finish", pattern:"write() + end() on a stream → send() → the body is baked into the value you return.",
+    node:{b:"native",t:"stream",c:"res.write(chunk); res.end()",d:"It <b>is</b> a Writable stream — push bytes, then <code>end()</code> to flush."},
+    express:{b:"dec",t:"＋ method",c:"res.send(payload)",d:"Sniffs the type, sets headers, writes &amp; ends — all in one call."},
+    next:{b:"inh-web",t:"inherited",c:"return new NextResponse(body)",d:"Body is fixed at construction (Web Response). You <b>return</b> the value."} },
+  { key:"next / rewrite", pattern:"Middleware-only signals with no equivalent on a Node/Express response object.",
+    node:{b:"none",t:"—",c:"—",d:"No notion of \"continue\" or \"rewrite\" at the response layer."},
+    express:{b:"none",t:"— (fn arg)",c:"next()  // the middleware callback",d:"Express's <code>next()</code> is the middleware callback — unrelated to <code>res</code>."},
+    next:{b:"ext",t:"＋ static",c:"NextResponse.next() / .rewrite(url)",d:"Static factories unique to the subclass — the response-side headline addition."} }
+];
+
+const BADGE_LABEL = { native:"native", "inh-node":"inherited", "inh-web":"inherited", dec:"", ext:"", none:"—" };
+function badge(cell){
+  const cls = cell.b; let inner;
+  if (cls === "dec" || cls === "ext") inner = cell.t.replace("＋", '<span class="mk">＋</span>');
+  else if (cls === "none") inner = cell.t;
+  else inner = BADGE_LABEL[cls] || cell.t;
+  return `<span class="badge ${cls}">${inner}</span>`;
+}
+function cellHtml(c){ return `<div class="pcell">${badge(c)}<span class="pcode">${esc(c.c)}</span></div>`; }
+function detailHtml(r, names){
+  const card = (who, cls, cell) => `<div class="pd-card ${cls}"><div class="who">${who}</div><div class="desc">${cell.d}</div></div>`;
+  return `<div class="pdetail">
+      <div class="pd-pattern"><span class="ar">⤷</span><div>${r.pattern}</div></div>
+      <div class="pd-grid">${card(names[0],"node",r.node)}${card(names[1],"express",r.express)}${card(names[2],"next",r.next)}</div>
+    </div>`;
+}
+function renderInspector(id, rows, prefix, names){
+  const ins = document.getElementById(id);
+  const head = ins.querySelector(".prow.head");
+  ins.innerHTML = ""; ins.appendChild(head);
+  rows.forEach(r => {
+    const item = document.createElement("div");
+    item.className = "pitem";
+    item.innerHTML =
+      `<div class="prow" role="button" tabindex="0" aria-expanded="false">
+         <div class="pcell"><span class="pkey"><span class="req">${prefix}</span>${esc(r.key)}</span></div>
+         ${cellHtml(r.node)}${cellHtml(r.express)}${cellHtml(r.next)}
+       </div>${detailHtml(r, names)}`;
+    const row = item.querySelector(".prow");
+    const toggle = () => { const o = item.classList.toggle("open"); row.setAttribute("aria-expanded", o ? "true" : "false"); };
+    row.addEventListener("click", toggle);
+    row.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+    ins.appendChild(item);
+  });
+}
+
+/* ---------- peel toggle ---------- */
+let decoOn = true;
+document.getElementById("peelBtn").addEventListener("click", () => {
+  decoOn = !decoOn;
+  document.getElementById("decoWrap").classList.toggle("hidden", !decoOn);
+  document.getElementById("peelBtn").textContent = decoOn ? "▾ remove the decoration layer" : "▸ apply the decoration layer";
+});
+
+/* ---------- mutate vs return stepper ---------- */
+const MUT = [
+  { code:"const res = serverResponse",                        writes:0, status:null,  hdr:false, body:"",         done:false },
+  { code:"res.statusCode = 201",                              writes:1, status:"201", hdr:false, body:"",         done:false },
+  { code:"res.setHeader('Content-Type', 'application/json')", writes:2, status:"201", hdr:true,  body:"",         done:false },
+  { code:"res.write(JSON.stringify(data))",                   writes:3, status:"201", hdr:true,  body:'{"id":7}', done:false },
+  { code:"res.end()",                                         writes:4, status:"201", hdr:true,  body:'{"id":7}', done:true  }
+];
+const IMM = [
+  { phase:"think",  code:"// decide what to send" },
+  { phase:"think",  code:"// nothing on the wire yet" },
+  { phase:"build",  code:"const res = NextResponse.json(\n  { id: 7 }, { status: 201 }\n)" },
+  { phase:"build",  code:"res.cookies.set('seen', '1') // tweak headers/cookies" },
+  { phase:"return", code:"return res  // hand back the value" }
+];
+const MMAX = MUT.length - 1;
+let mstep = 0;
+function mhl(code){
+  return esc(code)
+    .replace(/(\/\/[^\n]*)/g, '<span class="cm">$1</span>')
+    .replace(/\b(const|return|new)\b/g, '<span class="kw">$1</span>');
+}
+function renderMut(){
+  document.getElementById("mutLines").innerHTML = MUT.map((m, i) =>
+    `<div class="sline ${i <= mstep ? "on" : ""}"><span class="ln">${i+1}  </span>${mhl(m.code)}</div>`).join("");
+  const s = MUT[mstep];
+  document.getElementById("mutCount").textContent = s.writes + (s.writes === 1 ? " write" : " writes");
+  const rows = [
+    `<div><span class="k">statusCode</span>: ${s.status ?? '<span class="sempty">unset (200)</span>'}</div>`,
+    `<div><span class="k">headers</span>: ${s.hdr ? "Content-Type: application/json" : '<span class="sempty">{}</span>'}</div>`,
+    `<div><span class="k">body buffer</span>: ${s.body || '<span class="sempty">empty</span>'}</div>`
+  ];
+  if (s.done) rows.push(`<span class="sbadge flushed">■ stream ended · flushed to socket</span>`);
+  document.getElementById("mutRows").innerHTML = rows.join("");
+  const mo = document.getElementById("mutObj"); mo.classList.remove("pulse"); void mo.offsetWidth; mo.classList.add("pulse");
+
+  document.getElementById("immLines").innerHTML = IMM.map((m, i) =>
+    `<div class="sline ${i <= mstep ? "on" : ""}">${mhl(m.code)}</div>`).join("");
+  const ph = IMM[mstep].phase;
+  const ir = document.getElementById("immRows");
+  if (ph === "think") {
+    ir.innerHTML = `<span class="sempty">nothing constructed yet</span>`;
+  } else {
+    const cookieRow = mstep >= 3 ? `<div><span class="k">cookies</span>: seen=1</div>` : "";
+    ir.innerHTML =
+      `<div class="sobj-head" style="margin-bottom:4px"><span class="sobj-name">Response (immutable)</span></div>` +
+      `<div><span class="k">status</span>: 201 <span class="sempty">· read-only</span></div>` +
+      `<div><span class="k">headers</span>: Content-Type: application/json</div>` +
+      cookieRow +
+      `<div><span class="k">body</span>: {"id":7} <span class="sempty">· fixed at build</span></div>` +
+      (ph === "return" ? `<span class="sbadge returned">↗ returned untouched</span>` : `<span class="sbadge born">born whole</span>`);
+  }
+  document.getElementById("mInd").textContent = `step ${mstep} / ${MMAX}`;
+  document.getElementById("mPrev").disabled = mstep === 0;
+  document.getElementById("mNext").disabled = mstep === MMAX;
+  document.getElementById("mNext").textContent = mstep === MMAX ? "done ✓" : "advance ›";
+}
+document.getElementById("mNext").addEventListener("click", () => { mstep = Math.min(MMAX, mstep + 1); renderMut(); });
+document.getElementById("mPrev").addEventListener("click", () => { mstep = Math.max(0, mstep - 1); renderMut(); });
+document.getElementById("mReset").addEventListener("click", () => { mstep = 0; renderMut(); });
+
+/* ---------- theme ---------- */
+document.getElementById("themeToggle").addEventListener("click", () => {
+  const root = document.documentElement;
+  const next = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+  root.setAttribute("data-theme", next);
+  document.getElementById("themeToggle").textContent = next === "light" ? "◐" : "◑";
+});
+
+/* ---------- init ---------- */
+buildLifecycle("express");
+renderInspector("inspectorReq", REQ_ROWS, "req.", ["IncomingMessage", "Express req", "NextRequest"]);
+renderInspector("inspectorRes", RES_ROWS, "res.", ["ServerResponse", "Express res", "NextResponse"]);
+renderMut();
+
+// keep token aligned if the viewport resizes
+let rT;
+window.addEventListener("resize", () => { clearTimeout(rT); rT = setTimeout(() => { if (pos >= 0) paint(); }, 120); });
+</script>
+</body>
+</html>

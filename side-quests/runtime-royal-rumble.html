@@ -1,0 +1,2316 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Runtim Royal Rumble — Languages × Runtimes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ─────────────────────────────────────────────────────────────
+   THEME TOKENS
+   ───────────────────────────────────────────────────────────── */
+:root,
+[data-theme="dark"] {
+  --bg:           #08080a;
+  --bg-grid:      rgba(255,255,255,0.025);
+  --surface:      #101014;
+  --surface-2:    #18181d;
+  --surface-3:    #22222a;
+  --surface-hover:#26262e;
+  --border:       #2a2a32;
+  --border-strong:#3e3e48;
+  --text:         #f7f7fa;
+  --text-2:       #a8a8b3;
+  --text-3:       #6c6c78;
+  --shadow-lg:    0 32px 72px -12px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.05);
+  --shadow-md:    0 12px 32px -8px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04);
+
+  --blue:         #93c5fd;
+  --blue-bg:      rgba(96,165,250,0.16);
+  --blue-bg-2:    rgba(96,165,250,0.34);
+  --blue-border:  rgba(96,165,250,0.58);
+  --blue-glow:    rgba(96,165,250,0.70);
+
+  --purple:       #d8b4fe;
+  --purple-bg:    rgba(192,132,252,0.16);
+  --purple-bg-2:  rgba(192,132,252,0.34);
+  --purple-border:rgba(192,132,252,0.58);
+  --purple-glow:  rgba(192,132,252,0.70);
+
+  --teal:         #5eead4;
+  --teal-bg:      rgba(45,212,191,0.16);
+  --teal-bg-2:    rgba(45,212,191,0.34);
+  --teal-border:  rgba(45,212,191,0.58);
+  --teal-glow:    rgba(45,212,191,0.70);
+
+  --slate:        #d4d4dc;
+  --slate-bg:     rgba(180,180,196,0.10);
+  --slate-bg-2:   rgba(180,180,196,0.22);
+  --slate-border: rgba(180,180,196,0.42);
+  --slate-glow:   rgba(180,180,196,0.55);
+
+  --amber:        #fbbf24;
+  --amber-bg:     rgba(251,191,36,0.16);
+  --amber-bg-2:   rgba(251,191,36,0.34);
+  --amber-border: rgba(251,191,36,0.58);
+  --amber-glow:   rgba(251,191,36,0.70);
+
+  --orange:       #fb923c;
+  --orange-bg:    rgba(251,146,60,0.16);
+  --orange-bg-2:  rgba(251,146,60,0.34);
+  --orange-border:rgba(251,146,60,0.60);
+  --orange-glow:  rgba(251,146,60,0.72);
+
+  --rose:         #fb7185;
+  --rose-bg:      rgba(251,113,133,0.16);
+  --rose-bg-2:    rgba(251,113,133,0.34);
+  --rose-border:  rgba(251,113,133,0.60);
+  --rose-glow:    rgba(251,113,133,0.72);
+
+  --hi:           #facc15;
+  --hi-soft:      rgba(250,204,21,0.20);
+}
+
+[data-theme="light"] {
+  --bg:           #faf9f6;
+  --bg-grid:      rgba(0,0,0,0.025);
+  --surface:      #ffffff;
+  --surface-2:    #f4f3ee;
+  --surface-3:    #ebeae3;
+  --surface-hover:#e2e1d9;
+  --border:       #e0dfd6;
+  --border-strong:#c2c1b6;
+  --text:         #0a0a0c;
+  --text-2:       #4a4a52;
+  --text-3:       #74747e;
+  --shadow-lg:    0 32px 72px -12px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.05);
+  --shadow-md:    0 12px 32px -8px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04);
+
+  --blue:         #1d4ed8;
+  --blue-bg:      rgba(59,130,246,0.10);
+  --blue-bg-2:    rgba(59,130,246,0.20);
+  --blue-border:  rgba(29,78,216,0.40);
+  --blue-glow:    rgba(59,130,246,0.40);
+
+  --purple:       #7e22ce;
+  --purple-bg:    rgba(168,85,247,0.10);
+  --purple-bg-2:  rgba(168,85,247,0.20);
+  --purple-border:rgba(126,34,206,0.40);
+  --purple-glow:  rgba(168,85,247,0.40);
+
+  --teal:         #0f766e;
+  --teal-bg:      rgba(20,184,166,0.10);
+  --teal-bg-2:    rgba(20,184,166,0.20);
+  --teal-border:  rgba(15,118,110,0.38);
+  --teal-glow:    rgba(20,184,166,0.36);
+
+  --slate:        #3f3f46;
+  --slate-bg:     rgba(0,0,0,0.05);
+  --slate-bg-2:   rgba(0,0,0,0.10);
+  --slate-border: rgba(0,0,0,0.22);
+  --slate-glow:   rgba(0,0,0,0.22);
+
+  --amber:        #b45309;
+  --amber-bg:     rgba(245,158,11,0.12);
+  --amber-bg-2:   rgba(245,158,11,0.22);
+  --amber-border: rgba(180,83,9,0.45);
+  --amber-glow:   rgba(245,158,11,0.40);
+
+  --orange:       #c2410c;
+  --orange-bg:    rgba(249,115,22,0.12);
+  --orange-bg-2:  rgba(249,115,22,0.22);
+  --orange-border:rgba(194,65,12,0.45);
+  --orange-glow:  rgba(249,115,22,0.40);
+
+  --rose:         #be123c;
+  --rose-bg:      rgba(244,63,94,0.10);
+  --rose-bg-2:    rgba(244,63,94,0.20);
+  --rose-border:  rgba(190,18,60,0.45);
+  --rose-glow:    rgba(244,63,94,0.36);
+
+  --hi:           #a16207;
+  --hi-soft:      rgba(161,98,7,0.12);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   RESET + BASE
+   ───────────────────────────────────────────────────────────── */
+*,*::before,*::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--bg);
+  background-image:
+    linear-gradient(to right, var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--bg-grid) 1px, transparent 1px);
+  background-size: 64px 64px;
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'ss01', 'ss03', 'cv11';
+  transition: background-color 0.3s ease, color 0.3s ease;
+  overflow-x: hidden;
+}
+.mono { font-family: 'Geist Mono', ui-monospace, Menlo, Consolas, monospace; }
+.eyebrow {
+  font-family: 'Geist Mono', ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+a { color: inherit; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+
+/* ─────────────────────────────────────────────────────────────
+   NAVIGATION
+   ───────────────────────────────────────────────────────────── */
+.nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 28px;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid transparent;
+  transition: transform 0.36s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.3s ease,
+              background-color 0.3s ease;
+}
+.nav.is-scrolled { border-bottom-color: var(--border); }
+.nav.is-hidden { transform: translateY(-100%); }
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+.nav-mark {
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--teal) 0%, var(--blue) 50%, var(--purple) 100%);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Geist Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0a0a0c;
+}
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.nav-link {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  border-radius: 8px;
+  transition: color 0.2s, background-color 0.2s;
+  text-decoration: none;
+}
+.nav-link:hover { color: var(--text); background: var(--surface-2); }
+.nav-tools { display: flex; align-items: center; gap: 8px; }
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px; height: 36px;
+  border-radius: 9px;
+  color: var(--text-2);
+  transition: color 0.2s, background-color 0.2s;
+}
+.icon-btn:hover { color: var(--text); background: var(--surface-2); }
+.icon-btn svg { width: 16px; height: 16px; }
+
+[data-theme="dark"] .theme-toggle .sun { display: none; }
+[data-theme="dark"] .theme-toggle .moon { display: block; }
+[data-theme="light"] .theme-toggle .sun { display: block; }
+[data-theme="light"] .theme-toggle .moon { display: none; }
+
+@media (max-width: 720px) {
+  .nav { padding: 12px 16px; }
+  .nav-links { display: none; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   PAGE LAYOUT
+   ───────────────────────────────────────────────────────────── */
+.shell { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+@media (max-width: 720px) { .shell { padding: 0 16px; } }
+
+/* ─────────────────────────────────────────────────────────────
+   HERO
+   ───────────────────────────────────────────────────────────── */
+.hero {
+  position: relative;
+  padding: 160px 0 80px;
+}
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 28px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.hero-eyebrow .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--teal);
+  box-shadow: 0 0 0 3px var(--teal-bg-2), 0 0 12px var(--teal-glow);
+  animation: pulse 2.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.hero h1 {
+  margin: 0 0 24px;
+  font-size: clamp(40px, 7vw, 88px);
+  font-weight: 700;
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+  max-width: 16ch;
+}
+.hero h1 em {
+  font-style: normal;
+  background: linear-gradient(135deg, var(--blue) 0%, var(--purple) 50%, var(--teal) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.hero-lede {
+  max-width: 60ch;
+  font-size: clamp(16px, 1.3vw, 19px);
+  line-height: 1.55;
+  color: var(--text-2);
+  margin: 0 0 48px;
+}
+.hero-lede code {
+  font-family: 'Geist Mono', monospace;
+  font-size: 0.92em;
+  padding: 1px 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+}
+.hero-stats {
+  display: flex;
+  gap: 48px;
+  flex-wrap: wrap;
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
+}
+.hero-stat .num {
+  font-family: 'Geist Mono', monospace;
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1;
+}
+.hero-stat .label {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-top: 8px;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   SECTION HEADER
+   ───────────────────────────────────────────────────────────── */
+.section { padding: 56px 0; }
+.section-head { margin-bottom: 36px; display: flex; align-items: flex-end; justify-content: space-between; gap: 32px; flex-wrap: wrap; }
+.section-head-left { flex: 1 1 360px; min-width: 0; }
+.section-head .num {
+  display: inline-block;
+  font-family: 'Geist Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  color: var(--text-3);
+  margin-bottom: 16px;
+}
+.section-head h2 {
+  margin: 0 0 14px;
+  font-size: clamp(28px, 3.4vw, 44px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+.section-head h2 .accent { color: var(--sec-color, var(--text)); text-shadow: 0 0 32px var(--sec-glow, transparent); }
+.section-head p {
+  margin: 0;
+  max-width: 64ch;
+  color: var(--text-2);
+  font-size: 15.5px;
+  line-height: 1.6;
+}
+.section-head p code, .section-head p strong {
+  font-family: 'Geist Mono', monospace;
+  font-size: 0.9em;
+  padding: 1px 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-weight: 500;
+}
+.section-stamp {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 14px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-width: 180px;
+}
+.section-stamp .stamp-label {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.section-stamp .stamp-value {
+  font-family: 'Geist Mono', monospace;
+  font-size: 13px;
+  color: var(--sec-color, var(--text));
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* Section accent colors (one per language) */
+.section.lang-js     { --sec-color: var(--blue);    --sec-glow: var(--blue-glow); }
+.section.lang-py     { --sec-color: var(--teal);    --sec-glow: var(--teal-glow); }
+.section.lang-jvm    { --sec-color: var(--orange);  --sec-glow: var(--orange-glow); }
+.section.lang-dotnet { --sec-color: var(--purple);  --sec-glow: var(--purple-glow); }
+.section.lang-go     { --sec-color: var(--rose);    --sec-glow: var(--rose-glow); }
+.section.lang-rust   { --sec-color: var(--amber);   --sec-glow: var(--amber-glow); }
+.section.lang-beam   { --sec-color: var(--rose);    --sec-glow: var(--rose-glow); }
+.section.lang-ruby   { --sec-color: var(--rose);    --sec-glow: var(--rose-glow); }
+.section.lang-lua    { --sec-color: var(--purple);  --sec-glow: var(--purple-glow); }
+.section.lang-wasm   { --sec-color: var(--slate);   --sec-glow: var(--slate-glow); }
+
+/* ─────────────────────────────────────────────────────────────
+   AXES STRIP (intro)
+   ───────────────────────────────────────────────────────────── */
+.axes {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+@media (max-width: 880px) { .axes { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .axes { grid-template-columns: 1fr; } }
+.axis {
+  position: relative;
+  padding: 22px 22px 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.axis::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 14px;
+  background: radial-gradient(80% 60% at 50% 0%, var(--axis-glow, transparent) 0%, transparent 65%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.axis.a1 { --axis-glow: var(--blue-bg-2); }
+.axis.a2 { --axis-glow: var(--purple-bg-2); }
+.axis.a3 { --axis-glow: var(--teal-bg-2); }
+.axis.a4 { --axis-glow: var(--amber-bg-2); }
+.axis-num {
+  position: relative;
+  z-index: 1;
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--text-3);
+  margin-bottom: 10px;
+}
+.axis h3 {
+  position: relative; z-index: 1;
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.axis p {
+  position: relative; z-index: 1;
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   CARDS
+   ───────────────────────────────────────────────────────────── */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  background:
+    linear-gradient(180deg, var(--card-bg-2, transparent) 0%, transparent 35%),
+    var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: transform 0.22s cubic-bezier(0.16,1,0.3,1),
+              border-color 0.22s,
+              background 0.22s,
+              box-shadow 0.22s;
+}
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  pointer-events: none;
+  background: radial-gradient(80% 100% at 50% 0%, var(--card-glow, transparent) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.card:hover {
+  transform: translateY(-3px);
+  border-color: var(--card-border, var(--border-strong));
+  background:
+    linear-gradient(180deg, var(--card-bg-2, transparent) 0%, transparent 50%),
+    var(--surface-hover);
+  box-shadow: var(--shadow-md);
+}
+.card:hover::before { opacity: 0.7; }
+
+.card.blue   { --card-accent: var(--blue);   --card-bg: var(--blue-bg);   --card-bg-2: var(--blue-bg-2);   --card-border: var(--blue-border);   --card-glow: var(--blue-bg-2); }
+.card.purple { --card-accent: var(--purple); --card-bg: var(--purple-bg); --card-bg-2: var(--purple-bg-2); --card-border: var(--purple-border); --card-glow: var(--purple-bg-2); }
+.card.teal   { --card-accent: var(--teal);   --card-bg: var(--teal-bg);   --card-bg-2: var(--teal-bg-2);   --card-border: var(--teal-border);   --card-glow: var(--teal-bg-2); }
+.card.slate  { --card-accent: var(--slate);  --card-bg: var(--slate-bg);  --card-bg-2: var(--slate-bg-2);  --card-border: var(--slate-border);  --card-glow: var(--slate-bg-2); }
+.card.amber  { --card-accent: var(--amber);  --card-bg: var(--amber-bg);  --card-bg-2: var(--amber-bg-2);  --card-border: var(--amber-border);  --card-glow: var(--amber-bg-2); }
+.card.orange { --card-accent: var(--orange); --card-bg: var(--orange-bg); --card-bg-2: var(--orange-bg-2); --card-border: var(--orange-border); --card-glow: var(--orange-bg-2); }
+.card.rose   { --card-accent: var(--rose);   --card-bg: var(--rose-bg);   --card-bg-2: var(--rose-bg-2);   --card-border: var(--rose-border);   --card-glow: var(--rose-bg-2); }
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--card-accent);
+}
+.card-num {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  color: var(--text-3);
+  letter-spacing: 0.1em;
+}
+.card h3 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  line-height: 1.2;
+}
+.card-tagline {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+}
+.card-pill {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  padding: 3px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-2);
+}
+.card-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--card-accent);
+  margin-top: 4px;
+}
+.card-cta svg { width: 12px; height: 12px; transition: transform 0.2s; }
+.card:hover .card-cta svg { transform: translateX(3px); }
+
+/* ─────────────────────────────────────────────────────────────
+   MODAL
+   ───────────────────────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.28s;
+}
+[data-theme="light"] .modal-backdrop { background: rgba(20,20,30,0.45); }
+.modal-backdrop.is-open { opacity: 1; pointer-events: auto; }
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 80px 24px 40px;
+  pointer-events: none;
+  overflow: hidden;
+}
+.modal.is-open { overflow-y: auto; }
+.modal-panel {
+  position: relative;
+  width: 100%;
+  max-width: 860px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(20px) scale(0.985);
+  transition: opacity 0.32s cubic-bezier(0.16,1,0.3,1),
+              transform 0.32s cubic-bezier(0.16,1,0.3,1);
+  overflow: hidden;
+}
+.modal.is-open .modal-panel {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+.modal-header {
+  position: relative;
+  padding: 36px 40px 28px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--m-bg, transparent) 0%, transparent 100%);
+}
+.modal-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(90% 130% at 0% 0%, var(--m-glow, transparent) 0%, transparent 60%);
+  pointer-events: none;
+}
+.modal-close {
+  position: absolute;
+  top: 20px; right: 20px;
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  transition: color 0.18s, background-color 0.18s;
+  z-index: 2;
+}
+.modal-close:hover { color: var(--text); background: var(--surface-3); }
+.modal-close svg { width: 14px; height: 14px; }
+
+.modal-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 18px;
+  position: relative;
+  z-index: 1;
+}
+.modal-panel.blue   .modal-eyebrow { background: var(--blue-bg);   border: 1px solid var(--blue-border);   color: var(--blue); }
+.modal-panel.purple .modal-eyebrow { background: var(--purple-bg); border: 1px solid var(--purple-border); color: var(--purple); }
+.modal-panel.teal   .modal-eyebrow { background: var(--teal-bg);   border: 1px solid var(--teal-border);   color: var(--teal); }
+.modal-panel.slate  .modal-eyebrow { background: var(--slate-bg);  border: 1px solid var(--slate-border);  color: var(--slate); }
+.modal-panel.amber  .modal-eyebrow { background: var(--amber-bg);  border: 1px solid var(--amber-border);  color: var(--amber); }
+.modal-panel.orange .modal-eyebrow { background: var(--orange-bg); border: 1px solid var(--orange-border); color: var(--orange); }
+.modal-panel.rose   .modal-eyebrow { background: var(--rose-bg);   border: 1px solid var(--rose-border);   color: var(--rose); }
+.modal-panel.blue   { --m-glow: var(--blue-bg-2);   --m-bg: var(--blue-bg);   }
+.modal-panel.purple { --m-glow: var(--purple-bg-2); --m-bg: var(--purple-bg); }
+.modal-panel.teal   { --m-glow: var(--teal-bg-2);   --m-bg: var(--teal-bg);   }
+.modal-panel.slate  { --m-glow: var(--slate-bg-2);  --m-bg: var(--slate-bg);  }
+.modal-panel.amber  { --m-glow: var(--amber-bg-2);  --m-bg: var(--amber-bg);  }
+.modal-panel.orange { --m-glow: var(--orange-bg-2); --m-bg: var(--orange-bg); }
+.modal-panel.rose   { --m-glow: var(--rose-bg-2);   --m-bg: var(--rose-bg);   }
+
+.modal-header h2 {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 12px;
+  font-size: clamp(26px, 3.5vw, 38px);
+  font-weight: 600;
+  letter-spacing: -0.022em;
+  line-height: 1.08;
+}
+.modal-header .modal-tag {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  color: var(--text-2);
+  font-size: 16px;
+  max-width: 60ch;
+}
+.modal-body { padding: 32px 40px 40px; }
+.modal-body section { margin-bottom: 28px; }
+.modal-body section:last-child { margin-bottom: 0; }
+.modal-body h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--m-accent, var(--text));
+  font-family: 'Geist Mono', monospace;
+  text-shadow: 0 0 24px var(--m-glow, transparent);
+}
+.modal-body h3::before {
+  content: '';
+  flex: 0 0 26px;
+  height: 1px;
+  background: var(--m-accent, var(--border-strong));
+  opacity: 0.85;
+  box-shadow: 0 0 12px var(--m-glow, transparent);
+}
+.modal-panel.blue   .modal-body { --m-accent: var(--blue);   }
+.modal-panel.purple .modal-body { --m-accent: var(--purple); }
+.modal-panel.teal   .modal-body { --m-accent: var(--teal);   }
+.modal-panel.slate  .modal-body { --m-accent: var(--slate);  }
+.modal-panel.amber  .modal-body { --m-accent: var(--amber);  }
+.modal-panel.orange .modal-body { --m-accent: var(--orange); }
+.modal-panel.rose   .modal-body { --m-accent: var(--rose);   }
+.modal-body p {
+  margin: 0 0 12px;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+.modal-body p:last-child { margin-bottom: 0; }
+.modal-body strong {
+  color: var(--hi);
+  font-weight: 600;
+  text-shadow: 0 0 24px var(--hi-soft);
+}
+.modal-body em {
+  color: var(--text);
+  font-style: italic;
+  font-weight: 500;
+}
+.modal-body ul {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  color: var(--text-2);
+  font-size: 15px;
+  line-height: 1.65;
+}
+.modal-body ul li { margin-bottom: 6px; }
+.modal-body code {
+  font-family: 'Geist Mono', monospace;
+  font-size: 13px;
+  padding: 1px 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--m-accent, var(--text));
+}
+
+@media (max-width: 720px) {
+  .modal { padding: 60px 12px 24px; }
+  .modal-header { padding: 24px 22px 20px; }
+  .modal-body { padding: 24px 22px 28px; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   MODAL DIAGRAM (per-runtime anatomy)
+   ───────────────────────────────────────────────────────────── */
+.dgm-wrap {
+  position: relative;
+  padding: 18px 16px 14px;
+  margin: 0 0 28px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.dgm-wrap::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 14px;
+  background: radial-gradient(80% 60% at 50% 0%, var(--m-glow, transparent) 0%, transparent 60%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.dgm-eyebrow {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 12px;
+}
+.dgm-eyebrow .dgm-legend {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.dgm-eyebrow .dgm-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.dgm-eyebrow .dgm-legend-chip .sw {
+  width: 8px; height: 8px;
+  border-radius: 2px;
+  border: 1px solid;
+  display: inline-block;
+}
+.dgm-svg {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+}
+.dgm-svg .dgm-rect {
+  transition: stroke-width 0.18s, filter 0.18s;
+}
+.dgm-svg .dgm-node:hover .dgm-rect {
+  stroke-width: 1.8;
+  filter: drop-shadow(0 0 10px currentColor);
+}
+.dgm-svg .dgm-layer-label {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  fill: var(--text-3);
+}
+.dgm-svg .dgm-box-title {
+  font-family: 'Geist', sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: -0.005em;
+}
+.dgm-svg .dgm-box-sub {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.01em;
+}
+.dgm-svg .dgm-arrow {
+  stroke: var(--border-strong);
+  stroke-width: 1.3;
+  fill: none;
+  opacity: 0.7;
+}
+@media (max-width: 720px) {
+  .dgm-wrap { padding: 14px 10px 12px; overflow-x: auto; }
+  .dgm-svg  { min-width: 600px; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   FOOTER
+   ───────────────────────────────────────────────────────────── */
+.footer {
+  margin-top: 64px;
+  padding: 48px 0 80px;
+  border-top: 1px solid var(--border);
+  color: var(--text-3);
+  font-size: 13px;
+}
+.footer-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.footer .mono { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; }
+.footer a { color: var(--text-2); text-decoration: none; transition: color 0.18s; }
+.footer a:hover { color: var(--text); }
+
+/* ─────────────────────────────────────────────────────────────
+   ENTRANCE ANIMATION
+   ───────────────────────────────────────────────────────────── */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.rise { animation: rise 0.8s cubic-bezier(0.16,1,0.3,1) both; }
+.rise-1 { animation-delay: 0.05s; }
+.rise-2 { animation-delay: 0.15s; }
+.rise-3 { animation-delay: 0.25s; }
+.rise-4 { animation-delay: 0.35s; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════ NAV ═══════════════════════ -->
+<nav class="nav" id="nav">
+  <a href="#top" class="nav-brand">
+    <span class="nav-mark">R</span>
+    <span>Runtime Royal Rumble</span>
+  </a>
+  <div class="nav-links">
+    <a href="#js" class="nav-link">JS</a>
+    <a href="#py" class="nav-link">Python</a>
+    <a href="#jvm" class="nav-link">JVM</a>
+    <a href="#dotnet" class="nav-link">.NET</a>
+    <a href="#go" class="nav-link">Go</a>
+    <a href="#rust" class="nav-link">Rust</a>
+    <a href="#beam" class="nav-link">BEAM</a>
+    <a href="#ruby" class="nav-link">Ruby</a>
+    <a href="#lua" class="nav-link">Lua</a>
+    <a href="#wasm" class="nav-link">Wasm</a>
+  </div>
+  <div class="nav-tools">
+    <button class="icon-btn theme-toggle" id="themeToggle" aria-label="Toggle theme">
+      <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+</nav>
+
+<main id="top">
+
+  <!-- ═══════════════════════ HERO ═══════════════════════ -->
+  <section class="hero shell">
+    <div class="hero-eyebrow rise rise-1"><span class="dot"></span><span class="eyebrow">Field Guide · 10 Languages · 30 Runtimes</span></div>
+    <h1 class="rise rise-2">The runtime<br>Royal Rumble, every <em>language</em> is a weight class.</h1>
+    <p class="hero-lede rise rise-3">A <em>language</em> is a spec — text that promises what <code>map</code> or <code>async</code> mean. A <em>runtime</em> is whatever is actually there at the moment your code executes: translating source to instructions, managing memory, scheduling work, and binding to the world outside the CPU. Many languages have several. Click any card.</p>
+    <div class="hero-stats rise rise-4">
+      <div class="hero-stat"><div class="num">10</div><div class="label">Languages</div></div>
+      <div class="hero-stat"><div class="num">30</div><div class="label">Runtimes</div></div>
+      <div class="hero-stat"><div class="num">04</div><div class="label">Axes</div></div>
+      <div class="hero-stat"><div class="num">∞</div><div class="label">Trade-offs</div></div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ AXES (intro) ═══════════════════════ -->
+  <section class="section shell">
+    <div class="section-head">
+      <div class="section-head-left">
+        <div class="num">00 — Axes</div>
+        <h2>Four questions every runtime must answer.</h2>
+        <p>The personality of any runtime is mostly determined by how it resolves these four. Hold them in mind as you read the rest — they're what makes Bun feel different from Node, or HotSpot different from GraalVM.</p>
+      </div>
+    </div>
+
+    <div class="axes">
+      <div class="axis a1">
+        <div class="axis-num">01 · EXECUTION</div>
+        <h3>How does source become CPU work?</h3>
+        <p>Interpret bytecode directly, JIT-compile hot paths at runtime, or AOT-compile everything before shipping. Each is a different gamble on startup time vs. peak throughput.</p>
+      </div>
+      <div class="axis a2">
+        <div class="axis-num">02 · MEMORY</div>
+        <h3>Who decides when to free?</h3>
+        <p>Tracing GC, reference counting, ownership-based, or manual. Determines latency profile, fragmentation, and whether you ever say the words "stop the world."</p>
+      </div>
+      <div class="axis a3">
+        <div class="axis-num">03 · CONCURRENCY</div>
+        <h3>How is work scheduled?</h3>
+        <p>OS threads, green threads, goroutines, fibers, event loops, actors. Where the parallelism comes from and what synchronisation costs.</p>
+      </div>
+      <div class="axis a4">
+        <div class="axis-num">04 · CAPABILITIES</div>
+        <h3>What slice of the world is reachable?</h3>
+        <p>Filesystem, sockets, DOM, GPU, kernel-side hooks, edge KV stores. The runtime decides what the language can <em>do</em>, far more than the language itself.</p>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════ JAVASCRIPT / TS ═══════════════════════ -->
+  <section class="section shell lang-js" id="js">
+    <div class="section-head">
+      <div class="section-head-left">
+        <div class="num">01 — Language</div>
+        <h2><span class="accent">JavaScript</span> / TypeScript</h2>
+        <p>ECMAScript deliberately defines very little: <code>Array</code>, <code>Promise</code>, <code>async/await</code>. Everything else — <code>fetch</code>, <code>setTimeout</code>, <code>fs.readFile</code>, <code>document</code> — is provided by the host. That's why the <em>same language</em> behaves so differently in a browser vs. a server vs. an edge worker. Each is a distinct ambient world bolted onto an engine.</p>
+      </div>
+      <div class="section-stamp">
+        <span class="stamp-label">Engines</span>
+        <span class="stamp-value">V8 · JSC · SpiderMonkey · Hermes</span>
+      </div>
+    </div>
+    <div class="cards" data-lang="js"></div>
+  </section>
+
+  <!-- ═══════════════════════ PYTHON ═══════════════════════ -->
+  <section class="section shell lang-py" id="py">
+    <div class="section-head">
+      <div class="section-head-left">
+        <div class="num">02 — Language</div>
+        <h2><span class="accent">Python</span></h2>
+        <p>Python the language is one thing; Python the runtime is a choice. CPython is the reference and what most people use; PyPy is the same language with a JIT instead of a bytecode interpreter; MicroPython is the same language with the standard library mostly torn out so it can fit on a microcontroller. The differences are dramatic — performance, threading semantics, C-extension compatibility all flip depending on which one you boot.</p>
+      </div>
+      <div class="section-stamp">
+        <span class="stamp-label">Spec</span>
+        <span class="stamp-value">PEP-driven · CPython ref</span>
+      </div>
+    </div>
+    <div class="cards" data-lang="py"></div>
+  </section>
+
+  <!-- ═══════════════════════ JVM ═══════════════════════ -->
+  <section class="section shell lang-jvm" id="jvm">
+    <div class="section-head">
+      <div class="section-head-left">
+        <div class="num">03 — Language family</div>
+        <h2><span class="accent">JVM bytecode</span> — Java, Kotlin, Scala, Clojure</h2>
+        <p>Unusually, the runtime here is shared by an entire <em>family</em> of languages. They all compile to JVM bytecode, then a JVM executes it. So Kotlin's pauses, Scala's reflection, and Clojure's startup time are really HotSpot's pauses, HotSpot's reflection, HotSpot's startup. Picking GraalVM or OpenJ9 changes all of those without touching a line of source.</p>
+      </div>
+      <div class="section-stamp">
+        <span class="stamp-label">Bytecode</span>
+        <span class="stamp-value">JVMS · stack-based</span>
+      </div>
+    </div>
+    <div class="cards" data-lang="jvm"></div>
+  </section>
+
+  <!-- ═══════════════════════ .NET / CIL ═══════════════════════ -->
+  <section class="section shell lang-dotnet" id="dotnet">
+    <div class="section-head">
+      <div class="section-head-left">
+        <div class="num">04 — Language family</div>
+        <h2><span class="accent">.NET / CIL</span> — C#, F#, VB.NET</h2>
+        <p>The Microsoft counterpart to the JVM. Source compiles to CIL (Common Intermediate Language), and a CLR executes it. Modern .NET has unified what used to be three forks: CoreCLR for server, Mono for mobile and games, and NativeAOT for trim-down deployments where you want zero JIT. Same language surface, three different runtime experiences.</p>
+      </div>
+      <div class="section-stamp">
+        <span class="stamp-label">Bytecode</span>
+        <span class="stamp-value">CIL · ECMA-335</span>
+      </div>
+    </div>
+    <div class="cards" data-lang="dotnet"></div>
+  </section>
+
+  <!-- ═══════════════════════ GO ═══════════════════════ -->
+  <section class="section shell lang-go" id="go">
+    <div class="section-head">
+      <div class="section-head-left">
+        <div class="num">05 — Language</div>
+        <h2><span class="accent">Go</span></h2>
+        <p>Go has effectively one runtime, but it's an unusual one: it's <em>compiled into every binary</em>. No VM to install, no JIT to warm up. Yet that statically-linked binary contains a goroutine scheduler, a concurrent GC, channels, and a network poller — all running invisibly underneath your <code>main()</code>. The pitch was "deploy a single file"; the design consequence is that every Go program ships with a few megabytes of runtime even for hello-world.</p>
+      </div>
+      <div class="section-stamp">
+        <span class="stamp-label">Distribution</span>
+        <span class="stamp-value">static binary · ahead-of-time</span>
+      </div>
+    </div>
+    <div class="cards" data-lang="go"></div>
+  </section>
+
+  <!-- ═══════════════════════ RUST ═══════════════════════ -->
+  <section class="section shell lang-rust" id="rust">
+    <div class="section-head">
+      <div class="section-head-left">
+        <div class="num">06 — Language</div>
+        <h2><span class="accent">Rust</span></h2>
+        <p>Rust is the clarifying counter-example. People say it has "no runtime" because nothing tracks references at execution time and no scheduler is mandatory — ownership is checked at compile time and goes away before the program runs. But that's only true for <em>synchronous</em> Rust. The moment you write <code>async fn</code>, you need a runtime to drive the futures, and you pick one. Tokio, async-std, smol — same language, three different worlds.</p>
+      </div>
+      <div class="section-stamp">
+        <span class="stamp-label">Memory</span>
+        <span class="stamp-value">ownership · no GC</span>
+      </div>
+    </div>
+    <div class="cards" data-lang="rust"></div>
+  </section>
+
+  <!-- ═══════════════════════ BEAM ═══════════════════════ -->
+  <section class="section shell lang-beam" id="beam">
+    <div class="section-head">
+      <div class="section-head-left">
+        <div class="num">07 — Language family</div>
+        <h2><span class="accent">BEAM</span> — Erlang, Elixir, Gleam</h2>
+        <p>Most runtimes start from "execute the language." BEAM started from "build a phone switch that never goes down." Everything else — millions of lightweight processes, per-process GC, hot code reloading, transparent network distribution — falls out of that founding constraint. Three languages now ride on it; they share the runtime's superpowers <em>and</em> its quirks (no shared memory, weird-looking pattern matching at every boundary).</p>
+      </div>
+      <div class="section-stamp">
+        <span class="stamp-label">Origin</span>
+        <span class="stamp-value">Ericsson · 1986</span>
+      </div>
+    </div>
+    <div class="cards" data-lang="beam"></div>
+  </section>
+
+  <!-- ═══════════════════════ RUBY ═══════════════════════ -->
+  <section class="section shell lang-ruby" id="ruby">
+    <div class="section-head">
+      <div class="section-head-left">
+        <div class="num">08 — Language</div>
+        <h2><span class="accent">Ruby</span></h2>
+        <p>Ruby spent a decade as a pure interpreter (MRI), then YARV gave it a real bytecode VM, then YJIT gave it a JIT. Each step roughly halved the gap to V8. TruffleRuby — Ruby on GraalVM's polyglot stack — closes the rest in some benchmarks. It's a useful demonstration that "the language is slow" is almost always shorthand for "the dominant runtime hasn't caught up yet."</p>
+      </div>
+      <div class="section-stamp">
+        <span class="stamp-label">VM</span>
+        <span class="stamp-value">YARV · YJIT (Shopify)</span>
+      </div>
+    </div>
+    <div class="cards" data-lang="ruby"></div>
+  </section>
+
+  <!-- ═══════════════════════ LUA ═══════════════════════ -->
+  <section class="section shell lang-lua" id="lua">
+    <div class="section-head">
+      <div class="section-head-left">
+        <div class="num">09 — Language</div>
+        <h2><span class="accent">Lua</span></h2>
+        <p>Lua exists because the original authors needed a tiny scripting language they could <em>embed</em> in other programs. That constraint produced a runtime that fits in a few hundred kilobytes — and which now lives inside Nginx, Redis, World of Warcraft, Roblox, and Neovim. Then Mike Pall wrote LuaJIT and turned this small embeddable thing into one of the fastest dynamic-language implementations ever built. Same language, two extraordinarily different engines.</p>
+      </div>
+      <div class="section-stamp">
+        <span class="stamp-label">Footprint</span>
+        <span class="stamp-value">~200 KB embeddable</span>
+      </div>
+    </div>
+    <div class="cards" data-lang="lua"></div>
+  </section>
+
+  <!-- ═══════════════════════ WEBASSEMBLY ═══════════════════════ -->
+  <section class="section shell lang-wasm" id="wasm">
+    <div class="section-head">
+      <div class="section-head-left">
+        <div class="num">10 — Language target</div>
+        <h2><span class="accent">WebAssembly</span> — Rust, C, Go, Zig, AssemblyScript</h2>
+        <p>Wasm isn't a language people write directly — it's a binary instruction format that <em>other</em> languages compile to. The interesting thing is that this turns "runtime" into a commodity: any host that implements the Wasm spec can run the same bytecode. The browser was first; standalone runtimes (Wasmtime, Wasmer) followed; edge platforms (Fastly, Fermyon) bet the whole product on it. Cold starts in microseconds because the verifier replaces the trust model that VMs usually need.</p>
+      </div>
+      <div class="section-stamp">
+        <span class="stamp-label">Spec</span>
+        <span class="stamp-value">W3C Wasm · WASI</span>
+      </div>
+    </div>
+    <div class="cards" data-lang="wasm"></div>
+  </section>
+
+  <!-- ═══════════════════════ FOOTER ═══════════════════════ -->
+  <footer class="footer shell">
+    <div class="footer-row">
+      <div>
+        <div class="mono">Runtime Royal Rumble</div>
+        <div style="margin-top: 6px;">A field guide to the layer between your code and the CPU.</div>
+      </div>
+      <div class="mono">10 languages · 30 runtimes · 4 axes</div>
+    </div>
+  </footer>
+
+</main>
+
+<!-- ═══════════════════════ MODAL ═══════════════════════ -->
+<div class="modal-backdrop" id="modalBackdrop"></div>
+<div class="modal" id="modal" aria-hidden="true">
+  <div class="modal-panel" id="modalPanel">
+    <button class="modal-close" id="modalClose" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+    <div class="modal-header" id="modalHeader"></div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+
+<script>
+/* ─────────────────────────────────────────────────────────────
+   RUNTIMES DATA
+   Each runtime: { id, lang, color, title, tagline, pills, sections[{h, p}] }
+   Each modal section uses the four canonical axes plus context.
+   ───────────────────────────────────────────────────────────── */
+const RUNTIMES = [
+  /* ====================== JAVASCRIPT ====================== */
+  {
+    id: 'browser', lang: 'js', color: 'blue',
+    badge: 'In-browser',
+    title: 'Browser (V8 + Blink, JSC + WebKit, SpiderMonkey + Gecko)',
+    tagline: 'The runtime most JS developers met first. An engine plus a DOM plus a sandbox.',
+    pills: ['V8 · JSC · SpiderMonkey', 'event loop', 'DOM', 'sandboxed'],
+    sections: [
+      { h: 'Execution', p: 'Three production engines, all multi-tier JIT compilers. <strong>V8</strong> (Chrome, Edge, Node, Deno, Bun-via-JSC-actually-no, Workers) uses Ignition (interpreter) → Sparkplug (baseline) → Maglev (mid-tier) → TurboFan (optimising). <strong>JavaScriptCore</strong> (Safari) uses LLInt → Baseline → DFG → FTL. <strong>SpiderMonkey</strong> (Firefox) uses interpreter → Baseline → WarpMonkey. The tiering is similar across all three — cheap entry, expensive optimisation only for hot code.' },
+      { h: 'Memory', p: 'Generational, concurrent, incremental GC. V8\'s collector (Orinoco) does most of its work off the main thread now. Small short-lived allocations stay in young space and are reclaimed by fast scavenges; survivors are promoted to old space and collected by a concurrent mark-sweep-compact pass.' },
+      { h: 'Concurrency', p: 'Single-threaded JavaScript, single event loop, single microtask queue. <code>Web Workers</code> add real parallel JS in separate threads — each worker is a fresh isolate with its own heap, communicating only via <code>postMessage</code>. <code>SharedArrayBuffer</code> + <code>Atomics</code> enable shared-memory parallelism, gated behind cross-origin isolation headers.' },
+      { h: 'Capabilities', p: 'The browser is a <em>capability sandbox</em>. JS can touch the DOM, CSSOM, layout/paint, <code>fetch</code>, WebSockets, WebRTC, WebGL/WebGPU, IndexedDB, Service Workers, the Notifications API, the Permissions API. It cannot touch the filesystem (except via the gated File System Access API), cannot open raw sockets, cannot spawn processes, cannot read other origins.' },
+      { h: 'Distinctive', p: 'The runtime is married to a rendering engine. Performance work in the browser is rarely about V8 alone — it\'s about how a script blocks layout, how style recalc cascades from a mutation, how paint flashes. The most important runtime knob in a browser is often a <code>requestAnimationFrame</code>.' }
+    ]
+  },
+  {
+    id: 'node', lang: 'js', color: 'teal',
+    badge: 'Server-side',
+    title: 'Node.js',
+    tagline: 'V8 plus libuv plus a large C++ standard library. The runtime that made server-side JS plausible.',
+    pills: ['V8 + libuv', 'event loop', 'thread pool', 'fs · net · crypto'],
+    sections: [
+      { h: 'Execution', p: 'V8, same as Chrome — Node ships whatever stable V8 release was current at fork time. Ignition + TurboFan + Maglev are all in play. Startup is fast because V8 caches compiled code into a snapshot; Node\'s own bootstrap is also snapshotted and embedded into the binary.' },
+      { h: 'Memory', p: 'V8\'s generational GC, with a default old-space limit of <strong>around 4 GB</strong> on 64-bit (controllable via <code>--max-old-space-size</code>). Buffers (binary data) live <em>outside</em> the V8 heap — Node manages them in a separate C++-owned pool to avoid GC pressure on I/O paths.' },
+      { h: 'Concurrency', p: 'Single-threaded JS, but several thread pools under it. <strong>libuv</strong> runs the event loop and provides a default 4-worker thread pool (<code>UV_THREADPOOL_SIZE</code>) used by <code>fs</code>, DNS <code>lookup</code>, and some crypto. <strong>worker_threads</strong> lets you spawn real parallel JS — each worker is its own V8 isolate with its own event loop. The libuv pool is C++ only; worker_threads is for JS.' },
+      { h: 'Capabilities', p: 'Full POSIX surface: <code>fs</code>, <code>net</code> (TCP/UDP), <code>http</code>/<code>https</code>/<code>http2</code> (with bundled <strong>llhttp</strong> and <strong>nghttp2</strong>), <code>crypto</code> (bundled OpenSSL), <code>child_process</code>, <code>os</code>, <code>process</code>, <code>tty</code>. Recent Node has retrofitted Web standards: <code>fetch</code>, <code>URL</code>, <code>WebStreams</code>, <code>structuredClone</code>, <code>WebCrypto</code>.' },
+      { h: 'Distinctive', p: 'Node was the first mainstream runtime to commit fully to the <em>event loop as the concurrency model</em>. Its API design (callback-first, then promise-first) shaped how a generation of JS developers think about async. The cost: filesystem operations are not actually async at the kernel level on most platforms, so they\'re offloaded to a thread pool — which can starve under DNS-heavy load.' }
+    ]
+  },
+  {
+    id: 'deno', lang: 'js', color: 'blue',
+    badge: 'Server-side',
+    title: 'Deno',
+    tagline: 'A second-generation Node: same engine, different host, Web standards first, secure by default.',
+    pills: ['V8 + Tokio', 'Rust host', 'permissions', 'TypeScript built in'],
+    sections: [
+      { h: 'Execution', p: 'V8 again — but the surrounding host is written in <strong>Rust</strong> instead of C++, on top of <strong>Tokio</strong> instead of libuv. TypeScript is a first-class input; the runtime transpiles via swc (Rust) and caches the result. No <code>tsc</code> step, no <code>ts-node</code>.' },
+      { h: 'Memory', p: 'V8\'s GC plus Rust\'s ownership for the host side. The Rust layer never leaks because the borrow checker won\'t let it; the JS layer relies on V8 exactly as Node does.' },
+      { h: 'Concurrency', p: 'Tokio drives the event loop. Same single-threaded JS, same microtask semantics. Real parallelism via <code>Worker</code> (the Web standard, not Node\'s <code>worker_threads</code>) — each worker is a separate V8 isolate communicating by structured-clone messages.' },
+      { h: 'Capabilities', p: 'Web standards <em>are</em> the surface area: <code>fetch</code>, <code>Request</code>, <code>Response</code>, <code>ReadableStream</code>, <code>WebSocket</code>, <code>crypto.subtle</code> are first-class. Node compatibility (<code>node:fs</code>, <code>node:http</code>) is an opt-in layer added later. Plus a built-in linter, formatter, test runner, bundler, doc generator, dependency inspector.' },
+      { h: 'Distinctive', p: 'Sandbox by default. Out of the box, a Deno script <em>cannot</em> read files, open network connections, spawn subprocesses, or read environment variables. You opt in per-domain at the CLI: <code>--allow-net=api.github.com</code>, <code>--allow-read=./data</code>. The same script that runs unprivileged in production can\'t accidentally <code>rm -rf</code> your home directory in development.' }
+    ]
+  },
+  {
+    id: 'bun', lang: 'js', color: 'amber',
+    badge: 'Server-side',
+    title: 'Bun',
+    tagline: 'A from-scratch runtime built around speed. Different engine, different language underneath, batteries fused in.',
+    pills: ['JavaScriptCore', 'Zig host', 'bundler · test · package manager', 'Node-compatible'],
+    sections: [
+      { h: 'Execution', p: '<strong>JavaScriptCore</strong> (Apple\'s engine, from Safari) instead of V8. JSC\'s tiering is competitive with V8 on long-running workloads and notably better on startup, which is why Bun\'s cold-start numbers look the way they do.' },
+      { h: 'Memory', p: 'JSC\'s GC, plus a host written in <strong>Zig</strong> for fine-grained memory control. The bundled <code>Bun.serve()</code> and <code>Bun.file()</code> APIs are deliberately allocation-light to keep request throughput high.' },
+      { h: 'Concurrency', p: 'Event loop driven by the JSC dispatch infrastructure. <code>Worker</code> for parallel JS. The runtime also exposes lower-level primitives (<code>Bun.spawn</code>, faster pipes) for cases where Node\'s child_process feels slow.' },
+      { h: 'Capabilities', p: 'Implements <em>both</em> the Node API surface (most of <code>node:fs</code>, <code>node:http</code>, etc.) and the Web standard surface (<code>fetch</code>, <code>WebSocket</code>, <code>Response</code>). Plus its own native APIs (<code>Bun.serve</code>, <code>Bun.file</code>, <code>Bun.write</code>) that are typically several times faster than the equivalents.' },
+      { h: 'Distinctive', p: 'Bun absorbs tools that used to be separate processes. <code>bun install</code> replaces npm/yarn/pnpm and is roughly an order of magnitude faster. <code>bun test</code> replaces Jest. <code>bun build</code> bundles. <code>bun --hot</code> hot-reloads. The bet is that fusing them into one binary unlocks performance you can\'t get when each tool is a separate Node process.' }
+    ]
+  },
+  {
+    id: 'workers', lang: 'js', color: 'orange',
+    badge: 'Edge',
+    title: 'Cloudflare Workers',
+    tagline: 'V8 isolates only. Sub-millisecond cold starts because there\'s no process to start.',
+    pills: ['V8 isolates', 'no Node APIs', 'edge POPs', 'KV · R2 · D1 · DO'],
+    sections: [
+      { h: 'Execution', p: 'V8 — but only V8\'s <strong>isolate</strong> primitive, not a full process per request. A single Workers runtime hosts many isolates simultaneously; each request gets a fresh, lightweight one spun up in <strong>under a millisecond</strong>. No Node, no libuv, no filesystem driver.' },
+      { h: 'Memory', p: 'Strict per-isolate memory caps (128 MB on the standard plan). Isolates can\'t share memory; each has its own heap. The runtime tears them down aggressively to keep the host healthy.' },
+      { h: 'Concurrency', p: 'Each request runs in its own isolate, scheduled across many cores of the underlying machine. No long-lived background work in the standard model — you get a CPU-time budget per request (10–50 ms typically) and that\'s it. <strong>Durable Objects</strong> give you a single-threaded, addressable actor for the cases where you need state.' },
+      { h: 'Capabilities', p: 'Web-standard APIs (<code>fetch</code>, <code>Request</code>, <code>Response</code>, <code>caches</code>, <code>crypto.subtle</code>, <code>WebSocket</code>, <code>Web Streams</code>) plus Cloudflare-specific bindings: <strong>KV</strong> (eventually-consistent global key-value), <strong>R2</strong> (S3-compatible object storage), <strong>D1</strong> (SQLite at the edge), <strong>Durable Objects</strong> (single-instance state), <strong>Queues</strong>, <strong>AI</strong>. No raw sockets, no filesystem, no <code>process</code>.' },
+      { h: 'Distinctive', p: 'Workers runs at <em>hundreds</em> of edge locations simultaneously. Your code isn\'t deployed to a region — it\'s deployed everywhere, and the network routes each request to the nearest POP. The fast cold start exists because of this: spinning up a region\'s container would defeat the latency advantage of being near the user.' }
+    ]
+  },
+  {
+    id: 'vercel-edge', lang: 'js', color: 'orange',
+    badge: 'Edge',
+    title: 'Vercel Edge Runtime / Netlify Edge Functions',
+    tagline: 'V8-isolate model copied for the meta-framework world. Designed around Next.js middleware.',
+    pills: ['V8 isolates', 'Next.js middleware', 'Web standards', 'no Node built-ins'],
+    sections: [
+      { h: 'Execution', p: 'V8 isolates, modeled closely on Workers. Vercel\'s Edge Runtime is technically open source (it\'s a thin layer over V8); Netlify Edge Functions runs on Deno Deploy underneath.' },
+      { h: 'Memory', p: 'Isolate-scoped, just like Workers. Memory and CPU budgets are tight by design.' },
+      { h: 'Concurrency', p: 'Single-request per isolate. No long-lived processes; no shared state between invocations (unless you reach out to a separate store).' },
+      { h: 'Capabilities', p: 'Web-standard APIs only: <code>fetch</code>, <code>Request</code>, <code>Response</code>, <code>URL</code>, <code>crypto.subtle</code>, <code>TextEncoder</code>. None of Node\'s built-ins (<code>fs</code>, <code>net</code>, <code>child_process</code>) are available. Frameworks reach external stores (Upstash, Neon, Vercel KV) over HTTP rather than holding connections.' },
+      { h: 'Distinctive', p: 'The runtime is shaped around <em>middleware</em>: short-lived code that runs between a CDN edge and the origin, rewriting requests, doing auth, A/B-splitting. The tight runtime constraints (no Node, no long sockets) are the price for sub-50ms execution wherever the user is.' }
+    ]
+  },
+  {
+    id: 'electron', lang: 'js', color: 'purple',
+    badge: 'Desktop',
+    title: 'Electron',
+    tagline: 'Two runtimes in one process tree: Chromium (UI) and Node (system access), wired together by IPC.',
+    pills: ['V8 × 2', 'Chromium + Node', 'native menus', 'IPC bridge'],
+    sections: [
+      { h: 'Execution', p: 'Two V8 instances, one Chromium <strong>renderer</strong> per window (sandboxed, browser-like) and one Node <strong>main</strong> process (full system access). Both are real V8s with their own heaps; they share no JS objects.' },
+      { h: 'Memory', p: 'Each renderer gets its own V8 heap with Chromium\'s normal limits. The main process is a Node process with Node\'s default heap budget. Memory pressure is the perennial complaint about Electron apps — each renderer is essentially a tab.' },
+      { h: 'Concurrency', p: 'Each process has its own event loop. Renderer and main communicate via <strong>IPC</strong> (<code>ipcMain</code>, <code>ipcRenderer</code>) which structured-clones messages across the process boundary. <code>contextBridge</code> is the modern, safer way to expose limited APIs from main to renderer.' },
+      { h: 'Capabilities', p: 'The renderer has everything a browser tab has (DOM, fetch, WebGL). The main process has everything Node has (filesystem, child processes, native modules). Plus Electron-specific APIs for native menus, file dialogs, OS notifications, tray icons, auto-update, deep links, protocol handlers.' },
+      { h: 'Distinctive', p: 'You ship Chromium <em>and</em> Node <em>and</em> your code as one bundle. That\'s why every Electron app is ~150 MB on disk and ~300 MB in RAM minimum. The trade-off bought VS Code, Slack, Discord, Figma desktop, and 1Password — apps that could not realistically have shipped cross-platform with native UI toolkits in the same time frame.' }
+    ]
+  },
+  {
+    id: 'react-native', lang: 'js', color: 'rose',
+    badge: 'Mobile',
+    title: 'React Native (Hermes)',
+    tagline: 'A JS runtime designed for phones. No DOM — a bridge to native iOS/Android UI.',
+    pills: ['Hermes (or JSC)', 'AOT bytecode', 'native bridge', 'shadow tree'],
+    sections: [
+      { h: 'Execution', p: '<strong>Hermes</strong>, Meta\'s mobile-optimized engine, is now the default. Unlike V8/JSC, Hermes is primarily AOT — it compiles JS to its own bytecode at build time, which the app ships, so startup is fast even on cold launch. It still has a small JIT for hot paths.' },
+      { h: 'Memory', p: 'Hermes\'s GC is tuned for the constrained memory of phones — generational, low-pause, small heap by default. Startup memory is significantly lower than JSC or V8.' },
+      { h: 'Concurrency', p: 'Three threads in classic RN: <strong>JS thread</strong> (your code), <strong>UI thread</strong> (renders native views), <strong>shadow thread</strong> (computes Yoga layout). They communicate via the bridge (legacy) or JSI/Fabric (new architecture). The new architecture lets JS hold native references directly, avoiding serialisation.' },
+      { h: 'Capabilities', p: 'No DOM. Instead a tree of <code>&lt;View&gt;</code>, <code>&lt;Text&gt;</code>, <code>&lt;Image&gt;</code> components that map to native UIKit/Android View objects. Plus AsyncStorage, native modules for camera/GPS/sensors, platform-specific APIs (StatusBar, Linking, Permissions).' },
+      { h: 'Distinctive', p: 'The interesting trick is that the same source can target iOS, Android, and (via React Native Web) the browser, but the runtime underneath is genuinely different on each platform. The runtime\'s job is to make those differences invisible at the API level while staying performant on devices with 2 GB of RAM and a thermal envelope.' }
+    ]
+  },
+
+  /* ====================== PYTHON ====================== */
+  {
+    id: 'cpython', lang: 'py', color: 'teal',
+    badge: 'Reference',
+    title: 'CPython',
+    tagline: 'The reference implementation. What you almost certainly mean when you say "Python."',
+    pills: ['bytecode interpreter', 'refcounting + GC', 'GIL', 'C extension API'],
+    sections: [
+      { h: 'Execution', p: 'A <strong>bytecode interpreter written in C</strong>. Source is compiled to <code>.pyc</code> bytecode (lazily cached in <code>__pycache__</code>), then a giant <code>switch</code>-style dispatch loop in <code>ceval.c</code> executes opcodes. Python 3.11+ added a <em>specialising adaptive interpreter</em> — opcodes that always see the same types rewrite themselves to faster type-specialised versions. Python 3.13+ has an experimental JIT.' },
+      { h: 'Memory', p: 'Primarily <strong>reference counting</strong> — every object has a refcount that increments on every assignment and decrements on every drop; at zero, the object is freed immediately. A separate <strong>cycle collector</strong> runs periodically to catch cycles (objects that refer to each other but nothing else does). Determinism is the headline benefit; locking the refcount is the headline cost.' },
+      { h: 'Concurrency', p: 'The <strong>GIL</strong> (Global Interpreter Lock) serializes bytecode execution across threads — only one thread at a time can be running Python code in a given interpreter. Multiprocessing sidesteps this; <code>asyncio</code> uses a single thread plus an event loop. Python 3.13 has an experimental <em>free-threaded</em> build (no GIL); Python 3.12 added <strong>sub-interpreters</strong> as another route.' },
+      { h: 'Capabilities', p: 'Vast standard library covering most of POSIX. The <strong>C extension API</strong> (and the more modern <strong>limited API</strong>) is the real superpower — it\'s why NumPy, PyTorch, TensorFlow, Pandas, Pillow, Cryptography all exist. The interpreter is a host that native libraries plug into; that\'s arguably more important than the language itself.' },
+      { h: 'Distinctive', p: 'CPython\'s pace is set by backwards compatibility with C extensions. Removing the GIL is technically achievable; doing it without breaking NumPy is the actual hard problem. This is why progress on no-GIL Python is measured in years.' }
+    ]
+  },
+  {
+    id: 'pypy', lang: 'py', color: 'purple',
+    badge: 'Alt JIT',
+    title: 'PyPy',
+    tagline: 'Same language, tracing JIT instead of an interpreter. Often 3–10× faster on pure Python.',
+    pills: ['tracing JIT', 'RPython', 'GC variants', 'cpyext compatibility'],
+    sections: [
+      { h: 'Execution', p: 'A <strong>tracing JIT</strong>: PyPy records the actual instruction sequence executed by hot loops, optimises it as one giant trace (inlining, type specialisation, dead code elimination), and emits machine code. Pure-Python numeric or string-heavy code typically runs 3–10× faster than CPython.' },
+      { h: 'Memory', p: 'Real garbage collection (no reference counting). Several GC strategies are available — the default is an <em>incremental generational mark-sweep</em>. Better allocation throughput than CPython on object-churn-heavy workloads.' },
+      { h: 'Concurrency', p: 'Also has a GIL — for the same reason CPython does (single-threaded object model). PyPy has experimented with STM (software transactional memory) as a no-GIL alternative; not production.' },
+      { h: 'Capabilities', p: 'The standard library works. C extensions are the catch: PyPy provides <code>cpyext</code>, an emulation of CPython\'s C API, but it\'s slow — calling into a C extension can be slower than CPython, partially eating the JIT win. Pure-Python or HPy-using packages benefit fully.' },
+      { h: 'Distinctive', p: 'PyPy is itself written in a Python subset (<strong>RPython</strong>) and bootstrapped through a translation toolchain. The toolchain can generate JITs for <em>other</em> languages — there\'s a Smalltalk, a PHP, even a Prolog built with the same machinery. The runtime is a meta-runtime.' }
+    ]
+  },
+  {
+    id: 'micropython', lang: 'py', color: 'amber',
+    badge: 'Embedded',
+    title: 'MicroPython / CircuitPython',
+    tagline: 'Python on a microcontroller. The runtime is the OS.',
+    pills: ['no OS', '~256 KB flash', 'limited stdlib', 'GC'],
+    sections: [
+      { h: 'Execution', p: 'Compact bytecode interpreter designed to fit in tens of kilobytes of flash. Supports a subset of Python 3 — functions, classes, generators, exceptions, even <code>asyncio</code>. Some heavy features (full <code>unicode</code> tables, the <code>re</code> module\'s full surface) are pared back.' },
+      { h: 'Memory', p: 'Custom mark-sweep GC tuned for small heaps. On an ESP32 you might have <strong>~100 KB of usable RAM</strong> — every byte matters. The GC pauses are short but visible if you care about real-time response.' },
+      { h: 'Concurrency', p: 'Single-threaded plus an <code>asyncio</code> event loop. Some ports add <code>_thread</code> for hardware that has multiple cores (ESP32, RP2040), but there\'s still no GIL-removed Python here either.' },
+      { h: 'Capabilities', p: 'No filesystem in the OS sense — a small FAT volume on flash, plus the live REPL. Hardware access via <code>machine</code> (GPIO, I2C, SPI, UART, PWM), Wi-Fi/Bluetooth on capable chips, sensor libraries. No <code>os.fork</code>, no subprocess, no NumPy.' },
+      { h: 'Distinctive', p: 'There is no operating system beneath the runtime — the runtime <em>is</em> the OS. When the chip boots, MicroPython is what runs. CircuitPython (Adafruit\'s fork) is the same idea tuned for absolute beginner ergonomics, mounting the device as a USB drive so you edit code by saving a file.' }
+    ]
+  },
+
+  /* ====================== JVM ====================== */
+  {
+    id: 'hotspot', lang: 'jvm', color: 'orange',
+    badge: 'Default',
+    title: 'HotSpot (OpenJDK)',
+    tagline: 'The default JVM. Tiered JIT, pluggable GCs, three decades of server tuning.',
+    pills: ['C1 + C2 JIT', 'G1 · ZGC · Shenandoah', 'real OS threads', 'JNI'],
+    sections: [
+      { h: 'Execution', p: '<strong>Tiered compilation</strong>: a template interpreter handles cold code, <strong>C1</strong> compiles warm code with light optimisation, <strong>C2</strong> applies aggressive inlining, escape analysis, and vectorisation on hot code. Profiling-guided — methods cross tiers based on observed behaviour. Project Leyden is adding AOT options for faster startup.' },
+      { h: 'Memory', p: 'Choice of GC. <strong>G1</strong> (default) is a region-based generational collector aiming for predictable pauses. <strong>ZGC</strong> is concurrent and aims for sub-millisecond pauses even on multi-terabyte heaps. <strong>Shenandoah</strong> is another low-pause option. <strong>Parallel GC</strong> is the throughput-maximising option. <strong>Epsilon</strong> is a no-op GC for short-lived workloads.' },
+      { h: 'Concurrency', p: 'Real OS threads, with a defined Java Memory Model (JSR-133) that gives precise semantics for <code>volatile</code>, <code>synchronized</code>, and <code>happens-before</code>. Project Loom (Java 21+) added <strong>virtual threads</strong> — lightweight threads scheduled M:N onto OS threads, like goroutines.' },
+      { h: 'Capabilities', p: 'Enormous standard library plus the wider Java ecosystem. <code>java.nio</code> for non-blocking I/O, <code>java.util.concurrent</code> for high-quality lock-free data structures, <code>java.lang.reflect</code> for runtime metaprogramming. <strong>JNI</strong> bridges to native code; the newer <strong>Foreign Function & Memory API</strong> (Project Panama) replaces it more safely.' },
+      { h: 'Distinctive', p: 'HotSpot has had more performance work poured into it than any other runtime on this page. The cost: startup is slow (the JIT needs to warm up) and memory footprint is high. The benefit: a warm HotSpot can match or beat hand-optimised C++ on long-running server workloads.' }
+    ]
+  },
+  {
+    id: 'graalvm', lang: 'jvm', color: 'amber',
+    badge: 'Polyglot',
+    title: 'GraalVM',
+    tagline: 'A different JIT plus an AOT compiler that produces native binaries. Polyglot by design.',
+    pills: ['Graal JIT', 'native-image AOT', 'Truffle polyglot', 'fast startup'],
+    sections: [
+      { h: 'Execution', p: 'Two distinct execution modes. As a <strong>JVM</strong>, GraalVM replaces C2 with the <em>Graal compiler</em> (written in Java itself) — comparable peak performance to C2, sometimes better on certain workloads. As <strong>native-image</strong>, it AOT-compiles your Java to a static binary with no JVM — startup in tens of milliseconds, no JIT warmup, no JIT at all.' },
+      { h: 'Memory', p: 'On the JVM, the same GCs as HotSpot. In native-image, a smaller embedded GC (Serial GC by default, G1 available). Native-image binaries have dramatically smaller memory footprints than equivalent JVM processes.' },
+      { h: 'Concurrency', p: 'Standard Java concurrency on the JVM. Native-image supports threads, virtual threads (with caveats), and <code>java.util.concurrent</code>.' },
+      { h: 'Capabilities', p: 'Java\'s full surface on the JVM. Native-image has restrictions: reflection, dynamic class loading, and dynamic proxies require ahead-of-time configuration so the AOT compiler knows about them. Build tools (native-build-tools) automate most of this.' },
+      { h: 'Distinctive', p: '<strong>Truffle</strong> — GraalVM\'s polyglot framework — lets you implement other languages as Truffle interpreters and get JIT compilation and host-language interop for free. <strong>TruffleRuby</strong>, <strong>FastR</strong>, <strong>GraalPy</strong>, <strong>GraalJS</strong>, and <strong>Espresso</strong> (Java on Truffle) all ride this. You can call Python from Java from JavaScript inside one process with no marshalling.' }
+    ]
+  },
+  {
+    id: 'openj9', lang: 'jvm', color: 'rose',
+    badge: 'Alternative',
+    title: 'Eclipse OpenJ9 (IBM)',
+    tagline: 'IBM\'s production JVM, tuned for low memory and fast startup. Common in containers.',
+    pills: ['low memory', 'shared classes cache', 'fast startup', 'AdoptOpenJDK heritage'],
+    sections: [
+      { h: 'Execution', p: 'A bytecode interpreter plus a multi-tier JIT (Testarossa). Comparable peak performance to HotSpot on most workloads, sometimes better on memory-constrained ones.' },
+      { h: 'Memory', p: 'Several GC policies. The <strong>balanced</strong> collector (region-based, similar to G1) is the default for large heaps. <strong>gencon</strong> (generational concurrent) is the throughput-tuned default for typical workloads. OpenJ9 is consistently the lowest-memory option among production JVMs — important when you\'re running 100 JVMs on one Kubernetes node.' },
+      { h: 'Concurrency', p: 'Standard Java threading. Loom-equivalent work is in progress.' },
+      { h: 'Capabilities', p: 'Standard Java SE surface. <strong>Shared Classes Cache</strong> — a cross-JVM cache of compiled class data — lets multiple JVMs on the same machine share bytecode and even AOT-compiled methods, cutting startup time and memory.' },
+      { h: 'Distinctive', p: 'Came from IBM\'s J9 (powering WebSphere for decades), open-sourced in 2017. Where HotSpot optimises for peak throughput, OpenJ9 optimises for resource economy — it tends to win benchmarks where the comparison is "how many JVMs fit on this machine."' }
+    ]
+  },
+
+  /* ====================== .NET / CIL ====================== */
+  {
+    id: 'coreclr', lang: 'dotnet', color: 'purple',
+    badge: 'Server / desktop',
+    title: 'CoreCLR (.NET)',
+    tagline: 'Microsoft\'s modern .NET runtime. Tiered JIT, generational GC, cross-platform.',
+    pills: ['RyuJIT', 'tiered compilation', 'generational GC', 'cross-platform'],
+    sections: [
+      { h: 'Execution', p: 'Source compiles to <strong>CIL</strong> (Common Intermediate Language), packaged in assemblies. CoreCLR\'s JIT is <strong>RyuJIT</strong>, with tiered compilation: tier-0 produces quick, low-quality code; tier-1 reoptimises hot methods with full optimisation. PGO (profile-guided optimisation) is dynamic since .NET 6. <strong>ReadyToRun</strong> AOT-precompiles assemblies to skip cold-start JIT cost.' },
+      { h: 'Memory', p: 'Generational, mark-and-compact GC. Three generations (gen 0/1/2) plus a Large Object Heap. Server GC and Workstation GC modes; server uses one heap per logical processor with parallel collection. Recent versions have a <strong>regions-based</strong> heap layout for better large-heap behaviour.' },
+      { h: 'Concurrency', p: 'Real OS threads. <code>Task</code>-based async with <code>async/await</code> — the language compiles <code>await</code> into a state machine driven by a <code>TaskScheduler</code>. <strong>ThreadPool</strong> for short-lived work, <code>Channel&lt;T&gt;</code> for producer/consumer pipelines, <code>Span&lt;T&gt;</code> and <code>Memory&lt;T&gt;</code> for allocation-free buffer manipulation.' },
+      { h: 'Capabilities', p: 'Huge BCL covering filesystem, networking, cryptography, sockets, reflection, runtime emit. <strong>P/Invoke</strong> for native interop; <strong>LibraryImport</strong> + source generators for AOT-safe interop. ASP.NET Core is one of the fastest web frameworks in any language.' },
+      { h: 'Distinctive', p: 'The runtime team treats <em>throughput per dollar</em> as a first-class metric. Each release ships measurable improvements — TechEmpower benchmark numbers are an actual marketing surface for .NET. The JIT, GC, and BCL all evolve in lockstep because they\'re all Microsoft.' }
+    ]
+  },
+  {
+    id: 'mono', lang: 'dotnet', color: 'rose',
+    badge: 'Mobile / games',
+    title: 'Mono',
+    tagline: 'The .NET runtime for places CoreCLR doesn\'t reach. Phones, browsers, game consoles, Unity.',
+    pills: ['mini JIT', 'AOT options', 'iOS · Android · Wasm', 'Unity engine'],
+    sections: [
+      { h: 'Execution', p: 'Mono\'s JIT is <strong>mini</strong>, a smaller, more portable JIT than RyuJIT. Multiple AOT modes — full AOT (everything precompiled), hybrid AOT, and interpreted modes — for platforms that prohibit JIT (iOS) or where binary size matters (Wasm).' },
+      { h: 'Memory', p: 'A simpler GC (sgen, generational mark-and-sweep). Less throughput than CoreCLR\'s GC but better fit for resource-constrained targets.' },
+      { h: 'Concurrency', p: 'Standard .NET threading. <code>Task</code>-based async works the same way.' },
+      { h: 'Capabilities', p: 'Most of the BCL works. Platform-specific bindings: Xamarin/MAUI for iOS/Android, blazor-wasm for the browser, Unity engine for games.' },
+      { h: 'Distinctive', p: 'Mono was an independent open-source project before Microsoft acquired Xamarin in 2016. It\'s the reason .NET runs on iOS (where you cannot JIT), in the browser via Wasm (Blazor), and inside Unity (every Unity game, on every platform, contains Mono).' }
+    ]
+  },
+  {
+    id: 'nativeaot', lang: 'dotnet', color: 'orange',
+    badge: 'AOT',
+    title: 'NativeAOT (.NET)',
+    tagline: 'AOT-compile the whole app, ship a single native binary, never JIT at runtime.',
+    pills: ['AOT only', 'no JIT', 'small binaries', 'fast startup'],
+    sections: [
+      { h: 'Execution', p: 'The whole application is compiled <strong>ahead of time</strong> to native code at publish time — no IL at runtime, no JIT. The result is a single native executable, often under 10 MB, that starts in milliseconds.' },
+      { h: 'Memory', p: 'Same generational GC as CoreCLR, but the binary is much smaller because half the runtime (the JIT, the reflection metadata not statically reachable) doesn\'t need to ship.' },
+      { h: 'Concurrency', p: 'Same threading and async model as CoreCLR — <code>Task</code>, <code>async</code>/<code>await</code>, ThreadPool. The state-machine transformation for <code>await</code> happens at compile time and is fully AOT-friendly.' },
+      { h: 'Capabilities', p: 'Subset of the full BCL. Reflection-heavy code patterns (some serialisers, some DI containers) need source generators or adjustments to be AOT-compatible. Compiler warnings (<code>IL2026</code>, <code>IL3050</code>) flag patterns that won\'t survive trimming.' },
+      { h: 'Distinctive', p: 'NativeAOT puts .NET on the same playing field as Go and Rust for "ship a single binary" deployments — cloud containers, CLIs, serverless functions. The trade-off is that some idiomatic .NET patterns (heavy reflection, dynamic code-gen) have to be reconsidered or replaced with source-generator equivalents.' }
+    ]
+  },
+
+  /* ====================== GO ====================== */
+  {
+    id: 'goruntime', lang: 'go', color: 'rose',
+    badge: 'Built-in',
+    title: 'The Go runtime',
+    tagline: 'Compiled <em>into</em> every binary. Goroutine scheduler, concurrent GC, channels — all silent.',
+    pills: ['AOT compile', 'M:N goroutines', 'concurrent GC', 'channels'],
+    sections: [
+      { h: 'Execution', p: '<strong>Ahead-of-time</strong> compilation to native code. No JIT, no VM. The Go compiler is fast (intentionally — fast builds are a stated design goal) and produces a single statically-linked binary that includes the runtime.' },
+      { h: 'Memory', p: 'Concurrent, low-pause, tricolour mark-sweep GC. Pause times are typically <strong>under a millisecond</strong>, even on large heaps — the collector is willing to use significant CPU during marking to keep stop-the-world windows tiny. Allocation profiles via the escape analysis the compiler does (lots of allocations end up on the stack).' },
+      { h: 'Concurrency', p: 'Goroutines are <strong>green threads</strong>: cheap, stackful coroutines that the runtime multiplexes M:N onto a small pool of OS threads (the <strong>GMP scheduler</strong> — G for goroutine, M for OS thread, P for processor). Hundreds of thousands of goroutines per process is normal. Synchronisation via <strong>channels</strong> (CSP-style) or <code>sync</code> primitives.' },
+      { h: 'Capabilities', p: 'Standard library covers HTTP servers, crypto, JSON, templating, all of POSIX I/O, and a network poller built on epoll/kqueue/IOCP. <strong>cgo</strong> bridges to C but incurs a runtime tax (switching off the goroutine stack onto an OS thread).' },
+      { h: 'Distinctive', p: 'The runtime is small enough (~2 MB) to ship in every binary but does substantial work at every moment. This is why <code>go build</code> "just works" — there\'s no separate runtime to install on the target machine. The trade-off: a hello-world is 2 MB, and the runtime\'s decisions (GC pause goals, scheduler quanta) are not very tunable.' }
+    ]
+  },
+
+  /* ====================== RUST ====================== */
+  {
+    id: 'rust-bare', lang: 'rust', color: 'amber',
+    badge: 'Synchronous',
+    title: 'Rust (std, no async runtime)',
+    tagline: 'The "no runtime" claim. True for synchronous code; not true the moment you write <code>async</code>.',
+    pills: ['AOT compile', 'no GC', 'ownership', 'std I/O'],
+    sections: [
+      { h: 'Execution', p: 'AOT via LLVM. No interpreter, no JIT, no VM. A Rust binary is essentially a C binary with extra static checks done at compile time. The "runtime" is a tiny startup shim that sets up the stack, runs <code>main</code>, and handles panics.' },
+      { h: 'Memory', p: 'No GC. Ownership and borrow-checking — both compile-time — determine when allocations are freed. <code>Drop</code> trait runs deterministically at scope exit, like C++ destructors. <strong>RAII for the whole language.</strong>' },
+      { h: 'Concurrency', p: 'Real OS threads via <code>std::thread</code>. Synchronisation via <code>Mutex</code>, <code>RwLock</code>, channels (<code>mpsc</code>). The borrow checker enforces send/sync properties: data races are compile-time errors. But synchronous Rust has no event loop, no scheduler beyond what the OS provides.' },
+      { h: 'Capabilities', p: 'Standard library covers filesystem, processes, basic networking, threading. For embedded targets, the <code>#![no_std]</code> attribute opts out of even that — you keep <code>core</code> (allocator-free primitives) and bring your own everything.' },
+      { h: 'Distinctive', p: 'You can ship a binary that links zero runtime support. People run Rust on embedded MCUs, in Linux kernel modules (Rust-for-Linux), in WebAssembly. The discipline that buys this is the one Rust is famous for — no implicit allocation, no implicit copies, no hidden control flow.' }
+    ]
+  },
+  {
+    id: 'tokio', lang: 'rust', color: 'amber',
+    badge: 'Async',
+    title: 'Tokio',
+    tagline: 'The dominant async runtime for Rust. Multi-threaded scheduler, work stealing, async I/O.',
+    pills: ['multi-threaded', 'work stealing', 'mio (epoll/kqueue)', 'tasks'],
+    sections: [
+      { h: 'Execution', p: 'Tokio is a library — you bring it in via Cargo. Code is still AOT-compiled; what Tokio adds is <em>the thing that drives <code>Future</code>s</em>. The Rust async model is fully zero-cost: <code>async fn</code> generates a state machine struct at compile time. Tokio polls those state machines.' },
+      { h: 'Memory', p: 'Same as bare Rust — no GC. Tasks are heap-allocated futures (one allocation per spawn). The runtime is allocation-conscious; many internal data structures are intrusive linked lists to keep cache locality.' },
+      { h: 'Concurrency', p: 'Multi-threaded by default — a worker per CPU core, with <strong>work stealing</strong> between them. Each worker has a local task queue; when it empties, it steals from siblings. Reactor thread watches OS readiness via <strong>mio</strong> (a thin epoll/kqueue/IOCP abstraction).' },
+      { h: 'Capabilities', p: 'Async filesystem (via thread pool, like Node — kernels don\'t expose async fs), async sockets, timers, channels (<code>mpsc</code>, <code>oneshot</code>, <code>broadcast</code>, <code>watch</code>), synchronisation primitives (async <code>Mutex</code>, <code>RwLock</code>, <code>Semaphore</code>).' },
+      { h: 'Distinctive', p: 'Tokio is the foundation for almost everything async in Rust — Axum, Tonic, Hyper, sqlx all build on it. The de facto status is also a friction point: there\'s no language-level abstraction over runtimes yet, so libraries written for Tokio don\'t run on async-std and vice-versa.' }
+    ]
+  },
+  {
+    id: 'async-std', lang: 'rust', color: 'amber',
+    badge: 'Async alt',
+    title: 'async-std / smol',
+    tagline: 'Smaller, more std-shaped alternatives to Tokio. Different trade-offs, same language.',
+    pills: ['std-shaped API', 'lighter', 'smol = building blocks', 'less ecosystem'],
+    sections: [
+      { h: 'Execution', p: 'Same Rust compilation model. <strong>async-std</strong> mirrors the <code>std</code> module layout — <code>async_std::fs</code> looks like <code>std::fs</code> but is async. <strong>smol</strong> is a lower-level library that exposes the individual pieces (executor, reactor, timers) so you can build your own runtime.' },
+      { h: 'Memory', p: 'No GC, same as bare Rust.' },
+      { h: 'Concurrency', p: 'Both default to a multi-threaded executor with work stealing, similar to Tokio. smol is composable enough to drop into a single-thread mode for embedded or wasm.' },
+      { h: 'Capabilities', p: 'async-std has its own ecosystem; smol is a building block used by other crates (notably <code>async-process</code>, <code>async-net</code>, several actor frameworks).' },
+      { h: 'Distinctive', p: 'These exist because the Rust async ecosystem has not yet converged on a single runtime, and many people don\'t want to depend on a project as large as Tokio. The cost is fragmentation: a library that uses Tokio APIs internally won\'t run on async-std without a compatibility shim.' }
+    ]
+  },
+
+  /* ====================== BEAM ====================== */
+  {
+    id: 'beam-vm', lang: 'beam', color: 'rose',
+    badge: 'VM',
+    title: 'BEAM (Erlang VM)',
+    tagline: 'Built for telephone switches. Now runs WhatsApp, Discord, Cloudflare\'s pubsub, half of fintech.',
+    pills: ['lightweight processes', 'per-process GC', 'message passing', 'hot reload'],
+    sections: [
+      { h: 'Execution', p: 'Bytecode interpreter with a JIT (<strong>BeamAsm</strong>, since Erlang/OTP 24) that uses asmjit to emit native code. Compile units are <em>modules</em>; modules can be replaced live in a running system without stopping it (hot code reload).' },
+      { h: 'Memory', p: '<strong>Per-process heaps</strong> — every BEAM process has its own private heap and is collected independently. GC pauses are bounded by the process\'s heap size, not the total system heap. Large binaries (>64 bytes) are reference-counted in a shared region; everything else is copied between processes.' },
+      { h: 'Concurrency', p: 'BEAM <em>processes</em> are lightweight (a few hundred bytes each) and preemptively scheduled. Millions per node is routine. The scheduler is <em>preemptive</em> — every process gets a reduction budget and yields when it\'s spent, so a tight loop in one process cannot block another. <strong>No shared memory</strong>; processes only communicate by sending messages.' },
+      { h: 'Capabilities', p: 'OTP (Open Telecom Platform) is the standard library — <code>gen_server</code>, <code>gen_statem</code>, <code>supervisor</code>, all the patterns for building fault-tolerant systems. <strong>Distribution is built-in</strong>: <code>send</code>ing a message to a process on another node uses the same primitive as local. <strong>ETS</strong> for shared in-memory tables. Ports/NIFs for native code.' },
+      { h: 'Distinctive', p: 'BEAM is the only mainstream runtime designed from day one for <em>uptime</em> rather than throughput. The "let it crash" philosophy makes sense because crashing one of a million processes is cheap, and supervisors restart it. The flip side: BEAM is comparatively slow on raw computation. You don\'t run BEAM to crunch numbers; you run BEAM to keep a connection open to ten million users.' }
+    ]
+  },
+
+  /* ====================== RUBY ====================== */
+  {
+    id: 'mri-yarv', lang: 'ruby', color: 'rose',
+    badge: 'Reference',
+    title: 'MRI / YARV + YJIT',
+    tagline: 'The reference Ruby. Bytecode VM since 1.9, real JIT since YJIT (Shopify, 2021).',
+    pills: ['YARV bytecode', 'YJIT (Rust)', 'GVL', 'fibers · ractors'],
+    sections: [
+      { h: 'Execution', p: '<strong>YARV</strong> (Yet Another Ruby VM) compiles Ruby source to stack-based bytecode and interprets it. <strong>YJIT</strong>, written in Rust and contributed by Shopify, is a lazy basic-block-versioning JIT that emits native code for hot paths. Real-world Rails apps see 10–30% speedups; pure-compute benchmarks see more.' },
+      { h: 'Memory', p: 'Generational mark-sweep GC (<strong>GC.compact</strong> available since 2.7). Object slots are 40 bytes; the heap is organised into pages. <strong>Variable Width Allocation</strong> (3.2+) lets objects of similar sizes share allocation pools.' },
+      { h: 'Concurrency', p: 'Has a <strong>GVL</strong> (Global VM Lock), spiritually identical to Python\'s GIL. <strong>Fibers</strong> are cooperative single-threaded coroutines, used by the Fiber scheduler for async I/O. <strong>Ractors</strong> (3.0+) provide actor-like parallelism — separate Ractors don\'t share the GVL, so you can get real multi-core parallelism, with the constraint that they can only share immutable data.' },
+      { h: 'Capabilities', p: 'Standard library plus a vast gem ecosystem. C extensions are common and stable. The integration with C is part of why Rails is fast despite Ruby being a slow language — heavy work is in C extensions (nokogiri for XML, bcrypt, JSON parsers).' },
+      { h: 'Distinctive', p: 'The performance story has changed in the last 5 years. Pre-2022, Ruby was meaningfully slower than Python or JS. Post-YJIT, on Rails-shaped workloads, the gap has substantially closed. Shopify runs YJIT in production at planet scale, which provides unusually direct feedback for the maintainers.' }
+    ]
+  },
+  {
+    id: 'truffleruby', lang: 'ruby', color: 'amber',
+    badge: 'Polyglot',
+    title: 'TruffleRuby',
+    tagline: 'Ruby on GraalVM. Polyglot, often the fastest Ruby in pure-compute benchmarks.',
+    pills: ['Truffle framework', 'Graal JIT', 'polyglot interop', 'large peak speedups'],
+    sections: [
+      { h: 'Execution', p: 'Ruby implemented as a Truffle AST interpreter — partial evaluation specialises the AST to actual observed types, and Graal compiles the result to machine code. Peak performance is competitive with or better than YJIT in tight numerical loops.' },
+      { h: 'Memory', p: 'GraalVM\'s GC choices — typically G1 on the JVM build.' },
+      { h: 'Concurrency', p: 'Real OS threads with no GVL — true shared-memory parallel Ruby. The semantic compatibility cost is real: some C extensions assume the GVL.' },
+      { h: 'Capabilities', p: 'Almost full MRI compatibility, plus the ability to call into other Truffle languages: JavaScript, Python, R, WebAssembly. C extensions work via Sulong (LLVM bitcode on Truffle).' },
+      { h: 'Distinctive', p: 'Demonstrates that "language X is slow" usually means "the dominant runtime for X is slow." TruffleRuby on pure-compute benchmarks often outperforms JS engines. The cost: very heavy runtime (it\'s GraalVM), slow startup unless you build a native-image, and a smaller community than MRI.' }
+    ]
+  },
+
+  /* ====================== LUA ====================== */
+  {
+    id: 'lua-puc', lang: 'lua', color: 'purple',
+    badge: 'Reference',
+    title: 'Lua (PUC-Rio)',
+    tagline: 'Tiny, embeddable, designed to live inside other programs. ~250 KB compiled.',
+    pills: ['register VM', 'embeddable', 'coroutines', 'tiny footprint'],
+    sections: [
+      { h: 'Execution', p: 'A small <strong>register-based</strong> bytecode interpreter (since Lua 5.0) — most other dynamic-language VMs are stack-based. Register VMs fit fewer instructions per opcode but each is denser. No JIT in mainline Lua.' },
+      { h: 'Memory', p: 'Incremental mark-sweep GC. Tunable (pause and step multiplier). Designed to integrate cleanly with the host program\'s allocator — you pass in <code>malloc</code>/<code>free</code> equivalents.' },
+      { h: 'Concurrency', p: 'No threads. <strong>Coroutines</strong> are stackful, cooperative, first-class. Multi-threading is the host program\'s problem; you typically spawn one Lua state per OS thread (states don\'t share state directly).' },
+      { h: 'Capabilities', p: 'The standard library is tiny: math, string, table, io, os, debug. Everything else is the host\'s job. The whole point is that Lua is the <em>scripting layer inside something bigger</em> — game engine, web server, database, editor.' },
+      { h: 'Distinctive', p: 'Lua lives inside other programs: <strong>Nginx</strong> (OpenResty), <strong>Redis</strong> (scripting), <strong>Neovim</strong> (Lua is the config language and plugin runtime now), <strong>World of Warcraft</strong> (every addon is Lua), <strong>Roblox</strong> (Luau, a derived variant), <strong>Adobe Lightroom</strong>. Few users think of themselves as Lua developers; tens of millions of people use Lua-scripted software.' }
+    ]
+  },
+  {
+    id: 'luajit', lang: 'lua', color: 'amber',
+    badge: 'JIT',
+    title: 'LuaJIT',
+    tagline: 'Mike Pall\'s tracing JIT. One of the fastest dynamic-language runtimes ever built.',
+    pills: ['tracing JIT', 'ffi', '5–100× faster', 'paused upstream'],
+    sections: [
+      { h: 'Execution', p: 'Hand-written assembler interpreter plus a <strong>tracing JIT</strong>. The JIT records the actual execution path through hot loops, optimises it heavily, and emits machine code. On numerical workloads it routinely matches or beats C; on dispatch-heavy code it can be 30–100× faster than reference Lua.' },
+      { h: 'Memory', p: 'Custom allocator + GC. Strict 2 GB address limit on the default build (a constraint of the tagged-pointer representation).' },
+      { h: 'Concurrency', p: 'Same coroutine model as standard Lua. No threads; the host embeds it.' },
+      { h: 'Capabilities', p: 'Same standard library as Lua 5.1, plus the killer feature: <strong>FFI</strong>. You can call into C libraries by declaring their headers as a string, with no glue code, and the JIT inlines the calls into the trace. <code>ffi.cdef[[ int printf(const char*, ...); ]]</code> and you\'re calling libc.' },
+      { h: 'Distinctive', p: 'LuaJIT is the engine behind Nginx\'s OpenResty (so substantial fractions of internet traffic), and was the runtime inside Cloudflare\'s edge for years before V8 isolates. Active maintenance has been complicated since Mike Pall stepped back; forks (OpenResty\'s, MoonJIT) continue work.' }
+    ]
+  },
+
+  /* ====================== WEBASSEMBLY ====================== */
+  {
+    id: 'wasmtime', lang: 'wasm', color: 'slate',
+    badge: 'Standalone',
+    title: 'Wasmtime',
+    tagline: 'The Bytecode Alliance\'s reference standalone Wasm runtime. Cranelift compiler.',
+    pills: ['Cranelift', 'WASI', 'AOT or JIT', 'embeddable'],
+    sections: [
+      { h: 'Execution', p: '<strong>Cranelift</strong> (a code generator also used by Rust\'s debug build) compiles Wasm to native code. Two modes: AOT-compile once and reuse the artifact (<code>wasmtime compile</code>), or JIT-on-load. Cold starts are microseconds because the verifier replaces most of the trust model that other VMs need.' },
+      { h: 'Memory', p: 'Wasm uses a <strong>linear memory</strong> — a single contiguous byte array the module owns. Bounds checks are inserted at compile time. The Wasm GC proposal (landing 2023+) adds managed references that don\'t require the module to do its own allocation.' },
+      { h: 'Concurrency', p: 'Per-instance, single-threaded by default. The <strong>threads proposal</strong> adds <code>SharedArrayBuffer</code>-equivalent memory plus atomics. The <strong>component model</strong> is reshaping how instances compose.' },
+      { h: 'Capabilities', p: '<strong>WASI</strong> (WebAssembly System Interface) is the standard for filesystem, sockets, environment, clocks, randomness — explicitly capability-based, so a module only sees what the host gives it. Embeddable in Rust, C, Python, Go, Ruby, .NET hosts.' },
+      { h: 'Distinctive', p: 'Designed for embedding. <strong>Fermyon Spin</strong>, <strong>SpinKube</strong>, <strong>wasmCloud</strong>, <strong>Fastly Compute@Edge</strong>, and several database UDF systems are all Wasmtime under the hood. The bet is that Wasm becomes the "container" for next-generation serverless: orders-of-magnitude faster to start, smaller, and securely isolated by design.' }
+    ]
+  },
+  {
+    id: 'wasmer', lang: 'wasm', color: 'slate',
+    badge: 'Standalone',
+    title: 'Wasmer',
+    tagline: 'Multi-compiler Wasm runtime. Embed in any language, run anywhere.',
+    pills: ['LLVM · Cranelift · Singlepass', 'wasmer.io registry', 'WAPM', 'broad embedding'],
+    sections: [
+      { h: 'Execution', p: 'Three backend choices: <strong>Singlepass</strong> for fastest compile-time (good for short-lived workloads), <strong>Cranelift</strong> for balanced, <strong>LLVM</strong> for peak runtime speed (slower compile). Pick per use case.' },
+      { h: 'Memory', p: 'Same Wasm linear memory model.' },
+      { h: 'Concurrency', p: 'Single-threaded per instance; threads proposal supported on capable backends.' },
+      { h: 'Capabilities', p: 'WASI plus Wasmer-specific APIs. Bindings for Rust, C, JavaScript, Python, PHP, Go, Ruby, Java, C#, R, Postgres — much wider embedding story than Wasmtime.' },
+      { h: 'Distinctive', p: 'Markets a registry (WAPM, now Wasmer.io) — Wasm as a distribution format with package management. The pitch is "compile once in any language, run anywhere any binding exists."' }
+    ]
+  },
+  {
+    id: 'browser-wasm', lang: 'wasm', color: 'blue',
+    badge: 'In-browser',
+    title: 'Browser Wasm (V8 · JSC · SpiderMonkey)',
+    tagline: 'The original Wasm host. Same engines as JS, sharing memory with JS via interop.',
+    pills: ['Liftoff baseline', 'TurboFan optimising', 'JS interop', 'no WASI'],
+    sections: [
+      { h: 'Execution', p: 'Each major engine has its own Wasm compiler tier. V8 uses <strong>Liftoff</strong> (baseline) and <strong>TurboFan</strong> (optimising). Wasm code compiles much faster than equivalent JS because the bytecode is already typed and structured — startup overhead is essentially the parse-and-compile, no profiling phase needed.' },
+      { h: 'Memory', p: 'Linear memory exposed to JS as an <code>ArrayBuffer</code>. JS can read/write Wasm memory and vice versa via instance imports/exports. <strong>JS string references</strong> (proposal) lets Wasm hold JS strings without copying.' },
+      { h: 'Concurrency', p: 'Wasm threads available where <strong>cross-origin isolation</strong> is enabled (and <code>SharedArrayBuffer</code> is exposed). Without it, single-threaded only.' },
+      { h: 'Capabilities', p: '<em>No WASI in the browser.</em> Wasm in a browser has access to whatever JS gives it via imports — typically <code>fetch</code>, <code>WebGL</code>, the DOM (via wrappers), and so on. The host capability model is the browser\'s, not WASI\'s.' },
+      { h: 'Distinctive', p: 'Wasm in the browser is shaping up as the answer to "C++ in the browser" (Photoshop on the web, AutoCAD on the web, Figma\'s rendering core, Google Earth) and "near-native speed for compute-bound JS libraries" (FFmpeg.wasm, SQL.js, Pyodide).' }
+    ]
+  },
+  {
+    id: 'fastly-compute', lang: 'wasm', color: 'orange',
+    badge: 'Edge',
+    title: 'Fastly Compute@Edge',
+    tagline: 'Wasmtime at edge POPs. Microsecond cold starts because there\'s no isolate, no container.',
+    pills: ['Wasmtime', 'microsecond startup', 'edge', 'multi-language'],
+    sections: [
+      { h: 'Execution', p: 'Wasmtime running at Fastly edge POPs. Source is anything that compiles to Wasm — Rust, JS (via QuickJS-on-Wasm), Go (TinyGo), AssemblyScript, .NET (Wasi-SDK). Cold start <strong>around 35 microseconds</strong>.' },
+      { h: 'Memory', p: 'Per-request Wasm linear memory, torn down after the request completes.' },
+      { h: 'Concurrency', p: 'One request per instance; many instances per worker process; many worker processes per machine.' },
+      { h: 'Capabilities', p: 'WASI plus Fastly-specific hostcalls — KV store, secrets, the request/response API, geolocation, edge dictionaries.' },
+      { h: 'Distinctive', p: 'Where Cloudflare bet on V8 isolates, Fastly bet on Wasm. Result: Compute@Edge can run code from far more source languages than Workers (anything that compiles to Wasm), at the cost of needing a Wasm toolchain and explicit JS support via QuickJS rather than a real JS engine.' }
+    ]
+  }
+];
+
+/* ─────────────────────────────────────────────────────────────
+   DIAGRAMS DATA — one anatomy per runtime, top (your code) → bottom (kernel)
+   Shape: { layers: [{ label, boxes: [{ t: title, s: sub, c: color }] }] }
+   Colors: blue=code/API · purple=bridge/FFI · teal=engine/VM
+           amber=native libs · orange=event loop/scheduler · rose=concurrency
+           slate=OS/kernel
+   ───────────────────────────────────────────────────────────── */
+const DIAGRAMS = {
+  /* ─── JAVASCRIPT ─── */
+  browser: { layers: [
+    { label: 'L1 · CODE',    boxes: [{ t: 'Your JS / TS', s: 'user code · framework code · npm bundle', c: 'blue' }]},
+    { label: 'L2 · WEB API', boxes: [{ t: 'Web platform APIs', s: 'DOM · CSSOM · fetch · WebGL · WebRTC · IndexedDB', c: 'blue' }]},
+    { label: 'L3 · ENGINE',  boxes: [{ t: 'V8 / JavaScriptCore / SpiderMonkey', s: 'Ignition → Sparkplug → Maglev → TurboFan · generational GC', c: 'teal' }]},
+    { label: 'L4 · LOOP',    boxes: [{ t: 'event loop · microtasks · rAF', s: 'task queue → render pipeline (style → layout → paint → composite)', c: 'orange' }]},
+    { label: 'L5 · PROCESS', boxes: [
+      { t: 'Renderer process', s: 'sandboxed · per origin', c: 'amber' },
+      { t: 'GPU process',       s: 'compositor · paint',   c: 'amber' },
+      { t: 'Network service',   s: 'fetch · sockets · TLS', c: 'amber' }
+    ]},
+    { label: 'L6 · SANDBOX', boxes: [{ t: 'OS sandbox · seccomp-bpf · App Sandbox · AppContainer', s: 'syscall allow-list · capability brokering', c: 'slate' }]},
+    { label: 'L7 · KERNEL',  boxes: [{ t: 'OS kernel', s: 'permitted syscalls only: read · write · sendto · recvfrom', c: 'slate' }]}
+  ]},
+
+  node: { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'Your JavaScript application', s: 'user code · npm packages · framework code', c: 'blue' }]},
+    { label: 'L2 · CORE',   boxes: [{ t: 'Node core APIs', s: 'fs · http · crypto · net · stream · events · child_process', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'C++ bindings · N-API', s: 'marshall JS args ⇄ C++ types · HandleScope', c: 'purple' }]},
+    { label: 'L4 · ENGINE', boxes: [
+      { t: 'V8',          s: 'TurboFan · Maglev · Orinoco GC', c: 'teal' },
+      { t: 'libuv',       s: 'event loop · thread pool', c: 'teal' },
+      { t: 'native libs', s: 'OpenSSL · llhttp · nghttp2 · zlib · c-ares', c: 'amber' }
+    ]},
+    { label: 'L5 · LOOP',   boxes: [{ t: 'event loop phases', s: 'timers → pending → poll → check → close', c: 'orange' }]},
+    { label: 'L6 · I/O',    boxes: [{ t: 'kernel async I/O', s: 'epoll (Linux) · kqueue (BSD/macOS) · IOCP (Windows) · io_uring', c: 'slate' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls: read · write · open · close · socket · connect', c: 'slate' }]}
+  ]},
+
+  deno: { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'Your TypeScript / JS', s: 'transpiled by swc · permission-gated', c: 'blue' }]},
+    { label: 'L2 · API',    boxes: [{ t: 'Deno API surface', s: 'Web standards: fetch · WebSocket · ReadableStream · node:* compat layer', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'Deno ops · deno_core', s: 'JS ⇄ Rust via op2 macros · zero-copy when possible', c: 'purple' }]},
+    { label: 'L4 · ENGINE', boxes: [
+      { t: 'V8 isolate', s: 'TurboFan · Maglev', c: 'teal' },
+      { t: 'Tokio',      s: 'async runtime in Rust', c: 'teal' }
+    ]},
+    { label: 'L5 · GATE',   boxes: [{ t: 'permission manager', s: '--allow-net · --allow-read · --allow-env (checked per op)', c: 'orange' }]},
+    { label: 'L6 · I/O',    boxes: [{ t: 'mio reactor + tokio scheduler', s: 'epoll · kqueue · IOCP', c: 'slate' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls — but only after permission grant', c: 'slate' }]}
+  ]},
+
+  bun: { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'Your JS / TS / JSX', s: 'transpiled inline by Bun (Zig)', c: 'blue' }]},
+    { label: 'L2 · API',    boxes: [{ t: 'Bun + Node + Web APIs', s: 'Bun.serve · Bun.file · fetch · node:fs · node:http', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'Zig ⇄ JSC bindings', s: 'JS-Glue codegen · direct C++ method calls', c: 'purple' }]},
+    { label: 'L4 · ENGINE', boxes: [
+      { t: 'JavaScriptCore', s: 'LLInt → Baseline → DFG → FTL', c: 'teal' },
+      { t: 'Bun host (Zig)', s: 'allocator · stdlib · GC integration', c: 'teal' }
+    ]},
+    { label: 'L5 · LOOP',   boxes: [{ t: 'uSockets · custom event loop', s: 'HTTP fast-path · TLS · WebSocket built into the runtime', c: 'orange' }]},
+    { label: 'L6 · I/O',    boxes: [{ t: 'epoll · kqueue · IOCP', s: 'non-blocking socket I/O', c: 'slate' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls: read · write · accept · sendfile', c: 'slate' }]}
+  ]},
+
+  workers: { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'Your Worker', s: 'export default { fetch(req, env, ctx) { … } }', c: 'blue' }]},
+    { label: 'L2 · API',    boxes: [
+      { t: 'Web APIs',         s: 'fetch · Request · Response', c: 'blue' },
+      { t: 'Cloudflare bindings', s: 'KV · R2 · D1 · DO · Queues · AI', c: 'blue' }
+    ]},
+    { label: 'L3 · ENGINE', boxes: [{ t: 'V8 isolate (fresh per request)', s: 'no Node · no libuv · ~1ms cold start', c: 'teal' }]},
+    { label: 'L4 · HOST',   boxes: [{ t: 'workerd runtime (C++/Rust)', s: 'scheduler · CPU limiter · isolate lifecycle', c: 'orange' }]},
+    { label: 'L5 · EDGE',   boxes: [
+      { t: 'Edge POP',     s: '300+ locations', c: 'amber' },
+      { t: 'Storage tier', s: 'KV · R2 · DO replicas', c: 'amber' }
+    ]},
+    { label: 'L6 · NETWORK', boxes: [{ t: 'Cloudflare network (no direct kernel access for the Worker)', s: 'host kernel handles only the edge process itself', c: 'slate' }]}
+  ]},
+
+  'vercel-edge': { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'Next.js middleware / Edge function', s: 'export const config = { runtime: "edge" }', c: 'blue' }]},
+    { label: 'L2 · API',    boxes: [{ t: 'Web standards subset', s: 'fetch · Request · Response · URL · crypto.subtle (no Node built-ins)', c: 'blue' }]},
+    { label: 'L3 · ENGINE', boxes: [{ t: 'V8 isolate', s: 'fresh per invocation', c: 'teal' }]},
+    { label: 'L4 · HOST',   boxes: [{ t: 'Edge runtime host', s: 'Vercel: edge-runtime · Netlify: Deno Deploy', c: 'orange' }]},
+    { label: 'L5 · EDGE',   boxes: [{ t: 'CDN edge node', s: 'routed by Vercel/Netlify network', c: 'amber' }]},
+    { label: 'L6 · NETWORK', boxes: [{ t: 'host infrastructure', s: 'no direct kernel access for the function', c: 'slate' }]}
+  ]},
+
+  electron: { layers: [
+    { label: 'L1 · CODE',   boxes: [
+      { t: 'Renderer: HTML + JS', s: 'window UI', c: 'blue' },
+      { t: 'Main: Node JS',       s: 'system + lifecycle', c: 'blue' }
+    ]},
+    { label: 'L2 · API',    boxes: [
+      { t: 'Web APIs',        s: 'DOM · fetch · WebGL', c: 'blue' },
+      { t: 'Node + Electron', s: 'fs · BrowserWindow · Menu · ipcMain', c: 'blue' }
+    ]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'IPC · contextBridge · structured clone', s: 'message passing between renderer and main processes', c: 'purple' }]},
+    { label: 'L4 · ENGINE', boxes: [
+      { t: 'V8 (renderer)',     s: 'sandboxed per window', c: 'teal' },
+      { t: 'V8 + libuv (main)', s: 'full Node runtime',   c: 'teal' }
+    ]},
+    { label: 'L5 · CHROMIUM', boxes: [{ t: 'Chromium content layer', s: 'Blink · Skia · network service · compositor', c: 'orange' }]},
+    { label: 'L6 · OS',     boxes: [{ t: 'native OS APIs', s: 'Win32 · Cocoa · GTK · file dialogs · menus · notifications', c: 'amber' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls (renderer sandboxed · main unrestricted)', c: 'slate' }]}
+  ]},
+
+  'react-native': { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'React components', s: '<View> · <Text> · hooks · JS business logic', c: 'blue' }]},
+    { label: 'L2 · FRAMEWORK', boxes: [{ t: 'React Native JS', s: 'reconciler · shadow tree builder · Fabric renderer', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'JSI · TurboModules · Fabric', s: 'direct C++ refs (no JSON bridge) · synchronous calls', c: 'purple' }]},
+    { label: 'L4 · ENGINE', boxes: [
+      { t: 'Hermes',          s: 'AOT bytecode · small JIT · GC tuned for mobile', c: 'teal' },
+      { t: 'Native modules',  s: 'Obj-C / Kotlin / C++',                            c: 'teal' }
+    ]},
+    { label: 'L5 · THREADS', boxes: [
+      { t: 'JS thread',     s: 'your code',   c: 'orange' },
+      { t: 'Shadow thread', s: 'Yoga layout', c: 'orange' },
+      { t: 'UI thread',     s: 'native views', c: 'orange' }
+    ]},
+    { label: 'L6 · OS',     boxes: [{ t: 'iOS UIKit / Android View system', s: 'native widgets · sensors · network · filesystem', c: 'amber' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'XNU (Darwin) / Linux (Android)', s: 'mediated by app sandbox', c: 'slate' }]}
+  ]},
+
+  /* ─── PYTHON ─── */
+  cpython: { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'Your Python source', s: '.py files', c: 'blue' }]},
+    { label: 'L2 · STDLIB', boxes: [{ t: 'standard library + packages', s: 'os · socket · asyncio · numpy · requests', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'C extension API', s: 'CPython API · limited API · HPy · ctypes · cffi', c: 'purple' }]},
+    { label: 'L4 · VM',     boxes: [
+      { t: 'CPython interpreter', s: 'ceval.c · adaptive specialising bytecode loop', c: 'teal' },
+      { t: 'memory + GIL',        s: 'refcount + cycle GC · Global Interpreter Lock', c: 'teal' }
+    ]},
+    { label: 'L5 · ASYNC',  boxes: [{ t: 'asyncio event loop (selector or proactor)', s: 'optional · cooperative · single-threaded', c: 'orange' }]},
+    { label: 'L6 · LIBC',   boxes: [{ t: 'libc / pthreads', s: 'malloc · select · poll · epoll wrappers', c: 'amber' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls: read · write · poll · futex · clone', c: 'slate' }]}
+  ]},
+
+  pypy: { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'Your Python source', s: 'same language as CPython', c: 'blue' }]},
+    { label: 'L2 · STDLIB', boxes: [{ t: 'stdlib (pure-Python where possible)', s: 'fewer C extensions used internally', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'cpyext (CPython API emulation)', s: 'slow · most extensions still work', c: 'purple' }]},
+    { label: 'L4 · VM',     boxes: [
+      { t: 'PyPy: tracing JIT', s: 'hot loops → optimised machine code', c: 'teal' },
+      { t: 'RPython + GC',      s: 'incremental generational mark-sweep · still has GIL', c: 'teal' }
+    ]},
+    { label: 'L5 · LIBC',   boxes: [{ t: 'libc', s: 'malloc · pthread', c: 'amber' }]},
+    { label: 'L6 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls', c: 'slate' }]}
+  ]},
+
+  micropython: { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'Your Python source', s: 'subset of Python 3', c: 'blue' }]},
+    { label: 'L2 · STDLIB', boxes: [{ t: 'minimal stdlib', s: 'machine · network · uasyncio · ucollections', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'C modules', s: 'compiled into the firmware', c: 'purple' }]},
+    { label: 'L4 · VM',     boxes: [{ t: 'MicroPython interpreter', s: 'tiny bytecode VM · custom mark-sweep GC', c: 'teal' }]},
+    { label: 'L5 · HAL',    boxes: [{ t: 'Hardware Abstraction Layer', s: 'GPIO · I2C · SPI · UART · Wi-Fi/BT drivers', c: 'amber' }]},
+    { label: 'L6 · METAL',  boxes: [{ t: 'microcontroller silicon', s: 'ESP32 · RP2040 · STM32 · nRF — no operating system', c: 'slate' }]}
+  ]},
+
+  /* ─── JVM ─── */
+  hotspot: { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'Java / Kotlin / Scala / Clojure source', s: 'compiled to .class files (JVM bytecode)', c: 'blue' }]},
+    { label: 'L2 · JDK',    boxes: [{ t: 'JDK APIs', s: 'java.io · java.nio · java.net · java.util.concurrent', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'JNI · Panama Foreign Function & Memory API', s: 'safer native interop in modern JDKs', c: 'purple' }]},
+    { label: 'L4 · VM',     boxes: [
+      { t: 'HotSpot interpreter', s: 'template-based',         c: 'teal' },
+      { t: 'C1 (client) JIT',     s: 'fast compile, light opt', c: 'teal' },
+      { t: 'C2 (server) JIT',     s: 'inlining · escape · vectorise', c: 'teal' }
+    ]},
+    { label: 'L5 · MEMORY', boxes: [{ t: 'garbage collector', s: 'G1 (default) · ZGC · Shenandoah · Parallel · Epsilon', c: 'orange' }]},
+    { label: 'L6 · THREADS', boxes: [{ t: 'OS threads + virtual threads (Loom)', s: 'JMM · safepoints · biased locking · LockSupport', c: 'rose' }]},
+    { label: 'L7 · NATIVE', boxes: [{ t: 'libc · pthread · NIO via epoll/kqueue/IOCP', s: 'JVM\'s native I/O layer', c: 'amber' }]},
+    { label: 'L8 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls: read · write · futex · mmap', c: 'slate' }]}
+  ]},
+
+  graalvm: { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'Java + polyglot guests', s: 'Java · Kotlin · JS · Python · Ruby · R · LLVM bitcode', c: 'blue' }]},
+    { label: 'L2 · API',    boxes: [{ t: 'JDK + Truffle guest APIs', s: 'polyglot Context · Value', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'JNI · Truffle interop · Sulong (LLVM)', s: 'cross-language calls without marshalling', c: 'purple' }]},
+    { label: 'L4 · VM',     boxes: [
+      { t: 'Graal JIT (Java)',  s: 'replaces C2 · written in Java', c: 'teal' },
+      { t: 'Truffle framework', s: 'AST partial evaluation',        c: 'teal' },
+      { t: 'native-image / Substrate VM', s: 'AOT to static binary',  c: 'teal' }
+    ]},
+    { label: 'L5 · MEMORY', boxes: [{ t: 'GC: G1 (JVM mode) · Serial / G1 (native-image)', s: 'smaller GCs in native-image build', c: 'orange' }]},
+    { label: 'L6 · NATIVE', boxes: [{ t: 'libc · pthread', s: 'OS thread mapping', c: 'amber' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls', c: 'slate' }]}
+  ]},
+
+  openj9: { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'Java / Kotlin / Scala source', s: 'JVM bytecode', c: 'blue' }]},
+    { label: 'L2 · JDK',    boxes: [{ t: 'JDK APIs', s: 'OpenJDK class libraries', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'JNI', s: 'native interop', c: 'purple' }]},
+    { label: 'L4 · VM',     boxes: [
+      { t: 'J9 interpreter',    s: 'compact dispatch',              c: 'teal' },
+      { t: 'Testarossa JIT',    s: 'multi-tier compiler',           c: 'teal' },
+      { t: 'Shared Class Cache', s: 'cross-JVM compiled-code reuse', c: 'teal' }
+    ]},
+    { label: 'L5 · MEMORY', boxes: [{ t: 'gencon (default) · balanced · metronome', s: 'low-footprint GC profiles', c: 'orange' }]},
+    { label: 'L6 · NATIVE', boxes: [{ t: 'libc · pthread', s: 'OS abstraction', c: 'amber' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls', c: 'slate' }]}
+  ]},
+
+  /* ─── .NET ─── */
+  coreclr: { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'C# / F# / VB source', s: 'compiled to CIL bytecode (.dll assemblies)', c: 'blue' }]},
+    { label: 'L2 · BCL',    boxes: [{ t: 'Base Class Library', s: 'System.IO · System.Net · Threading.Tasks · Memory<T>', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'P/Invoke · LibraryImport · COM interop', s: 'source-generated marshalling', c: 'purple' }]},
+    { label: 'L4 · VM',     boxes: [
+      { t: 'RyuJIT (tiered)',  s: 'tier-0 → tier-1 · PGO',     c: 'teal' },
+      { t: 'ReadyToRun (AOT)', s: 'precompiled assemblies',     c: 'teal' },
+      { t: 'GC',               s: 'generational + LOH · regions', c: 'teal' }
+    ]},
+    { label: 'L5 · ASYNC',  boxes: [{ t: 'Task scheduler · ThreadPool · async/await state machines', s: 'ValueTask · Channels · IO completion ports', c: 'orange' }]},
+    { label: 'L6 · NATIVE', boxes: [{ t: 'libc / Win32 · networking primitives', s: 'OS thread mapping', c: 'amber' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls · IOCP completion · epoll · kqueue', c: 'slate' }]}
+  ]},
+
+  mono: { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'C# / F# source', s: 'compiled to CIL', c: 'blue' }]},
+    { label: 'L2 · BCL',    boxes: [{ t: 'BCL subset', s: 'profile per target platform', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'P/Invoke', s: 'platform-specific bindings', c: 'purple' }]},
+    { label: 'L4 · VM',     boxes: [
+      { t: 'mini JIT',           s: 'portable, multi-arch',     c: 'teal' },
+      { t: 'full AOT / hybrid',  s: 'required on iOS · WebAssembly', c: 'teal' },
+      { t: 'sgen GC',            s: 'generational mark-sweep',   c: 'teal' }
+    ]},
+    { label: 'L5 · PLATFORM', boxes: [
+      { t: 'Xamarin / MAUI',  s: 'iOS · Android · Mac', c: 'amber' },
+      { t: 'Blazor WASM',     s: 'browser',             c: 'amber' },
+      { t: 'Unity game loop', s: 'console · mobile',     c: 'amber' }
+    ]},
+    { label: 'L6 · OS',     boxes: [{ t: 'platform APIs', s: 'UIKit · Android Runtime · WebAssembly host · console SDK', c: 'rose' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel (where reachable)', s: 'syscalls — sandboxed on iOS · browser · console', c: 'slate' }]}
+  ]},
+
+  nativeaot: { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'C# source', s: 'AOT-friendly patterns · source generators', c: 'blue' }]},
+    { label: 'L2 · BCL',    boxes: [{ t: 'BCL trimmed by linker', s: 'reflection-using paths get warnings', c: 'blue' }]},
+    { label: 'L3 · COMPILE', boxes: [{ t: 'ILC (IL → native at publish time)', s: 'whole-program optimisation', c: 'purple' }]},
+    { label: 'L4 · BINARY', boxes: [{ t: 'native executable (single file)', s: 'no JIT · no IL at runtime · generational GC bundled', c: 'teal' }]},
+    { label: 'L5 · NATIVE', boxes: [{ t: 'libc · networking primitives', s: 'tiny embedded runtime', c: 'amber' }]},
+    { label: 'L6 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls — starts in milliseconds', c: 'slate' }]}
+  ]},
+
+  /* ─── GO ─── */
+  goruntime: { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'Your Go source', s: 'goroutines · channels', c: 'blue' }]},
+    { label: 'L2 · STDLIB', boxes: [{ t: 'standard library', s: 'net/http · os · sync · context · encoding/*', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'cgo (optional)', s: 'switches off goroutine stack onto OS thread', c: 'purple' }]},
+    { label: 'L4 · RUNTIME', boxes: [
+      { t: 'GMP scheduler', s: 'M:N green threads',        c: 'teal' },
+      { t: 'concurrent GC', s: 'tricolour mark-sweep · sub-ms pauses', c: 'teal' },
+      { t: 'channels · select', s: 'CSP primitives',         c: 'teal' }
+    ]},
+    { label: 'L5 · POLLER', boxes: [{ t: 'netpoller', s: 'parks goroutines waiting on fd readiness', c: 'orange' }]},
+    { label: 'L6 · I/O',    boxes: [{ t: 'epoll · kqueue · IOCP · solaris ports', s: 'platform readiness API', c: 'slate' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls — bundled in every binary, no install', c: 'slate' }]}
+  ]},
+
+  /* ─── RUST ─── */
+  'rust-bare': { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'Your Rust source', s: 'ownership checked at compile time', c: 'blue' }]},
+    { label: 'L2 · STD',    boxes: [{ t: 'std (or core for no_std)', s: 'std::fs · std::net · std::thread · std::sync', c: 'blue' }]},
+    { label: 'L3 · COMPILE', boxes: [{ t: 'rustc + LLVM (AOT)', s: 'monomorphisation · inlining · no IR at runtime', c: 'purple' }]},
+    { label: 'L4 · BINARY', boxes: [{ t: 'native executable', s: 'no GC · no scheduler · RAII via Drop', c: 'teal' }]},
+    { label: 'L5 · NATIVE', boxes: [{ t: 'libc · pthread', s: 'standard system bindings', c: 'amber' }]},
+    { label: 'L6 · KERNEL', boxes: [{ t: 'OS kernel', s: 'direct blocking syscalls: read · write · open', c: 'slate' }]}
+  ]},
+
+  tokio: { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'async Rust source', s: 'async fn · .await · #[tokio::main]', c: 'blue' }]},
+    { label: 'L2 · API',    boxes: [{ t: 'Tokio crates', s: 'tokio::fs · tokio::net · tokio::sync · channels', c: 'blue' }]},
+    { label: 'L3 · COMPILE', boxes: [{ t: 'Future state machines', s: 'each async fn → struct + impl Future, zero-cost', c: 'purple' }]},
+    { label: 'L4 · RUNTIME', boxes: [
+      { t: 'multi-threaded scheduler', s: 'one worker per core · work stealing', c: 'teal' },
+      { t: 'task queue',               s: 'local + global queues',               c: 'teal' }
+    ]},
+    { label: 'L5 · REACTOR', boxes: [{ t: 'mio reactor', s: 'registers fds with kernel, wakes tasks on readiness', c: 'orange' }]},
+    { label: 'L6 · I/O',    boxes: [{ t: 'epoll · kqueue · IOCP', s: 'plus a blocking-fs thread pool', c: 'slate' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls (blocking fs · non-blocking sockets)', c: 'slate' }]}
+  ]},
+
+  'async-std': { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'async Rust source', s: 'std-shaped async APIs', c: 'blue' }]},
+    { label: 'L2 · API',    boxes: [{ t: 'async-std / smol', s: 'async_std::fs · async_std::net · smol::Executor', c: 'blue' }]},
+    { label: 'L3 · COMPILE', boxes: [{ t: 'Future state machines', s: 'same zero-cost model as Tokio', c: 'purple' }]},
+    { label: 'L4 · RUNTIME', boxes: [{ t: 'executor (work-stealing or single-thread)', s: 'composable building blocks', c: 'teal' }]},
+    { label: 'L5 · REACTOR', boxes: [{ t: 'polling crate', s: 'thin abstraction over OS readiness API', c: 'orange' }]},
+    { label: 'L6 · I/O',    boxes: [{ t: 'epoll · kqueue · IOCP', s: 'OS-level non-blocking I/O', c: 'slate' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls', c: 'slate' }]}
+  ]},
+
+  /* ─── BEAM ─── */
+  'beam-vm': { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'Erlang / Elixir / Gleam source', s: 'all compile to BEAM bytecode', c: 'blue' }]},
+    { label: 'L2 · OTP',    boxes: [{ t: 'OTP libraries', s: 'gen_server · supervisor · application · ETS · Mnesia', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'NIFs · Ports · linked-in drivers', s: 'C code callable from BEAM processes', c: 'purple' }]},
+    { label: 'L4 · VM',     boxes: [
+      { t: 'BEAM interpreter',   s: 'register-based bytecode',                  c: 'teal' },
+      { t: 'BeamAsm JIT',        s: 'asmjit · native code for hot modules',     c: 'teal' },
+      { t: 'per-process heaps + GC', s: 'isolated · fast · short pauses',        c: 'teal' }
+    ]},
+    { label: 'L5 · SCHED',  boxes: [
+      { t: 'preemptive scheduler', s: 'reduction-based · one per core',          c: 'rose' },
+      { t: 'distribution',         s: 'transparent message passing across nodes', c: 'rose' }
+    ]},
+    { label: 'L6 · NATIVE', boxes: [{ t: 'inet_drv · async thread pool · libc · OpenSSL', s: 'all I/O goes through the inet driver', c: 'amber' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls: epoll · kqueue · IOCP', c: 'slate' }]}
+  ]},
+
+  /* ─── RUBY ─── */
+  'mri-yarv': { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'Your Ruby source', s: '.rb files · Rails app', c: 'blue' }]},
+    { label: 'L2 · STDLIB', boxes: [{ t: 'stdlib + gems', s: 'net/http · rack · activerecord · nokogiri', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'C extension API', s: 'native gems written in C (faster than pure Ruby)', c: 'purple' }]},
+    { label: 'L4 · VM',     boxes: [
+      { t: 'YARV bytecode',    s: 'compiled from source',          c: 'teal' },
+      { t: 'YJIT (Rust)',      s: 'basic-block versioning · BBV',  c: 'teal' },
+      { t: 'GC + GVL',         s: 'generational mark-sweep · VM lock', c: 'teal' }
+    ]},
+    { label: 'L5 · CONCURRENCY', boxes: [
+      { t: 'Fibers',  s: 'cooperative coroutines',         c: 'orange' },
+      { t: 'Ractors', s: 'actor model · parallel · 3.0+',   c: 'orange' }
+    ]},
+    { label: 'L6 · NATIVE', boxes: [{ t: 'libc · OpenSSL', s: 'standard system bindings', c: 'amber' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls: read · write · epoll · kqueue', c: 'slate' }]}
+  ]},
+
+  truffleruby: { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'Your Ruby source', s: 'mostly MRI-compatible', c: 'blue' }]},
+    { label: 'L2 · STDLIB', boxes: [{ t: 'Ruby stdlib + gems', s: 'pure-Ruby gems work · some C gems need help', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'Sulong (LLVM bitcode interpreter)', s: 'runs C extensions on Truffle', c: 'purple' }]},
+    { label: 'L4 · VM',     boxes: [
+      { t: 'Truffle AST interpreter', s: 'partial evaluation', c: 'teal' },
+      { t: 'Graal JIT',               s: 'huge peak speedups', c: 'teal' }
+    ]},
+    { label: 'L5 · MEMORY', boxes: [{ t: 'GraalVM GC', s: 'G1 (JVM mode) · Serial (native-image mode)', c: 'orange' }]},
+    { label: 'L6 · NATIVE', boxes: [{ t: 'libc', s: 'JVM\'s native layer', c: 'amber' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls', c: 'slate' }]}
+  ]},
+
+  /* ─── LUA ─── */
+  'lua-puc': { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'Your Lua script', s: '.lua files', c: 'blue' }]},
+    { label: 'L2 · STDLIB', boxes: [{ t: 'Lua stdlib', s: 'math · string · table · io · os', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'Lua C API', s: 'lua_pushinteger · lua_pcall · userdata · metatables', c: 'purple' }]},
+    { label: 'L4 · VM',     boxes: [{ t: 'Lua interpreter', s: 'register-based bytecode · mark-sweep GC · coroutines', c: 'teal' }]},
+    { label: 'L5 · HOST',   boxes: [{ t: 'host program', s: 'Nginx (OpenResty) · Redis · Neovim · WoW · Roblox · Lightroom', c: 'orange' }]},
+    { label: 'L6 · NATIVE', boxes: [{ t: 'host\'s libc and bindings', s: 'host handles all I/O', c: 'amber' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls (mediated by the host)', c: 'slate' }]}
+  ]},
+
+  luajit: { layers: [
+    { label: 'L1 · CODE',   boxes: [{ t: 'Your Lua script', s: 'plus optional FFI declarations', c: 'blue' }]},
+    { label: 'L2 · API',    boxes: [{ t: 'Lua stdlib + FFI', s: 'ffi.cdef · ffi.C · zero-glue C interop', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'FFI (call C directly)', s: 'no marshalling · JIT inlines the call site', c: 'purple' }]},
+    { label: 'L4 · VM',     boxes: [
+      { t: 'hand-written asm interpreter', s: 'fastest interpreter on the market', c: 'teal' },
+      { t: 'tracing JIT',                  s: 'numeric loops near C speed',         c: 'teal' }
+    ]},
+    { label: 'L5 · HOST',   boxes: [{ t: 'host program', s: 'OpenResty / nginx · games · trading systems · embedded apps', c: 'orange' }]},
+    { label: 'L6 · NATIVE', boxes: [{ t: 'libc · OpenSSL · host-bundled libs', s: '', c: 'amber' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls', c: 'slate' }]}
+  ]},
+
+  /* ─── WEBASSEMBLY ─── */
+  wasmtime: { layers: [
+    { label: 'L1 · SRC',    boxes: [{ t: 'Your source', s: 'Rust · C · C++ · Go (TinyGo) · AssemblyScript · Zig', c: 'blue' }]},
+    { label: 'L2 · WASM',   boxes: [{ t: 'Wasm module (.wasm)', s: 'verified bytecode · linear memory model', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'WASI imports', s: 'wasi_snapshot_preview1 · component model', c: 'purple' }]},
+    { label: 'L4 · ENGINE', boxes: [
+      { t: 'Cranelift compiler', s: 'JIT or AOT · code cache',     c: 'teal' },
+      { t: 'Wasmtime store',     s: 'linear memory · tables · instance', c: 'teal' }
+    ]},
+    { label: 'L5 · HOST',   boxes: [{ t: 'embedder (Rust · Python · Go · .NET host)', s: 'controls which WASI capabilities the module gets', c: 'orange' }]},
+    { label: 'L6 · NATIVE', boxes: [{ t: 'libc (in the host)', s: 'OS abstraction', c: 'amber' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls (mediated by WASI capability grants)', c: 'slate' }]}
+  ]},
+
+  wasmer: { layers: [
+    { label: 'L1 · SRC',    boxes: [{ t: 'Your source', s: 'any language that targets Wasm', c: 'blue' }]},
+    { label: 'L2 · WASM',   boxes: [{ t: 'Wasm module', s: 'distributed via Wasmer.io registry', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'WASI + Wasmer ABIs', s: 'Wasmer adds extra Emscripten / WASIX compat', c: 'purple' }]},
+    { label: 'L4 · ENGINE', boxes: [
+      { t: 'Singlepass', s: 'fastest compile',   c: 'teal' },
+      { t: 'Cranelift',  s: 'balanced',           c: 'teal' },
+      { t: 'LLVM',       s: 'peak runtime speed', c: 'teal' }
+    ]},
+    { label: 'L5 · HOST',   boxes: [{ t: 'embedder', s: '10+ host languages: Rust · Python · PHP · Java · C# · Ruby · Go · R', c: 'orange' }]},
+    { label: 'L6 · NATIVE', boxes: [{ t: 'libc (host)', s: 'OS bindings', c: 'amber' }]},
+    { label: 'L7 · KERNEL', boxes: [{ t: 'OS kernel', s: 'syscalls', c: 'slate' }]}
+  ]},
+
+  'browser-wasm': { layers: [
+    { label: 'L1 · SRC',    boxes: [{ t: 'Your source', s: 'Rust · C++ · AssemblyScript · ...', c: 'blue' }]},
+    { label: 'L2 · WASM',   boxes: [{ t: 'Wasm module + JS glue', s: 'loaded via WebAssembly.instantiate(...)', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'JS imports', s: 'host functions exposed by the page (no WASI)', c: 'purple' }]},
+    { label: 'L4 · ENGINE', boxes: [{ t: 'V8 / JSC / SpiderMonkey Wasm tier', s: 'Liftoff (baseline) → TurboFan (optimising)', c: 'teal' }]},
+    { label: 'L5 · BROWSER', boxes: [{ t: 'browser process · Web APIs', s: 'DOM · fetch · WebGL access only through JS glue', c: 'orange' }]},
+    { label: 'L6 · SANDBOX', boxes: [{ t: 'OS sandbox', s: 'syscall allow-list · same as the rest of the page', c: 'slate' }]}
+  ]},
+
+  'fastly-compute': { layers: [
+    { label: 'L1 · SRC',    boxes: [{ t: 'Your source', s: 'Rust · JS (via QuickJS) · Go · AssemblyScript · .NET', c: 'blue' }]},
+    { label: 'L2 · WASM',   boxes: [{ t: 'Wasm module', s: 'precompiled at deploy time', c: 'blue' }]},
+    { label: 'L3 · BRIDGE', boxes: [{ t: 'WASI + Fastly hostcalls', s: 'KV · Object Store · secrets · req/resp · geolocation', c: 'purple' }]},
+    { label: 'L4 · ENGINE', boxes: [{ t: 'Wasmtime (Cranelift, AOT)', s: 'instance per request · ~35µs cold start', c: 'teal' }]},
+    { label: 'L5 · EDGE',   boxes: [{ t: 'Fastly Compute platform', s: 'instance scheduler · CPU budget · request pipeline', c: 'orange' }]},
+    { label: 'L6 · POP',    boxes: [{ t: 'Fastly edge POP', s: 'host kernel mediated · no direct kernel access for the module', c: 'slate' }]}
+  ]}
+};
+
+/* ─────────────────────────────────────────────────────────────
+   DIAGRAM RENDERER — top→bottom stacked anatomy SVG.
+   Boxes auto-fit width; arrows connect each layer to the next.
+   ───────────────────────────────────────────────────────────── */
+function renderDiagram(diagram) {
+  const W = 820;
+  const headerH = 6;
+  const layerH = 84;
+  const boxH = 60;
+  const padX = 18;
+  const labelW = 90;
+  const usableX0 = padX + labelW;
+  const usableX1 = W - padX;
+  const usableW = usableX1 - usableX0;
+  const gap = 12;
+  const layers = diagram.layers;
+  const H = headerH + layers.length * layerH + 6;
+  const colors = ['blue','purple','teal','slate','amber','orange','rose'];
+
+  const defs = `
+    <defs>
+      <marker id="dgm-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--border-strong)" opacity="0.85"/>
+      </marker>
+      ${colors.map(c => `
+        <linearGradient id="dgm-g-${c}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stop-color="var(--${c}-bg-2)"/>
+          <stop offset="100%" stop-color="var(--${c}-bg)"/>
+        </linearGradient>
+      `).join('')}
+    </defs>
+  `;
+
+  let out = '';
+  layers.forEach((layer, i) => {
+    const yTop = headerH + i * layerH;
+    const yBox = yTop + 10;
+    const yMid = yBox + boxH / 2;
+
+    out += `<text x="${padX + 6}" y="${yMid + 3}" class="dgm-layer-label">${layer.label}</text>`;
+
+    const n = layer.boxes.length;
+    const boxW = (usableW - (n - 1) * gap) / n;
+
+    layer.boxes.forEach((box, j) => {
+      const x = usableX0 + j * (boxW + gap);
+      const cx = x + boxW / 2;
+      out += `
+        <g class="dgm-node" style="color: var(--${box.c})">
+          <rect class="dgm-rect" x="${x}" y="${yBox}" width="${boxW}" height="${boxH}" rx="9"
+                fill="url(#dgm-g-${box.c})" stroke="var(--${box.c}-border)" stroke-width="1"/>
+          <text x="${cx}" y="${yBox + 24}" text-anchor="middle" class="dgm-box-title" fill="var(--text)">${box.t}</text>
+          ${box.s ? `<text x="${cx}" y="${yBox + 42}" text-anchor="middle" class="dgm-box-sub" fill="var(--${box.c})">${box.s}</text>` : ''}
+        </g>
+      `;
+    });
+
+    if (i < layers.length - 1) {
+      const next = layers[i + 1];
+      const nN = next.boxes.length;
+      const nBoxW = (usableW - (nN - 1) * gap) / nN;
+      const yArrStart = yBox + boxH + 1;
+      const yArrEnd = headerH + (i + 1) * layerH + 9;
+
+      const fromXs = layer.boxes.map((_, j) => usableX0 + j * (boxW + gap) + boxW / 2);
+      const toXs   = next.boxes.map((_, j) => usableX0 + j * (nBoxW + gap) + nBoxW / 2);
+
+      if (n === 1 && nN === 1) {
+        out += `<path class="dgm-arrow" d="M${fromXs[0]} ${yArrStart} L${toXs[0]} ${yArrEnd}" marker-end="url(#dgm-arr)"/>`;
+      } else if (n === 1) {
+        toXs.forEach(tx => {
+          out += `<path class="dgm-arrow" d="M${fromXs[0]} ${yArrStart} L${tx} ${yArrEnd}" marker-end="url(#dgm-arr)"/>`;
+        });
+      } else if (nN === 1) {
+        fromXs.forEach(fx => {
+          out += `<path class="dgm-arrow" d="M${fx} ${yArrStart} L${toXs[0]} ${yArrEnd}" marker-end="url(#dgm-arr)"/>`;
+        });
+      } else {
+        const k = Math.max(n, nN);
+        for (let m = 0; m < k; m++) {
+          const fx = fromXs[Math.min(m, n - 1)];
+          const tx = toXs[Math.min(m, nN - 1)];
+          out += `<path class="dgm-arrow" d="M${fx} ${yArrStart} L${tx} ${yArrEnd}" marker-end="url(#dgm-arr)"/>`;
+        }
+      }
+    }
+  });
+
+  return `<svg class="dgm-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Runtime anatomy diagram">${defs}${out}</svg>`;
+}
+
+function buildDiagramBlock(id) {
+  const dgm = DIAGRAMS[id];
+  if (!dgm) return '';
+  return `
+    <div class="dgm-wrap">
+      <div class="dgm-eyebrow">
+        <span>Anatomy · code → kernel</span>
+        <span class="dgm-legend">
+          <span class="dgm-legend-chip"><span class="sw" style="background: var(--blue-bg-2); border-color: var(--blue-border);"></span>code/api</span>
+          <span class="dgm-legend-chip"><span class="sw" style="background: var(--purple-bg-2); border-color: var(--purple-border);"></span>bridge</span>
+          <span class="dgm-legend-chip"><span class="sw" style="background: var(--teal-bg-2); border-color: var(--teal-border);"></span>engine</span>
+          <span class="dgm-legend-chip"><span class="sw" style="background: var(--orange-bg-2); border-color: var(--orange-border);"></span>loop</span>
+          <span class="dgm-legend-chip"><span class="sw" style="background: var(--amber-bg-2); border-color: var(--amber-border);"></span>native</span>
+          <span class="dgm-legend-chip"><span class="sw" style="background: var(--slate-bg-2); border-color: var(--slate-border);"></span>kernel</span>
+        </span>
+      </div>
+      ${renderDiagram(dgm)}
+    </div>
+  `;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   RENDER CARDS
+   For each .cards[data-lang=X] container, append cards for that lang.
+   ───────────────────────────────────────────────────────────── */
+function renderCards() {
+  document.querySelectorAll('.cards[data-lang]').forEach(container => {
+    const lang = container.dataset.lang;
+    const items = RUNTIMES.filter(r => r.lang === lang);
+    items.forEach((r, i) => {
+      const card = document.createElement('button');
+      card.className = `card ${r.color}`;
+      card.dataset.runtime = r.id;
+      card.innerHTML = `
+        <div class="card-head">
+          <span class="card-badge">${r.badge}</span>
+          <span class="card-num">${String(i + 1).padStart(2, '0')} / ${String(items.length).padStart(2, '0')}</span>
+        </div>
+        <h3>${r.title}</h3>
+        <p class="card-tagline">${r.tagline}</p>
+        <div class="card-meta">
+          ${r.pills.map(p => `<span class="card-pill">${p}</span>`).join('')}
+        </div>
+        <span class="card-cta">
+          Inspect runtime
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+        </span>
+      `;
+      card.addEventListener('click', () => openModal(r.id));
+      container.appendChild(card);
+    });
+  });
+}
+
+/* ─────────────────────────────────────────────────────────────
+   MODAL
+   ───────────────────────────────────────────────────────────── */
+const modalEl = document.getElementById('modal');
+const modalPanel = document.getElementById('modalPanel');
+const modalHeader = document.getElementById('modalHeader');
+const modalBody = document.getElementById('modalBody');
+const backdropEl = document.getElementById('modalBackdrop');
+
+const LANG_LABELS = {
+  js: 'JavaScript / TypeScript',
+  py: 'Python',
+  jvm: 'JVM bytecode',
+  dotnet: '.NET / CIL',
+  go: 'Go',
+  rust: 'Rust',
+  beam: 'BEAM',
+  ruby: 'Ruby',
+  lua: 'Lua',
+  wasm: 'WebAssembly'
+};
+
+function openModal(id) {
+  const r = RUNTIMES.find(x => x.id === id);
+  if (!r) return;
+
+  modalPanel.className = `modal-panel ${r.color}`;
+  modalHeader.innerHTML = `
+    <span class="modal-eyebrow">${LANG_LABELS[r.lang]} · ${r.badge}</span>
+    <h2>${r.title}</h2>
+    <p class="modal-tag">${r.tagline}</p>
+  `;
+  modalBody.innerHTML = buildDiagramBlock(r.id) + r.sections.map(s => `
+    <section>
+      ${s.h ? `<h3>${s.h}</h3>` : ''}
+      <p>${s.p}</p>
+    </section>
+  `).join('');
+
+  backdropEl.classList.add('is-open');
+  modalEl.classList.add('is-open');
+  modalEl.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  modalPanel.scrollTop = 0;
+  setTimeout(() => {
+    try { modalEl.scrollTo({ top: 0 }); } catch (_) { modalEl.scrollTop = 0; }
+  }, 0);
+}
+
+function closeModal() {
+  backdropEl.classList.remove('is-open');
+  modalEl.classList.remove('is-open');
+  modalEl.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+}
+
+document.getElementById('modalClose').addEventListener('click', closeModal);
+backdropEl.addEventListener('click', closeModal);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && modalEl.classList.contains('is-open')) closeModal();
+});
+
+/* ─────────────────────────────────────────────────────────────
+   THEME TOGGLE
+   ───────────────────────────────────────────────────────────── */
+const root = document.documentElement;
+const themeToggle = document.getElementById('themeToggle');
+
+function getInitialTheme() {
+  try {
+    const stored = localStorage.getItem('runtime-atlas-theme');
+    if (stored === 'dark' || stored === 'light') return stored;
+  } catch (_) {}
+  return 'dark';
+}
+function setTheme(t) {
+  root.setAttribute('data-theme', t);
+  try { localStorage.setItem('runtime-atlas-theme', t); } catch (_) {}
+}
+setTheme(getInitialTheme());
+
+themeToggle.addEventListener('click', () => {
+  const cur = root.getAttribute('data-theme');
+  setTheme(cur === 'dark' ? 'light' : 'dark');
+});
+
+/* ─────────────────────────────────────────────────────────────
+   NAV — retract on scroll down, return on scroll up
+   ───────────────────────────────────────────────────────────── */
+const navEl = document.getElementById('nav');
+let lastY = window.scrollY;
+let navTicking = false;
+const HIDE_THRESHOLD = 80;
+
+function onScroll() {
+  const y = window.scrollY;
+  if (y > 4) navEl.classList.add('is-scrolled');
+  else navEl.classList.remove('is-scrolled');
+
+  if (y > lastY && y > HIDE_THRESHOLD) navEl.classList.add('is-hidden');
+  else if (y < lastY) navEl.classList.remove('is-hidden');
+
+  lastY = y;
+  navTicking = false;
+}
+window.addEventListener('scroll', () => {
+  if (!navTicking) {
+    requestAnimationFrame(onScroll);
+    navTicking = true;
+  }
+}, { passive: true });
+
+document.querySelectorAll('.nav-link, .nav-brand').forEach(a => {
+  a.addEventListener('click', () => navEl.classList.remove('is-hidden'));
+});
+
+/* ─────────────────────────────────────────────────────────────
+   BOOT
+   ───────────────────────────────────────────────────────────── */
+renderCards();
+</script>
+</body>
+</html>

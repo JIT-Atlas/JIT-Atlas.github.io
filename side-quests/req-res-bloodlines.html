@@ -1,0 +1,1649 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Two bloodlines of req &amp; res · internals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --node:#f6b365;   --node-soft:rgba(246,179,101,.14);
+  --express:#81c995;--express-soft:rgba(129,201,149,.14);
+  --next:#8ab4f8;   --next-soft:rgba(138,180,248,.14);
+  --warn:#fdd663;
+  --danger:#f28b82; --danger-soft:rgba(242,139,130,.14);
+  --r:4px; --maxw:1440px;
+  --mono:'Roboto Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --serif:'Roboto',-apple-system,BlinkMacSystemFont,sans-serif;
+}
+html[data-theme="dark"]{
+  --bg:#05080f; --bg2:#0a1322; --panel:#0f1a31; --panel2:#18243f;
+  --ink:#f3f6fb; --ink2:#c4cddd; --ink3:#8a97ac;
+  --line:#243248; --line2:#36486a;
+  --node:#ffc06b; --express:#67e6a0; --next:#5aa6ff;
+  --node-soft:rgba(255,192,107,.16); --express-soft:rgba(103,230,160,.16); --next-soft:rgba(90,166,255,.18);
+  --accent:#4d9bff; --accent-soft:rgba(77,155,255,.18); --glow:rgba(77,155,255,.40);
+  --warn:#ffd95e; --danger:#ff6b9d; --danger-soft:rgba(255,107,157,.16);
+  --shadow:0 16px 40px -16px rgba(0,0,0,.85);
+  /* muted, theme-aware scrollbars — faint at rest, a touch clearer on hover */
+  --sb-thumb:rgba(140,152,174,.20); --sb-thumb-hover:rgba(140,152,174,.40);
+  /* aliases for the preserved lineage SVG */
+  --text:var(--ink); --muted:var(--ink2); --faint:var(--ink3); --panelb:var(--panel2);
+}
+html[data-theme="light"]{
+  --bg:#f6f9ff; --bg2:#eef3fc; --panel:#ffffff; --panel2:#ffffff;
+  --ink:#0e1b33; --ink2:#3a4a66; --ink3:#6b7a93;
+  --line:#dbe5f5; --line2:#bccbe9;
+  --node:#bf7400; --express:#108a4d; --next:#1f6fe5;
+  --node-soft:rgba(191,116,0,.10); --express-soft:rgba(16,138,77,.10); --next-soft:rgba(31,111,229,.12);
+  --accent:#1f6fe5; --accent-soft:rgba(31,111,229,.14); --glow:rgba(31,111,229,.40);
+  --warn:#caa400; --danger:#d70022; --danger-soft:rgba(215,0,34,.08);
+  --shadow:0 14px 34px -16px rgba(31,111,229,.22);
+  --sb-thumb:rgba(107,122,147,.24); --sb-thumb-hover:rgba(107,122,147,.46);
+  --text:var(--ink); --muted:var(--ink2); --faint:var(--ink3); --panelb:var(--panel2);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scrollbar-gutter:stable;overflow-x:clip;scrollbar-width:thin;scrollbar-color:var(--sb-thumb) transparent}
+body{margin:0;overflow-x:clip;background:var(--bg);color:var(--ink);font-family:var(--serif);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;transition:background-color .25s,color .25s}
+body.fs-lock{overflow:hidden}
+/* --- WebKit/Blink scrollbars: muted, theme-aware, transparent track --- */
+::-webkit-scrollbar{width:12px;height:12px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-corner{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--sb-thumb);background-clip:padding-box;border:3px solid transparent;border-radius:999px;min-height:40px}
+::-webkit-scrollbar-thumb:hover{background:var(--sb-thumb-hover);background-clip:padding-box}
+::selection{background:var(--next-soft);color:var(--ink)}
+.mono{font-family:var(--mono)}
+code,pre{font-family:var(--mono)}
+
+/* --- no horizontal scroll: let wide content shrink/scroll inside, never push the page --- */
+main{min-width:0}
+img,svg,table,canvas{max-width:100%}
+.dial,.stepcol,.deep .dcol,.kv,.wbody{min-width:0}
+.kv .v{word-break:break-word}
+.preview,.codeline,td code,.pa{overflow-wrap:anywhere}
+pre.wire{max-width:100%}
+/* --- no layout shift on interaction: pin variable-height regions --- */
+.triad pre.wire{min-height:130px}
+.philo{min-height:80px}
+.caption{min-height:96px}
+
+header.top{position:sticky;top:0;z-index:60;background:var(--panel);border-bottom:1px solid var(--line)}
+.top-inner{max-width:var(--maxw);margin:0 auto;padding:8px 24px;display:flex;align-items:center;gap:16px;min-height:36px}
+.brand{font-family:var(--mono);font-weight:500;letter-spacing:.02em;font-size:12px;display:flex;align-items:center;gap:8px;color:var(--ink2)}
+.brand .dot{width:8px;height:8px;border-radius:50%;background:var(--next);box-shadow:0 0 0 3px var(--next-soft);animation:pulse 3s infinite}
+.brand .arr{color:var(--ink3)} .brand .eng{color:var(--express)}
+@keyframes pulse{50%{box-shadow:0 0 0 6px transparent}}
+.top-spacer{flex:1}
+.theme-btn{font-family:var(--mono);font-size:11px;letter-spacing:.04em;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);padding:4px 10px;border-radius:2px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:border-color .15s,color .15s;min-width:78px;justify-content:center}
+.theme-btn:hover{color:var(--ink);border-color:var(--next)}
+.theme-btn svg{width:13px;height:13px}
+
+.shell{max-width:var(--maxw);margin:0 auto;padding:0 24px;display:grid;grid-template-columns:228px minmax(0,1fr);gap:48px;transition:grid-template-columns .25s ease,gap .25s ease}
+.shell[data-toc="collapsed"]{grid-template-columns:44px minmax(0,1fr);gap:32px}
+.shell[data-toc="hidden"]{grid-template-columns:0 minmax(0,1fr);gap:0}
+.shell[data-toc="hidden"] nav.toc{opacity:0;pointer-events:none;visibility:hidden}
+.shell[data-toc="collapsed"] main,
+.shell[data-toc="hidden"] main{width:100%;max-width:calc(var(--maxw) - 48px - 228px - 48px);justify-self:center}
+nav.toc{position:sticky;top:64px;align-self:start;height:calc(100vh - 80px);padding-top:14px;font-family:var(--mono);font-size:12.5px;overflow:hidden;display:flex;flex-direction:column;transition:opacity .2s ease}
+.toc-toggle{display:flex;align-items:center;gap:8px;background:transparent;border:1px solid var(--line);border-radius:2px;color:var(--ink3);font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:6px 8px;cursor:pointer;margin:0 0 14px;transition:color .15s,border-color .15s;flex-shrink:0}
+.toc-toggle:hover{color:var(--ink);border-color:var(--next)}
+.toc-toggle svg{width:12px;height:12px;flex-shrink:0;transition:transform .25s ease}
+.shell[data-toc="collapsed"] .toc-toggle{padding:6px;justify-content:center}
+.shell[data-toc="collapsed"] .toc-toggle svg{transform:rotate(180deg)}
+.shell[data-toc="collapsed"] .toc-toggle .lbl{display:none}
+.toc-list{overflow-y:auto;overflow-x:hidden;flex:1;margin-left:-2px;scrollbar-width:none}
+.toc-list::-webkit-scrollbar{display:none}
+nav.toc a{display:flex;gap:10px;align-items:baseline;color:var(--ink3);text-decoration:none;padding:7px 0;border-left:2px solid transparent;padding-left:14px;transition:color .15s,border-color .15s;letter-spacing:.02em;white-space:nowrap}
+nav.toc a .num{color:var(--ink3);font-weight:700;font-size:11px;flex-shrink:0}
+nav.toc a:hover{color:var(--ink)}
+nav.toc a.active{color:var(--ink);border-left-color:var(--next)}
+nav.toc a.active .num{color:var(--next)}
+.shell[data-toc="collapsed"] nav.toc a{padding-left:10px;justify-content:center}
+.shell[data-toc="collapsed"] nav.toc a .lbl{opacity:0;width:0;overflow:hidden;display:inline-block}
+.shell[data-toc="collapsed"] nav.toc a .num{font-size:12px}
+main{padding:40px 0 140px;min-width:0}
+
+.kicker{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--express);display:flex;align-items:center;gap:10px;margin:0 0 12px}
+.kicker .ix{color:var(--next);font-weight:700}
+.kicker::after{content:"";flex:1;height:1px;background:var(--line)}
+h1.hero-h{font-weight:500;font-size:clamp(28px,4vw,44px);line-height:1.12;letter-spacing:-.01em;margin:0 0 14px}
+h1.hero-h .a{color:var(--node)} h1.hero-h .b{color:var(--express)} h1.hero-h .c{color:var(--next)}
+h2{font-weight:500;font-size:clamp(20px,2.4vw,25px);letter-spacing:-.005em;margin:0 0 14px;line-height:1.25}
+h2 em{font-style:italic;color:var(--ink)}
+h3{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2);margin:26px 0 10px}
+.lead{font-size:17px;color:var(--ink2);max-width:66ch;line-height:1.55}
+.prose{max-width:68ch;font-size:15px;line-height:1.65}
+.prose p{margin:0 0 14px} .prose strong{color:var(--ink);font-weight:500}
+.prose code,.lead code,td code{font-size:12.5px;color:var(--ink);background:var(--panel);border:1px solid var(--line);padding:1px 5px;border-radius:3px}
+section.block{padding:48px 0;border-bottom:1px solid var(--line);scroll-margin-top:72px}
+section.block:first-of-type{padding-top:24px}
+
+.term{cursor:help;border-bottom:1px dotted currentColor;color:inherit;transition:background .15s,border-color .15s}
+.term:hover{background:var(--next-soft)}
+#tip{position:fixed;z-index:900;max-width:330px;background:var(--panel2);border:1px solid var(--line2);border-radius:4px;padding:12px 14px;box-shadow:var(--shadow);font-size:13px;line-height:1.5;color:var(--ink2);pointer-events:none;opacity:0;transform:translateY(4px);transition:opacity .14s,transform .14s;font-family:var(--serif)}
+#tip.show{opacity:1;transform:translateY(0)}
+#tip .t-name{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--express);text-transform:uppercase;display:block;margin-bottom:5px}
+#tip .t-kind{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--next);text-transform:uppercase;float:right}
+#tip::after{content:"";position:absolute;left:var(--ax,20px);bottom:-7px;width:12px;height:12px;background:var(--panel2);border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);transform:rotate(45deg)}
+#tip.flip::after{bottom:auto;top:-7px;transform:rotate(225deg)}
+
+.callout{position:relative;border:1px solid var(--line);border-radius:12px;background:linear-gradient(135deg,var(--cl-tint),transparent 58%),var(--panel);padding:18px 20px 18px 26px;margin:24px 0;font-size:15px;line-height:1.65;box-shadow:0 12px 32px -20px var(--cl-glow);--cl-accent:var(--next);--cl-tint:var(--next-soft);--cl-glow:var(--glow)}
+.callout::before{content:"";position:absolute;left:8px;top:15px;bottom:15px;width:4px;border-radius:999px;background:var(--cl-accent)}
+.callout.eng{--cl-accent:var(--express);--cl-tint:var(--express-soft);--cl-glow:rgba(103,230,160,.4)}
+.callout.node{--cl-accent:var(--node);--cl-tint:var(--node-soft);--cl-glow:rgba(255,192,107,.4)}
+.callout .lbl{display:inline-flex;align-items:center;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--bg);background:var(--cl-accent);padding:3px 11px;border-radius:999px;margin-bottom:11px;font-weight:700;box-shadow:0 3px 12px -3px var(--cl-accent)}
+.callout code{font-size:12.5px;background:var(--bg2);border:1px solid var(--line);padding:1px 5px;border-radius:4px}
+
+pre.wire{font-family:var(--mono);font-size:12.5px;line-height:1.6;background:var(--bg2);border:1px solid var(--line);border-radius:4px;padding:14px 16px;overflow-y:auto;overflow-x:hidden;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink2);margin:0}
+pre.wire .k{color:var(--next)} pre.wire .v{color:var(--express)} pre.wire .c{color:var(--ink3)} pre.wire .n{color:var(--node)}
+
+table.spec{width:100%;border-collapse:collapse;font-size:14px;margin:8px 0 4px;font-family:var(--mono)}
+table.spec th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line2)}
+table.spec td{padding:12px 14px;border-bottom:1px solid var(--line);color:var(--ink2);vertical-align:top;line-height:1.55}
+table.spec td:first-child{color:var(--ink);font-weight:500}
+table.spec tr:hover td{background:var(--panel)}
+.pill{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;padding:2px 8px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.pill.node{color:var(--node);background:var(--node-soft)} .pill.express{color:var(--express);background:var(--express-soft)} .pill.web{color:var(--next);background:var(--next-soft)} .pill.none{color:var(--ink3)}
+
+.figure{margin:24px 0;border:1px solid var(--line);border-radius:4px;background:var(--panel);overflow:hidden}
+.figure.fs{position:fixed;inset:12px;z-index:400;margin:0;max-width:none;display:flex;flex-direction:column}
+.fig-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.fig-bar .title{font-family:var(--mono);font-size:12px;letter-spacing:.05em;color:var(--ink2);text-transform:uppercase}
+.fig-bar .grow{flex:1}
+.fbtn{font-family:var(--mono);font-size:11px;letter-spacing:.02em;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);padding:4px 9px;border-radius:2px;cursor:pointer;transition:border-color .15s,color .15s;display:inline-flex;align-items:center;gap:6px}
+.fbtn:hover{color:var(--ink);border-color:var(--next)}
+.fbtn.on{color:var(--bg);background:var(--express);border-color:var(--express)}
+.fbtn svg{width:13px;height:13px}
+.canvas{position:relative}
+.figure.fs .canvas{flex:1;min-height:0}
+svg.diagram{display:block;width:100%;height:auto;touch-action:auto}
+.figure.fs svg.diagram{height:100%;touch-action:none}
+.figure:not(.fs) .canvas{cursor:zoom-in}
+.figure.fs .canvas{cursor:grab}
+.figure.fs .canvas:active{cursor:grabbing}
+.zoomctl{position:absolute;right:12px;bottom:12px;display:none;flex-direction:column;gap:6px;z-index:5}
+.figure.fs .zoomctl{display:flex}
+.zoomctl button{width:34px;height:34px;border-radius:8px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);font-family:var(--mono);font-size:15px;cursor:pointer;line-height:1;transition:.15s;display:grid;place-items:center}
+.zoomctl button:hover{color:var(--ink);border-color:var(--express)}
+.zlevel{position:absolute;left:12px;bottom:12px;display:none;font-family:var(--mono);font-size:11px;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:5;user-select:none}
+.figure.fs .zlevel{display:block}
+.zhint{position:absolute;left:12px;top:12px;display:none;font-family:var(--mono);font-size:10px;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:5;opacity:.85;pointer-events:none}
+.figure.fs .zhint{display:block}
+.inspect-hint{position:absolute;right:12px;top:12px;font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:4;pointer-events:none;opacity:0;transition:opacity .2s}
+.figure:not(.fs) .canvas:hover .inspect-hint{opacity:.9}
+.figure.fs .inspect-hint{display:none}
+
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;color:var(--ink2);margin:18px 0 0}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+/* lineage diagram sizing is handled by svg.diagram */
+
+/* ---- task switcher ---- */
+.switch{display:flex;gap:6px;flex-wrap:wrap;margin:18px 0 14px}
+.chip{font-family:var(--mono);font-size:11.5px;letter-spacing:.02em;border:1px solid var(--line2);background:var(--panel);color:var(--ink3);padding:6px 12px;border-radius:999px;cursor:pointer;transition:.15s}
+.chip:hover{color:var(--ink);border-color:var(--next)}
+.chip.on{color:var(--bg);background:var(--next);border-color:var(--next)}
+.triad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.dial{border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--panel)}
+.dial .dh{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:9px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.dial.node .dh{color:var(--node)} .dial.express .dh{color:var(--express)} .dial.next .dh{color:var(--next)}
+.dial .dh i{width:8px;height:8px;border-radius:50%;background:currentColor}
+.dial pre.wire{border:0;border-radius:0;background:var(--bg2)}
+.philo{font-family:var(--serif);font-size:14px;color:var(--ink2);background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--express);border-radius:0 4px 4px 0;padding:12px 16px;margin-top:14px}
+.philo b{color:var(--ink);font-weight:500}
+
+/* ---- stepper ---- */
+.player{display:flex;align-items:center;gap:10px;padding:14px 16px;border-top:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.pbtn{width:40px;height:40px;border-radius:50%;border:1px solid var(--line2);background:var(--panel);color:var(--ink);cursor:pointer;display:grid;place-items:center;transition:.18s}
+.pbtn:hover{border-color:var(--next);color:var(--next)}
+.pbtn.play{background:var(--next);border-color:var(--next);color:var(--bg);width:46px;height:46px}
+.pbtn.play:hover{filter:brightness(1.08);color:var(--bg)}
+.pbtn svg{width:18px;height:18px}
+.scrub{flex:1;min-width:160px;height:6px;border-radius:999px;background:var(--line);position:relative;cursor:pointer}
+.scrub .fill{position:absolute;left:0;top:0;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--node),var(--next));width:0%}
+.stepno{font-family:var(--mono);font-size:12px;color:var(--ink3);min-width:72px;text-align:right}
+.stepcols{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line)}
+.stepcol{background:var(--panel);padding:16px}
+.stepcol .sc-h{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.stepcol.mut .sc-h{color:var(--node)} .stepcol.imm .sc-h{color:var(--next)}
+.mut-tag{font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:999px;border:1px solid currentColor}
+.codeline{font-family:var(--mono);font-size:12px;padding:6px 10px;border-radius:3px;background:var(--bg2);border:1px solid var(--line);color:var(--ink3);margin-bottom:6px;white-space:pre-wrap;transition:.2s;opacity:.4}
+.codeline.on{opacity:1;color:var(--ink2)}
+.stepcol.mut .codeline.on{border-color:var(--node)} .stepcol.imm .codeline.on{border-color:var(--next)}
+.obj{margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--ink3);border-top:1px dashed var(--line);padding-top:10px;min-height:96px}
+.obj .row{margin:3px 0} .obj .row b{color:var(--ink2);font-weight:500}
+.obj .empty{color:var(--ink3);opacity:.6;font-style:italic}
+.obj .stamp{display:inline-block;margin-top:8px;font-size:10.5px;padding:2px 8px;border-radius:999px}
+.obj .stamp.node{background:var(--node-soft);color:var(--node)} .obj .stamp.next{background:var(--next-soft);color:var(--next)} .obj .stamp.ok{background:var(--express-soft);color:var(--express)}
+.caption{padding:16px 20px;border-top:1px solid var(--line)}
+.caption .cn{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--next);margin-bottom:6px}
+.caption .cb{color:var(--ink2);font-size:15px;margin:0;max-width:80ch}
+
+footer{max-width:var(--maxw);margin:0 auto;padding:40px 24px 80px;font-family:var(--mono);font-size:12px;color:var(--ink3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;border-top:1px solid var(--line)}
+
+@media(max-width:1268px){
+  .shell{grid-template-columns:212px minmax(0,1fr)}
+  .shell[data-toc="collapsed"]{grid-template-columns:44px minmax(0,1fr)}
+  .shell[data-toc="hidden"]{grid-template-columns:0 minmax(0,1fr)}
+}
+@media(max-width:920px){
+  .shell{grid-template-columns:1fr;gap:0}
+  nav.toc{display:none}
+  body{font-size:17px}
+  main{padding:24px 0 100px}
+  .triad{grid-template-columns:1fr}
+  .stepcols{grid-template-columns:1fr}
+}
+/* ---- interactive nodes ---- */
+.node{cursor:pointer}
+.node .nbox{transition:filter .18s,stroke-width .18s}
+.node:hover .nbox{filter:brightness(1.14) drop-shadow(0 0 6px var(--line2));stroke-width:2.4}
+.node:active .nbox{filter:brightness(1.25)}
+.figclue{font-family:var(--mono);font-size:11px;color:var(--ink3);padding:10px 16px;border-top:1px solid var(--line);background:var(--panel2);display:flex;align-items:center;gap:8px}
+.figclue b{color:var(--express)}
+
+/* ---- modal ---- */
+.scrim{position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.6);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;pointer-events:none;transition:opacity .22s}
+.scrim.open{opacity:1;pointer-events:auto}
+.modal{position:relative;background:var(--panel2);border:1px solid var(--line2);border-radius:6px;max-width:780px;width:100%;max-height:88vh;overflow-y:auto;overflow-x:hidden;box-shadow:var(--shadow);transform:translateY(10px) scale(.99);transition:transform .22s}
+.scrim.open .modal{transform:none}
+.modal .mhead{padding:26px 32px 0}
+.modal .mtag{font-family:var(--mono);font-size:11px;letter-spacing:.13em;text-transform:uppercase;display:flex;gap:9px;align-items:center;color:var(--ink3)}
+.modal .mtag .nm{font-weight:700}
+.modal .mtag.node .nm{color:var(--node)} .modal .mtag.express .nm{color:var(--express)} .modal .mtag.web .nm{color:var(--next)}
+.modal h4{font-size:24px;font-weight:600;margin:9px 0 0;letter-spacing:-.01em;max-width:42ch}
+.modal .mbody{padding:14px 32px 30px;color:var(--ink2);font-size:15px;line-height:1.6}
+.modal .mbody>p{margin:0 0 14px;max-width:74ch}
+.modal .mbody code{font-size:12.5px;color:var(--ink);background:var(--panel);border:1px solid var(--line);padding:1px 5px;border-radius:3px}
+.modal .mbody b{color:var(--ink);font-weight:600}
+.mclose{position:absolute;right:15px;top:15px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);cursor:pointer;font-size:16px;line-height:1;z-index:3}
+.mclose:hover{color:var(--ink);border-color:var(--danger)}
+.why{border-left:3px solid var(--express);background:var(--express-soft);padding:13px 17px;border-radius:0 4px 4px 0;font-size:14px;line-height:1.6;margin-top:4px;max-width:76ch}
+.why .wl{font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--express);display:block;margin-bottom:5px}
+.deep-h{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3);margin-bottom:12px}
+.deep{display:grid;gap:12px;grid-template-columns:1fr 1fr}
+.deep .dcol{border:1px solid var(--line);border-radius:4px;padding:13px 15px;background:var(--bg2)}
+.deep .dcol .dl{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;display:block;margin-bottom:6px;color:var(--ink3)}
+.deep .dcol p{font-size:13px;margin:0;line-height:1.55;color:var(--ink2)}
+.deep code{font-size:12px;color:var(--ink);background:var(--panel);padding:1px 4px;border-radius:2px;border:1px solid var(--line)}
+
+/* ---- widgets ---- */
+.wdemo{margin:16px 0 20px;border:1px solid var(--line);border-radius:5px;background:var(--bg2);overflow:hidden}
+.wbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--panel2)}
+.wbar .wt{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin-right:auto}
+.wbtn{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);padding:5px 11px;border-radius:999px;cursor:pointer;transition:.15s}
+.wbtn:hover{color:var(--ink);border-color:var(--next)}
+.wbtn.on{color:var(--bg);background:var(--next);border-color:var(--next)}
+.wbtn.node.on{background:var(--node);border-color:var(--node)} .wbtn.express.on{background:var(--express);border-color:var(--express)}
+.wbtn:disabled{opacity:.4;cursor:not-allowed}
+.wbody{padding:13px 15px;font-family:var(--mono);font-size:12.5px;color:var(--ink2);line-height:1.7}
+.wbody .wlabel{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin:0 0 6px}
+.wbody .wlabel:not(:first-child){margin-top:12px}
+.chunks{display:flex;gap:6px;flex-wrap:wrap;min-height:28px;align-items:center}
+.chunk{padding:3px 8px;border-radius:4px;background:var(--node-soft);color:var(--node);border:1px solid var(--node);font-size:11px;animation:pop .28s}
+.bytes{color:var(--ink3)}
+@keyframes pop{from{transform:scale(.5);opacity:0}to{transform:scale(1);opacity:1}}
+.logline{padding:2px 0;color:var(--ink2);animation:fadein .25s}
+.logline .c{color:var(--ink3)} .logline .ok{color:var(--express)} .logline .n{color:var(--node)} .logline .b{color:var(--next)} .logline .err{color:var(--danger)}
+@keyframes fadein{from{opacity:0;transform:translateX(-4px)}to{opacity:1}}
+.plink{font-family:var(--mono);font-size:12px;border:1px solid var(--line);border-radius:4px;padding:7px 10px;background:var(--panel);transition:.25s;opacity:.4}
+.plink.on{opacity:1;border-color:var(--node);background:var(--node-soft);color:var(--node)}
+.parrow{color:var(--ink3);text-align:center;font-size:10px;margin:2px 0;opacity:.7}
+.win{font-family:var(--mono);font-size:12px;background:var(--panel);border:1px solid var(--line2);color:var(--ink);border-radius:4px;padding:7px 9px;width:100%;outline:none}
+.win:focus{border-color:var(--next)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin-top:4px}
+.kv .k{color:var(--ink3)} .kv .v{color:var(--ink)}
+.runtimes{display:flex;flex-wrap:wrap;gap:7px}
+.rt{font-family:var(--mono);font-size:11px;padding:4px 10px;border-radius:999px;border:1px solid var(--line2);color:var(--ink3);transition:.3s}
+.rt.ok{border-color:var(--next);color:var(--next);background:var(--next-soft)}
+.rt.no{border-color:var(--danger);color:var(--danger);opacity:.65}
+.proprow{display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--line);border-radius:4px;margin-bottom:5px;background:var(--panel)}
+.proprow .pn{color:var(--ink);min-width:78px}
+.proprow .ph{color:var(--ink3);font-size:11px}
+.proprow.added{border-color:var(--express);background:var(--express-soft)}
+.proprow.added .pn{color:var(--express)}
+.proprow .lock{margin-left:auto;font-size:10px;color:var(--ink3)}
+.addwrap{overflow:hidden;transition:max-height .4s ease,opacity .3s;max-height:0;opacity:0}
+.addwrap.show{max-height:240px;opacity:1}
+.preview{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px 12px;margin-top:8px;white-space:pre-wrap;color:var(--ink2);font-size:12px;min-height:64px}
+.stamp{display:inline-block;margin-top:8px;font-size:10.5px;padding:2px 9px;border-radius:999px}
+.stamp.node{background:var(--node-soft);color:var(--node)} .stamp.next{background:var(--next-soft);color:var(--next)} .stamp.ok{background:var(--express-soft);color:var(--express)} .stamp.err{background:var(--danger-soft);color:var(--danger)}
+.probe-grid{display:grid;grid-template-columns:1fr auto auto;gap:7px 16px;align-items:center}
+.probe-grid .ph{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3)}
+.probe-grid .pa{color:var(--ink2);font-size:12px}
+.probe-grid .pc{font-size:14px;text-align:center;min-width:30px;opacity:0;transition:opacity .25s}
+.probe-grid .pc.show{opacity:1}
+.probe-grid .pc.yes{color:var(--express)} .probe-grid .pc.no{color:var(--danger)}
+.csrow{display:grid;grid-template-columns:80px 1fr 58px;gap:10px;align-items:center;margin:9px 0}
+.cslabel{font-size:11px;font-family:var(--mono)} .cslabel.n{color:var(--node)} .cslabel.b{color:var(--next)}
+.csbar{height:10px;border-radius:999px;background:var(--line);overflow:hidden}
+.csfill{height:100%;width:0;border-radius:999px} .csfill.n{background:var(--node)} .csfill.b{background:var(--next)}
+.csms{font-size:11px;color:var(--ink3);text-align:right;font-family:var(--mono)}
+@media(max-width:560px){.deep{grid-template-columns:1fr}.modal .mhead,.modal .mbody{padding-left:20px;padding-right:20px}}
+/* ── softer, rounder surfaces ── */
+.figure{border-radius:12px;overflow:hidden}
+pre.wire{border-radius:9px}
+.callout{border-radius:11px}
+.modal{border-radius:16px}
+.wdemo{border-radius:11px}
+.deep .dcol{border-radius:9px}
+.obj{border-radius:9px}
+.dial{border-radius:9px}
+#tip{border-radius:9px}
+section.block{padding:52px 0}
+
+/* ── more color in the headings ── */
+.kicker .ix{color:var(--node)}
+h2{background:linear-gradient(90deg,var(--node),var(--express) 50%,var(--next));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:var(--next)}
+h2 em{font-style:italic;-webkit-text-fill-color:var(--next);color:var(--next)}
+h2 em.nd{-webkit-text-fill-color:var(--node);color:var(--node)}
+h2 em.ex{-webkit-text-fill-color:var(--express);color:var(--express)}
+h2 em.nx{-webkit-text-fill-color:var(--next);color:var(--next)}
+h3{color:var(--next)}
+/* ── prototype-chain stepper ── */
+.plink{opacity:.6}
+.plink.on{opacity:1;border-color:var(--line);background:var(--panel)}
+.plink.cur{opacity:1;border-color:var(--node);background:var(--node-soft);box-shadow:inset 0 0 0 1px var(--node)}
+.pl-head{display:flex;align-items:baseline;gap:10px;justify-content:space-between}
+.pl-name{color:var(--ink);font-weight:700}
+.pl-kind{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);white-space:nowrap}
+.pl-note{font-family:var(--serif);font-size:11.5px;line-height:1.5;color:var(--ink2);margin-top:5px}
+.pl-note code{font-family:var(--mono);font-size:10.5px;color:var(--ink);background:var(--bg2);border:1px solid var(--line);padding:0 4px;border-radius:4px}
+.parrow{opacity:.4;transition:opacity .2s}
+.parrow.on{opacity:1;color:var(--node)}
+.pa-label{font-family:var(--mono);font-size:10px;color:var(--ink3)}
+.parrow.on .pa-label{color:var(--node)}
+.wstep{font-family:var(--mono);font-size:11px;color:var(--ink3);min-width:42px;text-align:center}
+.wbtn:disabled{opacity:.35;cursor:not-allowed}
+/* ── runtime host diagram ── */
+.rt-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:13px}
+.rt-chip{font-family:var(--mono);font-size:11px;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);padding:5px 11px;border-radius:999px;cursor:pointer;transition:.15s}
+.rt-chip:hover{color:var(--ink);border-color:var(--next)}
+.rt-chip.on{background:var(--next);border-color:var(--next);color:var(--bg)}
+.rt-detail{border:1px solid var(--line);border-radius:10px;background:var(--bg2);padding:14px}
+.rt-flow{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:12px}
+.rt-pill{font-family:var(--mono);font-size:11px;padding:6px 11px;border-radius:8px;border:1px solid var(--next);color:var(--next);background:var(--next-soft);white-space:nowrap}
+.rt-ar{color:var(--ink3);font-size:11px}
+.rt-host{display:flex;flex-direction:column;align-items:center;gap:3px;border:1px solid var(--line2);border-radius:9px;padding:7px 14px;background:var(--panel)}
+.rt-hn{font-family:var(--mono);font-size:12px;color:var(--ink);font-weight:700}
+.rt-role{font-family:var(--mono);font-size:8px;text-transform:uppercase;letter-spacing:.08em;padding:1px 7px;border-radius:999px}
+.rt-role.server{color:var(--express);background:var(--express-soft)}
+.rt-role.edge{color:var(--next);background:var(--next-soft)}
+.rt-role.client{color:var(--node);background:var(--node-soft)}
+.rt-role.proxy{color:var(--warn);background:rgba(253,214,99,.16)}
+.rt-api{font-family:var(--mono);font-size:11px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:11px;line-height:1.5;overflow-wrap:anywhere}
+.rt-row{display:flex;gap:11px;padding:7px 0;border-top:1px solid var(--line)}
+.rt-row .rl{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);flex:0 0 92px;padding-top:2px}
+.rt-row .rv{font-family:var(--serif);font-size:12.5px;line-height:1.55;color:var(--ink2)}
+.rt-row .rv code{font-family:var(--mono);font-size:10.5px;color:var(--ink);background:var(--panel);border:1px solid var(--line);padding:0 4px;border-radius:4px}
+.rt-row .rv b{color:var(--ink)}
+/* ── deep, flat surfaces · blue accents (no shading) ── */
+.kicker{color:var(--accent)}
+a,.term{color:var(--next)}
+.brand .arr{color:var(--accent)}
+/* ===== view-mode segmented toggles ===== */
+.vmode{display:inline-flex;border:1px solid var(--line2);border-radius:999px;overflow:hidden;background:var(--panel)}
+.vmode .vm{font-family:var(--mono);font-size:11px;letter-spacing:.02em;color:var(--ink3);background:transparent;border:0;padding:6px 12px;cursor:pointer;white-space:nowrap;transition:.15s}
+.vmode .vm+.vm{border-left:1px solid var(--line)}
+.vmode .vm:hover{color:var(--ink)}
+.vmode .vm.on{background:var(--accent-soft);color:var(--ink)}
+.vmode.sm .vm{font-size:10.5px;padding:5px 10px}
+.switchrow{display:flex;align-items:center;justify-content:space-between;gap:12px 16px;flex-wrap:wrap;margin:18px 0 14px}
+.switchrow .switch{margin:0}
+
+/* App/Pages flip inside the Next dial header */
+.facetog{display:inline-flex;margin-left:auto;border:1px solid var(--line2);border-radius:999px;overflow:hidden}
+.facetog .ft{font-family:var(--mono);font-size:9.5px;letter-spacing:.03em;text-transform:none;color:var(--ink3);background:transparent;border:0;padding:3px 9px;cursor:pointer;transition:.15s}
+.facetog .ft+.ft{border-left:1px solid var(--line)}
+.facetog .ft:hover{color:var(--ink)}
+.facetog .ft.on{background:var(--next);color:var(--bg)}
+.dial .dh .dh-name{display:inline-flex;align-items:center}
+
+/* four-column task view */
+.triad.four{grid-template-columns:repeat(2,1fr)}
+@media(max-width:920px){ .triad.four{grid-template-columns:1fr} }
+
+/* wide reference table → wrap cells, never scroll */
+.tablewrap{overflow-x:clip}
+table.spec.cheat5 th,table.spec.cheat5 td{overflow-wrap:anywhere}
+
+/* grouped cast rows */
+table.spec tr.grouprow td{background:var(--bg2);color:var(--ink3);font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;padding:9px 14px;border-bottom:1px solid var(--line2)}
+table.spec tr.grouprow.node td{color:var(--node)} table.spec tr.grouprow.web td{color:var(--next)}
+table.spec tr.grouprow:hover td{background:var(--bg2)}
+
+/* ===== explorer widget ===== */
+.exbody{padding:18px}
+.mx-ctl{display:flex;flex-direction:column;gap:11px;margin-bottom:16px}
+.mx-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.mx-q{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);flex:0 0 56px}
+.mx-opts{display:inline-flex;gap:6px;flex-wrap:wrap}
+.mx-opt,.cf-chip,.dl-chip{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line2);background:var(--panel);color:var(--ink3);padding:6px 12px;border-radius:999px;cursor:pointer;transition:.15s}
+.mx-opt:hover,.cf-chip:hover,.dl-chip:hover{color:var(--ink);border-color:var(--next)}
+.mx-opt.on,.cf-chip.on,.dl-chip.on{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+.mx-out,.cf-out{border:1px solid var(--line);border-radius:9px;padding:14px 16px;background:var(--bg2)}
+.mx-out.ok{border-left:3px solid var(--express)} .mx-out.bad{border-left:3px solid var(--danger)}
+.mx-flag{font-size:14px;color:var(--ink);margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mx-flag b{font-weight:600}
+.mx-badge{font-family:var(--mono);font-size:10.5px;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.mx-badge.ok{background:var(--express-soft);color:var(--express)} .mx-badge.bad{background:var(--danger-soft);color:var(--danger)}
+.mx-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.mxl{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin-bottom:3px}
+.mxv{font-family:var(--mono);font-size:12.5px;color:var(--ink2)}
+.mxv.node{color:var(--node)} .mxv.next{color:var(--next)}
+.mx-why{font-family:var(--serif);font-size:13px;color:var(--ink2);line-height:1.55;margin:6px 0 0}
+.mx-why code,.cf-verdict code,.cf-inst code{font-family:var(--mono);font-size:11px;background:var(--panel);border:1px solid var(--line);padding:0 4px;border-radius:4px;color:var(--ink)}
+.cf-chips,.dl-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.cf-verdict{display:flex;align-items:center;gap:9px;font-size:14px;color:var(--ink);margin-bottom:8px;flex-wrap:wrap}
+.cf-verdict b{font-weight:600}
+.cf-dot{width:11px;height:11px;border-radius:50%;flex:0 0 auto}
+.cf-verdict.node .cf-dot{background:var(--node)} .cf-verdict.web .cf-dot{background:var(--next)}
+.cf-verdict.node b{color:var(--node)} .cf-verdict.web b{color:var(--next)}
+.cf-why{font-family:var(--serif);font-size:13px;color:var(--ink2);line-height:1.55;margin:0 0 10px}
+.cf-inst{font-family:var(--mono);font-size:11.5px;color:var(--ink2);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+.dl-cols{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.dl-cols pre.wire{min-height:92px}
+@media(max-width:760px){ .dl-cols{grid-template-columns:1fr} }
+
+/* ===== two-layer strip under the lineage tree ===== */
+.layerstrip{border-top:1px solid var(--line);background:var(--panel2);padding:14px 16px 16px}
+.ls-head{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin-bottom:11px}
+.ls-row{display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:11px}
+.ls-q{font-family:var(--mono);font-size:12px;color:var(--ink2);flex:0 0 176px;line-height:1.45;padding-top:6px}
+.ls-q i{color:var(--ink3);font-style:italic}
+.ls-qn{display:inline-block;font-size:9px;letter-spacing:.07em;text-transform:uppercase;color:var(--accent);border:1px solid var(--line2);border-radius:999px;padding:1px 7px;margin-right:7px}
+.ls-cells{display:flex;gap:8px;flex-wrap:wrap;flex:1;min-width:0}
+.ls-cell{display:flex;flex-direction:column;gap:2px;text-align:left;border:1px solid var(--line2);background:var(--panel);border-radius:8px;padding:8px 12px;cursor:pointer;transition:.15s}
+.ls-cell:hover{border-color:var(--next);transform:translateY(-1px)}
+.ls-cell b{font-family:var(--mono);font-size:11.5px;color:var(--ink);font-weight:600}
+.ls-cell span{font-family:var(--mono);font-size:10px;color:var(--ink3)}
+.ls-cell span em{font-style:normal;color:var(--ink2)}
+.ls-cell.node b{color:var(--node)} .ls-cell.next b{color:var(--next)}
+.ls-foot{font-family:var(--serif);font-size:12.5px;color:var(--ink2);line-height:1.55;margin:4px 0 0;border-top:1px dashed var(--line);padding-top:10px}
+.ls-foot b{color:var(--ink);font-weight:500}
+@media(max-width:620px){ .ls-q{flex:1 0 100%} }
+/* ===== IDE-style syntax tokens (in .wire, .codeline, and inline <code>) ===== */
+html[data-theme="dark"]{--tk-com:#5f6f8a;--tk-str:#86e0a4;--tk-kw:#c79bf2;--tk-num:#ffbd6b;--tk-type:#5fd6cf;--tk-fn:#f0cd74;--tk-prop:#79b8ff;--tk-var:#dfe7f3;--tk-punc:#93a1ba}
+html[data-theme="light"]{--tk-com:#8a93a6;--tk-str:#157a3c;--tk-kw:#7b35c0;--tk-num:#b5650a;--tk-type:#0c7a82;--tk-fn:#8a5e00;--tk-prop:#1f5fc0;--tk-var:#1a2740;--tk-punc:#5d6c86}
+.tk-com{color:var(--tk-com);font-style:italic}
+.tk-str{color:var(--tk-str)}
+.tk-kw{color:var(--tk-kw)}
+.tk-num{color:var(--tk-num)}
+.tk-type{color:var(--tk-type)}
+.tk-fn{color:var(--tk-fn)}
+.tk-prop{color:var(--tk-prop)}
+.tk-var{color:var(--tk-var)}
+.tk-punc{color:var(--tk-punc)}
+/* code blocks get a touch more presence now that they're colored */
+pre.wire{line-height:1.62}
+/* ===== stepper: pin variable regions so stepping never reflows ===== */
+.obj{min-height:140px}
+.caption{min-height:108px}
+.mut-tag{min-width:64px;text-align:center}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <button class="theme-btn" id="navBtn" aria-label="toggle navigation" title="Show or hide the navigation rail">
+      <svg id="navIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="1"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
+      <span id="navTxt">NAV</span>
+    </button>
+    <div class="brand"><span class="dot"></span>req<span class="arr">·····▶</span><span class="eng">res</span> &nbsp;internals</div>
+    <div class="top-spacer"></div>
+    <button class="theme-btn" id="themeBtn" aria-label="toggle theme">
+      <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>
+      <span id="themeTxt">DARK</span>
+    </button>
+  </div>
+</header>
+
+<div class="shell" id="shell">
+  <nav class="toc" id="toc">
+    <button class="toc-toggle" id="tocToggle" aria-label="toggle navigation">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      <span class="lbl">Collapse</span>
+    </button>
+    <div class="toc-list">
+      <a href="#bloodlines"><span class="num">00</span><span class="lbl"> The two bloodlines</span></a>
+      <a href="#split"><span class="num">01</span><span class="lbl"> The one split</span></a>
+      <a href="#layers"><span class="num">02</span><span class="lbl"> Two layers · Next in both</span></a>
+      <a href="#cast"><span class="num">03</span><span class="lbl"> The cast</span></a>
+      <a href="#request"><span class="num">04</span><span class="lbl"> Request, four ways</span></a>
+      <a href="#response"><span class="num">05</span><span class="lbl"> Response, four ways</span></a>
+      <a href="#mutate"><span class="num">06</span><span class="lbl"> Mutate vs return</span></a>
+      <a href="#cheat"><span class="num">07</span><span class="lbl"> Provenance sheet</span></a>
+      <a href="#runtime"><span class="num">08</span><span class="lbl"> Runtime &amp; why</span></a>
+    </div>
+  </nav>
+
+  <main>
+
+    <!-- ===== 00 HERO + LINEAGE ===== -->
+    <section class="block" id="bloodlines" style="border-bottom:none">
+      <p class="kicker"><span class="ix">00</span> An explorable comparison · Node · Express · Next</p>
+      <h1 class="hero-h">Two bloodlines<br>of <span class="a">req</span> &amp; <span class="c">res</span>.</h1>
+      <p class="lead">The same job — read a request, send a response — looks different in raw <strong>Node</strong>, in <strong>Express</strong>, and in <strong>Next.js</strong>. The reason is ancestry, and there are only <strong>two lines</strong>: one descends from Node <span class="term" data-term="stream">streams</span>, the other from the Web platform's <span class="term" data-term="Fetch API">Fetch</span> standard. The twist is that <strong>Next belongs to both</strong> — its App Router crosses to the Web line while its Pages API stays Node-blooded, a sibling of Express. Everything else follows from where an object was born. Click the diagram to inspect it.</p>
+
+      <div class="figure lineage" id="lineFig">
+        <div class="fig-bar">
+          <span class="title">▤ The family tree</span>
+          <span class="vmode" id="lineMode" role="group" aria-label="diagram view mode">
+            <button class="vm on" data-vm="layers">Tree + layers</button>
+            <button class="vm" data-vm="tree">Tree only</button>
+          </span>
+          <span class="grow"></span>
+          <button class="fbtn" data-inspect="lineageSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="lineageSvg">
+          <svg class="diagram" id="lineageSvg" viewBox="0 0 1060 372" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Lineage diagram: two ancestral bloodlines, Node streams and the Web Fetch standard, with Next appearing under both">
+            <defs>
+              <marker id="arrN" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--node)"></path></marker>
+              <marker id="arrC" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--next)"></path></marker>
+              <marker id="arrE" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--express)"></path></marker>
+            </defs>
+            <g class="viewport" id="lineageVP">
+              <!-- connectors: roots -> base (is-a) -->
+              <path d="M320,82 C320,120 160,116 160,156" fill="none" stroke="var(--node)" stroke-width="1.6" opacity=".55" marker-end="url(#arrN)"></path>
+              <path d="M320,82 C320,120 480,116 480,156" fill="none" stroke="var(--node)" stroke-width="1.6" opacity=".55" marker-end="url(#arrN)"></path>
+              <path d="M850,82 C850,120 760,116 760,156" fill="none" stroke="var(--next)" stroke-width="1.6" opacity=".55" marker-end="url(#arrC)"></path>
+              <path d="M850,82 C850,120 940,116 940,156" fill="none" stroke="var(--next)" stroke-width="1.6" opacity=".55" marker-end="url(#arrC)"></path>
+              <!-- connectors: Node bases -> leaves (decorate) -->
+              <path d="M160,212 C160,250 105,250 105,286" fill="none" stroke="var(--express)" stroke-width="1.5" stroke-dasharray="5 4" opacity=".75" marker-end="url(#arrE)"></path>
+              <path d="M160,212 C160,250 235,250 235,286" fill="none" stroke="var(--next)" stroke-width="1.5" stroke-dasharray="5 4" opacity=".75" marker-end="url(#arrC)"></path>
+              <path d="M480,212 C480,250 425,250 425,286" fill="none" stroke="var(--express)" stroke-width="1.5" stroke-dasharray="5 4" opacity=".75" marker-end="url(#arrE)"></path>
+              <path d="M480,212 C480,250 555,250 555,286" fill="none" stroke="var(--next)" stroke-width="1.5" stroke-dasharray="5 4" opacity=".75" marker-end="url(#arrC)"></path>
+              <!-- connectors: Web bases -> leaves (extend) -->
+              <path d="M760,212 L760,286" fill="none" stroke="var(--next)" stroke-width="1.5" stroke-dasharray="5 4" opacity=".75" marker-end="url(#arrC)"></path>
+              <path d="M940,212 L940,286" fill="none" stroke="var(--next)" stroke-width="1.5" stroke-dasharray="5 4" opacity=".75" marker-end="url(#arrC)"></path>
+
+              <!-- connector labels -->
+              <text x="250" y="118" fill="var(--faint)" font-size="11" font-family="'Roboto Mono',monospace" text-anchor="middle">is&#8209;a</text>
+              <text x="820" y="118" fill="var(--faint)" font-size="11" font-family="'Roboto Mono',monospace" text-anchor="middle">is&#8209;a</text>
+              <text x="320" y="248" fill="var(--express)" font-size="11" font-family="'Roboto Mono',monospace" text-anchor="middle">decorates (prototype)</text>
+              <text x="850" y="248" fill="var(--next)" font-size="11" font-family="'Roboto Mono',monospace" text-anchor="middle">extends (subclass)</text>
+
+              <!-- ROOTS -->
+              <g class="node" data-node="node-core">
+                <rect class="nbox" x="170" y="28" width="300" height="54" rx="11" fill="var(--panelb)" stroke="var(--node)" stroke-width="1.5"></rect>
+                <text x="320" y="52" text-anchor="middle" fill="var(--text)" font-size="15" font-weight="700" font-family="'Roboto Mono',monospace">Node.js core</text>
+                <text x="320" y="70" text-anchor="middle" fill="var(--muted)" font-size="11" font-family="'Roboto'">the stream module</text>
+              </g>
+              <g class="node" data-node="web-platform">
+                <rect class="nbox" x="700" y="28" width="300" height="54" rx="11" fill="var(--panelb)" stroke="var(--next)" stroke-width="1.5"></rect>
+                <text x="850" y="52" text-anchor="middle" fill="var(--text)" font-size="15" font-weight="700" font-family="'Roboto Mono',monospace">Web platform</text>
+                <text x="850" y="70" text-anchor="middle" fill="var(--muted)" font-size="11" font-family="'Roboto'">the Fetch standard</text>
+              </g>
+
+              <!-- BASE OBJECTS -->
+              <g class="node" data-node="incoming" font-family="'Roboto Mono',monospace">
+                <rect class="nbox" x="70" y="156" width="180" height="56" rx="10" fill="var(--panel)" stroke="var(--node)" stroke-width="1.3" opacity=".95"></rect>
+                <text x="160" y="179" text-anchor="middle" fill="var(--text)" font-size="13" font-weight="700">IncomingMessage</text>
+                <text x="160" y="196" text-anchor="middle" fill="var(--node)" font-size="11">stream.Readable</text>
+              </g>
+              <g class="node" data-node="serverresponse" font-family="'Roboto Mono',monospace">
+                <rect class="nbox" x="390" y="156" width="180" height="56" rx="10" fill="var(--panel)" stroke="var(--node)" stroke-width="1.3" opacity=".95"></rect>
+                <text x="480" y="179" text-anchor="middle" fill="var(--text)" font-size="13" font-weight="700">ServerResponse</text>
+                <text x="480" y="196" text-anchor="middle" fill="var(--node)" font-size="11">stream.Writable</text>
+              </g>
+              <g class="node" data-node="request" font-family="'Roboto Mono',monospace">
+                <rect class="nbox" x="672" y="156" width="176" height="56" rx="10" fill="var(--panel)" stroke="var(--next)" stroke-width="1.3" opacity=".95"></rect>
+                <text x="760" y="179" text-anchor="middle" fill="var(--text)" font-size="13" font-weight="700">Request</text>
+                <text x="760" y="196" text-anchor="middle" fill="var(--next)" font-size="11">Fetch API</text>
+              </g>
+              <g class="node" data-node="response" font-family="'Roboto Mono',monospace">
+                <rect class="nbox" x="852" y="156" width="176" height="56" rx="10" fill="var(--panel)" stroke="var(--next)" stroke-width="1.3" opacity=".95"></rect>
+                <text x="940" y="179" text-anchor="middle" fill="var(--text)" font-size="13" font-weight="700">Response</text>
+                <text x="940" y="196" text-anchor="middle" fill="var(--next)" font-size="11">Fetch API</text>
+              </g>
+
+              <!-- FRAMEWORK LEAVES -->
+              <g class="node" data-node="express-req" font-family="'Roboto Mono',monospace">
+                <rect class="nbox" x="43" y="286" width="124" height="50" rx="10" fill="var(--express-soft)" stroke="var(--express)" stroke-width="1.4"></rect>
+                <text x="105" y="308" text-anchor="middle" fill="var(--text)" font-size="12.5" font-weight="700">Express req</text>
+                <text x="105" y="324" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="'Roboto'">+ query · body</text>
+              </g>
+              <g class="node" data-node="nextapi-req" font-family="'Roboto Mono',monospace">
+                <rect class="nbox" x="173" y="286" width="124" height="50" rx="10" fill="var(--next-soft)" stroke="var(--next)" stroke-width="1.4"></rect>
+                <text x="235" y="308" text-anchor="middle" fill="var(--text)" font-size="12.5" font-weight="700">Next Pages req</text>
+                <text x="235" y="324" text-anchor="middle" fill="var(--next)" font-size="10" font-family="'Roboto'">NextApiRequest</text>
+              </g>
+              <g class="node" data-node="express-res" font-family="'Roboto Mono',monospace">
+                <rect class="nbox" x="363" y="286" width="124" height="50" rx="10" fill="var(--express-soft)" stroke="var(--express)" stroke-width="1.4"></rect>
+                <text x="425" y="308" text-anchor="middle" fill="var(--text)" font-size="12.5" font-weight="700">Express res</text>
+                <text x="425" y="324" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="'Roboto'">+ json · status</text>
+              </g>
+              <g class="node" data-node="nextapi-res" font-family="'Roboto Mono',monospace">
+                <rect class="nbox" x="493" y="286" width="124" height="50" rx="10" fill="var(--next-soft)" stroke="var(--next)" stroke-width="1.4"></rect>
+                <text x="555" y="308" text-anchor="middle" fill="var(--text)" font-size="12.5" font-weight="700">Next Pages res</text>
+                <text x="555" y="324" text-anchor="middle" fill="var(--next)" font-size="10" font-family="'Roboto'">NextApiResponse</text>
+              </g>
+              <g class="node" data-node="nextrequest" font-family="'Roboto Mono',monospace">
+                <rect class="nbox" x="685" y="286" width="150" height="50" rx="10" fill="var(--next-soft)" stroke="var(--next)" stroke-width="1.4"></rect>
+                <text x="760" y="308" text-anchor="middle" fill="var(--text)" font-size="13" font-weight="700">NextRequest</text>
+                <text x="760" y="324" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="'Roboto'">+ nextUrl · cookies</text>
+              </g>
+              <g class="node" data-node="nextresponse" font-family="'Roboto Mono',monospace">
+                <rect class="nbox" x="865" y="286" width="150" height="50" rx="10" fill="var(--next-soft)" stroke="var(--next)" stroke-width="1.4"></rect>
+                <text x="940" y="308" text-anchor="middle" fill="var(--text)" font-size="13" font-weight="700">NextResponse</text>
+                <text x="940" y="324" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="'Roboto'">.json · .redirect</text>
+              </g>
+            </g>
+          </svg>
+        </div>
+
+        <div class="layerstrip" id="layerStrip">
+          <div class="ls-head">two questions the tree answers — kept separate</div>
+          <div class="ls-row">
+            <div class="ls-q"><span class="ls-qn">layer 1</span> runtime · <i>who runs the code</i></div>
+            <div class="ls-cells">
+              <button class="ls-cell node" data-rt="rt-node" type="button"><b>Express</b><span>Node only</span></button>
+              <button class="ls-cell node" data-rt="rt-node" type="button"><b>Next Pages</b><span>Node only</span></button>
+              <button class="ls-cell next" data-rt="rt-edge" type="button"><b>Next App</b><span>Node <em>or</em> Edge</span></button>
+            </div>
+          </div>
+          <div class="ls-row">
+            <div class="ls-q"><span class="ls-qn">layer 2</span> request shape · <i>what your handler receives</i></div>
+            <div class="ls-cells">
+              <button class="ls-cell node" data-rt="incoming" type="button"><b>Express · Next Pages</b><span>Node IncomingMessage</span></button>
+              <button class="ls-cell next" data-rt="request" type="button"><b>Next App</b><span>Web Request</span></button>
+            </div>
+          </div>
+          <p class="ls-foot">Two independent axes. <b>Bloodline answers layer&nbsp;2</b> — and because Node streams can't exist without a Node process, it <b>constrains layer&nbsp;1</b> too.</p>
+        </div>
+
+        <div class="figclue">◈ <b>Click any box</b> for an interactive deep dive · hover to highlight · Inspect to pan &amp; zoom</div>
+      </div>
+
+      <div class="legend">
+        <span><i style="background:var(--node)"></i> Node line (streams)</span>
+        <span><i style="background:var(--express)"></i> Express · decorates Node</span>
+        <span><i style="background:var(--next)"></i> Next · App extends Web, Pages decorates Node</span>
+      </div>
+    </section>
+
+    <!-- ===== 01 THE SPLIT ===== -->
+    <section class="block" id="split">
+      <p class="kicker"><span class="ix">01</span> The one split</p>
+      <h2>Express <em class="ex">decorates</em> Node. Next <em class="nx">extends</em> the Web.</h2>
+      <div class="prose">
+        <p>There are only two ways to give a request object more power, and each picked one. Express takes Node's <code>IncomingMessage</code> and glues new keys onto the very same instance — same object, more properties. Next's App Router goes the other way: <code>NextRequest</code> is a subclass of the Web platform's <code>Request</code> — a different base entirely. Next still <em>runs</em> on Node by default; that's the runtime, not the request object, and the two come apart in the next section. The split itself is one character of TypeScript.</p>
+      </div>
+      <div class="callout eng">
+        <span class="lbl">the difference in one line</span>
+        <code>type ExpressReq = IncomingMessage &amp; { … }</code> &nbsp;vs&nbsp; <code>class NextRequest extends Request { … }</code>
+      </div>
+      <pre class="wire"><span class="c">// decoration — additive, same instance, base untouched</span>
+ExpressReq = IncomingMessage <span class="k">&amp;</span> { query, params, body }   <span class="c">→ still an IncomingMessage</span>
+
+<span class="c">// extension — a new class on a different base</span>
+NextRequest <span class="k">extends</span> Request                          <span class="c">→ NOT an IncomingMessage</span></pre>
+      <div class="prose"><p style="margin-top:14px">Because <span class="term" data-term="decoration">decoration</span> only ever adds, every Node property survives unchanged. Because <span class="term" data-term="extension">extension</span> swaps the foundation, <code>NextRequest</code> can run on the <span class="term" data-term="Edge runtime">Edge</span>, where there is no Node <code>IncomingMessage</code> to decorate in the first place. But "Next" isn't one thing: its older <span class="term" data-term="Pages API">Pages API</span> routes <em>decorate</em> Node exactly like Express — so the real fault line runs between routers, not frameworks.</p></div>
+    </section>
+
+    <!-- ===== 02 TWO LAYERS ===== -->
+    <section class="block" id="layers">
+      <p class="kicker"><span class="ix">02</span> Two layers · and Next in both</p>
+      <h2>Runtime is not request shape.</h2>
+      <div class="prose">
+        <p>"But I thought Next used Node?" It does. The confusion comes from collapsing two questions that are actually independent. The <strong>runtime layer</strong> asks <em>who executes your code</em> — a full <span class="term" data-term="Node.js runtime">Node.js process</span>, or a bare <span class="term" data-term="V8 isolate">V8 isolate</span> at the Edge. The <strong>request-API layer</strong> asks <em>what object your handler is handed</em> — Node's <code>IncomingMessage</code>, or the Web platform's <code>Request</code>. Express answers both with Node. Next's App Router answers the first with "Node or Edge" and the second with "Web."</p>
+        <p>And here is the twist the word <em>bloodlines</em> was hiding: Next's <strong>Pages API</strong> answers both with Node. In <code>pages/api</code>, <code>req</code> is an <code>IncomingMessage</code> and <code>res</code> a <code>ServerResponse</code>, decorated with <code>res.json()</code> and <code>res.status()</code> — the same decoration trick Express plays. So Next.js is not one bloodline. It has a child in <em>each</em>: the App Router on the Web line, the Pages API on the Node line, sitting right beside Express.</p>
+      </div>
+      <div class="callout node">
+        <span class="lbl">lock it in</span>
+        Running <em>on</em> Node does not require exposing Node's request object as your API. <code>Express</code>: here is Node's req/res, made nicer. <code>Next App Router</code>: here is a Web <code>Request</code>, return a Web <code>Response</code> — the runtime is ours to handle. <code>Next Pages API</code>: here is Node-style req/res, made Next-friendly.
+      </div>
+
+      <div class="prose"><p style="margin-top:6px">Probe it three ways — flip the matrix to feel the two layers move independently, classify any object by its bloodline, or read the same task in every dialect at once.</p></div>
+
+      <div class="figure" id="explorerFig">
+        <div class="fig-bar">
+          <span class="title">▶ probe the bloodlines</span>
+          <span class="vmode" id="exMode" role="group" aria-label="explorer mode">
+            <button class="vm on" data-ex="matrix">Matrix</button>
+            <button class="vm" data-ex="classify">Classifier</button>
+            <button class="vm" data-ex="dialects">Three dialects</button>
+          </span>
+        </div>
+        <div class="exbody" id="exBody"></div>
+      </div>
+    </section>
+
+    <!-- ===== 03 CAST ===== -->
+    <section class="block" id="cast">
+      <p class="kicker"><span class="ix">03</span> The cast &amp; their lineage</p>
+      <h2>Ten objects, two bloodlines.</h2>
+      <div class="prose"><p>Knowing which base each object descends from explains every behavioural quirk that follows — what <code>url</code> contains, whether headers are a plain object or a <code>Headers</code> instance, whether you mutate or return. Grouped by bloodline the families separate cleanly — and Next turns up in each.</p></div>
+      <div class="switch" id="castSwitch">
+        <button class="chip on" data-cast="grp">By bloodline</button>
+        <button class="chip" data-cast="src">Source order</button>
+      </div>
+      <table class="spec" id="castTable">
+        <thead><tr><th>Object</th><th>Role</th><th>Lineage</th><th>Relationship to its base</th></tr></thead>
+        <tbody id="castBody"></tbody>
+      </table>
+    </section>
+
+    <!-- ===== 04 REQUEST ===== -->
+    <section class="block" id="request">
+      <p class="kicker"><span class="ix">04</span> Request · the same job, four dialects</p>
+      <h2>Reading what arrives.</h2>
+      <div class="prose"><p>Pick a task. The shorter the code gets, the more plumbing the layer is hiding for you — a raw string becomes an auto-parsed object becomes a typed helper. The Next column has two faces: flip it between the App Router (Web) and the Pages API (Node), or open the full four-column view.</p></div>
+      <div class="switchrow">
+        <div class="switch" id="reqSwitch"></div>
+        <span class="vmode sm" id="reqView" role="group" aria-label="column view">
+          <button class="vm on" data-cv="three">3 columns</button>
+          <button class="vm" data-cv="four">4 columns</button>
+        </span>
+      </div>
+      <div class="triad" id="reqTriad"></div>
+      <div class="philo" id="reqPhilo"></div>
+    </section>
+
+    <!-- ===== 05 RESPONSE ===== -->
+    <section class="block" id="response">
+      <p class="kicker"><span class="ix">05</span> Response · the same job, four dialects</p>
+      <h2>Sending what you reply with.</h2>
+      <div class="prose"><p>The mirror image. Next's App Router verbs are mostly <strong>static factories</strong> that <em>return</em> a value; Express's are <strong>instance methods</strong> that <em>mutate</em> one — and the Pages API, true to its Node blood, mutates right alongside Express.</p></div>
+      <div class="switchrow">
+        <div class="switch" id="resSwitch"></div>
+        <span class="vmode sm" id="resView" role="group" aria-label="column view">
+          <button class="vm on" data-cv="three">3 columns</button>
+          <button class="vm" data-cv="four">4 columns</button>
+        </span>
+      </div>
+      <div class="triad" id="resTriad"></div>
+      <div class="philo" id="resPhilo"></div>
+    </section>
+
+    <!-- ===== 06 MUTATE VS RETURN ===== -->
+    <section class="block" id="mutate">
+      <p class="kicker"><span class="ix">06</span> The behavioural consequence</p>
+      <h2>You <em class="nd">poke</em> a stream. You <em class="nx">return</em> a value.</h2>
+      <div class="prose"><p>This is what the type difference causes — and notice the split tracks <strong>bloodline, not framework</strong>. A decorated <code>ServerResponse</code> is a writable stream, so you mutate it step by step; Express <em>and</em> the Node-blooded Next Pages API both live on this side. A <code>NextResponse</code> is-a Web <code>Response</code> — an immutable value — so the App Router constructs it whole and hands it back. Step through both.</p></div>
+
+      <div class="figure">
+        <div class="fig-bar"><span class="title">▶ res lifecycle · mutate vs construct</span></div>
+        <div class="stepcols">
+          <div class="stepcol mut">
+            <div class="sc-h"><span>Node · Express · Next Pages · mutate</span><span class="mut-tag" id="mutTag">0 writes</span></div>
+            <div id="mutLines"></div>
+            <div class="obj" id="mutObj"></div>
+          </div>
+          <div class="stepcol imm">
+            <div class="sc-h"><span>Next App Router · construct &amp; return</span></div>
+            <div id="immLines"></div>
+            <div class="obj" id="immObj"></div>
+          </div>
+        </div>
+        <div class="player">
+          <button class="pbtn" id="sPrev" title="step back"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17V7l-7 5zM8 7h-2v10h2z"/></svg></button>
+          <button class="pbtn play" id="sPlay" title="play/pause"><svg id="sPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg></button>
+          <button class="pbtn" id="sNext" title="step forward"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 7v10l7-5zM16 7h2v10h-2z"/></svg></button>
+          <div class="scrub" id="sScrub"><div class="fill" id="sFill"></div></div>
+          <span class="stepno" id="sStepNo">00 / 04</span>
+        </div>
+        <div class="caption">
+          <div class="cn" id="sCapN">STEP 00</div>
+          <p class="cb" id="sCapB">Allocate the response. One side will be poked five times; the other won't exist until it's whole.</p>
+        </div>
+      </div>
+      <div class="callout node">
+        <span class="lbl">one honest seam</span>
+        A Next response isn't <em>totally</em> frozen — its <code>headers</code> and <code>cookies</code> are mutable views you may set before returning. But the body and status are fixed at construction, and you never re-open a stream to <code>write()</code> again.
+      </div>
+    </section>
+
+    <!-- ===== 07 CHEAT SHEET ===== -->
+    <section class="block" id="cheat">
+      <p class="kicker"><span class="ix">07</span> Provenance — everything on one card</p>
+      <h2>Where each capability comes from.</h2>
+      <div class="prose"><p style="margin-bottom:10px">Next splits into two columns here, and the resemblance is the whole point: the <strong>Pages API</strong> column lines up with Express, not with the App Router.</p></div>
+      <div class="tablewrap">
+      <table class="spec cheat5">
+        <thead><tr><th>Trait</th><th>Node core</th><th>Express</th><th>Next App Router</th><th>Next Pages API</th></tr></thead>
+        <tbody>
+          <tr><td>Foundation</td><td>Node streams</td><td>decorated Node streams</td><td>Web Fetch standard</td><td>decorated Node streams</td></tr>
+          <tr><td>Statefulness</td><td><span class="pill node">mutable</span></td><td><span class="pill express">mutable</span></td><td><span class="pill web">return a value</span></td><td><span class="pill node">mutable</span></td></tr>
+          <tr><td>URL parsing</td><td>raw <code>req.url</code> string</td><td><code>req.query</code> / <code>req.params</code></td><td><code>req.nextUrl</code> object</td><td><code>req.query</code> object</td></tr>
+          <tr><td>Headers</td><td>plain lowercased object</td><td><code>req.get()</code> helper</td><td>Web <code>Headers</code> (<code>.get()</code>)</td><td>plain lowercased object</td></tr>
+          <tr><td>Cookies</td><td>raw header string</td><td><code>cookie-parser</code> needed</td><td>built&#8209;in <code>.cookies</code></td><td>built&#8209;in <code>req.cookies</code></td></tr>
+          <tr><td>Body</td><td>drain the stream by hand</td><td><code>express.json()</code> middleware</td><td><code>await req.json()</code></td><td><code>req.body</code> (auto)</td></tr>
+          <tr><td>Send JSON</td><td><code>end(JSON.stringify())</code></td><td><code>res.json()</code></td><td><code>NextResponse.json()</code></td><td><code>res.json()</code></td></tr>
+          <tr><td>Redirect</td><td><code>writeHead(302,…)</code></td><td><code>res.redirect()</code> · 302</td><td><code>NextResponse.redirect()</code> · 307</td><td><code>res.redirect(307,…)</code></td></tr>
+          <tr><td>Runtime</td><td><span class="pill node">Node only</span></td><td><span class="pill node">Node only</span></td><td><span class="pill web">Node + Edge</span></td><td><span class="pill node">Node only</span></td></tr>
+          <tr><td>Primary use</td><td>servers &amp; frameworks</td><td>classic backend APIs</td><td>route handlers &amp; middleware</td><td>legacy API routes</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+
+    <!-- ===== 08 WHY ===== -->
+    <section class="block" id="runtime" style="border-bottom:none">
+      <p class="kicker"><span class="ix">08</span> Runtime &amp; why it matters</p>
+      <h2>The lineage decides where your code can run.</h2>
+      <div class="prose">
+        <p>The two layers line up for everyone except the App Router. Raw Node, Express, and Next's Pages API all hand you Node <span class="term" data-term="stream">streams</span>, so they all need a real Node process. Only the App Router put on the Web platform's <code>Request</code>/<code>Response</code>, which is why its objects are immutable and the same handler can run in a bare <span class="term" data-term="V8 isolate">V8 isolate</span> at the Edge.</p>
+        <p>So the practical takeaway isn't "which API is nicer" — it's that <strong>decoration buys you the Node ecosystem</strong>, and <strong>extension buys you the Web platform and the Edge</strong>. Three of the four dialects chose decoration; one chose extension. You're picking a bloodline, and the ergonomics — and the runtimes you can deploy to — follow from it.</p>
+      </div>
+      <div class="callout">
+        <span class="lbl">tl;dr</span>
+        Three of these are Node streams wearing different clothes — raw Node, Express, and Next's Pages API. One, the App Router, is a different species that happens to do the same job. That single split is the whole story.
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <span>two bloodlines of req &amp; res · an explorable comparison</span>
+  <span>Node <span style="color:var(--node)">▰</span> · Express <span style="color:var(--express)">▰</span> · Next/Web <span style="color:var(--next)">▰</span></span>
+</footer>
+
+<div class="scrim" id="scrim">
+  <div class="modal" role="dialog" aria-modal="true">
+    <button class="mclose" id="mclose" aria-label="close">✕</button>
+    <div class="mhead"><div class="mtag" id="mtag"></div><h4 id="mh4"></h4></div>
+    <div class="mbody" id="mbody"></div>
+  </div>
+</div>
+
+<div id="tip"></div>
+
+<script>
+/* ============================================================
+   GLOSSARY — hover/tap .term
+   ============================================================ */
+const KIND_LABEL={node:'Node',web:'Web platform',concept:'concept',express:'Express'};
+const GLOSSARY={
+  "stream":["node","Node models I/O as streams. An incoming request is a <b>Readable</b> stream of bytes; an outgoing response is a <b>Writable</b> one. This is why raw Node makes you collect the body in chunks."],
+  "Fetch API":["web","The WHATWG standard that defines <b>Request</b>, <b>Response</b>, <b>Headers</b> and <b>Body</b> in browsers, service workers, Deno, Bun and Cloudflare Workers. Next adopts it instead of Node's objects."],
+  "decoration":["concept","Adding properties to an existing object instance (or its prototype) without changing its identity. <code>req instanceof IncomingMessage</code> stays true. Type-wise it's an intersection: <code>Base &amp; { extra }</code>."],
+  "extension":["concept","Creating a new class that subclasses a base — <code>class X extends Base</code>. A new type with new guarantees, built on a (possibly different) foundation."],
+  "Edge runtime":["web","A lightweight runtime built on a bare V8 isolate (no Node APIs). Next middleware and Edge routes run here, which is only possible because NextRequest/NextResponse are Web objects, not Node streams."],
+  "V8 isolate":["web","A single, isolated instance of the V8 engine with its own heap — far cheaper to spin up than a full Node process. The unit of execution at the Edge."],
+  "middleware":["express","A function with the signature <code>(req, res, next)</code> that runs between the server and your handler. In Express it's how <code>body</code>, <code>cookies</code> and custom fields get assigned onto <code>req</code>."],
+  "getter":["concept","A property backed by a function that computes its value on access. Express's <code>req.query</code> is a getter that parses <code>req.url</code> lazily — it reads the URL, never rewrites it."],
+  "prototype":["node","The object every JS object delegates to for inherited properties. Express decorates by inserting its own object into <code>req</code>'s prototype chain, above Node's <code>IncomingMessage.prototype</code>."],
+  "nextUrl":["web","A parsed <code>NextURL</code> (a subclass of the Web <code>URL</code>) exposed on NextRequest, with <code>pathname</code>, <code>searchParams</code> and routing helpers ready to use."],
+  "ReadableStream":["web","The Web-standard streaming type. A Web <code>Request</code>/<code>Response</code> body is a ReadableStream — which is why <code>await req.json()</code> can be read only once."],
+  "Pages API":["node","Next's original router, living in <code>pages/api</code>. The handler is <code>(req, res) =&gt; {}</code> where <code>req</code> is a Node <code>IncomingMessage</code> and <code>res</code> a <code>ServerResponse</code>, decorated with Express-like helpers (<code>res.json()</code>, <code>res.status()</code>, <code>res.redirect()</code>). Node-blooded — a sibling of Express."],
+  "App Router":["web","Next's modern router, living in <code>app/</code>. Route handlers receive a Web <code>Request</code> (typed as <code>NextRequest</code>) and return a Web <code>Response</code> — so the same handler can run on Node <em>or</em> the Edge."],
+  "Node.js runtime":["node","A full Node.js process with every built-in module (<code>fs</code>, <code>net</code>, the <code>stream</code> module). The opposite of the Edge's bare V8 isolate. Anything built on Node streams requires it."]
+};
+const tip=document.getElementById('tip');
+const termKeys=Object.keys(GLOSSARY).sort((a,b)=>b.length-a.length);
+const esc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+function tagTerms(scope){
+  scope.querySelectorAll('p, li, td, .lead').forEach(block=>{
+    if(block.closest('pre')) return;
+    const used=new Set();
+    block.querySelectorAll('.term').forEach(t=>used.add(t.dataset.term.toLowerCase()));
+    const walker=document.createTreeWalker(block,NodeFilter.SHOW_TEXT,{acceptNode(n){
+      const p=n.parentElement; if(!p) return NodeFilter.FILTER_REJECT;
+      if(p.closest('code,pre,.term,a,.pill,h1,h2,h3,.mono')) return NodeFilter.FILTER_REJECT;
+      return n.nodeValue.trim()?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT;
+    }});
+    const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(node=>{
+      const text=node.nodeValue;
+      for(const term of termKeys){
+        if(used.has(term.toLowerCase())) continue;
+        const re=new RegExp('\\b'+esc(term)+'\\b','i');
+        const m=re.exec(text);
+        if(m){
+          used.add(term.toLowerCase());
+          const frag=document.createDocumentFragment();
+          const before=text.slice(0,m.index), after=text.slice(m.index+m[0].length);
+          if(before) frag.appendChild(document.createTextNode(before));
+          const span=document.createElement('span');
+          span.className='term'; span.dataset.term=term; span.textContent=text.substr(m.index,m[0].length);
+          frag.appendChild(span);
+          if(after) frag.appendChild(document.createTextNode(after));
+          node.parentNode.replaceChild(frag,node);
+          return;
+        }
+      }
+    });
+  });
+}
+let tipHideT;
+function showTip(el){
+  const key=el.dataset.term;
+  const entry=GLOSSARY[key]||GLOSSARY[Object.keys(GLOSSARY).find(k=>k.toLowerCase()===key.toLowerCase())];
+  if(!entry) return;
+  clearTimeout(tipHideT);
+  tip.innerHTML='<span class="t-kind">'+KIND_LABEL[entry[0]]+'</span><span class="t-name">'+key+'</span>'+entry[1];
+  hlCodeIn(tip);
+  tip.classList.add('show');
+  const r=el.getBoundingClientRect();
+  const tw=Math.min(330,tip.offsetWidth||330), th=tip.offsetHeight;
+  let left=r.left+r.width/2-tw/2;
+  left=Math.max(12,Math.min(left,window.innerWidth-tw-12));
+  let top=r.top-th-12, flip=false;
+  if(top<10){top=r.bottom+12;flip=true;}
+  tip.style.left=left+'px'; tip.style.top=top+'px';
+  tip.style.setProperty('--ax',(r.left+r.width/2-left-6)+'px');
+  tip.classList.toggle('flip',flip);
+}
+function hideTip(){tipHideT=setTimeout(()=>tip.classList.remove('show'),60);}
+document.addEventListener('mouseover',e=>{const t=e.target.closest('.term');if(t)showTip(t);});
+document.addEventListener('mouseout',e=>{if(e.target.closest('.term'))hideTip();});
+document.addEventListener('click',e=>{const t=e.target.closest('.term');if(t){showTip(t);setTimeout(hideTip,2800);}});
+
+/* ============================================================
+   TASK SWITCHERS — request & response
+   ============================================================ */
+const REQ_CFG={
+  base:[{key:"node",name:"IncomingMessage",cls:"node"},{key:"express",name:"Express req",cls:"express"}],
+  app:{key:"next",name:"NextRequest",cls:"next"},
+  pages:{key:"pages",name:"Next Pages req",cls:"next pg"}
+};
+const RES_CFG={
+  base:[{key:"node",name:"ServerResponse",cls:"node"},{key:"express",name:"Express res",cls:"express"}],
+  app:{key:"next",name:"NextResponse",cls:"next"},
+  pages:{key:"pages",name:"Next Pages res",cls:"next pg"}
+};
+const SYN_KW=new Set(['const','let','var','function','return','await','async','new','class','extends','implements','import','export','from','as','default','if','else','for','of','in','typeof','instanceof','this','super','void','yield','try','catch','finally','throw','switch','case','break','continue','do','while','delete','static','get','set']);
+const SYN_CONST=new Set(['true','false','null','undefined','NaN','Infinity']);
+function tkEsc(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function hl(src){
+  const re=/(\/\/[^\n]*)|(`(?:[^`\\]|\\.)*`)|('(?:[^'\\]|\\.)*')|("(?:[^"\\]|\\.)*")|(\b\d+(?:\.\d+)?\b)|(\.?)([A-Za-z_$][\w$]*)/g;
+  let out='',last=0,m;
+  while((m=re.exec(src))){
+    out+=tkEsc(src.slice(last,m.index));
+    last=re.lastIndex;
+    if(m[1]) out+='<span class="tk-com">'+tkEsc(m[1])+'</span>';
+    else if(m[2]||m[3]||m[4]){ out+='<span class="tk-str">'+tkEsc(m[2]||m[3]||m[4])+'</span>'; }
+    else if(m[5]) out+='<span class="tk-num">'+tkEsc(m[5])+'</span>';
+    else{
+      const dot=m[6], name=m[7], call=/^\s*\(/.test(src.slice(re.lastIndex));
+      let cls;
+      if(dot) cls=call?'tk-fn':'tk-prop';
+      else if(SYN_KW.has(name)) cls='tk-kw';
+      else if(SYN_CONST.has(name)) cls='tk-num';
+      else if(/^[A-Z]/.test(name)) cls='tk-type';
+      else if(call) cls='tk-fn';
+      else cls='tk-var';
+      out+=(dot?'<span class="tk-punc">.</span>':'')+'<span class="'+cls+'">'+tkEsc(name)+'</span>';
+    }
+  }
+  out+=tkEsc(src.slice(last));
+  return out;
+}
+function hlCodeIn(scope){
+  if(!scope) return;
+  scope.querySelectorAll('code').forEach(c=>{ if(c.dataset.hl) return; c.dataset.hl='1'; c.innerHTML=hl(c.textContent); });
+}
+const REQ_TASKS=[
+  {id:"query",label:"Get ?tab=info",
+   philo:"<b>Raw string → auto-parsed object → URL helper.</b> Each layer parses the query string a little more so you don't have to.",
+   node:`// req.url is a raw string: "/users/7?tab=info"\nconst { searchParams } =\n  new URL(req.url, \`http://\${req.headers.host}\`);\nconst tab = searchParams.get('tab');  // "info"`,
+   express:`// parsed for you (via the qs lib)\nconst tab = req.query.tab;            // "info"`,
+   next:`// NextRequest exposes a parsed URL\nconst tab = req.nextUrl.searchParams.get('tab');`,
+   pages:`// Pages API parses the query for you\nconst tab = req.query.tab;            // "info"`},
+  {id:"body",label:"Read JSON body",
+   philo:"<b>Drain a stream → it's pre-parsed → await a promise.</b> Same data, three levels of being done for you.",
+   node:`let raw = '';\nreq.on('data', c => raw += c);\nreq.on('end', () => {\n  const body = JSON.parse(raw);\n});`,
+   express:`app.use(express.json());   // once, globally\n// ...\nconst body = req.body;     // already an object`,
+   next:`// one await — consumes the stream once\nconst body = await req.json();`,
+   pages:`// built-in body parser, on by default\nconst body = req.body;     // already an object`},
+  {id:"cookie",label:"Read a cookie",
+   philo:"<b>Raw header → middleware → built in.</b> Cookies live in a header string; the layers turn that into a lookup.",
+   node:`// one raw header string\nconst raw = req.headers.cookie;\n// "sid=abc; t=dark"  — parse it yourself`,
+   express:`app.use(cookieParser());\nconst sid = req.cookies.sid;   // "abc"`,
+   next:`const sid = req.cookies.get('sid')?.value;`,
+   pages:`// NextApiRequest pre-parses cookies\nconst sid = req.cookies.sid;   // "abc"`},
+  {id:"header",label:"Read a header",
+   philo:"<b>Object lookup → helper → Web Headers.</b> The App Router uses the standard Headers interface; everyone else reads Node's plain object.",
+   node:`// plain object, keys lowercased\nconst ua = req.headers['user-agent'];`,
+   express:`// case-insensitive helper\nconst ua = req.get('User-Agent');`,
+   next:`// standard Web Headers — use .get()\nconst ua = req.headers.get('user-agent');`,
+   pages:`// Node-style: plain lowercased object\nconst ua = req.headers['user-agent'];`},
+];
+const RES_TASKS=[
+  {id:"json",label:"Send JSON",
+   philo:"<b>Stringify by hand → a helper that mutates → a factory that returns a value.</b> The Node version is what the others do under the hood; the Pages API mutates just like Express.",
+   node:`res.writeHead(200, {\n  'Content-Type': 'application/json'\n});\nres.end(JSON.stringify({ ok: true }));`,
+   express:`res.json({ ok: true });`,
+   next:`return NextResponse.json({ ok: true });`,
+   pages:`res.status(200).json({ ok: true });`},
+  {id:"status",label:"Set a status",
+   philo:"<b>Assign a field → chain a method → pass an option.</b> Mutable objects let you set or chain; the immutable App Router takes it as config.",
+   node:`res.statusCode = 201;\nres.end();`,
+   express:`res.status(201).json({ id });   // chainable`,
+   next:`return NextResponse.json({ id }, { status: 201 });`,
+   pages:`res.status(201).json({ id });   // chainable`},
+  {id:"cookie",label:"Set a cookie",
+   philo:"<b>Write a header → a helper → a cookie store.</b> Note the Pages API has no <code>res.cookie()</code> — it falls back to the Node header, betraying its Node blood.",
+   node:`res.setHeader('Set-Cookie',\n  'sid=abc; Path=/; HttpOnly');\nres.end();`,
+   express:`res.cookie('sid', 'abc', {\n  httpOnly: true\n}).end();`,
+   next:`const res = NextResponse.json({ ok: true });\nres.cookies.set('sid', 'abc', { httpOnly: true });\nreturn res;`,
+   pages:`// no res.cookie() helper here\nres.setHeader('Set-Cookie',\n  'sid=abc; Path=/; HttpOnly');\nres.status(200).json({ ok: true });`},
+  {id:"redirect",label:"Redirect",
+   philo:"<b>Hand-write a 302 → one helper → a factory.</b> Watch the default status: Express sends 302, both Next routers send 307.",
+   node:`res.writeHead(302, { Location: '/login' });\nres.end();`,
+   express:`res.redirect('/login');   // 302 by default`,
+   next:`return NextResponse.redirect(\n  new URL('/login', req.url)\n);   // 307 by default`,
+   pages:`res.redirect(307, '/login');`},
+];
+function buildSwitch(switchId, triadId, philoId, viewId, tasks, cfg){
+  const sw=document.getElementById(switchId), tr=document.getElementById(triadId),
+        ph=document.getElementById(philoId), vw=document.getElementById(viewId);
+  let active=0, view="three", face="next";   // face: "next"=App Router, "pages"=Pages API
+  function dial(col, withFace){
+    let head;
+    if(withFace){
+      head=`<div class="dh ${col.cls}"><i></i><span class="dh-name">${col.name}</span>`+
+           `<span class="facetog" role="group" aria-label="App or Pages">`+
+             `<button class="ft ${face==='next'?'on':''}" data-face="next">App</button>`+
+             `<button class="ft ${face==='pages'?'on':''}" data-face="pages">Pages</button>`+
+           `</span></div>`;
+    } else {
+      head=`<div class="dh ${col.cls}"><i></i>${col.name}</div>`;
+    }
+    return `<div class="dial ${col.cls}">${head}<pre class="wire">${hl(tasks[active][col.key])}</pre></div>`;
+  }
+  function render(){
+    sw.innerHTML=tasks.map((t,i)=>`<button class="chip ${i===active?'on':''}" data-i="${i}">${t.label}</button>`).join("");
+    vw.querySelectorAll('.vm').forEach(b=>b.classList.toggle('on', b.dataset.cv===view));
+    const four = view==="four";
+    tr.className = "triad"+(four?" four":"");
+    let html;
+    if(four){
+      html=[cfg.base[0],cfg.base[1],cfg.app,cfg.pages].map(c=>dial(c,false)).join("");
+    } else {
+      const nextCol = face==="next" ? cfg.app : cfg.pages;
+      html=dial(cfg.base[0],false)+dial(cfg.base[1],false)+dial(nextCol,true);
+    }
+    tr.innerHTML=html;
+    ph.innerHTML=`<span class="mono" style="color:var(--express);font-size:11px;letter-spacing:.05em">WHY IT SHRINKS &nbsp;</span>${tasks[active].philo}`;
+    sw.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{active=+c.dataset.i;render();});
+    tr.querySelectorAll('.ft').forEach(b=>b.onclick=()=>{face=b.dataset.face;render();});
+  }
+  vw.querySelectorAll('.vm').forEach(b=>b.onclick=()=>{view=b.dataset.cv;render();});
+  render();
+}
+buildSwitch('reqSwitch','reqTriad','reqPhilo','reqView',REQ_TASKS,REQ_CFG);
+buildSwitch('resSwitch','resTriad','resPhilo','resView',RES_TASKS,RES_CFG);
+
+/* ============================================================
+   STEPPER — mutate vs return
+   ============================================================ */
+const MUT=[
+  {code:"const res = serverResponse",                         writes:0, status:null, hdr:false, body:"",         done:false},
+  {code:"res.statusCode = 201",                               writes:1, status:"201",hdr:false, body:"",         done:false},
+  {code:"res.setHeader('Content-Type', 'application/json')",  writes:2, status:"201",hdr:true,  body:"",         done:false},
+  {code:"res.write(JSON.stringify(data))",                    writes:3, status:"201",hdr:true,  body:'{"id":7}', done:false},
+  {code:"res.end()",                                          writes:4, status:"201",hdr:true,  body:'{"id":7}', done:true },
+];
+const IMM=[
+  {phase:"think",  code:"// decide what to send"},
+  {phase:"think",  code:"// nothing on the wire yet"},
+  {phase:"build",  code:"const res = NextResponse.json(\n  { id: 7 }, { status: 201 })"},
+  {phase:"build",  code:"res.cookies.set('seen','1')"},
+  {phase:"return", code:"return res"},
+];
+const CAPS=[
+  ["STEP 00","Allocate the response. One side will be poked five times; the other won't exist until it's whole."],
+  ["STEP 01","Set the status. On Node it's a mutable field; on Next it's not set yet — status is decided at construction."],
+  ["STEP 02","Add a header on Node (mutation #2). On Next, the whole Response is now constructed in one expression — born complete."],
+  ["STEP 03","Node buffers the body (mutation #3). Next only tweaks a mutable cookie view; the body is already fixed."],
+  ["STEP 04","Node ends the stream — flushed and locked. Next simply returns the value it built, never having mutated it."],
+];
+const MAX=MUT.length-1;
+let step=0, timer=null;
+function renderStep(){
+  document.getElementById('mutLines').innerHTML=MUT.map((m,i)=>`<div class="codeline ${i<=step?'on':''}">${hl(m.code)}</div>`).join("");
+  const s=MUT[step];
+  document.getElementById('mutTag').textContent=s.writes+(s.writes===1?" write":" writes");
+  let mr=`<div class="row"><b>statusCode</b>: ${s.status??'<span class="empty">unset (200)</span>'}</div>`;
+  mr+=`<div class="row"><b>headers</b>: ${s.hdr?'Content-Type: application/json':'<span class="empty">{}</span>'}</div>`;
+  mr+=`<div class="row"><b>body buffer</b>: ${s.body||'<span class="empty">empty</span>'}</div>`;
+  if(s.done) mr+=`<span class="stamp node">■ stream ended · flushed</span>`;
+  document.getElementById('mutObj').innerHTML=mr;
+
+  document.getElementById('immLines').innerHTML=IMM.map((m,i)=>`<div class="codeline ${i<=step?'on':''}">${hl(m.code)}</div>`).join("");
+  const ph=IMM[step].phase, io=document.getElementById('immObj');
+  if(ph==="think"){ io.innerHTML=`<span class="empty">nothing constructed yet</span>`; }
+  else{
+    const ck = step>=3?`<div class="row"><b>cookies</b>: seen=1</div>`:"";
+    io.innerHTML=`<div class="row"><b>status</b>: 201 <span class="empty">· read-only</span></div>`+
+      `<div class="row"><b>headers</b>: Content-Type: application/json</div>`+ck+
+      `<div class="row"><b>body</b>: {"id":7} <span class="empty">· fixed at build</span></div>`+
+      (ph==="return"?`<span class="stamp ok">↗ returned untouched</span>`:`<span class="stamp next">born whole</span>`);
+  }
+  document.getElementById('sFill').style.width=(step/MAX*100)+'%';
+  document.getElementById('sStepNo').textContent=String(step).padStart(2,'0')+' / 0'+MAX;
+  document.getElementById('sCapN').textContent=CAPS[step][0];
+  document.getElementById('sCapB').textContent=CAPS[step][1];
+}
+function go(d){ step=Math.max(0,Math.min(MAX,step+d)); renderStep(); }
+function setStep(i){ step=Math.max(0,Math.min(MAX,i)); renderStep(); }
+const playIcon='<path d="M7 5v14l12-7z"/>', pauseIcon='<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
+function play(){ if(step>=MAX) setStep(0); timer=setInterval(()=>{ if(step>=MAX){stop();return;} go(1); },1100); document.getElementById('sPlayIcon').innerHTML=pauseIcon; }
+function stop(){ clearInterval(timer); timer=null; document.getElementById('sPlayIcon').innerHTML=playIcon; }
+document.getElementById('sPrev').onclick=()=>{stop();go(-1);};
+document.getElementById('sNext').onclick=()=>{stop();go(1);};
+document.getElementById('sPlay').onclick=()=>{ timer?stop():play(); };
+document.getElementById('sScrub').onclick=e=>{ stop(); const r=e.currentTarget.getBoundingClientRect(); setStep(Math.round((e.clientX-r.left)/r.width*MAX)); };
+renderStep();
+
+/* ============================================================
+   INSPECT MODE — fullscreen pan/zoom for the lineage diagram
+   ============================================================ */
+let fsFig=null, fsApi=null;
+function enterFs(fig,api){ if(fsFig) exitFs(); fsFig=fig; fsApi=api; fig.classList.add('fs'); document.body.classList.add('fs-lock');
+  const b=fig.querySelector('[data-inspect]'); if(b) b.lastChild.textContent=' Exit'; }
+function exitFs(){ if(!fsFig) return; if(fsApi) fsApi.reset();
+  const b=fsFig.querySelector('[data-inspect]'); if(b) b.lastChild.textContent=' Inspect';
+  fsFig.classList.remove('fs'); document.body.classList.remove('fs-lock'); fsFig=null; fsApi=null; }
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){ if(document.getElementById('scrim').classList.contains('open')) closeModal(); else exitFs(); }});
+function makeInspectable(svgId){
+  const svg=document.getElementById(svgId); if(!svg) return;
+  const vp=svg.querySelector('.viewport');
+  const canvas=svg.closest('.canvas');
+  const fig=svg.closest('.figure');
+  const hintTag=document.createElement('div'); hintTag.className='inspect-hint'; hintTag.textContent='⤢ tap to inspect'; canvas.appendChild(hintTag);
+  const ctl=document.createElement('div'); ctl.className='zoomctl';
+  ctl.innerHTML='<button data-z="in" title="zoom in">+</button><button data-z="out" title="zoom out">−</button><button data-z="reset" title="reset view">⟲</button>';
+  canvas.appendChild(ctl);
+  const lvl=document.createElement('div'); lvl.className='zlevel'; lvl.textContent='100%'; canvas.appendChild(lvl);
+  const zh=document.createElement('div'); zh.className='zhint'; zh.textContent='scroll / pinch to zoom · drag to pan · Esc to exit'; canvas.appendChild(zh);
+  let s=1,tx=0,ty=0,drag=false,sx=0,sy=0; const pts=new Map(); let pinchD=0,pinchS=1;
+  const isFs=()=>fig.classList.contains('fs');
+  const clamp=v=>Math.max(0.5,Math.min(6,v));
+  const apply=()=>{vp.setAttribute('transform',`translate(${tx},${ty}) scale(${s})`);lvl.textContent=Math.round(s*100)+'%';};
+  const reset=()=>{s=1;tx=0;ty=0;vp.removeAttribute('transform');lvl.textContent='100%';};
+  function toVB(cx,cy){const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;return[(cx-r.left)/r.width*vb.width,(cy-r.top)/r.height*vb.height];}
+  function zoomAt(cx,cy,f){const ns=clamp(s*f);const[px,py]=toVB(cx,cy);tx=px-(px-tx)*(ns/s);ty=py-(py-ty)*(ns/s);s=ns;apply();}
+  canvas.addEventListener('click',e=>{ if(isFs())return; if(e.target.closest('.node'))return; enterFs(fig,{reset}); });
+  canvas.addEventListener('wheel',e=>{ if(!isFs())return; e.preventDefault(); zoomAt(e.clientX,e.clientY,e.deltaY<0?1.12:0.89); },{passive:false});
+  canvas.addEventListener('dblclick',e=>{ if(!isFs())return; zoomAt(e.clientX,e.clientY,1.5); });
+  canvas.addEventListener('pointerdown',e=>{ if(!isFs())return; pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){const a=[...pts.values()];pinchD=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);pinchS=s;drag=false;return;}
+    if(e.target.closest('.node'))return;
+    drag=true;sx=e.clientX;sy=e.clientY;canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove',e=>{ if(!isFs())return;
+    if(pts.has(e.pointerId))pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){const a=[...pts.values()];const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);if(pinchD>0){const ns=clamp(pinchS*(d/pinchD));const cx=(a[0].x+a[1].x)/2,cy=(a[0].y+a[1].y)/2;const[px,py]=toVB(cx,cy);tx=px-(px-tx)*(ns/s);ty=py-(py-ty)*(ns/s);s=ns;apply();}return;}
+    if(!drag)return;const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;
+    tx+=(e.clientX-sx)/r.width*vb.width;ty+=(e.clientY-sy)/r.height*vb.height;sx=e.clientX;sy=e.clientY;apply(); });
+  function up(e){pts.delete(e.pointerId);if(pts.size<2)pinchD=0;drag=false;}
+  canvas.addEventListener('pointerup',up); canvas.addEventListener('pointercancel',up);
+  ctl.querySelectorAll('button').forEach(b=>{ b.onclick=ev=>{ ev.stopPropagation(); const r=svg.getBoundingClientRect();
+    if(b.dataset.z==='in')zoomAt(r.left+r.width/2,r.top+r.height/2,1.25);
+    else if(b.dataset.z==='out')zoomAt(r.left+r.width/2,r.top+r.height/2,0.8); else reset(); };});
+  const tog=fig.querySelector('[data-inspect="'+svgId+'"]');
+  if(tog) tog.addEventListener('click',()=>{ isFs()?exitFs():enterFs(fig,{reset}); });
+}
+makeInspectable('lineageSvg');
+
+/* ============================================================
+   NODE MODALS — interactive deep dives for every card
+   ============================================================ */
+const scrim=document.getElementById('scrim'),mtag=document.getElementById('mtag'),mh4=document.getElementById('mh4'),mbody=document.getElementById('mbody');
+let widgetCleanup=null;
+function makeEl(h){const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstElementChild;}
+function mountEl(node){ document.getElementById('wmount').appendChild(node); }
+
+/* ---- widget builders: each returns a cleanup() ---- */
+const WIDGETS={
+  proto(args){
+    const links=args.chain;
+    const wrap=makeEl(`<div class="wdemo"><div class="wbar"><span class="wt">prototype chain · let p = req</span><button class="wbtn" data-a="prev" title="back">◀</button><span class="wstep" id="pcstep"></span><button class="wbtn node" data-a="next">step ▶</button><button class="wbtn" data-a="reset" title="reset">↻</button></div><div class="wbody" id="pcbody"></div></div>`);
+    const body=wrap.querySelector('#pcbody');
+    body.innerHTML=links.map((l,i)=>{
+      const name=(typeof l==='string')?l:l.n, kind=(l&&l.k)?`<span class="pl-kind">${l.k}</span>`:'', note=(l&&l.d)?`<div class="pl-note">${l.d}</div>`:'';
+      return `<div class="plink" data-i="${i}"><div class="pl-head"><span class="pl-name">${name}</span>${kind}</div>${note}</div>`+(i<links.length-1?`<div class="parrow" data-ar="${i}">↓ <span class="pa-label">Object.getPrototypeOf(p)</span></div>`:'');
+    }).join('');
+    const rows=[...body.querySelectorAll('.plink')],arrows=[...body.querySelectorAll('.parrow')],stepEl=wrap.querySelector('#pcstep');
+    const prev=wrap.querySelector('[data-a="prev"]'),next=wrap.querySelector('[data-a="next"]');
+    let k=0;
+    function render(){
+      rows.forEach((r,i)=>{r.classList.toggle('on',i<=k);r.classList.toggle('cur',i===k);});
+      arrows.forEach(a=>a.classList.toggle('on',+a.dataset.ar<k));
+      stepEl.textContent=(k+1)+' / '+rows.length;
+      prev.disabled=k<=0; next.disabled=k>=rows.length-1;
+      const cur=rows[k]; if(cur) cur.scrollIntoView({block:'nearest'});
+    }
+    next.onclick=()=>{if(k<rows.length-1){k++;render();}};
+    prev.onclick=()=>{if(k>0){k--;render();}};
+    wrap.querySelector('[data-a="reset"]').onclick=()=>{k=0;render();};
+    render(); mountEl(wrap); return ()=>{};
+  },
+  runtimes(args){
+    const list=args.list;
+    const wrap=makeEl('<div class="wdemo"><div class="wbar"><span class="wt">one portable handler · (req: Request) → Response · pick a host</span></div><div class="wbody"><div class="rt-chips" id="rtchips"></div><div class="rt-detail" id="rtdetail"></div></div></div>');
+    const chipbox=wrap.querySelector('#rtchips'),detail=wrap.querySelector('#rtdetail');
+    chipbox.innerHTML=list.map((r,i)=>'<button class="rt-chip" data-i="'+i+'">'+r.name+'</button>').join('');
+    const chips=[...chipbox.querySelectorAll('.rt-chip')];
+    function pick(i){
+      chips.forEach((c,j)=>c.classList.toggle('on',j===i));
+      const r=list[i];
+      detail.innerHTML=
+        '<div class="rt-flow"><span class="rt-pill">'+(r.inLabel||'Request')+'</span><span class="rt-ar">▶</span><span class="rt-host"><span class="rt-hn">'+r.name+'</span><span class="rt-role '+r.role+'">'+r.role+'</span></span><span class="rt-ar">▶</span><span class="rt-pill out">'+(r.outLabel||'Response')+'</span></div>'+
+        '<div class="rt-api">'+r.api+'</div>'+
+        '<div class="rt-row"><span class="rl">its job</span><span class="rv">'+r.job+'</span></div>'+
+        '<div class="rt-row"><span class="rl">how it uses the tech</span><span class="rv">'+r.uses+'</span></div>';
+    }
+    chips.forEach((c,i)=>c.onclick=()=>pick(i));
+    pick(0);
+    mountEl(wrap);return ()=>{};
+  },
+  streamIn(){
+    const parts=['{"email":','"a@','b.co"','}'];
+    const wrap=makeEl(`<div class="wdemo"><div class="wbar"><span class="wt">it IS a Readable stream</span><button class="wbtn node" data-a="send">▶ receive body</button><button class="wbtn" data-a="reset">reset</button></div><div class="wbody"><p class="wlabel">req.on('data', chunk =&gt; …)</p><div class="chunks" id="cks"></div><p class="wlabel">req.on('end', …)</p><div id="cend"></div></div></div>`);
+    const cks=wrap.querySelector('#cks'),cend=wrap.querySelector('#cend');let t=null;
+    function reset(){clearInterval(t);cks.innerHTML='';cend.innerHTML='<span class="bytes">— waiting for chunks —</span>';}
+    wrap.querySelector('[data-a="send"]').onclick=()=>{reset();let i=0;t=setInterval(()=>{if(i>=parts.length){clearInterval(t);const j=parts.join('');cend.innerHTML='<span class="ok">end</span> → JSON.parse(<span class="bytes">'+j.length+' bytes</span>) → <span class="n">{ email: "a@b.co" }</span>';return;}const c=document.createElement('span');c.className='chunk';c.textContent=JSON.stringify(parts[i]);cks.appendChild(c);i++;},480);};
+    wrap.querySelector('[data-a="reset"]').onclick=reset;reset();
+    mountEl(wrap);return ()=>clearInterval(t);
+  },
+  streamOut(){
+    const steps=[['res.writeHead(200, {…})','<span class="ok">head flushed · headers now locked</span>'],
+                 ["res.write('{\"ok\":')",'<span class="n">+6 bytes buffered</span>'],
+                 ["res.write('true}')",'<span class="n">+5 bytes buffered</span>'],
+                 ['res.end()','<span class="ok">stream closed · 11 bytes sent</span>']];
+    const wrap=makeEl(`<div class="wdemo"><div class="wbar"><span class="wt">it IS a Writable stream</span><button class="wbtn node" data-a="go">▶ send response</button><button class="wbtn" data-a="reset">reset</button></div><div class="wbody" id="sob"></div></div>`);
+    const ob=wrap.querySelector('#sob');let t=null;
+    function reset(){clearInterval(t);ob.innerHTML='<span class="bytes">— press send —</span>';}
+    wrap.querySelector('[data-a="go"]').onclick=()=>{ob.innerHTML='';let i=0;clearInterval(t);t=setInterval(()=>{if(i>=steps.length){clearInterval(t);return;}const s=steps[i++];ob.appendChild(makeEl('<div class="logline"><span class="c">&gt;</span> '+s[0]+'  <span class="c">·</span> '+s[1]+'</div>'));},650);};
+    wrap.querySelector('[data-a="reset"]').onclick=reset;reset();
+    mountEl(wrap);return ()=>clearInterval(t);
+  },
+  consume(){
+    const wrap=makeEl(`<div class="wdemo"><div class="wbar"><span class="wt">body is a ReadableStream · read ONCE</span><button class="wbtn" data-a="json">await req.json()</button><button class="wbtn" data-a="reset">reset</button></div><div class="wbody" id="cob"></div></div>`);
+    const ob=wrap.querySelector('#cob');let read=false;
+    function reset(){read=false;ob.innerHTML='<span class="bytes">stream: <span class="ok">unlocked</span> — call .json() once</span>';}
+    wrap.querySelector('[data-a="json"]').onclick=()=>{if(!read){read=true;ob.innerHTML='<div class="logline"><span class="ok">✓</span> { email: "a@b.co" } <span class="c">· stream now locked</span></div>';}else{ob.insertAdjacentHTML('beforeend','<div class="logline"><span class="err">✕ TypeError: body stream already read</span></div>');}};
+    wrap.querySelector('[data-a="reset"]').onclick=reset;reset();
+    mountEl(wrap);return ()=>{};
+  },
+  construct(){
+    const wrap=makeEl(`<div class="wdemo"><div class="wbar"><span class="wt">construct whole · never mutate</span><button class="wbtn" data-s="200">200 OK</button><button class="wbtn" data-s="404">404</button><button class="wbtn" data-b="1">toggle body</button></div><div class="wbody"><div class="preview" id="cpv"></div></div></div>`);
+    let status=200,body=true;const pv=wrap.querySelector('#cpv');
+    function render(){pv.innerHTML='const res = new Response(\n  '+(body?'\'{"ok":true}\'':'null')+',\n  { status: '+status+' }\n);\nreturn res;  <span class="stamp next">a brand-new immutable value</span>';}
+    wrap.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{status=+b.dataset.s;render();});
+    wrap.querySelector('[data-b]').onclick=()=>{body=!body;render();};render();
+    mountEl(wrap);return ()=>{};
+  },
+  decorate(){
+    const wrap=makeEl(`<div class="wdemo"><div class="wbar"><span class="wt">same instance · only adds</span><button class="wbtn express" data-a="toggle">＋ apply Express decoration</button></div><div class="wbody">
+      <p class="wlabel">from IncomingMessage · untouched</p>
+      <div class="proprow"><span class="pn">method</span><span class="ph">"GET"</span><span class="lock">🔒 native</span></div>
+      <div class="proprow"><span class="pn">url</span><span class="ph">"/users/7?tab=info"</span><span class="lock">🔒 never rewritten</span></div>
+      <div class="proprow"><span class="pn">headers</span><span class="ph">{ host, … }</span><span class="lock">🔒 native</span></div>
+      <div class="addwrap" id="adds">
+        <p class="wlabel">＋ Express adds (on top)</p>
+        <div class="proprow added"><span class="pn">query</span><span class="ph" id="qv">getter → parses url</span></div>
+        <div class="proprow added"><span class="pn">params</span><span class="ph">{ id: "7" } · router-assigned</span></div>
+        <div class="proprow added"><span class="pn">body</span><span class="ph">middleware-assigned</span></div>
+        <div style="margin-top:8px"><code>req instanceof IncomingMessage</code> → <span class="stamp ok">true</span></div>
+      </div></div></div>`);
+    const adds=wrap.querySelector('#adds'),btn=wrap.querySelector('[data-a="toggle"]'),qv=wrap.querySelector('#qv');let on=false;
+    btn.onclick=()=>{on=!on;adds.classList.toggle('show',on);btn.classList.toggle('on',on);btn.textContent=on?'− remove decoration':'＋ apply Express decoration';if(on)qv.textContent='{ tab: "info" } ← from url';};
+    mountEl(wrap);return ()=>{};
+  },
+  verbs(){
+    const wrap=makeEl(`<div class="wdemo"><div class="wbar"><span class="wt">chainable mutation</span><button class="wbtn express" data-v="status">.status(201)</button><button class="wbtn express" data-v="json">.json({id:7})</button><button class="wbtn express" data-v="cookie">.cookie('sid','abc')</button><button class="wbtn" data-v="reset">reset</button></div><div class="wbody"><div class="preview" id="vpv"></div></div></div>`);
+    const pv=wrap.querySelector('#vpv');const st={status:200,hdr:[],body:null,chain:['res']};
+    function render(){pv.innerHTML=st.chain.join('\n  .')+'\n\n<span class="c">// → on the wire</span>\nstatus: '+st.status+'\nheaders: '+(st.hdr.length?st.hdr.join(', '):'—')+'\nbody: '+(st.body||'—');}
+    wrap.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{const v=b.dataset.v;
+      if(v==='reset'){st.status=200;st.hdr=[];st.body=null;st.chain=['res'];}
+      else if(v==='status'){st.status=201;st.chain.push('status(201)');}
+      else if(v==='json'){st.hdr.push('Content-Type: application/json');st.body='{"id":7}';st.chain.push('json({ id: 7 })');}
+      else if(v==='cookie'){st.hdr.push('Set-Cookie: sid=abc');st.chain.push("cookie('sid','abc')");}
+      render();});
+    render();mountEl(wrap);return ()=>{};
+  },
+  url(){
+    const wrap=makeEl(`<div class="wdemo"><div class="wbar"><span class="wt">live · req.nextUrl (a parsed URL)</span></div><div class="wbody">
+      <input class="win" id="uin" value="https://shop.dev/products/42?cat=vitamins&page=2"/>
+      <div class="kv" id="uout" style="margin-top:10px"></div></div></div>`);
+    const inp=wrap.querySelector('#uin'),out=wrap.querySelector('#uout');
+    function render(){let u;try{u=new URL(inp.value);}catch(_){out.innerHTML='<span class="k">—</span><span class="v err">invalid URL</span>';return;}
+      const sp=[...u.searchParams.entries()].map(([k,v])=>k+'='+v).join(', ')||'—';
+      out.innerHTML='<span class="k">nextUrl.pathname</span><span class="v">'+u.pathname+'</span>'+
+        '<span class="k">nextUrl.searchParams</span><span class="v">'+sp+'</span>'+
+        '<span class="k">nextUrl.search</span><span class="v">'+(u.search||'—')+'</span>'+
+        '<span class="k">nextUrl.host</span><span class="v">'+u.host+'</span>'+
+        '<span class="k">cookies.get(\'sid\')</span><span class="v">"abc" <span class="bytes">· built-in store</span></span>';}
+    inp.addEventListener('input',render);render();
+    mountEl(wrap);return ()=>{};
+  },
+  factory(){
+    const F={json:['NextResponse.json({ id: 7 }, { status: 201 })','status 201 · Content-Type: application/json · body {"id":7}'],
+             redirect:['NextResponse.redirect(new URL("/login", req.url))','status 307 · Location: /login · (no body)'],
+             next:['NextResponse.next()','continue to the route · middleware-only signal'],
+             rewrite:['NextResponse.rewrite(new URL("/proxy", req.url))','serve /proxy, keep the URL · middleware-only']};
+    const wrap=makeEl(`<div class="wdemo"><div class="wbar"><span class="wt">static factories → return a value</span><button class="wbtn" data-f="json">.json</button><button class="wbtn" data-f="redirect">.redirect</button><button class="wbtn" data-f="next">.next</button><button class="wbtn" data-f="rewrite">.rewrite</button></div><div class="wbody"><div class="preview" id="fpv"></div></div></div>`);
+    const pv=wrap.querySelector('#fpv'),btns=[...wrap.querySelectorAll('[data-f]')];
+    function pick(k){btns.forEach(b=>b.classList.toggle('on',b.dataset.f===k));pv.innerHTML='return '+F[k][0]+';\n\n<span class="c">// → produces</span>\n'+F[k][1]+'  <span class="stamp next">a finished Response</span>';}
+    btns.forEach(b=>b.onclick=()=>pick(b.dataset.f));pick('json');
+    mountEl(wrap);return ()=>{};
+  },
+  /* Node-only runtime: probe which APIs exist where */
+  probe(args){
+    const wrap=makeEl(`<div class="wdemo"><div class="wbar"><span class="wt">call an API in each runtime</span><button class="wbtn node" data-a="run">▶ run probe</button><button class="wbtn" data-a="reset">reset</button></div><div class="wbody"><div class="probe-grid" id="pg">
+      <div class="ph">API</div><div class="ph">Node&nbsp;process</div><div class="ph">V8&nbsp;isolate</div>
+      ${args.rows.map((r,i)=>`<div class="pa">${r.api}</div><div class="pc ${r.node?'yes':'no'}" data-i="${i}">${r.node?'✓':'✕'}</div><div class="pc ${r.edge?'yes':'no'}" data-i="${i}">${r.edge?'✓':'✕'}</div>`).join('')}
+    </div></div></div>`);
+    const cells=[...wrap.querySelectorAll('.pc')];let t=null;
+    function reset(){clearInterval(t);cells.forEach(c=>c.classList.remove('show'));}
+    wrap.querySelector('[data-a="run"]').onclick=()=>{reset();let i=0;t=setInterval(()=>{const row=cells.filter(c=>+c.dataset.i===i);if(!row.length){clearInterval(t);return;}row.forEach(c=>c.classList.add('show'));i++;},260);};
+    wrap.querySelector('[data-a="reset"]').onclick=reset;
+    mountEl(wrap);return ()=>clearInterval(t);
+  },
+  /* Edge runtime: cold-start race, process vs isolate */
+  coldstart(){
+    const wrap=makeEl(`<div class="wdemo"><div class="wbar"><span class="wt">cold start · time to first request</span><button class="wbtn" data-a="boot">▶ cold start both</button><button class="wbtn" data-a="reset">reset</button></div><div class="wbody">
+      <div class="csrow"><span class="cslabel n">Node process</span><div class="csbar"><div class="csfill n" id="cf1"></div></div><span class="csms" id="cm1">0 ms</span></div>
+      <div class="csrow"><span class="cslabel b">V8 isolate</span><div class="csbar"><div class="csfill b" id="cf2"></div></div><span class="csms" id="cm2">0 ms</span></div>
+      <p class="wlabel" id="csnote">An isolate is just an instance of the JS engine — no OS process to spin up, no Node stdlib to load.</p></div></div>`);
+    const cf1=wrap.querySelector('#cf1'),cf2=wrap.querySelector('#cf2'),cm1=wrap.querySelector('#cm1'),cm2=wrap.querySelector('#cm2');let raf=null;
+    function reset(){if(raf)cancelAnimationFrame(raf);raf=null;cf1.style.width='0';cf2.style.width='0';cm1.textContent='0 ms';cm2.textContent='0 ms';}
+    wrap.querySelector('[data-a="boot"]').onclick=()=>{reset();const D=1500,start=performance.now();
+      (function frame(now){const e=now-start;const np=Math.min(1,e/D);cf1.style.width=(np*100)+'%';cm1.textContent=Math.round(np*300)+' ms';
+        const ip=Math.min(1,e/(D*0.025));cf2.style.width=(ip*100)+'%';cm2.textContent=Math.round(ip*5)+' ms';
+        if(np<1)raf=requestAnimationFrame(frame);else{cm1.textContent='~300 ms';cm2.textContent='~5 ms';}})(start);};
+    wrap.querySelector('[data-a="reset"]').onclick=reset;
+    mountEl(wrap);return ()=>{if(raf)cancelAnimationFrame(raf);};
+  }
+};
+
+/* ---- per-node content ---- */
+const NODE_DATA={
+  "node-core":{tag:["Node","root"],cls:"node",title:"Node.js core — everything is a stream",
+    lead:"Node models I/O as <b>streams</b>. The OS hands Node bytes; Node wraps them in a <code>Readable</code> (incoming) or <code>Writable</code> (outgoing). Both <code>IncomingMessage</code> and <code>ServerResponse</code> are just specialised streams — which is why raw Node makes you think in chunks and events, not finished values.",
+    widget:["proto",{chain:[
+      {n:"req",k:"instance",d:"The request object itself. Per-request state is set right here during parsing: <code>headers</code>, <code>method</code>, <code>url</code>, <code>socket</code>."},
+      {n:"IncomingMessage.prototype",k:"node · http",d:"Specialises a stream into an HTTP request: <code>httpVersion</code>, <code>rawHeaders</code>, <code>.setTimeout()</code>, <code>.destroy()</code>."},
+      {n:"stream.Readable.prototype",k:"node · stream",d:"Readable behaviour: <code>.read()</code>, <code>.pipe()</code>, <code>.pause()</code>/<code>.resume()</code> and the <code>'data'</code>/<code>'end'</code> events — this is why the body arrives in chunks."},
+      {n:"Stream.prototype",k:"node · stream",d:"The abstract base shared by every Readable and Writable — a thin layer that wires streams onto the event system."},
+      {n:"EventEmitter.prototype",k:"node · events",d:"<code>.on()</code>, <code>.once()</code>, <code>.emit()</code>, <code>.removeListener()</code>. Every <code>req.on('data', …)</code> works because of this level."},
+      {n:"Object.prototype",k:"js · core",d:"The root of nearly every JS object: <code>.hasOwnProperty()</code>, <code>.toString()</code>. Its own <code>__proto__</code> is <code>null</code> — the chain ends here."}
+    ]}],
+    why:"Streams are lazy and chunked — data may still be arriving. That single choice is why you must drain <code>req.on('data')</code> to read a body, and why headers must be set before the first <code>write()</code>.",
+    deep:[["the lineage","<code>req</code> delegates up a chain that ends at <code>EventEmitter</code> — requests are event emitters first, HTTP objects second."],["the consequence","No parsing, no helpers. <code>req.url</code> is a raw string and the body is a byte stream you assemble yourself."]]},
+  "web-platform":{tag:["Web","root"],cls:"web",title:"The Web platform — one Request/Response everywhere",
+    lead:"The WHATWG <b>Fetch</b> standard defines <code>Request</code>, <code>Response</code>, <code>Headers</code> and <code>Body</code> as plain Web objects — the same ones the browser's <code>fetch()</code> uses. They aren't tied to Node, so they run anywhere a JS engine runs.",
+    widget:["runtimes",{list:[
+      {name:"Browser",role:"client",inLabel:"your code",outLabel:"Response",api:"const res = await fetch('/api', { method: 'POST' })",job:"The birthplace of the Fetch standard — used here as a <b>client</b>.",uses:"Builds a <code>Request</code> for the outgoing call and hands back a <code>Response</code> you read with <code>.json()</code> / <code>.text()</code>."},
+      {name:"Service Worker",role:"proxy",api:"addEventListener('fetch', e => e.respondWith(handle(e.request)))",job:"A programmable <b>proxy</b> inside the browser — offline, caching, rewriting.",uses:"Receives the page's <code>Request</code> from the <code>fetch</code> event and answers with a <code>Response</code>, from network or cache."},
+      {name:"Deno",role:"server",api:"Deno.serve(req => new Response('ok'))",job:"A server runtime where the Web APIs are first-class, no shims.",uses:"Calls your handler with a real <code>Request</code>; you return a <code>Response</code>. Exactly the browser's contract, server-side."},
+      {name:"Bun",role:"server",api:"Bun.serve({ fetch(req) { return new Response('ok') } })",job:"A fast server runtime built around the Web-standard handler.",uses:"Same <code>(req: Request) =&gt; Response</code> shape — the <code>fetch</code> key <em>is</em> your handler."},
+      {name:"Cloudflare Workers",role:"edge",api:"export default { fetch(req, env, ctx) { return new Response() } }",job:"Edge functions running in V8 isolates at CDN points of presence.",uses:"The platform passes a <code>Request</code> into <code>fetch()</code>; you return a <code>Response</code> — and there are no Node APIs to reach for."},
+      {name:"Vercel Edge",role:"edge",api:"export default (req) => new Response('ok')   // runtime = 'edge'",job:"Next.js Edge functions &amp; middleware, in a bare isolate.",uses:"A <code>NextRequest</code> (subclass of <code>Request</code>) comes in; a <code>NextResponse</code> (subclass of <code>Response</code>) goes out."},
+      {name:"Node 18+",role:"server",api:"globalThis.fetch; new Request(url); new Response(body)",job:"Node adopted the Web objects as globals in v18.",uses:"You can build and consume <code>Request</code>/<code>Response</code> directly — though Node's HTTP <em>server</em> still hands you an <code>IncomingMessage</code>."}
+    ]}],
+    why:"Because these are platform primitives, the exact same handler runs in a Service Worker, in Deno/Bun, and in a bare V8 isolate at the Edge — no Node process required.",
+    deep:[["the standard","Defined by the <b>Fetch</b> + <b>Streams</b> specs, not by any one runtime."],["the shape","Values, not streams-you-poke: a <code>Response</code> is constructed whole and returned."]]},
+  "incoming":{tag:["Node","base object"],cls:"node",title:"IncomingMessage — the request as a readable stream",
+    lead:"The object your Node server receives. It <b>is</b> a <code>stream.Readable</code>: the body arrives as chunks, and metadata lives in plain fields — <code>method</code>, a raw <code>url</code> string, and a lowercased <code>headers</code> object.",
+    widget:["streamIn",{}],
+    why:"There is no <code>query</code>, no parsed <code>body</code>, no cookie helper. Everything Express and Next give you is built on exactly this.",
+    deep:[["url","<code>req.url</code> → <code>\"/users/7?tab=info\"</code> — a path string, no origin, unparsed."],["body","A stream: collect <code>data</code> chunks, then <code>JSON.parse</code> on <code>end</code>."]]},
+  "serverresponse":{tag:["Node","base object"],cls:"node",title:"ServerResponse — the reply as a writable stream",
+    lead:"The other half. A <code>stream.Writable</code> you imperatively drive: set the status, set headers, <code>write()</code> bytes, then <code>end()</code>. There is no <code>.json()</code> — you stringify by hand.",
+    widget:["streamOut",{}],
+    why:"Headers must be set <b>before</b> the first byte goes out. Once you <code>write()</code>, the head is locked — order matters because it's a stream.",
+    deep:[["lifecycle","<code>writeHead</code> → <code>write</code> → <code>end</code>. Mutable, ordered, one-shot."],["no sugar","<code>res.end(JSON.stringify(x))</code> plus a manual <code>Content-Type</code> header."]]},
+  "request":{tag:["Web","base object"],cls:"web",title:"Request — the Fetch-standard incoming request",
+    lead:"The same object the browser's <code>fetch()</code> builds. <code>url</code> is a <b>full</b> URL, <code>headers</code> is a real <code>Headers</code> instance, and the body is a <code>ReadableStream</code> with async helpers — <code>.json()</code>, <code>.text()</code>, <code>.formData()</code>.",
+    widget:["consume",{}],
+    why:"The body is a stream you can read <b>once</b>. Call <code>.json()</code> twice and it throws — <code>req.clone()</code> first if you need it again.",
+    deep:[["url","<code>req.url</code> → <code>\"https://site/users/7?tab=info\"</code> — absolute."],["headers","A <code>Headers</code> object — use <code>.get()</code>, not bracket access."]]},
+  "response":{tag:["Web","base object"],cls:"web",title:"Response — an immutable value you return",
+    lead:"You don't poke a Response; you <b>construct</b> it whole — <code>new Response(body, { status, headers })</code> — and return it. Status and body are fixed at construction.",
+    widget:["construct",{}],
+    why:"Immutability comes straight from the base class. It's why the framework built on it (Next) returns responses instead of mutating a stream.",
+    deep:[["construct","Everything is passed at once to the constructor or a static helper."],["one seam","<code>headers</code>/<code>cookies</code> are mutable views; the <b>body</b> and <b>status</b> are not."]]},
+  "express-req":{tag:["Express","decorates"],cls:"express",title:"Express req — IncomingMessage, decorated",
+    lead:"Not a new object — the <b>same</b> <code>IncomingMessage</code> with extra properties glued on via the prototype. <code>query</code> is a getter that parses <code>this.url</code>; <code>params</code> and <code>body</code> are assigned onto the instance by the router and middleware.",
+    widget:["decorate",{}],
+    why:"<code>req instanceof IncomingMessage</code> stays <code>true</code>. Decoration only ever adds — your raw <code>url</code> is never rewritten.",
+    deep:[["getter","<code>req.query</code> parses the URL lazily, via the <code>qs</code> library."],["assigned","<code>req.body</code> exists only after <code>express.json()</code> has run."]]},
+  "express-res":{tag:["Express","decorates"],cls:"express",title:"Express res — ServerResponse, with friendlier verbs",
+    lead:"The same writable stream, plus chainable sugar: <code>res.status(201).json(obj)</code>. Under the hood these still call Node's <code>setHeader</code>/<code>write</code>/<code>end</code> — the same mutate-then-end lifecycle.",
+    widget:["verbs",{}],
+    why:"Convenience, not a new model. You are still mutating one streaming object and finishing it.",
+    deep:[["chainable","<code>status()</code> returns <code>res</code>, so calls chain."],["helpers","<code>json()</code> sets <code>Content-Type</code>, stringifies, and ends."]]},
+  "nextrequest":{tag:["Next","extends Request"],cls:"web",title:"NextRequest — Request, subclassed",
+    lead:"<code>class NextRequest extends Request</code>. It inherits the whole Fetch contract and adds two headline conveniences: a parsed <code>nextUrl</code> and a built-in <code>cookies</code> store — no middleware needed.",
+    widget:["url",{}],
+    why:"Because the base is the Web <code>Request</code>, not Node, a NextRequest runs on the Edge — and <code>instanceof IncomingMessage</code> is <code>false</code>.",
+    deep:[["nextUrl","A <code>NextURL</code> (subclass of <code>URL</code>) with <code>pathname</code>/<code>searchParams</code> ready."],["cookies","<code>req.cookies.get('sid')</code> — built in, no parser middleware."]]},
+  "nextresponse":{tag:["Next","extends Response"],cls:"web",title:"NextResponse — Response, with factories",
+    lead:"<code>class NextResponse extends Response</code>. Build one with a static factory — <code>.json()</code>, <code>.redirect()</code>, <code>.next()</code>, <code>.rewrite()</code> — set cookies on it, and return it.",
+    widget:["factory",{}],
+    why:"Each factory returns a finished value. <code>.next()</code> and <code>.rewrite()</code> are middleware-only signals with no equivalent on a Node/Express response.",
+    deep:[["factories","<code>.json</code> · <code>.redirect</code> · <code>.next</code> · <code>.rewrite</code>"],["cookies","<code>res.cookies.set(...)</code> on the response before returning it."]]},
+  "nextapi-req":{tag:["Next Pages","decorates"],cls:"node",title:"Next Pages req — IncomingMessage, decorated",
+    lead:"In <code>pages/api</code>, <code>req</code> is typed <code>NextApiRequest</code> — but at runtime it's the <b>same</b> Node <code>IncomingMessage</code>, with <code>query</code>, <code>cookies</code> and a parsed <code>body</code> assigned onto the instance. The exact decoration trick Express plays.",
+    widget:["proto",{chain:[
+      {n:"req",k:"NextApiRequest",d:"Next assigns <code>query</code>, <code>cookies</code> and (via the built-in parser) <code>body</code> directly onto the instance."},
+      {n:"IncomingMessage.prototype",k:"node · http",d:"The Node HTTP request: raw <code>headers</code>, <code>method</code>, the <code>url</code> string, <code>.setTimeout()</code>."},
+      {n:"stream.Readable.prototype",k:"node · stream",d:"Readable behaviour — the body is still a stream of chunks underneath the parser."},
+      {n:"EventEmitter.prototype",k:"node · events",d:"<code>.on()</code>/<code>.emit()</code> — you could still listen for <code>'data'</code> right here."},
+      {n:"Object.prototype",k:"js · core",d:"The chain ends here, exactly as it does for raw Node and for Express."}
+    ]}],
+    why:"<code>req instanceof IncomingMessage</code> is <code>true</code>. That's why Pages API headers are a Node lowercased object, and why it can never run on the Edge — it's Node blood, like Express.",
+    deep:[["parsed for you","<code>req.query</code> and <code>req.cookies</code> are objects; <code>req.body</code> comes from the built-in parser."],["still Node","No Web <code>Headers</code>, no <code>req.json()</code> — the foundation is a stream, not a Fetch <code>Request</code>."]]},
+  "nextapi-res":{tag:["Next Pages","decorates"],cls:"node",title:"Next Pages res — ServerResponse, with helpers",
+    lead:"<code>res</code> is typed <code>NextApiResponse</code> — Node's <code>ServerResponse</code> with Express-like sugar bolted on: <code>res.status(201).json(obj)</code>, <code>res.redirect(307, '/')</code>. Note what's missing — there is no <code>res.cookie()</code>.",
+    widget:["proto",{chain:[
+      {n:"res",k:"NextApiResponse",d:"Adds <code>.status()</code>, <code>.json()</code>, <code>.send()</code>, <code>.redirect()</code> — but no cookie helper; you set <code>Set-Cookie</code> yourself."},
+      {n:"ServerResponse.prototype",k:"node · http",d:"The Node HTTP response: <code>writeHead</code>, <code>setHeader</code>, <code>write</code>, <code>end</code>."},
+      {n:"stream.Writable.prototype",k:"node · stream",d:"Writable behaviour — under the helpers you're still mutating a stream step by step."},
+      {n:"EventEmitter.prototype",k:"node · events",d:"<code>.on('finish', …)</code> and the rest of the event surface live here."},
+      {n:"Object.prototype",k:"js · core",d:"The same root as every other response object on the Node side."}
+    ]}],
+    why:"Because it's a writable stream, you <b>mutate</b> it just like Express — calls chain, headers lock after the first byte. It sits on the mutate side of the stepper, beside Node and Express.",
+    deep:[["Express-like","<code>res.status(201).json({…})</code> chains exactly like Express's verbs."],["one gap","No <code>res.cookie()</code> — fall back to <code>res.setHeader('Set-Cookie', …)</code>, betraying the Node base."]]},
+  "rt-node":{tag:["Node","runtime"],cls:"node",title:"Node.js runtime — a real OS process",
+    lead:"Raw Node and Express objects <b>are</b> Node streams wired to OS resources — sockets, the file system, <code>Buffer</code>, <code>process</code>. So they can only run inside a full <b>Node.js process</b>: a heavyweight, long-lived OS process with the entire Node standard library loaded.",
+    widget:["probe",{rows:[
+      {api:"http.Server / raw sockets",node:true,edge:false},
+      {api:"fs.readFile()",node:true,edge:false},
+      {api:"Buffer",node:true,edge:false},
+      {api:"process.cpuUsage()",node:true,edge:false},
+      {api:"fetch() / Headers (Web)",node:true,edge:true}
+    ]}],
+    why:"Because <code>IncomingMessage</code> and <code>ServerResponse</code> depend on Node's socket and stream internals, an Express app can't run anywhere those are missing — it needs a real Node process, so it can't go to the Edge.",
+    deep:[["weight","Its own memory, the full Node stdlib, slower cold starts — usually kept warm and long-lived."],["where it lives","Traditional servers, containers, and serverless functions that ship a Node runtime."]]},
+  "rt-edge":{tag:["Web","runtime"],cls:"web",title:"Node + Edge — also a bare V8 isolate",
+    lead:"Because <code>NextRequest</code>/<code>NextResponse</code> are Web objects, the same handler runs in a Node process <b>and</b> in a <b>V8 isolate</b> — just an instance of the JS engine with a Web-API surface and no Node process around it. That's the Edge.",
+    widget:["coldstart",{}],
+    why:"An isolate has no OS process to boot and no Node stdlib to load, so it cold-starts in single-digit milliseconds and can run in hundreds of locations close to your users.",
+    deep:[["what's there","Web APIs only — <code>fetch</code>, <code>Headers</code>, <code>URL</code>, Web Crypto, Web Streams. No <code>fs</code>, no raw sockets."],["the payoff","Near-instant cold starts and global low-latency placement — impossible for a full Node process."]]}
+};
+
+function openModal(d){
+  if(widgetCleanup){try{widgetCleanup();}catch(_){}widgetCleanup=null;}
+  mtag.className='mtag '+d.cls;
+  mtag.innerHTML='<span class="nm">'+d.tag[0]+'</span><span>·</span><span>'+d.tag[1]+'</span>';
+  mh4.textContent=d.title;
+  mbody.innerHTML='<p>'+d.lead+'</p><div id="wmount"></div>'+
+    '<div class="why"><span class="wl">why it matters</span>'+d.why+'</div>'+
+    '<div class="deep-h">under the hood</div><div class="deep">'+
+    d.deep.map(c=>'<div class="dcol"><span class="dl">'+c[0]+'</span><p>'+c[1]+'</p></div>').join('')+'</div>';
+  const w=d.widget;
+  widgetCleanup = WIDGETS[w[0]] ? WIDGETS[w[0]](w[1]) : null;
+  hlCodeIn(mbody);
+  scrim.classList.add('open'); document.body.classList.add('fs-lock'); mbody.scrollTop=0;
+}
+function closeModal(){ scrim.classList.remove('open'); document.body.classList.remove('fs-lock'); if(widgetCleanup){try{widgetCleanup();}catch(_){}widgetCleanup=null;} }
+document.getElementById('mclose').onclick=closeModal;
+scrim.addEventListener('click',e=>{if(e.target===scrim)closeModal();});
+document.getElementById('lineageSvg').addEventListener('click',e=>{
+  const n=e.target.closest('.node'); if(!n)return;
+  const d=NODE_DATA[n.dataset.node]; if(d) openModal(d);
+});
+
+/* ============================================================
+   THEME · SCROLLSPY · TOC STATE MACHINE
+   ============================================================ */
+const root=document.documentElement,themeBtn=document.getElementById('themeBtn');
+const sunIcon='<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/>';
+const moonIcon='<path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/>';
+if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)setTheme('light');
+function setTheme(t){root.setAttribute('data-theme',t);document.getElementById('themeTxt').textContent=t.toUpperCase();document.getElementById('themeIcon').innerHTML=t==='dark'?sunIcon:moonIcon;}
+themeBtn.onclick=()=>setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+
+const links=[...document.querySelectorAll('nav.toc a')];
+const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)links.forEach(l=>l.classList.toggle('active',l.getAttribute('href')==='#'+e.target.id));});},{rootMargin:'-30% 0px -60% 0px'});
+document.querySelectorAll('section.block').forEach(s=>io.observe(s));
+
+const shell=document.getElementById('shell'), tocToggle=document.getElementById('tocToggle'), navBtn=document.getElementById('navBtn'), navTxt=document.getElementById('navTxt');
+function setTocState(s){ shell.setAttribute('data-toc',s); navTxt.textContent = s==='hidden'?'NAV':'HIDE'; }
+tocToggle.addEventListener('click',()=>setTocState(shell.getAttribute('data-toc')==='expanded'?'collapsed':'expanded'));
+let lastVisible='expanded';
+navBtn.addEventListener('click',()=>{ const cur=shell.getAttribute('data-toc'); if(cur==='hidden'){setTocState(lastVisible||'expanded');} else {lastVisible=cur;setTocState('hidden');} });
+(function initToc(){ if(window.innerWidth<1100&&window.innerWidth>=920) setTocState('collapsed'); else setTocState('expanded'); })();
+
+tagTerms(document.querySelector('main'));
+
+/* ============================================================
+   NEW · lineage view toggle · layer strip · cast table · explorer
+   ============================================================ */
+(function(){
+  const lm=document.getElementById('lineMode'), ls=document.getElementById('layerStrip');
+  if(!lm||!ls) return;
+  lm.querySelectorAll('.vm').forEach(b=>b.onclick=()=>{
+    lm.querySelectorAll('.vm').forEach(x=>x.classList.toggle('on',x===b));
+    ls.style.display = b.dataset.vm==='tree' ? 'none' : '';
+  });
+  ls.querySelectorAll('.ls-cell').forEach(c=>c.onclick=()=>{const d=NODE_DATA[c.dataset.rt]; if(d) openModal(d);});
+})();
+
+/* ---- cast table: grouped by bloodline ⇄ source order ---- */
+const CAST=[
+  {obj:"IncomingMessage", role:"Incoming request — a readable stream", pill:["node","Node"], rel:"is&#8209;a <code>stream.Readable</code>", bl:"node", src:0},
+  {obj:"ServerResponse", role:"Outgoing response — a writable stream", pill:["node","Node"], rel:"is&#8209;a <code>stream.Writable</code>", bl:"node", src:1},
+  {obj:"Express req", role:"IncomingMessage + <code>query</code>/<code>params</code>/<code>body</code>", pill:["express","Express"], rel:"decorates the same instance", bl:"node", src:4},
+  {obj:"Express res", role:"ServerResponse + <code>json</code>/<code>status</code>/<code>cookie</code>", pill:["express","Express"], rel:"decorates the same instance", bl:"node", src:5},
+  {obj:"NextApiRequest", role:"IncomingMessage + <code>query</code>/<code>cookies</code>/<code>body</code>", pill:["node","Next Pages"], rel:"decorates <code>IncomingMessage</code>", bl:"node", src:8},
+  {obj:"NextApiResponse", role:"ServerResponse + <code>json</code>/<code>status</code>/<code>redirect</code>", pill:["node","Next Pages"], rel:"decorates <code>ServerResponse</code>", bl:"node", src:9},
+  {obj:"Request", role:"Incoming request — the Fetch standard", pill:["web","Web"], rel:"the global <code>Request</code>", bl:"web", src:2},
+  {obj:"Response", role:"Outgoing response — the Fetch standard", pill:["web","Web"], rel:"the global <code>Response</code>", bl:"web", src:3},
+  {obj:"NextRequest", role:"Request + <code>nextUrl</code>/<code>cookies</code>", pill:["web","Next"], rel:"<code>extends Request</code>", bl:"web", src:6},
+  {obj:"NextResponse", role:"Response + factories &amp; <code>cookies</code>", pill:["web","Next"], rel:"<code>extends Response</code>", bl:"web", src:7}
+];
+(function(){
+  const tbody=document.getElementById('castBody'), sw=document.getElementById('castSwitch');
+  if(!tbody||!sw) return;
+  const row=r=>`<tr><td>${r.obj}</td><td>${r.role}</td><td><span class="pill ${r.pill[0]}">${r.pill[1]}</span></td><td>${r.rel}</td></tr>`;
+  const grp=(label,cls)=>`<tr class="grouprow ${cls}"><td colspan="4">${label}</td></tr>`;
+  function render(mode){
+    if(mode==='src'){
+      tbody.innerHTML=[...CAST].sort((a,b)=>a.src-b.src).map(row).join('');
+    }else{
+      tbody.innerHTML=grp('Node bloodline — descend from streams','node')+CAST.filter(r=>r.bl==='node').map(row).join('')
+                     +grp('Web bloodline — descend from Fetch','web')+CAST.filter(r=>r.bl==='web').map(row).join('');
+    }
+    hlCodeIn(tbody);
+  }
+  sw.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{sw.querySelectorAll('.chip').forEach(x=>x.classList.toggle('on',x===c));render(c.dataset.cast);});
+  render('grp');
+})();
+
+/* ---- explorer: matrix · classifier · three dialects ---- */
+(function(){
+  const body=document.getElementById('exBody'), bar=document.getElementById('exMode');
+  if(!body||!bar) return;
+  let mode='matrix';
+  const STACKS={
+    express:{name:'Express',blood:'node',req:'IncomingMessage (decorated)',resp:'mutate the stream',edge:false,why:'Express decorates Node streams, so it needs a real Node process.'},
+    app:{name:'Next App Router',blood:'web',req:'NextRequest (Web Request)',resp:'return a Response',edge:true,why:'NextRequest / NextResponse are Web objects, so the same handler runs on Node or the Edge.'},
+    pages:{name:'Next Pages API',blood:'node',req:'NextApiRequest (IncomingMessage)',resp:'mutate the stream',edge:false,why:'NextApiRequest IS an IncomingMessage — Node-blooded, exactly like Express.'}
+  };
+  const OBJECTS=[
+    {label:'Express req',blood:'node',base:'IncomingMessage',inst:'req instanceof IncomingMessage → true',why:'Express glues query / params / body onto Node\u2019s IncomingMessage. Same instance, Node blood.'},
+    {label:'Express res',blood:'node',base:'ServerResponse',inst:'res instanceof ServerResponse → true',why:'A decorated writable stream — you mutate it step by step, then end it.'},
+    {label:'NextApiRequest',blood:'node',base:'IncomingMessage',inst:'req instanceof IncomingMessage → true',why:'The Pages API req is a decorated IncomingMessage — a sibling of Express req, not the App Router\u2019s NextRequest.'},
+    {label:'NextApiResponse',blood:'node',base:'ServerResponse',inst:'res instanceof ServerResponse → true',why:'The Pages API res is a decorated ServerResponse. You mutate it, like Express — and there is no res.cookie().'},
+    {label:'NextRequest',blood:'web',base:'Request',inst:'req instanceof IncomingMessage → false',why:'class NextRequest extends Request. Web-blooded, so instanceof IncomingMessage is false and it can run at the Edge.'},
+    {label:'NextResponse',blood:'web',base:'Response',inst:'res instanceof Response → true',why:'class NextResponse extends Response — an immutable value you construct and return.'},
+    {label:'raw IncomingMessage',blood:'node',base:'stream.Readable',inst:'req instanceof Readable → true',why:'The Node original: a readable stream of bytes, no parsing, no helpers.'},
+    {label:'Web Response',blood:'web',base:'Response',inst:'res instanceof Response → true',why:'The Fetch-standard value, constructed whole and returned — the base the App Router builds on.'}
+  ];
+  const DIALECTS=[].concat(
+    REQ_TASKS.map(t=>({label:t.label,express:t.express,app:t.next,pages:t.pages})),
+    RES_TASKS.map(t=>({label:t.label,express:t.express,app:t.next,pages:t.pages}))
+  );
+
+  function matrix(){
+    let rt='node', stk='app';
+    function paint(){
+      body.querySelectorAll('[data-rt]').forEach(b=>b.classList.toggle('on',b.dataset.rt===rt));
+      body.querySelectorAll('[data-stk]').forEach(b=>b.classList.toggle('on',b.dataset.stk===stk));
+      const s=STACKS[stk], ok=!(rt==='edge'&&!s.edge), out=body.querySelector('#mxOut');
+      if(ok){
+        out.className='mx-out ok';
+        out.innerHTML='<div class="mx-flag"><span class="mx-badge ok">✓ valid</span> <b>'+s.name+'</b> on the <b>'+(rt==='edge'?'Edge · V8 isolate':'Node runtime')+'</b></div>'+
+          '<div class="mx-grid"><div><span class="mxl">request object</span><span class="mxv '+(s.blood==='web'?'next':'node')+'">'+s.req+'</span></div>'+
+          '<div><span class="mxl">response style</span><span class="mxv">'+s.resp+'</span></div>'+
+          '<div><span class="mxl">bloodline</span><span class="mxv '+(s.blood==='web'?'next':'node')+'">'+(s.blood==='web'?'Web · Fetch':'Node · streams')+'</span></div></div>';
+      }else{
+        out.className='mx-out bad';
+        out.innerHTML='<div class="mx-flag"><span class="mx-badge bad">✕ impossible</span> <b>'+s.name+'</b> can\u2019t run on the <b>Edge</b></div>'+
+          '<p class="mx-why">'+s.why+' The Edge is a bare V8 isolate with no Node process, so anything built on Node streams (<code>'+s.req.split(' ')[0]+'</code>) simply isn\u2019t there.</p>';
+      }
+      hlCodeIn(out);
+    }
+    body.innerHTML='<div class="mx-ctl">'+
+      '<div class="mx-row"><span class="mx-q">runtime</span><span class="mx-opts">'+
+        '<button class="mx-opt" data-rt="node">Node process</button><button class="mx-opt" data-rt="edge">Edge · V8 isolate</button></span></div>'+
+      '<div class="mx-row"><span class="mx-q">stack</span><span class="mx-opts">'+
+        '<button class="mx-opt" data-stk="express">Express</button><button class="mx-opt" data-stk="app">Next App Router</button><button class="mx-opt" data-stk="pages">Next Pages API</button></span></div>'+
+      '</div><div class="mx-out" id="mxOut"></div>';
+    body.querySelectorAll('[data-rt]').forEach(b=>b.onclick=()=>{rt=b.dataset.rt;paint();});
+    body.querySelectorAll('[data-stk]').forEach(b=>b.onclick=()=>{stk=b.dataset.stk;paint();});
+    paint();
+  }
+  function classify(){
+    let i=2;
+    function paint(){
+      body.querySelectorAll('.cf-chip').forEach((c,j)=>c.classList.toggle('on',j===i));
+      const o=OBJECTS[i];
+      body.querySelector('#cfOut').innerHTML=
+        '<div class="cf-verdict '+o.blood+'"><span class="cf-dot"></span><b>'+(o.blood==='web'?'Web bloodline':'Node bloodline')+'</b> — descends from <code>'+o.base+'</code></div>'+
+        '<p class="cf-why">'+o.why+'</p><div class="cf-inst">'+o.inst.replace(/(→ )(true|false)$/,'$1<b style="color:'+(/true$/.test(o.inst)?'var(--express)':'var(--danger)')+'">$2</b>')+'</div>';
+    }
+    body.innerHTML='<div class="cf-chips">'+OBJECTS.map((o,j)=>'<button class="cf-chip" data-i="'+j+'">'+o.label+'</button>').join('')+'</div><div class="cf-out" id="cfOut"></div>';
+    body.querySelectorAll('.cf-chip').forEach((c,j)=>c.onclick=()=>{i=j;paint();});
+    paint();
+  }
+  function dialects(){
+    let i=0;
+    function paint(){
+      body.querySelectorAll('.dl-chip').forEach((c,j)=>c.classList.toggle('on',j===i));
+      const t=DIALECTS[i];
+      body.querySelector('#dlOut').innerHTML='<div class="dl-cols">'+
+        '<div class="dial express"><div class="dh express"><i></i>Express</div><pre class="wire">'+hl(t.express)+'</pre></div>'+
+        '<div class="dial next"><div class="dh next"><i></i>Next App</div><pre class="wire">'+hl(t.app)+'</pre></div>'+
+        '<div class="dial next pg"><div class="dh next"><i></i>Next Pages</div><pre class="wire">'+hl(t.pages)+'</pre></div></div>';
+    }
+    body.innerHTML='<div class="dl-chips">'+DIALECTS.map((t,j)=>'<button class="dl-chip" data-i="'+j+'">'+t.label+'</button>').join('')+'</div><div class="dl-out" id="dlOut"></div>';
+    body.querySelectorAll('.dl-chip').forEach((c,j)=>c.onclick=()=>{i=j;paint();});
+    paint();
+  }
+  function show(){
+    bar.querySelectorAll('.vm').forEach(b=>b.classList.toggle('on',b.dataset.ex===mode));
+    if(mode==='matrix') matrix(); else if(mode==='classify') classify(); else dialects();
+  }
+  bar.querySelectorAll('.vm').forEach(b=>b.onclick=()=>{mode=b.dataset.ex;show();});
+  show();
+})();
+
+/* highlight every inline <code> on the page (static prose, tables, callouts) */
+hlCodeIn(document.body);
+</script>
+</body>
+</html>

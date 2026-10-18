@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ESM vs CommonJS — An Interactive Reference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ───────────────── TOKENS ───────────────── */
+:root, [data-theme="dark"]{
+  --bg:#0a0e15; --bg-grid:rgba(150,200,235,.035);
+  --surface:#10141d; --surface-2:#151b26; --surface-3:#1d2533; --surface-hover:#222b3a;
+  --border:#222c3a; --border-strong:#33415440;
+  --text:#eef4fb; --text-2:#9db0c6; --text-3:#637488;
+  --shadow-lg:0 30px 70px -14px rgba(0,0,0,.7), 0 0 0 1px rgba(150,200,235,.05);
+  --shadow-md:0 14px 34px -10px rgba(0,0,0,.6), 0 0 0 1px rgba(150,200,235,.04);
+
+  --live:#5eead4; --live-bg:rgba(94,234,212,.13); --live-bg2:rgba(94,234,212,.28); --live-bd:rgba(94,234,212,.55); --live-gl:rgba(94,234,212,.6);
+  --warn:#f5b740; --warn-bg:rgba(245,183,64,.13); --warn-bg2:rgba(245,183,64,.28); --warn-bd:rgba(245,183,64,.55); --warn-gl:rgba(245,183,64,.6);
+  --drop:#5a7794; --drop-bg:rgba(90,119,148,.12);
+  --bad:#fb7185; --bad-bg:rgba(251,113,133,.13);
+
+  --blue:#93c5fd; --blue-bg:rgba(96,165,250,.15); --blue-bd:rgba(96,165,250,.55); --blue-gl:rgba(96,165,250,.6);
+  --purple:#d8b4fe; --purple-bg:rgba(192,132,252,.15); --purple-bd:rgba(192,132,252,.55); --purple-gl:rgba(192,132,252,.6);
+  --teal:#5eead4; --teal-bg:rgba(45,212,191,.15); --teal-bd:rgba(45,212,191,.55); --teal-gl:rgba(45,212,191,.6);
+  --green:#86efac; --green-bg:rgba(74,222,128,.15); --green-bd:rgba(74,222,128,.5); --green-gl:rgba(74,222,128,.55);
+  --amber:#fbbf24; --amber-bg:rgba(251,191,36,.15); --amber-bd:rgba(251,191,36,.55); --amber-gl:rgba(251,191,36,.6);
+  --orange:#fb923c; --orange-bg:rgba(251,146,60,.15); --orange-bd:rgba(251,146,60,.55); --orange-gl:rgba(251,146,60,.6);
+  --rose:#fb7185; --rose-bg:rgba(251,113,133,.15); --rose-bd:rgba(251,113,133,.55); --rose-gl:rgba(251,113,133,.6);
+  --slate:#cbd5e1; --slate-bg:rgba(148,163,184,.12); --slate-bd:rgba(148,163,184,.42); --slate-gl:rgba(148,163,184,.5);
+  --hi:#fde68a;
+}
+[data-theme="light"]{
+  --bg:#f6f7f9; --bg-grid:rgba(20,40,70,.04);
+  --surface:#ffffff; --surface-2:#f1f4f8; --surface-3:#e7ecf3; --surface-hover:#dde4ee;
+  --border:#e2e7ef; --border-strong:#c3ccd9;
+  --text:#0c1320; --text-2:#445064; --text-3:#6b7688;
+  --shadow-lg:0 30px 70px -16px rgba(20,40,70,.22), 0 0 0 1px rgba(20,40,70,.05);
+  --shadow-md:0 14px 34px -12px rgba(20,40,70,.14), 0 0 0 1px rgba(20,40,70,.04);
+  --live:#0d9488; --live-bg:rgba(13,148,136,.1); --live-bg2:rgba(13,148,136,.2); --live-bd:rgba(13,148,136,.4); --live-gl:rgba(13,148,136,.3);
+  --warn:#b45309; --warn-bg:rgba(180,83,9,.1); --warn-bg2:rgba(180,83,9,.2); --warn-bd:rgba(180,83,9,.42); --warn-gl:rgba(180,83,9,.3);
+  --drop:#7a8aa0; --drop-bg:rgba(122,138,160,.1);
+  --bad:#be123c; --bad-bg:rgba(190,18,60,.1);
+  --blue:#1d4ed8; --blue-bg:rgba(29,78,216,.08); --blue-bd:rgba(29,78,216,.38); --blue-gl:rgba(29,78,216,.28);
+  --purple:#7e22ce; --purple-bg:rgba(126,34,206,.08); --purple-bd:rgba(126,34,206,.38); --purple-gl:rgba(126,34,206,.28);
+  --teal:#0f766e; --teal-bg:rgba(15,118,110,.08); --teal-bd:rgba(15,118,110,.38); --teal-gl:rgba(15,118,110,.28);
+  --green:#15803d; --green-bg:rgba(21,128,61,.08); --green-bd:rgba(21,128,61,.38); --green-gl:rgba(21,128,61,.28);
+  --amber:#b45309; --amber-bg:rgba(180,83,9,.1); --amber-bd:rgba(180,83,9,.42); --amber-gl:rgba(180,83,9,.3);
+  --orange:#c2410c; --orange-bg:rgba(194,65,12,.1); --orange-bd:rgba(194,65,12,.42); --orange-gl:rgba(194,65,12,.3);
+  --rose:#be123c; --rose-bg:rgba(190,18,60,.08); --rose-bd:rgba(190,18,60,.4); --rose-gl:rgba(190,18,60,.3);
+  --slate:#475569; --slate-bg:rgba(71,85,105,.08); --slate-bd:rgba(71,85,105,.35); --slate-gl:rgba(71,85,105,.28);
+  --hi:#a16207;
+}
+
+*,*::before,*::after{ box-sizing:border-box; }
+html{ scroll-behavior:smooth; }
+body{
+  margin:0; color:var(--text); background:var(--bg);
+  font-family:"Inter",system-ui,sans-serif; font-size:16.5px; line-height:1.62;
+  background-image:
+    linear-gradient(to right,var(--bg-grid) 1px,transparent 1px),
+    linear-gradient(to bottom,var(--bg-grid) 1px,transparent 1px);
+  background-size:30px 30px; background-attachment:fixed;
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+  transition:background-color .3s,color .3s; overflow-x:hidden;
+}
+.mono{ font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace; }
+.shell{ max-width:1120px; margin:0 auto; padding:0 26px; }
+@media(max-width:680px){ .shell{ padding:0 16px; } body{ font-size:15.5px; } }
+a{ color:inherit; text-decoration:none; }
+button{ font:inherit; color:inherit; background:none; border:0; cursor:pointer; }
+.eyebrow{
+  font-family:"JetBrains Mono",monospace; font-size:11px; font-weight:600;
+  letter-spacing:.22em; text-transform:uppercase; color:var(--text-3);
+}
+
+/* progress */
+#bar{ position:fixed; top:0; left:0; height:2px; width:0; z-index:300;
+  background:linear-gradient(90deg,var(--live),#7dd3fc); box-shadow:0 0 10px var(--live-gl); }
+
+/* ───────────────── NAV ───────────────── */
+nav{ position:sticky; top:0; z-index:120; backdrop-filter:blur(14px);
+  background:color-mix(in srgb,var(--bg) 78%,transparent);
+  border-bottom:1px solid var(--border); }
+.nav-in{ max-width:1120px; margin:0 auto; padding:12px 26px; display:flex; align-items:center; gap:20px; }
+.brand{ display:flex; align-items:center; gap:11px; font-family:"Space Grotesk",sans-serif; font-weight:600; letter-spacing:-.01em; }
+.brand .glyph{ width:26px; height:26px; }
+.brand b{ color:var(--live); } .brand .sep{ color:var(--text-3); font-weight:400; }
+.nav-links{ display:flex; gap:4px; margin-left:auto; }
+.nav-link{ padding:7px 13px; border-radius:8px; font-size:13.5px; color:var(--text-2);
+  font-family:"JetBrains Mono",monospace; transition:.16s; }
+.nav-link:hover{ color:var(--text); background:var(--surface-2); }
+.tgl{ width:38px; height:38px; border-radius:10px; display:inline-flex; align-items:center; justify-content:center;
+  color:var(--text-2); background:var(--surface-2); border:1px solid var(--border); transition:.18s; }
+.tgl:hover{ color:var(--text); background:var(--surface-3); }
+.tgl svg{ width:16px; height:16px; }
+@media(max-width:760px){ .nav-links{ display:none; } }
+
+/* ───────────────── HERO ───────────────── */
+header.hero{ padding:72px 0 26px; position:relative; }
+.hero-eyebrow{ display:inline-flex; align-items:center; gap:10px; padding:5px 13px; border-radius:999px;
+  background:var(--live-bg); border:1px solid var(--live-bd); color:var(--live);
+  font-family:"JetBrains Mono",monospace; font-size:11px; font-weight:600; letter-spacing:.18em; text-transform:uppercase; }
+.hero h1{ font-family:"Space Grotesk",sans-serif; font-weight:700; letter-spacing:-.025em;
+  font-size:clamp(2.3rem,6.5vw,4.1rem); line-height:1.02; margin:22px 0 0; max-width:16ch; }
+.hero h1 .e{ color:var(--live); } .hero h1 .c{ color:var(--warn); } .hero h1 .v{ color:var(--text-3); font-weight:500; }
+.hero p.sub{ margin:20px 0 0; max-width:60ch; font-size:1.16rem; color:var(--text-2); }
+.hero .hint{ margin-top:22px; display:flex; flex-wrap:wrap; gap:12px 22px; font-family:"JetBrains Mono",monospace; font-size:12.5px; color:var(--text-3); }
+.hero .hint b{ color:var(--text-2); font-weight:600; }
+.hero .hint .kbd{ display:inline-block; padding:1px 7px; border:1px solid var(--border-strong); border-radius:5px; background:var(--surface-2); color:var(--text-2); }
+
+/* ───────────────── GRAPH (signature) ───────────────── */
+.graph-wrap{ margin:38px 0 8px; border:1px solid var(--border); border-radius:18px; overflow:hidden;
+  background:linear-gradient(180deg,var(--surface) 0%,color-mix(in srgb,var(--surface) 70%,var(--bg)) 100%); box-shadow:var(--shadow-md); }
+.graph-top{ display:flex; align-items:center; gap:16px; flex-wrap:wrap; padding:16px 20px; border-bottom:1px solid var(--border); }
+.seg{ display:inline-flex; padding:4px; gap:4px; border-radius:11px; background:var(--surface-2); border:1px solid var(--border); }
+.seg button{ padding:8px 18px; border-radius:8px; font-family:"JetBrains Mono",monospace; font-size:13px; font-weight:600;
+  letter-spacing:.04em; color:var(--text-3); transition:.2s; display:inline-flex; align-items:center; gap:8px; }
+.seg button .pip{ width:8px; height:8px; border-radius:50%; background:currentColor; opacity:.5; }
+.seg button[data-on="esm"].is-active{ color:var(--live); background:var(--live-bg); box-shadow:inset 0 0 0 1px var(--live-bd); }
+.seg button[data-on="cjs"].is-active{ color:var(--warn); background:var(--warn-bg); box-shadow:inset 0 0 0 1px var(--warn-bd); }
+.seg button.is-active .pip{ opacity:1; }
+.graph-verdict{ font-family:"JetBrains Mono",monospace; font-size:13px; color:var(--text-2); margin-left:auto; }
+.graph-verdict .em-keep{ color:var(--live); } .graph-verdict .em-warn{ color:var(--warn); } .graph-verdict .em-drop{ color:var(--drop); }
+[data-mode="cjs"] .graph-verdict .em-keep{ display:none; }
+.graph-scroll{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.graph-svg{ display:block; width:100%; min-width:680px; height:auto; padding:8px 4px; }
+.graph-legend{ display:flex; flex-wrap:wrap; gap:14px 22px; padding:13px 20px; border-top:1px solid var(--border);
+  font-family:"JetBrains Mono",monospace; font-size:11.5px; color:var(--text-2); }
+.lg{ display:flex; align-items:center; gap:8px; } .lg .sw{ width:22px; border-top:2.5px solid; }
+.lg.keep .sw{ border-color:var(--live); } .lg.cond .sw{ border-color:var(--drop); border-top-style:dashed; }
+.lg.warn .sw{ border-color:var(--warn); border-top-style:dashed; }
+
+/* svg graph nodes */
+.edge{ fill:none; stroke:var(--border-strong); stroke-width:1.7; stroke-linecap:round; transition:stroke .45s ease,opacity .45s ease; }
+.edge.flow{ stroke-dasharray:5 7; animation:flow 1.7s linear infinite; }
+@keyframes flow{ to{ stroke-dashoffset:-48; } }
+[data-mode="esm"] .e-keep{ stroke:var(--live); opacity:1; }
+[data-mode="esm"] .e-cond{ stroke:var(--drop); stroke-dasharray:4 6; opacity:.4; }
+[data-mode="cjs"] .e-keep, [data-mode="cjs"] .e-cond{ stroke:var(--warn); stroke-dasharray:6 5; opacity:1; }
+.nb{ fill:var(--surface-2); stroke:var(--border-strong); stroke-width:1.5; transition:stroke .45s,fill .45s,opacity .45s; }
+.nt{ font-family:"JetBrains Mono",monospace; fill:var(--text-2); transition:fill .45s,opacity .45s; }
+.nh{ font-family:"JetBrains Mono",monospace; fill:var(--text); font-weight:600; }
+.ntag{ font-family:"JetBrains Mono",monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase; transition:fill .45s,opacity .45s; }
+.gnode{ cursor:pointer; }
+.gnode:hover .nb{ stroke:var(--text-3); filter:brightness(1.12); }
+.gnode:focus-visible{ outline:none; } .gnode:focus-visible .nb{ stroke:var(--live); }
+/* keep state */
+[data-mode="esm"] .s-keep .nb{ stroke:var(--live); fill:var(--live-bg); }
+[data-mode="esm"] .s-keep .nt{ fill:var(--live); }
+[data-mode="esm"] .s-keep .ntag{ fill:var(--live); }
+/* conditional state */
+[data-mode="esm"] .s-cond .nb{ stroke:var(--drop); stroke-dasharray:5 5; opacity:.45; }
+[data-mode="esm"] .s-cond .nt{ fill:var(--drop); opacity:.75; }
+[data-mode="esm"] .s-cond .ntag{ fill:var(--drop); opacity:.8; }
+/* CJS: everything kept = amber */
+[data-mode="cjs"] .s-keep .nb, [data-mode="cjs"] .s-cond .nb{ stroke:var(--warn); fill:var(--warn-bg); stroke-dasharray:none; opacity:1; }
+[data-mode="cjs"] .s-keep .nt, [data-mode="cjs"] .s-cond .nt{ fill:var(--warn); opacity:1; }
+[data-mode="cjs"] .s-keep .ntag, [data-mode="cjs"] .s-cond .ntag{ fill:var(--warn); opacity:1; }
+/* mode-only labels */
+[data-mode="cjs"] .only-esm{ display:none; } [data-mode="esm"] .only-cjs{ display:none; }
+.elabel{ font-family:"JetBrains Mono",monospace; font-size:11px; }
+.elabel.keep{ fill:var(--live); } .elabel.warn{ fill:var(--warn); } .elabel.drop{ fill:var(--drop); }
+@media(prefers-reduced-motion:reduce){ .edge.flow{ animation:none; } #bar{ box-shadow:none; } html{ scroll-behavior:auto; } }
+
+/* ───────────────── SECTIONS / PROSE ───────────────── */
+section.block{ padding:60px 0 8px; }
+.sec-head{ margin-bottom:26px; }
+.sec-head .eyebrow{ display:flex; align-items:center; gap:12px; }
+.sec-head .eyebrow::after{ content:""; flex:1; height:1px; background:linear-gradient(90deg,var(--border),transparent); }
+.sec-head h2{ font-family:"Space Grotesk",sans-serif; font-weight:600; letter-spacing:-.018em;
+  font-size:clamp(1.7rem,4vw,2.4rem); margin:14px 0 0; }
+.prose{ max-width:72ch; }
+.prose p{ margin:0 0 16px; color:var(--text); }
+.prose p.lead{ font-size:1.16rem; color:var(--text); }
+.prose strong{ font-weight:600; }
+
+/* term button (popover trigger) */
+.term{ display:inline; font:inherit; color:var(--text); cursor:help; padding:0 1px;
+  background:linear-gradient(var(--live-bg),var(--live-bg)) no-repeat left bottom / 100% 0;
+  border-bottom:1px dotted color-mix(in srgb,var(--live) 70%,transparent); transition:background-size .18s,color .18s; }
+.term:hover, .term.anno-on{ color:var(--live); background-size:100% 100%; border-bottom-color:var(--live); border-radius:3px; }
+.anno-reveal .term{ background-size:100% 100%; }
+
+/* ───────────────── PIPELINE (clickable strip) ───────────────── */
+.pipe{ display:grid; grid-template-columns:repeat(5,1fr); gap:0; margin:30px 0 6px;
+  border:1px solid var(--border); border-radius:14px; overflow:hidden; background:var(--surface); }
+.pstage{ position:relative; padding:18px 16px; text-align:left; border-right:1px solid var(--border); transition:.18s; }
+.pstage:last-child{ border-right:none; }
+.pstage:hover{ background:var(--surface-2); }
+.pstage .pn{ font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--text-3); }
+.pstage h4{ font-family:"Space Grotesk",sans-serif; font-size:15px; font-weight:600; margin:8px 0 4px; }
+.pstage p{ margin:0; font-size:12.5px; color:var(--text-2); line-height:1.4; }
+.pstage .parrow{ position:absolute; right:-9px; top:50%; transform:translateY(-50%); z-index:2; color:var(--text-3); }
+.pstage:nth-child(n+4) h4{ color:var(--live); }
+@media(max-width:760px){ .pipe{ grid-template-columns:1fr 1fr; } .pstage .parrow{ display:none; } }
+
+/* ───────────────── CARDS → MODALS ───────────────── */
+.cards{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:8px; }
+@media(max-width:920px){ .cards{ grid-template-columns:1fr 1fr; } }
+@media(max-width:560px){ .cards{ grid-template-columns:1fr; } }
+.card{ position:relative; text-align:left; padding:20px; border-radius:15px; border:1px solid var(--border);
+  background:var(--surface); transition:transform .22s cubic-bezier(.16,1,.3,1),border-color .22s,box-shadow .22s; overflow:hidden; display:flex; flex-direction:column; min-height:182px; }
+.card::before{ content:""; position:absolute; inset:0; opacity:0; transition:opacity .22s; pointer-events:none;
+  background:radial-gradient(120% 90% at 0% 0%,var(--c-glow,transparent) 0%,transparent 55%); }
+.card:hover{ transform:translateY(-4px); border-color:var(--c-bd,var(--border-strong)); box-shadow:var(--shadow-md); }
+.card:hover::before{ opacity:1; }
+.card .ctop{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.card .cicon{ width:38px; height:38px; border-radius:10px; display:inline-flex; align-items:center; justify-content:center;
+  color:var(--c-col,var(--live)); background:var(--c-bg,var(--live-bg)); border:1px solid var(--c-bd,var(--live-bd)); }
+.card .cicon svg{ width:19px; height:19px; }
+.card .cnum{ font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--text-3); }
+.card .cnum b{ color:var(--text-2); }
+.card h3{ font-family:"Space Grotesk",sans-serif; font-size:1.12rem; font-weight:600; letter-spacing:-.01em; margin:0 0 6px; }
+.card p{ margin:0; font-size:13.5px; color:var(--text-2); line-height:1.5; flex:1; }
+.card .cfoot{ margin-top:16px; display:flex; align-items:center; justify-content:space-between; }
+.card .cpills{ display:flex; gap:6px; flex-wrap:wrap; }
+.card .cpill{ font-family:"JetBrains Mono",monospace; font-size:10px; padding:3px 8px; border-radius:6px;
+  background:var(--surface-2); border:1px solid var(--border); color:var(--text-3); letter-spacing:.03em; }
+.card .ccta{ font-family:"JetBrains Mono",monospace; font-size:12px; color:var(--c-col,var(--live)); display:inline-flex; align-items:center; gap:6px; opacity:.85; }
+.card .ccta svg{ width:14px; height:14px; transition:transform .22s; }
+.card:hover .ccta svg{ transform:translateX(3px); }
+
+/* ───────────────── COMPARE TABLE ───────────────── */
+.tbl-scroll{ overflow-x:auto; border:1px solid var(--border); border-radius:14px; margin-top:8px; }
+table{ border-collapse:collapse; width:100%; min-width:560px; font-size:14.5px; }
+thead th{ text-align:left; padding:15px 18px; font-family:"Space Grotesk",sans-serif; font-weight:600;
+  background:var(--surface-2); border-bottom:1px solid var(--border); }
+thead th.q{ font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--text-3); letter-spacing:.14em; text-transform:uppercase; }
+thead th.e{ color:var(--live); } thead th.c{ color:var(--warn); }
+tbody td{ padding:13px 18px; border-bottom:1px solid var(--border); vertical-align:top; }
+tbody tr:last-child td{ border-bottom:none; }
+tbody td:first-child{ font-family:"JetBrains Mono",monospace; font-size:12.5px; color:var(--text-3); white-space:nowrap; }
+tbody td.te{ color:var(--text); } tbody td.tc{ color:color-mix(in srgb,var(--warn) 60%,var(--text)); }
+tbody tr:hover td{ background:color-mix(in srgb,var(--surface-2) 60%,transparent); }
+
+/* ───────────────── MODEL RECAP ───────────────── */
+.recap{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:8px; }
+@media(max-width:680px){ .recap{ grid-template-columns:1fr; } }
+.rcard{ border-radius:16px; border:1px solid var(--border); padding:26px; background:var(--surface); position:relative; overflow:hidden; }
+.rcard.esm{ border-color:var(--live-bd); } .rcard.cjs{ border-color:var(--warn-bd); }
+.rcard::before{ content:""; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(90% 60% at 0% 0%,var(--g) 0%,transparent 60%); opacity:.5; }
+.rcard.esm{ --g:var(--live-gl); } .rcard.cjs{ --g:var(--warn-gl); }
+.rcard .rlabel{ font-family:"JetBrains Mono",monospace; font-size:11px; font-weight:600; letter-spacing:.18em; text-transform:uppercase; position:relative; }
+.rcard.esm .rlabel{ color:var(--live); } .rcard.cjs .rlabel{ color:var(--warn); }
+.rcard h3{ font-family:"Space Grotesk",sans-serif; font-size:1.35rem; margin:10px 0 14px; position:relative; }
+.rcard p{ margin:0; color:var(--text-2); position:relative; font-size:14.5px; }
+.rcard .quote{ color:var(--text); font-family:"Space Grotesk",sans-serif; font-size:1.05rem; line-height:1.5; }
+
+footer{ max-width:1120px; margin:54px auto 64px; padding:24px 26px; border-top:1px solid var(--border);
+  display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px;
+  font-family:"JetBrains Mono",monospace; font-size:11.5px; color:var(--text-3); letter-spacing:.06em; }
+footer .dot{ color:var(--live); }
+
+/* ───────────────── POPOVER (stacking) ───────────────── */
+.anno-pop{ position:fixed; z-index:240; min-width:270px; max-width:360px; padding:0;
+  background:var(--surface); border:1px solid var(--border-strong); border-radius:13px; box-shadow:var(--shadow-lg);
+  opacity:0; pointer-events:none; transform:translateY(-6px) scale(.98); transition:opacity .16s,transform .16s;
+  --anno:var(--live); --anno-soft:var(--live-bg); --anno-bd:var(--live-bd); }
+.anno-pop.is-open{ opacity:1; pointer-events:auto; transform:none; }
+.anno-pop-bar{ display:flex; align-items:center; gap:9px; padding:9px 14px; border-bottom:1px solid var(--border); }
+.anno-pop-bar .dot{ width:8px; height:8px; border-radius:50%; background:var(--anno); box-shadow:0 0 8px var(--anno); }
+.anno-pop-ctx{ font-family:"JetBrains Mono",monospace; font-size:9.5px; font-weight:600; letter-spacing:.2em; text-transform:uppercase; color:var(--text-3); }
+.anno-back{ font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--anno); padding:2px 8px; border-radius:6px; border:1px solid var(--anno-bd); background:var(--anno-soft); }
+.anno-back:hover{ filter:brightness(1.15); }
+.anno-pop-inner{ padding:14px 16px 16px; }
+.anno-pop-title{ font-family:"Space Grotesk",sans-serif; font-size:16px; font-weight:600; color:var(--anno); margin-bottom:8px; }
+.anno-pop-body{ font-size:13.5px; line-height:1.55; color:var(--text-2); }
+.anno-pop-body code{ font-family:"JetBrains Mono",monospace; font-size:12px; padding:1px 5px; background:var(--surface-2); border:1px solid var(--border); border-radius:4px; color:var(--text); }
+.anno-pop-body strong{ color:var(--text); font-weight:600; }
+.anno-pop-body em{ color:var(--text); font-style:italic; }
+.anno-pop-body .term{ color:var(--text); }
+
+/* ───────────────── MODAL ───────────────── */
+.modal-backdrop{ position:fixed; inset:0; z-index:150; background:rgba(4,7,12,.62); backdrop-filter:blur(8px);
+  opacity:0; pointer-events:none; transition:opacity .28s; }
+.modal-backdrop.is-open{ opacity:1; pointer-events:auto; }
+.modal{ position:fixed; inset:0; z-index:160; display:flex; align-items:flex-start; justify-content:center;
+  padding:70px 22px 40px; pointer-events:none; overflow:hidden; }
+.modal.is-open{ overflow-y:auto; }
+.modal-panel{ position:relative; width:100%; max-width:840px; background:var(--surface); border:1px solid var(--border);
+  border-radius:20px; box-shadow:var(--shadow-lg); pointer-events:none; opacity:0; transform:translateY(20px) scale(.985);
+  transition:opacity .32s cubic-bezier(.16,1,.3,1),transform .32s cubic-bezier(.16,1,.3,1); overflow:hidden;
+  --m:var(--live); --m-bg:var(--live-bg); --m-bd:var(--live-bd); --m-gl:var(--live-gl); }
+.modal.is-open .modal-panel{ opacity:1; transform:none; pointer-events:auto; }
+.modal-close{ position:absolute; top:18px; right:18px; width:36px; height:36px; border-radius:10px; display:inline-flex;
+  align-items:center; justify-content:center; color:var(--text-2); background:var(--surface-2); border:1px solid var(--border); z-index:3;
+  transition:color .18s,background-color .18s,transform .32s cubic-bezier(.16,1,.3,1); }
+.modal-close:hover{ color:var(--text); background:var(--surface-3); transform:rotate(90deg); }
+.modal-close svg{ width:14px; height:14px; }
+.modal-header{ position:relative; padding:34px 38px 26px; border-bottom:1px solid var(--border);
+  background:linear-gradient(180deg,var(--m-bg) 0%,transparent 100%); }
+.modal-header::before{ content:""; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(85% 130% at 0% 0%,var(--m-gl) 0%,transparent 55%); opacity:.4; }
+.modal-head-row{ display:flex; align-items:center; gap:14px; position:relative; z-index:1; }
+.modal-icon{ width:46px; height:46px; border-radius:12px; display:inline-flex; align-items:center; justify-content:center;
+  flex:0 0 auto; color:var(--m); background:var(--m-bg); border:1px solid var(--m-bd); }
+.modal-icon svg{ width:23px; height:23px; }
+.modal-eyebrow{ display:inline-block; padding:3px 11px; border-radius:999px; font-family:"JetBrains Mono",monospace;
+  font-size:10.5px; font-weight:600; letter-spacing:.18em; text-transform:uppercase; color:var(--m);
+  background:var(--m-bg); border:1px solid var(--m-bd); margin-bottom:8px; }
+.modal-header h2{ font-family:"Space Grotesk",sans-serif; font-size:clamp(24px,3.4vw,34px); font-weight:600;
+  letter-spacing:-.02em; line-height:1.08; margin:0; position:relative; z-index:1; }
+.modal-tag{ position:relative; z-index:1; margin:12px 0 0; color:var(--text-2); font-size:15.5px; max-width:64ch; }
+.modal-body{ padding:28px 38px 36px; }
+.modal-body section{ margin-bottom:26px; }
+.modal-body section:last-child{ margin-bottom:0; }
+.modal-body h3{ display:flex; align-items:center; gap:11px; font-family:"Space Grotesk",sans-serif; font-size:15px;
+  font-weight:600; color:var(--text); margin:0 0 9px; text-transform:none; }
+.modal-body h3::before{ content:""; width:7px; height:7px; border-radius:2px; background:var(--m); flex:0 0 auto; box-shadow:0 0 7px var(--m-gl); }
+.modal-body p{ margin:0 0 12px; color:var(--text-2); font-size:14.5px; line-height:1.6; }
+.modal-body p:last-child{ margin-bottom:0; }
+.modal-body strong{ color:var(--text); font-weight:600; }
+.modal-body em{ color:var(--text); font-style:italic; }
+.modal-body code{ font-family:"JetBrains Mono",monospace; font-size:12.5px; padding:1px 5px; background:var(--surface-2); border:1px solid var(--border); border-radius:4px; color:var(--text); }
+@media(max-width:680px){ .modal{ padding:54px 12px 30px; } .modal-header{ padding:26px 22px 20px; } .modal-body{ padding:22px 22px 28px; } }
+
+/* code block */
+.codeblk{ position:relative; margin:16px 0; border:1px solid var(--border); border-radius:11px; overflow:hidden; background:color-mix(in srgb,var(--surface-2) 70%,var(--bg)); }
+.codeblk .cl{ display:flex; align-items:center; gap:8px; padding:8px 14px; border-bottom:1px solid var(--border); font-family:"JetBrains Mono",monospace; font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-3); }
+.codeblk .cl .ci{ width:7px; height:7px; border-radius:50%; }
+.codeblk .cl.esm .ci{ background:var(--live); } .codeblk .cl.cjs .ci{ background:var(--warn); } .codeblk .cl.bad .ci{ background:var(--bad); }
+.codeblk pre{ margin:0; padding:15px 16px; overflow-x:auto; }
+.codeblk code{ font-family:"JetBrains Mono",monospace; font-size:12.8px; line-height:1.62; color:#cfe0f3; white-space:pre; background:none; border:none; padding:0; }
+[data-theme="light"] .codeblk code{ color:#1c2a3a; }
+.c-kw{ color:#7dd3fc; } .c-fn{ color:#c4b5fd; } .c-str{ color:var(--live); } .c-num{ color:var(--warn); } .c-com{ color:var(--drop); font-style:italic; }
+[data-theme="light"] .c-kw{ color:#0369a1; } [data-theme="light"] .c-fn{ color:#7e22ce; } [data-theme="light"] .c-num{ color:#b45309; }
+
+/* callout */
+.callout{ display:flex; gap:13px; align-items:flex-start; margin:16px 0; padding:15px 17px; border-radius:11px;
+  background:var(--m-bg); border:1px solid var(--m-bd); }
+.callout .coi{ width:26px; height:26px; border-radius:8px; flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; color:var(--m); background:color-mix(in srgb,var(--m) 18%,transparent); }
+.callout .coi svg{ width:15px; height:15px; }
+.callout .cot{ font-size:14px; color:var(--text); line-height:1.55; }
+.callout .cot b{ color:var(--m); }
+
+/* ───────────────── WIDGET KIT ───────────────── */
+.w{ margin:18px 0 2px; border:1px solid var(--border); border-radius:13px; overflow:hidden; background:var(--surface-2); --wc:var(--m); }
+.w-head{ display:flex; align-items:center; justify-content:space-between; padding:11px 15px; border-bottom:1px solid var(--border); }
+.w-head .wt{ font-family:"JetBrains Mono",monospace; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-3); }
+.w-head .wr{ font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--wc); }
+.w-body{ padding:15px; }
+.w-code{ font-family:"JetBrains Mono",monospace; font-size:12.5px; color:var(--text-2); background:color-mix(in srgb,var(--bg) 50%,var(--surface)); border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:12px; overflow-x:auto; white-space:pre; }
+.w-code .hl{ color:var(--wc); font-weight:600; }
+.w-list{ display:flex; flex-direction:column; gap:7px; }
+.w-item{ display:flex; align-items:center; gap:11px; padding:9px 12px; border-radius:9px; border:1px solid var(--border); background:var(--surface);
+  transition:border-color .3s,opacity .3s,background-color .3s; }
+.w-item .wst{ width:20px; height:20px; border-radius:6px; display:inline-flex; align-items:center; justify-content:center; font-family:"JetBrains Mono",monospace; font-size:12px; flex:0 0 auto; background:var(--surface-3); color:var(--text-3); transition:.3s; }
+.w-item code{ font-family:"JetBrains Mono",monospace; font-size:12.5px; color:var(--text); background:none; border:none; padding:0; flex:1; }
+.w-item .wtag{ font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--text-3); }
+.w-item.kept{ border-color:var(--live-bd); background:var(--live-bg); }
+.w-item.kept .wst{ background:var(--live-bg2); color:var(--live); }
+.w-item.kept code{ color:var(--live); }
+.w-item.dropped{ opacity:.42; border-style:dashed; }
+.w-item.dropped .wst{ background:var(--drop-bg); color:var(--drop); }
+.w-item.kept-warn{ border-color:var(--warn-bd); background:var(--warn-bg); }
+.w-item.kept-warn .wst{ background:var(--warn-bg2); color:var(--warn); }
+.w-item.kept-warn code{ color:var(--warn); }
+.w-ctrls{ display:flex; gap:9px; margin:13px 0 0; flex-wrap:wrap; }
+.w-btn{ display:inline-flex; align-items:center; gap:7px; padding:9px 15px; border-radius:9px; font-family:"JetBrains Mono",monospace; font-size:12.5px; font-weight:600;
+  background:var(--surface-3); border:1px solid var(--border); color:var(--text); transition:.16s; }
+.w-btn:hover{ background:var(--surface-hover); }
+.w-btn.go{ background:var(--wc); color:#06121a; border-color:transparent; }
+[data-theme="light"] .w-btn.go{ color:#fff; }
+.w-btn.go:hover{ filter:brightness(1.08); }
+.w-btn svg{ width:14px; height:14px; }
+.w-stats{ display:flex; gap:9px; margin-top:13px; flex-wrap:wrap; }
+.w-stat{ flex:1; min-width:90px; padding:10px 12px; border-radius:9px; background:var(--surface); border:1px solid var(--border); }
+.w-stat .sl{ font-family:"JetBrains Mono",monospace; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-3); }
+.w-stat .sv{ font-family:"JetBrains Mono",monospace; font-size:15px; font-weight:600; color:var(--text); margin-top:3px; }
+.w-stat.keep .sv{ color:var(--live); } .w-stat.warn .sv{ color:var(--warn); }
+.w-switch{ display:inline-flex; align-items:center; gap:11px; cursor:pointer; font-family:"JetBrains Mono",monospace; font-size:12.5px; color:var(--text-2); margin-bottom:12px; user-select:none; }
+.w-track{ width:44px; height:24px; border-radius:999px; background:var(--surface-3); border:1px solid var(--border); position:relative; transition:.22s; flex:0 0 auto; }
+.w-knob{ position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:var(--text-3); transition:.22s cubic-bezier(.16,1,.3,1); }
+.w-switch.on .w-track{ background:var(--warn-bg2); border-color:var(--warn-bd); }
+.w-switch.on .w-knob{ left:22px; background:var(--warn); }
+.w-bars{ display:flex; flex-direction:column; gap:9px; margin-top:6px; }
+.w-bar{ display:flex; align-items:center; gap:11px; }
+.w-bk{ font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--text-3); width:72px; flex:0 0 auto; }
+.w-trk{ flex:1; height:9px; border-radius:6px; background:var(--surface); border:1px solid var(--border); overflow:hidden; }
+.w-fill{ height:100%; border-radius:6px; transition:width .5s cubic-bezier(.16,1,.3,1); }
+.w-bv{ font-family:"JetBrains Mono",monospace; font-size:11.5px; color:var(--text-2); width:64px; text-align:right; flex:0 0 auto; }
+.w-fan{ display:grid; grid-template-columns:repeat(auto-fill,minmax(108px,1fr)); gap:8px; margin-top:6px; }
+.w-fan .wf{ padding:9px 11px; border-radius:9px; border:1px solid var(--border); background:var(--surface); font-family:"JetBrains Mono",monospace; font-size:11.5px; color:var(--text-2); transition:.3s; display:flex; align-items:center; justify-content:space-between; gap:6px; }
+.w-fan .wf .wfs{ font-size:10px; color:var(--text-3); }
+.w-fan .wf.keep{ border-color:var(--warn-bd); background:var(--warn-bg); color:var(--warn); }
+.w-fan .wf.keep .wfs{ color:var(--warn); }
+.w-fan .wf.one{ border-color:var(--live-bd); background:var(--live-bg); color:var(--live); }
+.w-fan .wf.one .wfs{ color:var(--live); }
+.w-fan .wf.gone{ opacity:.38; border-style:dashed; }
+
+/* ───────────────── FAB ───────────────── */
+.fab{ position:fixed; right:22px; bottom:22px; z-index:130; width:46px; height:46px; border-radius:14px;
+  display:inline-flex; align-items:center; justify-content:center; font-family:"Space Grotesk",sans-serif; font-weight:700; font-size:18px; font-style:italic;
+  color:var(--text-2); background:var(--surface); border:1px solid var(--border-strong); box-shadow:var(--shadow-md); transition:.18s; }
+.fab:hover{ color:var(--text); transform:translateY(-2px); }
+.fab.is-active{ color:var(--live); border-color:var(--live-bd); background:var(--live-bg); }
+.fab-tip{ position:fixed; right:22px; bottom:78px; z-index:130; max-width:230px; padding:9px 12px; border-radius:10px;
+  background:var(--surface); border:1px solid var(--border-strong); box-shadow:var(--shadow-md); font-size:12px; color:var(--text-2);
+  opacity:0; pointer-events:none; transform:translateY(6px); transition:.2s; }
+.fab-tip.show{ opacity:1; transform:none; }
+@media(max-width:560px){ .fab{ right:14px; bottom:14px; } }
+</style>
+</head>
+<body>
+<div id="bar"></div>
+
+<nav>
+  <div class="nav-in">
+    <a class="brand" href="#top">
+      <svg class="glyph" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="color:var(--live)">
+        <circle cx="8" cy="16" r="3"/><circle cx="24" cy="8" r="3"/><circle cx="24" cy="24" r="3"/>
+        <path d="M11 14.5 21 9.5M11 17.5 21 22.5"/>
+      </svg>
+      <span><b>esm</b> <span class="sep">/</span> cjs</span>
+    </a>
+    <div class="nav-links">
+      <a class="nav-link" href="#graph">Graph</a>
+      <a class="nav-link" href="#concepts">Concepts</a>
+      <a class="nav-link" href="#compare">Compare</a>
+      <a class="nav-link" href="#model">Model</a>
+    </div>
+    <button class="tgl" id="themeBtn" aria-label="Toggle theme" title="Toggle theme"></button>
+  </div>
+</nav>
+
+<a id="top"></a>
+<header class="hero">
+  <div class="shell">
+    <span class="hero-eyebrow">Static structure → provable graph</span>
+    <h1><span class="e">ESM</span> <span class="v">vs</span> <span class="c">CommonJS</span>, and why bundlers can prove one but not the other</h1>
+    <p class="sub">A module system either hands the bundler a graph it can read before running the program — or forces it to execute the code to find out. That single difference is the whole story of tree shaking.</p>
+    <div class="hint">
+      <span><b>Flip</b> the graph between modes</span>
+      <span><b>Click</b> any node or card → deep dive</span>
+      <span><b>Hover</b> <span class="term" data-term="tree-shaking">underlined terms</span> for a definition</span>
+      <span>Press <span class="kbd">i</span> bottom-right to reveal what's interactive</span>
+    </div>
+  </div>
+</header>
+
+<!-- ───────── SIGNATURE: TWO-MODE GRAPH ───────── -->
+<section class="block" id="graph" style="padding-top:24px">
+  <div class="shell">
+    <div class="graph-wrap" data-mode="esm" id="graph2">
+      <div class="graph-top">
+        <div class="seg" role="tablist" aria-label="Module mode">
+          <button data-on="esm" class="is-active" type="button"><span class="pip"></span>ESM</button>
+          <button data-on="cjs" type="button"><span class="pip"></span>CommonJS</button>
+        </div>
+        <div class="graph-verdict mono">
+          <span class="only-esm"><span class="em-keep">2 kept</span> · <span class="em-drop">6 dropped</span> — graph is provable</span>
+          <span class="only-cjs"><span class="em-warn">8 kept</span> — argument unknown, keep everything</span>
+        </div>
+      </div>
+      <div class="graph-scroll">
+        <svg class="graph-svg" viewBox="0 0 920 470" role="img" aria-label="A module graph that stays lean under ESM and balloons under CommonJS">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+              <path d="M0 0 10 5 0 10z" fill="context-stroke"/>
+            </marker>
+          </defs>
+
+          <!-- EDGES (drawn first) -->
+          <!-- entry -> lib -->
+          <path class="edge flow e-keep" d="M214 150 C280 150 280 150 330 150" marker-end="url(#ah)"/>
+          <!-- entry -> adapters (one in ESM, fan in CJS) -->
+          <path class="edge flow e-keep" d="M214 330 C300 330 300 250 660 196" marker-end="url(#ah)"/>
+          <path class="edge flow e-cond" d="M214 330 C320 330 360 246 660 246" marker-end="url(#ah)"/>
+          <path class="edge flow e-cond" d="M214 330 C320 330 360 296 660 296" marker-end="url(#ah)"/>
+          <path class="edge flow e-cond" d="M214 330 C320 330 360 346 660 346" marker-end="url(#ah)"/>
+          <path class="edge flow e-cond" d="M214 330 C320 330 360 396 660 396" marker-end="url(#ah)"/>
+
+          <!-- edge labels -->
+          <text class="elabel keep only-esm" x="250" y="140">import { a }</text>
+          <text class="elabel warn only-cjs" x="244" y="140">lib[name]()</text>
+          <text class="elabel keep only-esm" x="250" y="250">require("./db.js")</text>
+          <text class="elabel warn only-cjs" x="238" y="250">require("./"+name)</text>
+
+          <!-- ENTRY -->
+          <g class="gnode" data-concept="static-analysis" tabindex="0" role="button" aria-label="entry.js — open static analysis">
+            <rect class="nb" x="40" y="200" width="174" height="58" rx="9"/>
+            <text class="nh" x="58" y="226" font-size="13">entry.js</text>
+            <text class="nt" x="58" y="246" font-size="11">the program root</text>
+          </g>
+
+          <!-- LIB with a/b/c -->
+          <text class="ntag" x="330" y="78" style="fill:var(--text-3)">lib.js · exports</text>
+          <g class="gnode" data-concept="reachability" tabindex="0" role="button" aria-label="lib.js exports — open reachability">
+            <g class="s-keep"><rect class="nb" x="330" y="88" width="190" height="44" rx="8"/>
+              <text class="nt" x="348" y="115" font-size="12.5">a()</text>
+              <text class="ntag only-esm" x="506" y="114" text-anchor="end">keep</text>
+              <text class="ntag only-cjs" x="506" y="114" text-anchor="end">keep</text></g>
+            <g class="s-cond"><rect class="nb" x="330" y="138" width="190" height="44" rx="8"/>
+              <text class="nt" x="348" y="165" font-size="12.5">b()</text>
+              <text class="ntag only-esm" x="506" y="164" text-anchor="end">drop</text>
+              <text class="ntag only-cjs" x="506" y="164" text-anchor="end">keep</text></g>
+            <g class="s-cond"><rect class="nb" x="330" y="188" width="190" height="44" rx="8"/>
+              <text class="nt" x="348" y="215" font-size="12.5">c()</text>
+              <text class="ntag only-esm" x="506" y="214" text-anchor="end">drop</text>
+              <text class="ntag only-cjs" x="506" y="214" text-anchor="end">keep</text></g>
+          </g>
+
+          <!-- ADAPTERS folder -->
+          <text class="ntag" x="660" y="170" style="fill:var(--text-3)">./adapters/</text>
+          <g class="gnode" data-concept="static-vs-dynamic" tabindex="0" role="button" aria-label="adapters folder — open static import vs dynamic require">
+            <g class="s-keep"><rect class="nb" x="660" y="180" width="200" height="34" rx="7"/>
+              <text class="nt" x="676" y="202" font-size="11.5">postgres.js</text>
+              <text class="ntag only-esm" x="846" y="201" text-anchor="end">keep</text>
+              <text class="ntag only-cjs" x="846" y="201" text-anchor="end">keep</text></g>
+            <g class="s-cond"><rect class="nb" x="660" y="230" width="200" height="34" rx="7"/>
+              <text class="nt" x="676" y="252" font-size="11.5">mysql.js</text>
+              <text class="ntag only-esm" x="846" y="251" text-anchor="end">drop</text>
+              <text class="ntag only-cjs" x="846" y="251" text-anchor="end">keep</text></g>
+            <g class="s-cond"><rect class="nb" x="660" y="280" width="200" height="34" rx="7"/>
+              <text class="nt" x="676" y="302" font-size="11.5">sqlite.js</text>
+              <text class="ntag only-esm" x="846" y="301" text-anchor="end">drop</text>
+              <text class="ntag only-cjs" x="846" y="301" text-anchor="end">keep</text></g>
+            <g class="s-cond"><rect class="nb" x="660" y="330" width="200" height="34" rx="7"/>
+              <text class="nt" x="676" y="352" font-size="11.5">mock.js</text>
+              <text class="ntag only-esm" x="846" y="351" text-anchor="end">drop</text>
+              <text class="ntag only-cjs" x="846" y="351" text-anchor="end">keep</text></g>
+            <g class="s-cond"><rect class="nb" x="660" y="380" width="200" height="34" rx="7"/>
+              <text class="nt" x="676" y="402" font-size="11.5">redis.js</text>
+              <text class="ntag only-esm" x="846" y="401" text-anchor="end">drop</text>
+              <text class="ntag only-cjs" x="846" y="401" text-anchor="end">keep</text></g>
+          </g>
+        </svg>
+      </div>
+      <div class="graph-legend">
+        <span class="lg keep"><span class="sw"></span> reachable · kept</span>
+        <span class="lg cond"><span class="sw"></span> unreachable · dropped (ESM)</span>
+        <span class="lg warn"><span class="sw"></span> unknown · kept to be safe (CommonJS)</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── INTRO PROSE ───────── -->
+<section class="block">
+  <div class="shell">
+    <div class="prose">
+      <p class="lead">A <span class="term" data-term="bundler">bundler</span> wants to turn many modules into the smallest correct output. To do that it must answer one question: can it know the <span class="term" data-term="module-graph">dependency graph</span> and which exports are used <strong>without running the program?</strong></p>
+      <p>That is the entire difference between a <strong>static</strong> module system and a <strong>dynamic</strong> one. In <span class="term" data-term="esm">ESM</span>, imports and exports are part of the language grammar, so the graph is visible before any code executes. In <span class="term" data-term="commonjs">CommonJS</span>, <span class="term" data-term="require">require</span> is an ordinary function call that runs during execution and can appear anywhere — which means the bundler often has to guess, and a safe guess keeps more code than it needs. Flip the graph above to watch the same modules either tree-shake cleanly or balloon.</p>
+    </div>
+
+    <!-- clickable pipeline -->
+    <div class="pipe" id="pipe" role="list" aria-label="Bundler pipeline — click a stage">
+      <button class="pstage" data-concept="static-analysis" role="listitem">
+        <div class="pn">01</div><h4>Source files</h4><p>readable, heavy, unoptimized</p>
+        <span class="parrow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </button>
+      <button class="pstage" data-concept="esm-structure" role="listitem">
+        <div class="pn">02</div><h4>Dependency graph</h4><p>who imports whom</p>
+        <span class="parrow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </button>
+      <button class="pstage" data-concept="reachability" role="listitem">
+        <div class="pn">03</div><h4>Reachability</h4><p>what can actually run</p>
+        <span class="parrow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </button>
+      <button class="pstage" data-concept="reachability" role="listitem">
+        <div class="pn">04</div><h4>Drop dead code</h4><p>the part you came for</p>
+        <span class="parrow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </button>
+      <button class="pstage" data-concept="practical-rules" role="listitem">
+        <div class="pn">05</div><h4>Emit bundles</h4><p>small, fast chunks</p>
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── CONCEPT CARDS ───────── -->
+<section class="block" id="concepts">
+  <div class="shell">
+    <div class="sec-head">
+      <div class="eyebrow">The eleven ideas</div>
+      <h2>Every concept, one click deep</h2>
+    </div>
+    <div class="cards" id="cards"><!-- injected --></div>
+  </div>
+</section>
+
+<!-- ───────── COMPARE ───────── -->
+<section class="block" id="compare">
+  <div class="shell">
+    <div class="sec-head">
+      <div class="eyebrow">Side by side</div>
+      <h2>The clean comparison</h2>
+    </div>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th class="q">Question</th><th class="e">ESM</th><th class="c">CommonJS</th></tr></thead>
+        <tbody>
+          <tr><td>Import form</td><td class="te">import syntax</td><td class="tc">require() function</td></tr>
+          <tr><td>When discovered</td><td class="te">Before execution</td><td class="tc">During execution</td></tr>
+          <tr><td>Module graph</td><td class="te">Static</td><td class="tc">Runtime / discovered as run</td></tr>
+          <tr><td>Export shape</td><td class="te">Static named bindings</td><td class="tc">Mutable exports object</td></tr>
+          <tr><td>Loading style</td><td class="te">Async-friendly / link phase</td><td class="tc">Synchronous require</td></tr>
+          <tr><td>Tree shaking</td><td class="te">Strong</td><td class="tc">Weaker / heuristic-based</td></tr>
+          <tr><td>Dynamic loading</td><td class="te">import()</td><td class="tc">require(expression)</td></tr>
+          <tr><td>Bundler confidence</td><td class="te">High</td><td class="tc">Lower</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── MENTAL MODEL ───────── -->
+<section class="block" id="model">
+  <div class="shell">
+    <div class="sec-head">
+      <div class="eyebrow">Lock it in</div>
+      <h2>Two systems, two promises</h2>
+    </div>
+    <div class="recap">
+      <div class="rcard esm">
+        <div class="rlabel">ESM says</div>
+        <h3>Know me before running me</h3>
+        <p class="quote">Here are my dependencies. Here are my exports. Here are the exact bindings I use — all readable before a single line executes.</p>
+      </div>
+      <div class="rcard cjs">
+        <div class="rlabel">CommonJS says</div>
+        <h3>Run me to find out</h3>
+        <p class="quote">While I run I may call require(), build exports, choose modules, mutate objects, and reach for properties by a runtime string.</p>
+      </div>
+    </div>
+    <div class="prose" style="margin-top:22px">
+      <p>That is why ESM is friendlier to static analysis, tree shaking, chunking, and <span class="term" data-term="dead-code">dead-code elimination</span>. CommonJS can still be bundled — but once <code>require()</code> or export access becomes dynamic, the bundler loses its proof and has to keep more code to stay correct.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span><span class="dot">◆</span> ESM vs CommonJS · interactive reference</span>
+  <span>the more your code looks like a static graph, the more confidently tools can optimize it</span>
+</footer>
+
+<!-- modal + popover hosts -->
+<div class="modal-backdrop" id="backdrop"></div>
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal-panel" id="modalPanel">
+    <button class="modal-close" id="modalClose" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <header class="modal-header" id="modalHeader"></header>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ════════════ tiny syntax highlighter ════════════ */
+function escHtml(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function hl(src){
+  var KW=/^(?:import|export|default|from|as|const|let|var|function|return|new|typeof|await|async|if|else|for|of|in|class|extends|true|false|null|undefined|this|void)\b/;
+  var out="",i=0,L=src.length;
+  function e1(c){ return c==="&"?"&amp;":c==="<"?"&lt;":c===">"?"&gt;":c; }
+  while(i<L){
+    var ch=src[i], two=src.substr(i,2);
+    if(two==="//"){ var j=src.indexOf("\n",i); if(j<0)j=L; out+='<span class="c-com">'+escHtml(src.slice(i,j))+"</span>"; i=j; continue; }
+    if(ch==='"'||ch==="'"||ch==="`"){ var q=ch,k=i+1; while(k<L&&src[k]!==q){ if(src[k]==="\\")k++; k++; } k=Math.min(k+1,L); out+='<span class="c-str">'+escHtml(src.slice(i,k))+"</span>"; i=k; continue; }
+    if(/[0-9]/.test(ch)&&!/[A-Za-z_$]/.test(src[i-1]||"")){ var nm=src.slice(i).match(/^[0-9][0-9._a-fA-FxX]*/)[0]; out+='<span class="c-num">'+nm+"</span>"; i+=nm.length; continue; }
+    if(/[A-Za-z_$]/.test(ch)){ var id=src.slice(i).match(/^[A-Za-z0-9_$]+/)[0]; var rest=src.slice(i+id.length).replace(/^\s*/,""); if(KW.test(id))out+='<span class="c-kw">'+id+"</span>"; else if(rest[0]==="(")out+='<span class="c-fn">'+id+"</span>"; else out+=e1(ch)+escHtml(id.slice(1)); i+=id.length; continue; }
+    out+=e1(ch); i++;
+  }
+  return out;
+}
+function tm(slug,label){ return '<button class="term" data-term="'+slug+'">'+(label||slug)+"</button>"; }
+function codeBlk(label,kind,src){
+  return '<div class="codeblk"><div class="cl '+(kind||"esm")+'"><span class="ci"></span>'+label+"</div><pre><code>"+hl(src)+"</code></pre></div>";
+}
+function callout(text){
+  return '<div class="callout"><span class="coi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="cot">'+text+"</div></div>";
+}
+
+/* ════════════ icons ════════════ */
+var ARROW='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
+var ICONS={
+  scan:'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+  grammar:'<path d="M4 7V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-2"/><path d="M8 12h8"/>',
+  link:'<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
+  runtime:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  split:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  shake:'<path d="M12 22V9"/><path d="M5 12l7-5 7 5"/><path d="M9 17l-2 4M15 17l2 4"/>',
+  table:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/>',
+  effect:'<path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/>',
+  chunk:'<path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/>',
+  fear:'<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+  rules:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+  bolt:'<path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/>'
+};
+function svgIcon(name,size){ size=size||18; return '<svg viewBox="0 0 24 24" width="'+size+'" height="'+size+'" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+(ICONS[name]||ICONS.scan)+"</svg>"; }
+
+/* ════════════ glossary (stacking popovers) ════════════ */
+var TERMS={
+  "bundler":{title:"Bundler",body:"A tool ("+tm("esm","esbuild")+", Rollup, webpack, Turbopack) that reads your modules, builds a "+tm("module-graph","dependency graph")+", and emits optimized output. Its leverage comes entirely from what it can prove about your code <em>before</em> running it."},
+  "esm":{title:"ESM",body:"ECMAScript Modules — the modern, language-level module system. <code>import</code> and <code>export</code> are <strong>syntax</strong>, not function calls, so the engine and bundler can read the graph and the "+tm("named-import","export table")+" before any code runs."},
+  "commonjs":{title:"CommonJS",body:"Node's original module system, built on the "+tm("require","require()")+" function and a mutable <code>module.exports</code> object. Because it's all ordinary runtime JavaScript, structure isn't guaranteed to be knowable statically."},
+  "require":{title:"require()",body:"A normal function the CommonJS runtime injects into every module. Because it's a function, it can run <strong>anywhere</strong> — inside an <code>if</code>, a loop, with a computed path — which is exactly what defeats static analysis."},
+  "module-graph":{title:"Module graph",body:"The directed graph of which module imports which. "+tm("esm","ESM")+" exposes it before execution; "+tm("commonjs","CommonJS")+" discovers it <em>as</em> the program runs, so a bundler may not see the whole shape."},
+  "named-import":{title:"Named binding / export table",body:"In ESM, <code>export function a(){}</code> registers <code>a</code> in a known export table, and <code>import { a }</code> creates a "+tm("live-binding","live binding")+" to it. The bundler knows the exact set of names a module provides."},
+  "live-binding":{title:"Live binding",body:"An imported name in ESM points at the <em>same</em> variable in the exporting module — not a copy. If the exporter mutates it, the importer sees the new value. This gives ESM a precise semantic model."},
+  "static-analysis":{title:"Static analysis",body:"Reading code as text or an "+tm("ast","AST")+" and inferring facts <strong>without executing it</strong>. It's how a bundler learns the graph and which exports are used."},
+  "ast":{title:"AST",body:"Abstract Syntax Tree — the parsed, structured form of source code. Tools walk the AST to find imports, exports, and usage without running anything."},
+  "reachability":{title:"Reachability analysis",body:"Starting from the entry file, which modules, functions, and exports can actually be reached? Whatever can't is dead and may be dropped. "+tm("require","Dynamic require")+" or dynamic property access makes everything <em>look</em> reachable."},
+  "tree-shaking":{title:"Tree shaking",body:"Dropping exports that are provably never used. It needs three facts: what modules exist, what each exports, and which exports are actually imported. "+tm("esm","ESM")+" answers all three directly."},
+  "dead-code":{title:"Dead-code elimination",body:"Removing code that can never run or whose result is never used. "+tm("tree-shaking","Tree shaking")+" is dead-code elimination at the level of module exports."},
+  "side-effect":{title:"Side effect",body:"Anything a module does to the outside world just by being run — <code>console.log</code>, mutating a global, registering a plugin. A module with side effects can't be dropped even if none of its exports are used."},
+  "dynamic-import":{title:"Dynamic import",body:"<code>import()</code> returns a promise and loads a module at runtime, creating an async "+tm("chunk","chunk")+" boundary on purpose. Unlike "+tm("require","dynamic require")+", it's the intended tool for "+tm("code-splitting","code splitting")+"."},
+  "code-splitting":{title:"Code splitting",body:"Breaking the bundle into separate "+tm("chunk","chunks")+" loaded on demand, so the initial download stays small. Driven by "+tm("dynamic-import","dynamic import")+"."},
+  "chunk":{title:"Chunk",body:"A separately-emitted bundle file the runtime can load when needed. "+tm("dynamic-import","Dynamic import")+" creates one; the heavy module moves out of the initial load."},
+  "namespace-import":{title:"Namespace import",body:"<code>import * as money from \"./money.js\"</code> brings in the whole module object. Still analyzable when access is static (<code>money.formatPrice</code>), but <code>money[runtimeKey]</code> weakens it — though ESM still knows the full set of possible exports."},
+  "scope-hoisting":{title:"Scope hoisting",body:"Concatenating the surviving modules into one shared scope after "+tm("tree-shaking","tree shaking")+", producing smaller and faster output than wrapping each module in its own function."}
+};
+
+/* ════════════ concepts (cards + modals) ════════════ */
+var CONCEPTS=[
+  { id:"static-analysis", color:"teal", icon:"scan", title:"Static analysis", layer:"Foundation",
+    tagline:"Reading the code without running it — the move that makes everything else possible.",
+    pills:["AST","reachability"],
+    sections:[
+      {h:"What it is", p:"Static analysis means reading code as text or an "+tm("ast","AST")+" and inferring facts <strong>without executing it</strong>. Given <code>import { formatPrice } from \"./money.js\"</code>, a bundler knows the dependency and the one name used — it never runs the file."},
+      {h:"Why it matters", p:"Because the import names exactly what's used, the bundler can mark <code>formatPrice</code> reachable and everything else in <code>money.js</code> unreachable. That verdict — kept vs dropped, decided before runtime — is the foundation of "+tm("tree-shaking","tree shaking")+"."}
+    ],
+    code:{label:"money.js",kind:"esm",src:'export function formatPrice(value) {\n  return `R${value}`;\n}\nexport function parsePrice(input) {\n  return Number(input.replace("R", ""));\n}\nexport function debugMoney(value) {\n  console.log("debug", value);\n}'},
+    callout:"<b>Read the code as text or AST and infer facts without executing it.</b> Everything a bundler can do for you flows from that one capability."
+  },
+  { id:"esm-structure", color:"blue", icon:"grammar", title:"ESM is grammar", layer:"ESM",
+    tagline:"Imports and exports are syntax the engine reads before any code runs.",
+    pills:["top-level","static path"],
+    sections:[
+      {h:"Fixed structure", p:"In "+tm("esm","ESM")+", <code>import</code> and <code>export</code> are part of the language grammar, not function calls. The path must be a static string at the top level — you can't import conditionally or from a computed variable. So the bundler gets a clear dependency edge before the program runs."},
+      {h:"Discovered in phases", p:"The engine <strong>parses</strong> first, <strong>discovers</strong> every import and export, <strong>builds</strong> the "+tm("module-graph","graph")+", <strong>links</strong> bindings, and only then <strong>executes</strong> module bodies. The dependency graph is known before any body runs."}
+    ],
+    code:{label:"invalid in ESM",kind:"bad",src:'if (condition) {\n  import { thing } from "./thing.js"; // not allowed\n}\n\nconst path = "./thing.js";\nimport { thing } from path; // not allowed — path must be static'},
+    callout:"<b>ESM discovers the dependency graph before executing module bodies.</b> The wiring is readable before the current flows."
+  },
+  { id:"live-bindings", color:"blue", icon:"link", title:"Live bindings", layer:"ESM",
+    tagline:"An imported name points at the exporter's variable — not a copy of it.",
+    pills:["export table","binding"],
+    sections:[
+      {h:"A known export table", p:"<code>export const name</code>, <code>export function greet</code>, <code>export class User</code> register a known set of names the bundler can read directly. There's no ambiguity about what a module provides."},
+      {h:"Not a copy", p:"An imported binding refers to the <em>same</em> variable in the exporting module. Call an exported <code>increment()</code> that does <code>count++</code>, and the imported <code>count</code> reflects it. This "+tm("live-binding","live binding")+" gives ESM a precise semantic model."}
+    ],
+    code:{label:"counter.js + main.js",kind:"esm",src:'// counter.js\nexport let count = 0;\nexport function increment() { count++; }\n\n// main.js\nimport { count, increment } from "./counter.js";\nconsole.log(count); // 0\nincrement();\nconsole.log(count); // 1 — same binding, not a copy'},
+    widget:"binding"
+  },
+  { id:"commonjs-runtime", color:"amber", icon:"runtime", title:"CommonJS is runtime", layer:"CommonJS",
+    tagline:"require is an ordinary function, so it can run anywhere a function can.",
+    pills:["require()","wrapper"],
+    sections:[
+      {h:"A function, not syntax", p:"Each CommonJS module is wrapped in a function that receives <code>require</code>, <code>module</code>, and <code>exports</code>. So <code>const money = require(\"./money\")</code> is just a function call inside a function — and a call can live inside an <code>if</code>, a loop, or behind a computed path."},
+      {h:"Resolved while running", p:"When Node hits "+tm("require","require")+", it evaluates the argument, resolves the path, checks the cache, executes the target if needed, and returns its <code>module.exports</code> — all <strong>during execution</strong>. If the path depends on the environment, it can't be known at build time."}
+    ],
+    code:{label:"all legal CommonJS",kind:"cjs",src:'if (process.env.DEBUG) {\n  require("./debug-tools");\n}\nfunction loadPlugin(name) {\n  return require("./plugins/" + name);\n}\nfor (const file of files) {\n  require(file);\n}'},
+    callout:"<b>And that is the heart of the problem.</b> A call that can appear anywhere can't be fully read in advance."
+  },
+  { id:"static-vs-dynamic", color:"orange", icon:"split", title:"Static import vs dynamic require", layer:"The split",
+    tagline:"One known edge, or a whole folder of maybes.",
+    pills:["resolution","fan-out"],
+    sections:[
+      {h:"ESM: one edge", p:"<code>import { connectPostgres } from \"./adapters/postgres.js\"</code> tells the bundler the exact module and the exact export used. Nothing else in <code>./adapters/</code> is pulled in."},
+      {h:"CommonJS: keep them all", p:"<code>require(\"./adapters/\" + adapterName)</code> hides the target behind a runtime string. The bundler can't know which adapter loads, so to stay correct it may keep the <strong>entire folder</strong> — postgres, mysql, sqlite, mock, redis. Any one of them might be required at runtime."}
+    ],
+    code:{label:"adapters",kind:"cjs",src:'// ESM — known\nimport { connectPostgres } from "./adapters/postgres.js";\n\n// CommonJS — unknown\nconst adapterName = process.env.ADAPTER;\nconst adapter = require("./adapters/" + adapterName);'},
+    widget:"dynreq"
+  },
+  { id:"reachability", color:"green", icon:"shake", title:"Reachability & tree shaking", layer:"Optimization",
+    tagline:"Dynamic access makes every export look reachable — so all of it stays.",
+    pills:["keep / drop","tree shaking"],
+    sections:[
+      {h:"The clean case", p:"With <code>import { a } from \"./lib.js\"; a();</code>, "+tm("reachability","reachability")+" is obvious: <code>a</code> is kept, <code>b</code> and <code>c</code> are unreachable and dropped."},
+      {h:"The defeated case", p:"With <code>const lib = require(\"./lib\"); lib[process.argv[2]]()</code>, the export is chosen by a runtime string. The user could run <code>node app.js b</code>, so every export <em>might</em> be reachable — and all of them are kept. Literal <code>require(\"./file\")</code> is often detectable, but CommonJS as a system doesn't guarantee it."}
+    ],
+    code:{label:"lib.js — two verdicts",kind:"cjs",src:'// ESM keeps only a\nimport { a } from "./lib.js";\na();\n\n// CommonJS keeps a, b, and c\nconst lib = require("./lib");\nlib[process.argv[2]]();   // which one? unknown'},
+    widget:"treeshake"
+  },
+  { id:"export-problem", color:"rose", icon:"effect", title:"The export problem", layer:"CommonJS",
+    tagline:"ESM exports are declarations; CommonJS exports are mutations.",
+    pills:["mutable","Proxy"],
+    sections:[
+      {h:"Mutations, not a table", p:"<code>exports.parse = ...</code> looks analyzable, but CommonJS also allows <code>exports[process.env.NAME] = ...</code>, a conditional <code>module.exports = require(env ? \"./prod\" : \"./dev\")</code>, or even a <code>Proxy</code> whose keys are computed on access. The export set becomes the result of running arbitrary code."},
+      {h:"The consumer side too", p:"Even with obvious exports, a consumer can do <code>lib[process.env.FEATURE]()</code>. The bundler can't say <em>only <code>a</code> is used</em>, because at runtime the key might be <code>a</code>, <code>b</code>, or <code>c</code>. ESM's <code>import { a }</code> names the binding directly, so only <code>a</code> is marked reachable."}
+    ],
+    code:{label:"exports as runtime values",kind:"cjs",src:'exports[process.env.EXPORT_NAME] = function () {};\n\nmodule.exports = process.env.NODE_ENV === "production"\n  ? require("./prod")\n  : require("./dev");\n\nmodule.exports = new Proxy({}, {\n  get(t, prop) { return require("./features/" + prop); }\n});'},
+    callout:"<b>This module could export many things — keep the whole module.</b> Often the safest thing a bundler can conclude."
+  },
+  { id:"side-effects", color:"purple", icon:"effect", title:"Side effects", layer:"Optimization",
+    tagline:"The other reason code is kept even when no export is used.",
+    pills:["import for effect","purity"],
+    sections:[
+      {h:"Run for what it does", p:"A "+tm("side-effect","side effect")+" is anything a module changes in the outside world just by running — a <code>console.log</code>, a global assignment, a plugin registration. <code>import \"./setup.js\"</code> imports no values; it runs the module for its effects, so it can't be dropped."},
+      {h:"Keep the top-level effect", p:"Even a mostly-pure module that does work at the top level forces the bundler to keep that work. Tree shaking is strongest when modules combine static imports, static exports, minimal top-level side effects, and direct named imports."}
+    ],
+    code:{label:"a side-effect module",kind:"esm",src:'console.log("initializing money module");\n\nexport function formatPrice(value) {}\nexport function debugMoney(value) {}\n// even if debugMoney is unused, the console.log must stay'},
+    callout:"Tree shaking works best with: <b>static imports + static exports + minimal side effects + direct named imports.</b>"
+  },
+  { id:"import-vs-require", color:"purple", icon:"chunk", title:"import() vs require()", layer:"Both",
+    tagline:"Both load at runtime — but one is a chunk boundary, the other is a black box.",
+    pills:["async chunk","sync"],
+    sections:[
+      {h:"Dynamic import splits", p:""+tm("dynamic-import","import()")+" loads at runtime <em>by design</em>: it returns a promise and creates an async "+tm("chunk","chunk")+" boundary. It's the intended tool for "+tm("code-splitting","code splitting")+" — move a heavy modal or editor out of the initial load and fetch it on demand."},
+      {h:"Dynamic require balloons", p:"Dynamic <code>require()</code> is synchronous and highly flexible, so <code>require(\"./plugins/\" + name)</code> can force the bundler to include a broad set of possible modules. Same idea, opposite effect on bundle size."}
+    ],
+    code:{label:"on-demand chunk",kind:"esm",src:'button.addEventListener("click", async () => {\n  const { openModal } = await import("./modal.js");\n  openModal();\n});\n// "./modal.js" becomes its own chunk, loaded on click'},
+    widget:"split"
+  },
+  { id:"the-fear", color:"amber", icon:"fear", title:"The bundler's fear", layer:"The split",
+    tagline:"It keeps code because deleting the wrong thing breaks your program.",
+    pills:["correctness","confidence"],
+    sections:[
+      {h:"Ballooning to stay safe", p:"<code>require(\"./pages/\" + page)</code> over a folder of routes means the bundler doesn't know <code>page</code> at build time. Drop the wrong file and <code>PAGE=admin node app.js</code> crashes — so it keeps every candidate. Dynamic require is how bundles quietly balloon."},
+      {h:"A ladder of certainty", p:"Difficulty climbs with dynamism: <code>require(\"./lib\")</code> is easy; <code>lib[methodName]()</code> is harder; <code>require(\"./\" + name)</code> is very hard; and <code>require(\"./plugins/\" + file)</code> over <code>fs.readdirSync</code> is nearly impossible — the graph depends on the filesystem at runtime."}
+    ],
+    code:{label:"the dependency graph leaks into runtime",kind:"cjs",src:'const fs = require("fs");\nfor (const file of fs.readdirSync("./plugins")) {\n  require("./plugins/" + file);\n}\n// what gets bundled depends on what is on disk when it runs'},
+    callout:"<b>The bundler is protecting correctness.</b> When it can't prove a thing is dead, keeping it is the only safe move."
+  },
+  { id:"practical-rules", color:"green", icon:"rules", title:"Practical rules", layer:"Takeaways",
+    tagline:"Make your code look like a static graph and tools optimize it confidently.",
+    pills:["prefer","avoid"],
+    sections:[
+      {h:"For app code", p:"Prefer direct named imports over object access, and especially over computed paths. <code>import { formatPrice } from \"./money.js\"</code> beats <code>require(\"./money\").formatPrice</code>, which beats <code>require(\"./\" + name)[method]()</code>."},
+      {h:"For libraries", p:"Expose named exports rather than one big <code>module.exports = {…}</code> object, and never attach exports under computed keys when bundle size matters. Static shape in, optimization out."}
+    ],
+    code:{label:"prefer / avoid",kind:"esm",src:'// prefer\nimport { formatPrice } from "./money.js";\nexport function formatPrice() {}\n\n// avoid when bundle size matters\nconst money = require("./" + moduleName);\nexports[dynamicName] = function () {};'},
+    callout:"<b>The more your code looks like a static graph, the more confidently tools can optimize it.</b>"
+  }
+];
+window.CONCEPTS=CONCEPTS; window.TERMS=TERMS;
+function conceptById(id){ for(var i=0;i<CONCEPTS.length;i++) if(CONCEPTS[i].id===id) return CONCEPTS[i]; return null; }
+
+/* ════════════ interactive widgets ════════════ */
+var WIDGETS={
+  /* live binding: increment counter, watch imported value follow (vs a copy) */
+  binding:function(){
+    var w=document.createElement("div"); w.className="w";
+    var count=0, copy=0;
+    w.innerHTML=
+      '<div class="w-head"><span class="wt">Live binding vs copy</span><span class="wr" id="b_r">count = 0</span></div>'+
+      '<div class="w-body">'+
+      '<div class="w-list">'+
+        '<div class="w-item kept"><span class="wst">▸</span><code>counter.js · count</code><span class="wtag" id="b_src">0</span></div>'+
+        '<div class="w-item kept"><span class="wst">↔</span><code>main.js · import { count }</code><span class="wtag" id="b_live">0 · live</span></div>'+
+        '<div class="w-item dropped"><span class="wst">✕</span><code>a hand-made copy</code><span class="wtag" id="b_copy">0 · stale</span></div>'+
+      '</div>'+
+      '<div class="w-ctrls"><button class="w-btn go" id="b_inc">'+svgIcon("bolt",14)+' increment()</button><button class="w-btn" id="b_rst">Reset</button></div>'+
+      '</div>';
+    function paint(){
+      w.querySelector("#b_r").textContent="count = "+count;
+      w.querySelector("#b_src").textContent=count;
+      w.querySelector("#b_live").textContent=count+" · live";
+      w.querySelector("#b_copy").textContent=copy+" · stale";
+    }
+    w.querySelector("#b_inc").addEventListener("click",function(){ count++; paint(); });
+    w.querySelector("#b_rst").addEventListener("click",function(){ count=0; copy=0; paint(); });
+    paint(); return w;
+  },
+
+  /* tree-shake: named import keeps used, drops the rest; toggle to dynamic access */
+  treeshake:function(){
+    var w=document.createElement("div"); w.className="w";
+    var lib=[{n:"a",b:120,used:true},{n:"b",b:260,used:false},{n:"c",b:180,used:false}];
+    var dyn=false;
+    w.innerHTML=
+      '<div class="w-head"><span class="wt">Tree-shake lib.js</span><span class="wr" id="t_r">3 exports</span></div>'+
+      '<div class="w-body">'+
+      '<label class="w-switch" id="t_sw"><span class="w-track"><span class="w-knob"></span></span><span id="t_swl">static: import { a }</span></label>'+
+      '<div class="w-code" id="t_code"></div>'+
+      '<div class="w-list" id="t_list"></div>'+
+      '<div class="w-ctrls"><button class="w-btn go" id="t_go">'+svgIcon("shake",14)+' Tree-shake</button><button class="w-btn" id="t_rst">Reset</button></div>'+
+      '<div class="w-stats"><div class="w-stat keep"><span class="sl">kept</span><span class="sv" id="t_k">—</span></div>'+
+      '<div class="w-stat warn"><span class="sl">dropped</span><span class="sv" id="t_d">—</span></div>'+
+      '<div class="w-stat"><span class="sl">savings</span><span class="sv" id="t_s">—</span></div></div>'+
+      '</div>';
+    var list=w.querySelector("#t_list");
+    function rows(){
+      list.innerHTML=lib.map(function(e,i){
+        return '<div class="w-item" data-i="'+i+'"><span class="wst">·</span><code>'+e.n+'()</code><span class="wtag">'+e.b+' B</span></div>';
+      }).join("");
+    }
+    function code(){
+      w.querySelector("#t_code").innerHTML= dyn
+        ? 'const lib = require("./lib");<br>lib[<span class="hl">runtimeKey</span>]();'
+        : 'import { <span class="hl">a</span> } from "./lib.js";<br><span class="hl">a</span>();';
+      w.querySelector("#t_swl").textContent= dyn ? "dynamic: lib[key]()" : "static: import { a }";
+    }
+    function reset(){
+      rows();
+      w.querySelector("#t_k").textContent="—"; w.querySelector("#t_d").textContent="—"; w.querySelector("#t_s").textContent="—";
+      w.querySelector("#t_r").textContent="3 exports";
+    }
+    function shake(){
+      var kb=0,db=0,kn=0,dn=0;
+      list.querySelectorAll(".w-item").forEach(function(it){
+        var e=lib[+it.dataset.i], st=it.querySelector(".wst");
+        var keep = dyn ? true : e.used;            // dynamic access => everything kept
+        if(keep){
+          it.className="w-item "+(dyn?"kept-warn":"kept"); st.innerHTML="✓";
+          kb+=e.b; kn++;
+        } else { it.className="w-item dropped"; st.innerHTML="✕"; db+=e.b; dn++; }
+      });
+      w.querySelector("#t_k").textContent=kn+" · "+kb+" B";
+      w.querySelector("#t_d").textContent=dn+" · "+db+" B";
+      w.querySelector("#t_s").textContent= db? "−"+Math.round(db/(kb+db)*100)+"%" : "0%";
+      w.querySelector("#t_r").textContent= dyn? "all kept" : "shook";
+    }
+    w.querySelector("#t_sw").addEventListener("click",function(){ dyn=!dyn; this.classList.toggle("on",dyn); code(); reset(); });
+    w.querySelector("#t_go").addEventListener("click",shake);
+    w.querySelector("#t_rst").addEventListener("click",reset);
+    code(); reset(); return w;
+  },
+
+  /* dynamic require explosion: literal keeps one, dynamic keeps the folder */
+  dynreq:function(){
+    var w=document.createElement("div"); w.className="w";
+    var files=["postgres.js","mysql.js","sqlite.js","mock.js","redis.js"];
+    var dyn=true;
+    w.innerHTML=
+      '<div class="w-head"><span class="wt">Resolve ./adapters/</span><span class="wr" id="d_r">5 candidates</span></div>'+
+      '<div class="w-body">'+
+      '<label class="w-switch on" id="d_sw"><span class="w-track"><span class="w-knob"></span></span><span id="d_swl">dynamic: require("./"+name)</span></label>'+
+      '<div class="w-code" id="d_code"></div>'+
+      '<div class="w-fan" id="d_fan"></div>'+
+      '<div class="w-stats"><div class="w-stat" id="d_kw"><span class="sl">kept</span><span class="sv" id="d_k">—</span></div>'+
+      '<div class="w-stat"><span class="sl">shipped</span><span class="sv" id="d_b">—</span></div></div>'+
+      '</div>';
+    var fan=w.querySelector("#d_fan");
+    function paint(){
+      w.querySelector("#d_swl").textContent= dyn? 'dynamic: require("./"+name)' : 'literal: require("./adapters/postgres")';
+      w.querySelector("#d_code").innerHTML= dyn
+        ? 'const name = process.env.<span class="hl">ADAPTER</span>;<br>require("./adapters/" + <span class="hl">name</span>);'
+        : 'require("./adapters/<span class="hl">postgres</span>");';
+      fan.innerHTML=files.map(function(f,i){
+        var cls = dyn ? "keep" : (i===0?"one":"gone");
+        var tag = dyn ? "keep" : (i===0?"keep":"drop");
+        return '<div class="wf '+cls+'">'+f+'<span class="wfs">'+tag+'</span></div>';
+      }).join("");
+      var kept = dyn? 5 : 1;
+      w.querySelector("#d_k").textContent= kept+" / 5";
+      w.querySelector("#d_b").textContent= (kept*40)+" KB";
+      w.querySelector("#d_kw").className = "w-stat "+(dyn?"warn":"keep");
+    }
+    w.querySelector("#d_sw").addEventListener("click",function(){ dyn=!dyn; this.classList.toggle("on",dyn); paint(); });
+    paint(); return w;
+  },
+
+  /* static vs dynamic import: first-load bars */
+  split:function(){
+    var w=document.createElement("div"); w.className="w";
+    var dyn=true;
+    w.innerHTML=
+      '<div class="w-head"><span class="wt">First Load JS</span><span class="wr" id="s_r">modal.js · 90 KB</span></div>'+
+      '<div class="w-body">'+
+      '<label class="w-switch on" id="s_sw"><span class="w-track"><span class="w-knob"></span></span><span id="s_swl">dynamic import()</span></label>'+
+      '<div class="w-code" id="s_code"></div>'+
+      '<div class="w-bars">'+
+        '<div class="w-bar"><span class="w-bk">initial</span><div class="w-trk"><div class="w-fill" id="s_init"></div></div><span class="w-bv" id="s_iv"></span></div>'+
+        '<div class="w-bar"><span class="w-bk">on demand</span><div class="w-trk"><div class="w-fill" id="s_lazy" style="background:var(--live)"></div></div><span class="w-bv" id="s_lv"></span></div>'+
+      '</div>'+
+      '</div>';
+    function paint(){
+      w.querySelector("#s_swl").textContent= dyn? "dynamic import()" : "static import";
+      w.querySelector("#s_code").innerHTML= dyn
+        ? 'const { openModal } = await <span class="hl">import</span>("./modal.js");'
+        : '<span class="hl">import</span> { openModal } from "./modal.js";';
+      var base=140, modal=90;
+      var initial= dyn? base : base+modal;
+      var lazy= dyn? modal : 0;
+      var max=base+modal;
+      w.querySelector("#s_init").style.width=(initial/max*100)+"%";
+      w.querySelector("#s_init").style.background= dyn? "var(--live)" : "var(--warn)";
+      w.querySelector("#s_lazy").style.width=(lazy/max*100)+"%";
+      w.querySelector("#s_iv").textContent=initial+" KB";
+      w.querySelector("#s_lv").textContent= lazy? lazy+" KB":"—";
+      w.querySelector("#s_r").textContent= dyn? "modal.js → own chunk" : "modal.js in initial";
+    }
+    w.querySelector("#s_sw").addEventListener("click",function(){ dyn=!dyn; this.classList.toggle("on",dyn); paint(); });
+    paint(); return w;
+  }
+};
+
+/* ════════════ cards ════════════ */
+function renderCards(){
+  var host=document.getElementById("cards"); if(!host) return;
+  var html="";
+  for(var i=0;i<CONCEPTS.length;i++){
+    var p=CONCEPTS[i];
+    var nn=(i+1<10?"0":"")+(i+1);
+    var pills=p.pills.map(function(x){ return '<span class="cpill">'+x+"</span>"; }).join("");
+    html+='<button class="card" data-concept="'+p.id+'" type="button" style="--c-col:var(--'+p.color+');--c-bg:var(--'+p.color+'-bg);--c-bd:var(--'+p.color+'-bd);--c-glow:var(--'+p.color+'-gl)">'+
+      '<div class="ctop"><span class="cicon">'+svgIcon(p.icon,19)+'</span>'+
+      '<span class="cnum"><b>'+nn+'</b> / 11</span></div>'+
+      '<h3>'+p.title+'</h3>'+
+      '<p>'+p.tagline+'</p>'+
+      '<div class="cfoot"><div class="cpills">'+pills+'</div>'+
+      '<span class="ccta">Open '+ARROW+'</span></div>'+
+      '</button>';
+  }
+  host.innerHTML=html;
+}
+
+/* ════════════ modal ════════════ */
+var modalEl=document.getElementById("modal"),
+    backdropEl=document.getElementById("backdrop"),
+    panelEl=document.getElementById("modalPanel"),
+    headerEl=document.getElementById("modalHeader"),
+    bodyEl=document.getElementById("modalBody"),
+    closeBtn=document.getElementById("modalClose");
+var lastFocused=null;
+var COLORS=["blue","purple","teal","green","amber","orange","rose","slate"];
+function setTone(color){
+  panelEl.style.setProperty("--m","var(--"+color+")");
+  panelEl.style.setProperty("--m-bg","var(--"+color+"-bg)");
+  panelEl.style.setProperty("--m-bd","var(--"+color+"-bd)");
+  panelEl.style.setProperty("--m-gl","var(--"+color+"-gl)");
+}
+function openModal(id){
+  var p=conceptById(id); if(!p) return;
+  lastFocused=document.activeElement;
+  clearStack();
+  setTone(p.color);
+  var idx=CONCEPTS.indexOf(p), nn=(idx+1<10?"0":"")+(idx+1);
+  headerEl.innerHTML=
+    '<div class="modal-head-row"><span class="modal-icon">'+svgIcon(p.icon,23)+'</span>'+
+    '<div><span class="modal-eyebrow">'+p.layer+' · '+nn+' of 11</span>'+
+    '<h2>'+p.title+'</h2></div></div>'+
+    '<p class="modal-tag">'+p.tagline+'</p>';
+  var html="";
+  for(var s=0;s<p.sections.length;s++) html+="<section><h3>"+p.sections[s].h+"</h3>"+p.sections[s].p+"</section>";
+  if(p.code) html+=codeBlk(p.code.label,p.code.kind,p.code.src);
+  if(p.callout) html+=callout(p.callout);
+  bodyEl.innerHTML=html;
+  if(p.widget && WIDGETS[p.widget]){
+    try{ var node=WIDGETS[p.widget](); if(node) bodyEl.appendChild(node); }catch(e){ console.error("widget",p.widget,e); }
+  }
+  window.__phase=p.color;
+  backdropEl.classList.add("is-open");
+  modalEl.classList.add("is-open");
+  modalEl.setAttribute("aria-hidden","false");
+  document.body.style.overflow="hidden";
+  bodyEl.scrollTop=0;
+  closeBtn.focus();
+}
+function closeModal(){
+  clearStack();
+  backdropEl.classList.remove("is-open");
+  modalEl.classList.remove("is-open");
+  modalEl.setAttribute("aria-hidden","true");
+  document.body.style.overflow="";
+  window.__phase=null;
+  if(lastFocused && lastFocused.focus) lastFocused.focus();
+}
+window.openModal=openModal; window.closeModal=closeModal;
+closeBtn.addEventListener("click",closeModal);
+backdropEl.addEventListener("click",closeModal);
+
+/* delegate clicks for any [data-concept] trigger (cards, pipeline, graph nodes) */
+document.addEventListener("click",function(e){
+  if(e.target.closest && e.target.closest(".term")) return; // terms handled separately
+  var t=e.target.closest?e.target.closest("[data-concept]"):null;
+  if(t){ e.preventDefault(); openModal(t.getAttribute("data-concept")); }
+});
+document.addEventListener("keydown",function(e){
+  if((e.key==="Enter"||e.key===" ") && document.activeElement && document.activeElement.matches && document.activeElement.matches(".gnode")){
+    e.preventDefault(); openModal(document.activeElement.getAttribute("data-concept"));
+  }
+});
+
+/* ════════════ stacking popover engine ════════════ */
+var STACK=[], Z=240;
+function makePop(level){
+  var el=document.createElement("div"); el.className="anno-pop"; el.setAttribute("role","dialog");
+  el.dataset.level=level; el.style.zIndex=Z+level*2;
+  el.innerHTML='<div class="anno-pop-bar">'+(level>0?'<button class="anno-back" type="button">‹ Back</button>':'<span class="dot"></span>')+
+    '<span class="anno-pop-ctx">Glossary</span></div>'+
+    '<div class="anno-pop-inner"><div class="anno-pop-title"></div><div class="anno-pop-body"></div></div>';
+  return el;
+}
+function tone(el,color){
+  if(!color){ el.style.removeProperty("--anno"); el.style.removeProperty("--anno-soft"); el.style.removeProperty("--anno-bd"); return; }
+  el.style.setProperty("--anno","var(--"+color+")");
+  el.style.setProperty("--anno-soft","var(--"+color+"-bg)");
+  el.style.setProperty("--anno-bd","var(--"+color+"-bd)");
+}
+function positionPop(el,trigger,parentEl){
+  var pw=el.offsetWidth, ph=el.offsetHeight, pad=12, gap=10, left, top;
+  if(parentEl){
+    var pr=parentEl.getBoundingClientRect(); if(!pr.width&&!pr.height) return;
+    var OFF=18; left=pr.left+OFF; top=pr.top+OFF;
+    if(left+pw>window.innerWidth-pad) left=pr.left-OFF;
+  } else {
+    var r=trigger.getBoundingClientRect(); if(!r.width&&!r.height&&!r.top) return;
+    left=r.left+r.width/2-pw/2; top=r.bottom+gap;
+    if(top+ph>window.innerHeight-pad && r.top-gap-ph>pad) top=r.top-gap-ph;
+  }
+  left=Math.max(pad,Math.min(left,window.innerWidth-pw-pad));
+  top=Math.max(pad,Math.min(top,window.innerHeight-ph-pad));
+  el.style.left=left+"px"; el.style.top=top+"px";
+}
+function popAbove(level){
+  for(var i=STACK.length-1;i>=0;i--){
+    if(STACK[i].level>level){ STACK[i].trigger.classList.remove("anno-on"); STACK[i].el.remove(); STACK.splice(i,1); }
+  }
+}
+function clearStack(){ popAbove(-1); }
+function repositionAll(){ for(var i=0;i<STACK.length;i++) positionPop(STACK[i].el,STACK[i].trigger,STACK[i].parent); }
+function termColor(trigger){
+  if(trigger.closest && trigger.closest("#modalBody")) return window.__phase||"live";
+  return null;
+}
+function openTerm(trigger){
+  var slug=trigger.getAttribute("data-term"); var t=TERMS[slug]; if(!t) return;
+  if(STACK.length && STACK[STACK.length-1].trigger===trigger){ popAbove(STACK[STACK.length-1].level-1); return; }
+  var parentPop=trigger.closest?trigger.closest(".anno-pop"):null;
+  var baseLevel=parentPop?(+parentPop.dataset.level):-1;
+  popAbove(baseLevel);
+  var level=baseLevel+1;
+  var color = parentPop ? (parentPop.dataset.color||null) : termColor(trigger);
+  var el=makePop(level); el.dataset.color=color||""; tone(el,color);
+  el.querySelector(".anno-pop-title").textContent=t.title;
+  el.querySelector(".anno-pop-body").innerHTML=t.body;
+  el.style.visibility="hidden"; document.body.appendChild(el); el.classList.add("is-open");
+  positionPop(el,trigger,parentPop); el.style.visibility="";
+  var back=el.querySelector(".anno-back");
+  if(back) back.addEventListener("click",function(ev){ ev.preventDefault(); ev.stopPropagation(); popAbove(level-1); });
+  trigger.classList.add("anno-on");
+  STACK.push({el:el,trigger:trigger,level:level,parent:parentPop});
+}
+document.addEventListener("click",function(e){
+  var term=e.target.closest?e.target.closest(".term"):null;
+  if(term){ e.preventDefault(); e.stopPropagation(); openTerm(term); return; }
+  if(STACK.length && !(e.target.closest&&e.target.closest(".anno-pop"))) clearStack();
+},true);
+document.addEventListener("keydown",function(e){
+  if(e.key==="Escape"){
+    if(STACK.length){ e.stopPropagation(); popAbove(STACK[STACK.length-1].level-1); }
+    else if(modalEl.classList.contains("is-open")){ closeModal(); }
+  }
+},true);
+window.addEventListener("scroll",function(){ if(STACK.length) repositionAll(); },{passive:true});
+window.addEventListener("resize",function(){ if(STACK.length) repositionAll(); });
+
+/* ════════════ graph mode toggle ════════════ */
+(function(){
+  var g=document.getElementById("graph2"); if(!g) return;
+  g.querySelectorAll(".seg button").forEach(function(b){
+    b.addEventListener("click",function(){
+      var mode=b.getAttribute("data-on");
+      g.setAttribute("data-mode",mode);
+      g.querySelectorAll(".seg button").forEach(function(x){ x.classList.toggle("is-active",x===b); });
+    });
+  });
+})();
+
+/* ════════════ theme toggle ════════════ */
+var SUN='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+var MOON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+var themeBtn=document.getElementById("themeBtn");
+function setTheme(t){ document.documentElement.setAttribute("data-theme",t); themeBtn.innerHTML=t==="dark"?MOON:SUN; }
+setTheme("dark");
+themeBtn.addEventListener("click",function(){
+  var cur=document.documentElement.getAttribute("data-theme");
+  setTheme(cur==="dark"?"light":"dark");
+});
+
+/* ════════════ reveal FAB ════════════ */
+var fab=document.createElement("button"); fab.className="fab"; fab.type="button"; fab.textContent="i";
+fab.title="Reveal what's interactive"; fab.setAttribute("aria-label","Reveal interactive elements");
+document.body.appendChild(fab);
+var tip=document.createElement("div"); tip.className="fab-tip";
+tip.textContent="Underlined terms open definitions. Cards, pipeline stages, and graph nodes open deep dives.";
+document.body.appendChild(tip);
+var tipT;
+fab.addEventListener("click",function(e){
+  e.stopPropagation();
+  var on=document.body.classList.toggle("anno-reveal");
+  fab.classList.toggle("is-active",on);
+  if(on){ tip.classList.add("show"); clearTimeout(tipT); tipT=setTimeout(function(){ tip.classList.remove("show"); },4200); }
+  else tip.classList.remove("show");
+});
+
+/* ════════════ progress bar ════════════ */
+var bar=document.getElementById("bar");
+window.addEventListener("scroll",function(){
+  var h=document.documentElement, max=h.scrollHeight-h.clientHeight;
+  bar.style.width=(max>0?(h.scrollTop/max*100):0).toFixed(2)+"%";
+},{passive:true});
+
+/* ════════════ boot ════════════ */
+renderCards();
+})();
+</script>
+</body>
+</html>

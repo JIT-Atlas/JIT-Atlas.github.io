@@ -1,0 +1,1369 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Exact Order · RSC → Flight → HTML → paint → hydrate, from first principles</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800;1,400;1,500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --flow:#3ad6e6;  --flow-soft:rgba(58,214,230,.14);   /* HTML — what paints */
+  --press:#f0a830; --press-soft:rgba(240,168,48,.15);  /* Flight — the React model */
+  --buf:#a888ff;   --buf-soft:rgba(168,136,255,.16);   /* Server Components — server work */
+  --live:#5fd98a;  --live-soft:rgba(95,217,138,.16);   /* Client JS — hydration / interactive */
+  --danger:#f0654f;--danger-soft:rgba(240,101,79,.15); /* myths / corrections */
+  --r:14px; --maxw:1200px;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --disp:'Geist','Hanken Grotesk',sans-serif;
+}
+html[data-theme="dark"]{
+  --bg:#070a0f; --bg2:#0a0f16; --panel:#0d141d; --panel2:#111a25;
+  --ink:#eef1ec; --ink2:#a7b2c0; --ink3:#7c8895;
+  --line:rgba(140,165,195,.13); --line2:rgba(140,165,195,.26);
+  --grid:rgba(110,150,190,.045); --grid2:rgba(110,150,190,.08);
+  --shadow:0 28px 70px -24px rgba(0,0,0,.78);
+  --str:#86e1a0;
+}
+html[data-theme="light"]{
+  --bg:#eceae1; --bg2:#f2efe6; --panel:#f8f5ec; --panel2:#fcfaf2;
+  --ink:#141a20; --ink2:#46505c; --ink3:#8a8f84;
+  --line:rgba(30,45,62,.15); --line2:rgba(30,45,62,.3);
+  --grid:rgba(40,65,90,.05); --grid2:rgba(40,65,90,.1);
+  --flow:#0f93a8; --press:#c47a12; --buf:#6b48c2; --live:#0f9d58; --danger:#c1432e;
+  --flow-soft:rgba(15,147,168,.12); --press-soft:rgba(196,122,18,.14);
+  --buf-soft:rgba(107,72,194,.12); --live-soft:rgba(15,157,88,.12); --danger-soft:rgba(193,67,46,.12);
+  --shadow:0 26px 56px -24px rgba(40,55,75,.42);
+  --str:#0f766e;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);
+  font-size:15.5px;line-height:1.62;-webkit-font-smoothing:antialiased;letter-spacing:-.005em;
+  background-image:
+    linear-gradient(var(--grid) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid) 1px,transparent 1px),
+    linear-gradient(var(--grid2) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid2) 1px,transparent 1px);
+  background-size:30px 30px,30px 30px,150px 150px,150px 150px;
+  transition:background-color .4s,color .4s;
+}
+body.fs-lock{overflow:hidden}
+::selection{background:var(--press-soft);color:var(--ink)}
+code,pre{font-family:var(--mono)}
+*{scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+*::-webkit-scrollbar{width:11px;height:11px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:var(--line2);border:3px solid transparent;border-radius:99px;background-clip:padding-box}
+*::-webkit-scrollbar-thumb:hover{background:var(--press);background-clip:padding-box;border:3px solid transparent}
+html::-webkit-scrollbar-thumb{background:linear-gradient(var(--flow),var(--press),var(--live));background-clip:padding-box;border:4px solid transparent;border-radius:99px}
+
+header.top{position:fixed;top:0;left:0;right:0;z-index:60;backdrop-filter:blur(15px);
+  background:color-mix(in srgb,var(--bg) 80%,transparent);border-bottom:1px solid var(--line);
+  transform:translateY(0);transition:transform .4s cubic-bezier(.4,0,.2,1)}
+header.top.hidden{transform:translateY(-106%)}
+.top-inner{max-width:var(--maxw);margin:0 auto;padding:13px 24px;display:flex;align-items:center;gap:18px}
+.brand{font-family:var(--mono);font-weight:800;letter-spacing:.01em;font-size:13.5px;display:flex;align-items:center;gap:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand .dot{width:10px;height:10px;border-radius:50%;background:var(--press);box-shadow:0 0 0 4px var(--press-soft);animation:pulse 2.4s infinite;flex-shrink:0}
+.brand .a{color:var(--buf)} .brand .arr{color:var(--ink3)} .brand .b{color:var(--flow)} .brand .c{color:var(--press)} .brand .d{color:var(--live)}
+@keyframes pulse{50%{box-shadow:0 0 0 10px transparent}}
+.vol{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink3);border:1px solid var(--line);border-radius:999px;padding:3px 10px;text-transform:uppercase;white-space:nowrap}
+.top-spacer{flex:1}
+.scrollprog{position:absolute;left:0;bottom:-1px;height:2px;background:linear-gradient(90deg,var(--buf),var(--press),var(--flow),var(--live));width:0%;transition:width .1s linear}
+.theme-btn{font-family:var(--mono);font-size:12px;letter-spacing:.05em;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);padding:8px 14px;border-radius:999px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:.2s;flex-shrink:0}
+.theme-btn:hover{color:var(--ink);border-color:var(--press)}
+.theme-btn svg{width:15px;height:15px}
+
+.shell{max-width:960px;margin:0 auto;padding:0 24px}
+nav.toc{display:none;position:fixed;top:96px;left:max(20px,calc(50% - 730px));width:226px;
+  height:calc(100vh - 128px);font-family:var(--mono);font-size:12.5px;overflow:auto;z-index:40}
+.toc-head .tt{font-size:10px;letter-spacing:.18em;color:var(--ink3);text-transform:uppercase;padding-left:14px;display:block;margin-bottom:10px}
+nav.toc a{display:flex;gap:10px;align-items:baseline;color:var(--ink3);text-decoration:none;padding:6px 0;border-left:2px solid transparent;padding-left:14px;margin-left:-2px;transition:.2s}
+nav.toc a .num{color:var(--ink3);font-weight:700;font-size:11px;min-width:20px}
+nav.toc a:hover{color:var(--ink)}
+nav.toc a.active{color:var(--ink);border-left-color:var(--press)}
+nav.toc a.active .num{color:var(--press)}
+@media(min-width:1480px){ nav.toc{display:block} }
+
+main{padding:96px 0 140px;min-width:0;overflow-x:hidden}
+.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--flow);display:flex;align-items:center;gap:12px;margin:0 0 16px}
+.kicker .ix{color:var(--press);font-weight:800}
+.kicker::after{content:"";flex:1;height:1px;background:var(--line)}
+h1.hero-h{font-family:var(--disp);font-weight:600;font-size:clamp(32px,5.4vw,60px);line-height:1.02;letter-spacing:-.02em;margin:0 0 22px;font-optical-sizing:auto}
+h1.hero-h .a{color:var(--buf)} h1.hero-h .b{color:var(--press);font-style:italic} h1.hero-h .c{color:var(--flow)} h1.hero-h .d{color:var(--live)}
+h2{font-family:var(--disp);font-weight:600;font-size:clamp(24px,3.3vw,35px);letter-spacing:-.015em;margin:0 0 16px;line-height:1.12}
+h2 em{font-style:italic;color:var(--press)}
+h3{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink2);margin:30px 0 10px}
+.lead{font-size:17px;line-height:1.6;color:var(--ink2);max-width:72ch;font-family:var(--mono)}
+.prose{max-width:70ch}
+.prose p{margin:0 0 16px} .prose strong{color:var(--ink);font-weight:700}
+.prose em{color:var(--ink);font-style:italic}
+.prose code{background:var(--bg2);padding:1px 5px;border-radius:5px;color:var(--ink);font-size:13.5px}
+section.block{padding:72px 0;border-bottom:1px solid var(--line);scroll-margin-top:88px}
+section.block:first-of-type{padding-top:14px}
+.phase{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--buf);border:1px solid var(--buf);background:var(--buf-soft);border-radius:999px;padding:3px 11px;margin-bottom:14px}
+
+.term{cursor:help;border-bottom:1.5px dotted var(--flow);color:inherit;transition:background .15s}
+.term:hover{background:var(--flow-soft)}
+#tip{position:fixed;z-index:1200;max-width:340px;background:var(--panel2);border:1px solid var(--line2);border-radius:12px;padding:13px 15px;box-shadow:var(--shadow);font-size:14px;line-height:1.5;color:var(--ink2);pointer-events:none;opacity:0;transform:translateY(4px);transition:opacity .14s,transform .14s;font-family:var(--mono)}
+#tip.show{opacity:1;transform:translateY(0)}
+#tip .t-name{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.03em;color:var(--flow);text-transform:uppercase;display:block;margin-bottom:5px}
+#tip .t-kind{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--press);text-transform:uppercase;float:right}
+#tip.kind-buf .t-name,#tip.kind-buf .t-kind{color:var(--buf)}
+#tip.kind-live .t-name,#tip.kind-live .t-kind{color:var(--live)}
+#tip.kind-press .t-name,#tip.kind-press .t-kind{color:var(--press)}
+#tip::after{content:"";position:absolute;left:var(--ax,20px);bottom:-7px;width:12px;height:12px;background:var(--panel2);border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);transform:rotate(45deg)}
+#tip.flip::after{bottom:auto;top:-7px;transform:rotate(225deg)}
+
+.callout{border:1px solid var(--line);border-left:3px solid var(--flow);background:var(--panel);border-radius:0 var(--r) var(--r) 0;padding:20px 24px;margin:26px 0;font-size:16px}
+.callout.press{border-left-color:var(--press)}
+.callout.buf{border-left-color:var(--buf)}
+.callout.live{border-left-color:var(--live)}
+.callout.dgr{border-left-color:var(--danger)}
+.callout .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--flow);display:block;margin-bottom:8px}
+.callout.press .lbl{color:var(--press)} .callout.buf .lbl{color:var(--buf)} .callout.live .lbl{color:var(--live)} .callout.dgr .lbl{color:var(--danger)}
+.callout code{background:var(--bg2);padding:1px 5px;border-radius:5px;color:var(--ink);font-size:13.5px}
+.callout strong{color:var(--ink)}
+
+pre.wire{font-family:var(--mono);font-size:13px;line-height:1.7;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow-x:auto;white-space:pre;color:var(--ink2);margin:22px 0}
+pre.wire .k{color:var(--press)} pre.wire .v{color:var(--flow)} pre.wire .c{color:var(--ink3)} pre.wire .d{color:var(--danger)} pre.wire .n{color:var(--buf)} pre.wire .s{color:var(--str)} pre.wire .l{color:var(--live)}
+pre.wire b{color:var(--ink);font-weight:700}
+.codecap{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin:22px 0 -10px;display:flex;align-items:center;gap:9px}
+.codecap::after{content:"";flex:1;height:1px;background:var(--line)}
+
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;color:var(--ink2);margin:18px 0 0}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+/* ---- figure + animation player ---- */
+.figure{margin:30px 0;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);overflow:hidden;box-shadow:var(--shadow)}
+.figure.fs{position:fixed;inset:12px;z-index:400;margin:0;max-width:none;display:flex;flex-direction:column}
+.fig-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.fig-bar .title{font-family:var(--mono);font-size:12px;letter-spacing:.03em;color:var(--ink2);text-transform:uppercase}
+.fig-bar .grow{flex:1}
+.fbtn{font-family:var(--mono);font-size:11px;letter-spacing:.03em;border:1px solid var(--line2);background:transparent;color:var(--ink2);padding:6px 11px;border-radius:8px;cursor:pointer;transition:.18s;display:inline-flex;align-items:center;gap:6px}
+.fbtn:hover{color:var(--ink);border-color:var(--press)}
+.fbtn svg{width:13px;height:13px}
+.canvas{position:relative;background:radial-gradient(circle at 1px 1px,var(--grid2) 1px,transparent 0) 0 0/24px 24px}
+.figure.fs .canvas{flex:1;min-height:0}
+.figure:not(.fs) .canvas[data-zoom]{cursor:zoom-in}
+.figure.fs .canvas{cursor:grab}
+.figure.fs .canvas:active{cursor:grabbing}
+svg.diagram{display:block;width:100%;height:auto;touch-action:auto}
+.figure.fs svg.diagram{height:100%;touch-action:none}
+.zoomctl{position:absolute;right:12px;bottom:12px;display:none;flex-direction:column;gap:6px;z-index:5}
+.figure.fs .zoomctl{display:flex}
+.zoomctl button{width:34px;height:34px;border-radius:8px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);font-family:var(--mono);font-size:15px;cursor:pointer;line-height:1;transition:.15s;display:grid;place-items:center}
+.zoomctl button:hover{color:var(--ink);border-color:var(--press)}
+.zlevel{position:absolute;left:12px;bottom:12px;display:none;font-family:var(--mono);font-size:11px;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:5;user-select:none}
+.figure.fs .zlevel{display:block}
+.zhint{position:absolute;left:12px;top:12px;display:none;font-family:var(--mono);font-size:10px;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:5;opacity:.85;pointer-events:none}
+.figure.fs .zhint{display:block}
+.inspect-hint{position:absolute;right:12px;top:12px;font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:4;pointer-events:none;opacity:0;transition:opacity .2s}
+.figure:not(.fs) .canvas[data-zoom]:hover .inspect-hint{opacity:.9}
+.figure.fs .inspect-hint{display:none}
+.player{display:flex;align-items:center;gap:10px;padding:14px 16px;border-top:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.pbtn{width:40px;height:40px;border-radius:50%;border:1px solid var(--line2);background:var(--panel);color:var(--ink);cursor:pointer;display:grid;place-items:center;transition:.18s}
+.pbtn:hover{border-color:var(--press);color:var(--press)}
+.pbtn.play{background:var(--press);border-color:var(--press);color:var(--bg);width:46px;height:46px}
+.pbtn.play:hover{filter:brightness(1.08);color:var(--bg)}
+.pbtn svg{width:18px;height:18px}
+.scrub{flex:1;min-width:160px;height:6px;border-radius:999px;background:var(--line);position:relative;cursor:pointer}
+.scrub .fill{position:absolute;left:0;top:0;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--buf),var(--press),var(--flow));width:0%}
+.scrub .ticks{position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center;padding:0 1px}
+.scrub .tk{width:2px;height:2px;border-radius:50%;background:var(--ink3)}
+.stepno{font-family:var(--mono);font-size:12px;color:var(--ink3);min-width:62px;text-align:right}
+.caption{padding:18px 22px;border-top:1px solid var(--line);min-height:104px}
+.caption .cn{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--press);display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.caption .cn .lane{color:var(--flow)}
+.caption .ch{font-family:var(--disp);font-size:21px;font-weight:600;margin:0 0 4px;letter-spacing:-.01em}
+.caption .cb{color:var(--ink2);font-size:15px;margin:0;max-width:84ch;font-family:var(--mono)}
+
+/* ---- stat grid ---- */
+.statgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:30px 0 6px}
+@media(max-width:620px){.statgrid{grid-template-columns:repeat(2,1fr)}}
+.stat{border:1px solid var(--line);border-radius:12px;padding:15px 17px;background:var(--panel)}
+.stat .sv{font-family:var(--disp);font-size:29px;font-weight:700;line-height:1}
+.stat .sl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin-top:8px;display:block;line-height:1.3}
+
+/* ---- three questions triptych (tabs) ---- */
+.qtabs{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:24px 0 0}
+@media(max-width:640px){.qtabs{grid-template-columns:1fr}}
+.qtab{border:1px solid var(--line);border-radius:13px;padding:16px 18px;background:var(--panel);cursor:pointer;transition:.2s;text-align:left;position:relative;overflow:hidden}
+.qtab::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--flow);opacity:.5;transition:.2s}
+.qtab.f::before{background:var(--press)} .qtab.j::before{background:var(--live)}
+.qtab:hover{transform:translateY(-2px);border-color:var(--line2)}
+.qtab.on{border-color:var(--flow);box-shadow:var(--shadow)}
+.qtab.on::before{opacity:1;width:5px}
+.qtab.f.on{border-color:var(--press)} .qtab.j.on{border-color:var(--live)}
+.qtab .qk{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--flow);display:block;margin-bottom:7px}
+.qtab.f .qk{color:var(--press)} .qtab.j .qk{color:var(--live)}
+.qtab .qq{font-family:var(--disp);font-size:18px;font-weight:600;color:var(--ink);line-height:1.2;letter-spacing:-.01em}
+.qpanel{border:1px solid var(--line2);border-radius:13px;padding:20px 22px;background:var(--panel2);margin-top:12px;min-height:120px}
+.qpanel .pa{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--flow);margin-bottom:8px;display:block}
+.qpanel.f .pa{color:var(--press)} .qpanel.j .pa{color:var(--live)}
+.qpanel p{margin:0;font-size:15.5px;color:var(--ink2);max-width:78ch}
+.qpanel p code{background:var(--bg2);padding:1px 5px;border-radius:5px;color:var(--ink);font-size:13px}
+.qpanel strong{color:var(--ink)}
+
+/* ---- toggle (myth vs reality) ---- */
+.toggle-wrap{margin:24px 0}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:999px;overflow:hidden;margin-bottom:16px}
+.seg button{font-family:var(--mono);font-size:12px;padding:8px 18px;background:transparent;color:var(--ink3);cursor:pointer;border:0;transition:.16s;letter-spacing:.02em}
+.seg button.on{color:var(--bg);font-weight:700}
+.seg button.wrong.on{background:var(--danger)}
+.seg button.right.on{background:var(--live)}
+.togpanel{border:1px solid var(--line);border-left:3px solid var(--danger);border-radius:0 13px 13px 0;padding:20px 24px;background:var(--panel)}
+.togpanel.right{border-left-color:var(--live)}
+.togpanel .tl{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--danger);display:block;margin-bottom:8px}
+.togpanel.right .tl{color:var(--live)}
+.togpanel p{margin:0 0 12px;font-size:15.5px;color:var(--ink2)}
+.togpanel p:last-child{margin:0}
+.togpanel strong{color:var(--ink)} .togpanel em{color:var(--ink);font-style:italic}
+.togpanel code{background:var(--bg2);padding:1px 5px;border-radius:5px;color:var(--ink);font-size:13px}
+
+/* ---- two-up comparison ---- */
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:24px 0;align-items:start}
+@media(max-width:680px){.vs{grid-template-columns:1fr}}
+.vscol{border:1px solid var(--line);border-radius:14px;padding:18px 20px;background:var(--panel)}
+.vscol.s{border-top:3px solid var(--buf)} .vscol.c{border-top:3px solid var(--live)}
+.vscol h4{font-family:var(--disp);font-size:20px;font-weight:600;margin:0 0 4px;letter-spacing:-.01em}
+.vscol.s h4{color:var(--buf)} .vscol.c h4{color:var(--live)}
+.vscol .sub{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--ink3);text-transform:uppercase;margin-bottom:14px;display:block}
+.vsrow{display:flex;gap:10px;padding:9px 0;border-top:1px solid var(--line);font-size:14px}
+.vsrow:first-of-type{border-top:0}
+.vsrow .rk{color:var(--ink3);min-width:96px;font-size:11px;letter-spacing:.03em;text-transform:uppercase;padding-top:1px}
+.vsrow .rv{color:var(--ink);flex:1}
+.vsrow .rv.yes{color:var(--live)} .vsrow .rv.no{color:var(--danger)}
+.vscol code{background:var(--bg2);padding:1px 4px;border-radius:4px;color:var(--ink);font-size:12px}
+
+/* ---- myth cards ---- */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(248px,100%),1fr));gap:14px;margin:24px 0}
+.card{border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:var(--panel);cursor:pointer;transition:.2s;position:relative;overflow:hidden}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--danger);opacity:.7}
+.card:hover{transform:translateY(-3px);border-color:var(--line2);box-shadow:var(--shadow)}
+.card .fn{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--ink3);text-transform:uppercase;margin-bottom:7px;display:flex;justify-content:space-between;gap:8px}
+.card .fn .mx{color:var(--danger);font-weight:800}
+.card .ft{font-family:var(--mono);font-weight:700;font-size:14px;line-height:1.3;margin-bottom:6px;color:var(--ink)}
+.card .fs2{font-size:13.5px;color:var(--ink2);line-height:1.5}
+.card .chip{font-family:var(--mono);font-size:9px;letter-spacing:.06em;color:var(--live);border:1px solid var(--live);border-radius:999px;padding:1px 8px;margin-top:10px;display:inline-block}
+.scrim{position:fixed;inset:0;z-index:600;background:rgba(4,7,11,.66);backdrop-filter:blur(7px);display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;pointer-events:none;transition:opacity .25s}
+.scrim.open{opacity:1;pointer-events:auto}
+.modal{background:var(--panel2);border:1px solid var(--line2);border-radius:18px;max-width:640px;width:100%;max-height:88vh;overflow:auto;box-shadow:var(--shadow);transform:translateY(16px) scale(.98);transition:transform .3s cubic-bezier(.3,1.2,.4,1);position:relative}
+.scrim.open .modal{transform:none}
+.modal .mhead{padding:24px 26px 0}
+.modal .mtag{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--danger);display:flex;gap:10px;align-items:center}
+.modal h4{font-family:var(--disp);font-size:24px;font-weight:600;margin:8px 0 0;letter-spacing:-.01em}
+.modal .mbody{padding:14px 26px 26px;color:var(--ink2);font-size:15.5px}
+.modal .mbody p{margin:0 0 14px}
+.modal .mbody code{background:var(--panel);padding:1px 5px;border-radius:5px;font-size:13px;color:var(--ink)}
+.modal .mbody strong{color:var(--ink)} .modal .mbody em{color:var(--ink);font-style:italic}
+.mclose{position:absolute;right:18px;top:18px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);cursor:pointer;font-size:18px;line-height:1;z-index:2}
+.mclose:hover{color:var(--ink);border-color:var(--danger)}
+.better{border-left:3px solid var(--live);background:var(--live-soft);padding:12px 16px;border-radius:0 10px 10px 0;font-size:14.5px;margin-top:8px}
+.better .bl{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--live);display:block;margin-bottom:5px}
+
+/* ---- final lock-in ---- */
+.lockin{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin:26px 0}
+@media(max-width:760px){.lockin{grid-template-columns:1fr}}
+.lock{border:1px solid var(--line);border-radius:13px;padding:18px 20px;background:var(--panel);border-top:3px solid var(--flow)}
+.lock.f{border-top-color:var(--press)} .lock.j{border-top-color:var(--live)}
+.lock .lh{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--flow);margin-bottom:8px;display:block}
+.lock.f .lh{color:var(--press)} .lock.j .lh{color:var(--live)}
+.lock .lq{font-family:var(--disp);font-size:17px;font-weight:600;color:var(--ink);line-height:1.25;letter-spacing:-.01em}
+
+footer{max-width:var(--maxw);margin:0 auto;padding:40px 24px 80px;font-family:var(--mono);font-size:12px;color:var(--ink3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;border-top:1px solid var(--line)}
+@media(max-width:920px){ body{font-size:16px} main{padding:84px 0 100px} }
+</style>
+</head>
+<body>
+<header class="top" id="topNav">
+  <div class="top-inner">
+    <div class="brand">
+      <span class="dot"></span>
+      <span class="a">Server Components</span><span class="arr"> → </span><span class="c">Flight</span><span class="arr"> → </span><span class="b">HTML</span><span class="arr"> → </span><span class="d">hydrate</span>
+    </div>
+    <span class="vol">the exact order · what feeds what</span>
+    <div class="top-spacer"></div>
+    <button class="theme-btn" id="themeBtn" aria-label="toggle theme">
+      <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>
+      <span id="themeTxt">DARK</span>
+    </button>
+  </div>
+  <div class="scrollprog" id="scrollProg"></div>
+</header>
+
+<div class="shell">
+  <nav class="toc" id="toc">
+    <span class="tt">one render · two outputs</span>
+    <a href="#hero"><span class="num">00</span> The exact order</a>
+    <a href="#deps"><span class="num">01</span> One render, two outputs</a>
+    <a href="#overlap"><span class="num">02</span> Overlap ≠ independence</a>
+    <a href="#three"><span class="num">03</span> The three questions</a>
+    <a href="#scfirst"><span class="num">04</span> Server Components run first</a>
+    <a href="#nothtml"><span class="num">05</span> Not missing from the HTML</a>
+    <a href="#boundary"><span class="num">06</span> Client Components are boundaries</a>
+    <a href="#braid"><span class="num">07</span> One response, braided</a>
+    <a href="#paint"><span class="num">08</span> Paint first, then hydrate</a>
+    <a href="#split"><span class="num">09</span> The real split</a>
+    <a href="#myths"><span class="num">10</span> The rule · four myths</a>
+  </nav>
+
+  <main>
+
+    <!-- ================= 00 HERO ================= -->
+    <section class="block" id="hero">
+      <p class="kicker"><span class="ix">00</span> RSC · Flight · HTML · from first principles</p>
+      <h1 class="hero-h">One request starts <span class="a">one server render</span>.<br>It produces <span class="b">two things</span> the browser needs — and <span class="c">the order</span> is <span class="d">strict</span>.</h1>
+      <p class="lead">A React Server Components app does not turn your tree into plain HTML and forget it. One render produces <strong style="color:var(--press)">a Flight payload</strong> — the data model of the Server Component tree — and a <strong style="color:var(--flow)">stream of HTML</strong> the browser paints first. They can be produced at overlapping times, but the dependency never reverses: <strong>HTML is downstream of the server-rendered React result.</strong> Press play and follow one request all the way to an interactive page.</p>
+
+      <div class="figure" id="depFig">
+        <div class="fig-bar">
+          <span class="title">▼ request → Server Components → Flight → React DOM Server → HTML → paint → hydrate</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-inspect="depSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="depSvg">
+          <svg class="diagram" id="depSvg" viewBox="0 0 1200 760" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="depVP"></g></svg>
+        </div>
+        <div class="player">
+          <button class="pbtn" id="dp_prev" title="step back"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17V7l-7 5zM8 7h-2v10h2z"/></svg></button>
+          <button class="pbtn play" id="dp_play" title="play/pause"><svg id="dp_playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg></button>
+          <button class="pbtn" id="dp_next" title="step forward"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 7v10l7-5zM16 7h2v10h-2z"/></svg></button>
+          <div class="scrub" id="dp_scrub"><div class="fill" id="dp_fill"></div><div class="ticks" id="dp_ticks"></div></div>
+          <span class="stepno" id="dp_stepno">00 / 00</span>
+        </div>
+        <div class="caption">
+          <div class="cn"><span id="dp_capn">STAGE 00</span> · <span class="lane" id="dp_lane">—</span></div>
+          <p class="ch" id="dp_caph">Press play to follow the dependency chain</p>
+          <p class="cb" id="dp_capb">Violet runs on the server. Amber is the Flight model. Cyan is HTML the browser paints. Green is the interactive layer. Each stage feeds the next — top to bottom is literally "downstream".</p>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--buf)"></i> Server Components — run on the server</span>
+        <span><i style="background:var(--press)"></i> Flight / RSC payload — the React model</span>
+        <span><i style="background:var(--flow)"></i> HTML — what the browser paints</span>
+        <span><i style="background:var(--live)"></i> Client JS — hydration &amp; interactivity</span>
+      </div>
+
+      <div class="callout dgr">
+        <span class="lbl">the early correction that fixes everything</span>
+        Server Components do <strong>not</strong> "only become Flight" while Client Components "become HTML." A <strong style="color:var(--buf)">Server Component</strong> produces visible HTML <em>and</em> Flight data; it just ships <strong>no component JavaScript</strong>. The split that matters is by <strong>capability</strong>, not by which artifact a component turns into.
+      </div>
+
+      <div class="statgrid">
+        <div class="stat"><div class="sv" style="color:var(--press)">2</div><span class="sl">outputs from one render</span></div>
+        <div class="stat"><div class="sv" style="color:var(--flow)">1</div><span class="sl">streamed response, first load</span></div>
+        <div class="stat"><div class="sv" style="color:var(--buf)">0 KB</div><span class="sl">JS a Server Component ships</span></div>
+        <div class="stat"><div class="sv" style="color:var(--live)">2</div><span class="sl">milestones: paint, then interactive</span></div>
+      </div>
+    </section>
+
+    <!-- ================= 01 DEPENDENCY ================= -->
+    <section class="block" id="deps">
+      <p class="kicker"><span class="ix">01</span> One source, a strict dependency</p>
+      <span class="phase">Flight is the model · HTML is rendered from it</span>
+      <h2>HTML and Flight are <em>not</em> two unrelated outputs</h2>
+      <p class="lead">Flight is the React data model for the Server Component render. The HTML stream is produced from the <span class="term" data-term="renderable result">renderable result</span> of that same model. They may be produced and streamed at overlapping times, but the dependency is one-directional.</p>
+
+      <pre class="wire"><span class="c">Server Components run</span>
+  ↓
+<span class="c">Flight rows are produced</span>
+  ↓
+<span class="c">React DOM Server uses the result to produce HTML</span>
+  ↓
+<span class="c">the browser paints the HTML</span>
+  ↓
+<span class="c">the browser uses Flight + client JS to hydrate</span></pre>
+
+      <div class="prose">
+        <p>Read that top to bottom: every line depends on the one above it. The server can <em>stream</em> — it does not finish the whole tree before emitting anything — but it can never emit the HTML for a region before it has produced the React result for that region. That single fact is the spine of the whole pipeline.</p>
+      </div>
+
+      <div class="callout buf">
+        <span class="lbl">why a model and not just markup</span>
+        The browser needs to know <strong>what React tree</strong> the painted HTML represents, so it can adopt that exact DOM during <span class="term" data-term="hydration">hydration</span> instead of throwing it away and re-rendering. HTML alone cannot say "here is a <code>&lt;Counter&gt;</code> client boundary with these props." Flight can.
+      </div>
+    </section>
+
+    <!-- ================= 02 OVERLAP ================= -->
+    <section class="block" id="overlap">
+      <p class="kicker"><span class="ix">02</span> The subtle part</p>
+      <span class="phase">streamed in parallel · still strictly ordered</span>
+      <h2>Overlap in time is <em>not</em> the same as independence</h2>
+      <p class="lead">Two facts about this pipeline sound like they contradict each other. The server <strong>streams</strong> — it flushes HTML for finished regions while slower regions are still rendering, so work overlaps in time. And yet the order is <strong>strict</strong> — a region's HTML can never appear before that region's Flight. Both are true, because they describe <em>two different axes</em>.</p>
+
+      <div class="prose">
+        <p>Look across the whole page and you see <strong>concurrency</strong>: at a single instant the server can be producing region C's model while the browser is already painting region A. Now zoom into any <em>one</em> region and you see a strict <strong>queue</strong>: its Flight rows first, its HTML second — always.</p>
+        <p>"Overlap" is a statement about <strong>different regions at the same time</strong>. "Dependency" is a statement about <strong>one region's two artifacts</strong>. Picture a single global timeline and the two collapse into a contradiction. Keep the axes apart and it's obvious.</p>
+      </div>
+
+      <div class="callout buf">
+        <span class="lbl">the analogy that makes it click</span>
+        A kitchen during a dinner rush cooks many dishes at once — dish A is being <strong>plated</strong> while dish B is still <strong>in the pan</strong>. That is the overlap. But no dish is ever plated before it is cooked. That is the per-dish order. <strong>Flight is cooking · HTML is plating · a region is a dish.</strong>
+      </div>
+
+      <p class="codecap">the truth sits between two tidy but wrong models</p>
+      <div class="lockin">
+        <div class="lock" style="border-top-color:var(--danger)">
+          <span class="lh" style="color:var(--danger)">✕ too sequential</span>
+          <span class="lq" style="font-size:15px;font-weight:600">“The whole Flight payload finishes, then HTML begins.” No — ready regions flush as HTML while later regions are still rendering.</span>
+        </div>
+        <div class="lock" style="border-top-color:var(--danger)">
+          <span class="lh" style="color:var(--danger)">✕ too independent</span>
+          <span class="lq" style="font-size:15px;font-weight:600">“HTML and Flight are unrelated streams racing.” No — each HTML region strictly trails its own Flight rows.</span>
+        </div>
+        <div class="lock j">
+          <span class="lh">✓ streamed and ordered</span>
+          <span class="lq" style="font-size:15px;font-weight:600">Concurrent across regions, ordered within a region. The diagram shows exactly this — follow ① → ② and watch the gate.</span>
+        </div>
+      </div>
+
+      <div class="figure" id="ovFig">
+        <div class="fig-bar">
+          <span class="title">▦ within a region: Flight → HTML (ordered) · across regions: overlapping in time</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-inspect="ovSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="ovSvg">
+          <svg class="diagram" id="ovSvg" viewBox="0 0 1200 560" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="ovVP"></g></svg>
+        </div>
+        <div class="player">
+          <button class="pbtn" id="ov_prev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17V7l-7 5zM8 7h-2v10h2z"/></svg></button>
+          <button class="pbtn play" id="ov_play"><svg id="ov_playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg></button>
+          <button class="pbtn" id="ov_next"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 7v10l7-5zM16 7h2v10h-2z"/></svg></button>
+          <div class="scrub" id="ov_scrub"><div class="fill" id="ov_fill"></div><div class="ticks" id="ov_ticks"></div></div>
+          <span class="stepno" id="ov_stepno">00 / 00</span>
+        </div>
+        <div class="caption">
+          <div class="cn"><span id="ov_capn">FRAME 00</span> · <span class="lane" id="ov_lane">—</span></div>
+          <p class="ch" id="ov_caph">Press play to watch Flight gate the HTML</p>
+          <p class="cb" id="ov_capb">The top lane is Flight rows the server produces. The bottom lane is HTML the browser receives. An HTML region only turns solid once its Flight row exists above it; until then it is a fallback.</p>
+        </div>
+      </div>
+
+      <div class="callout press">
+        <span class="lbl">the rule, in both halves</span>
+        <strong>Across regions, overlapping:</strong> the server keeps flushing whatever is ready, in any order. <strong>Within a region, ordered:</strong> ready Flight rows → that region's HTML can be produced; missing Flight rows → that region waits or shows a fallback. The streams overlap in time; the dependency never bends.
+      </div>
+    </section>
+
+    <!-- ================= 03 THREE QUESTIONS ================= -->
+    <section class="block" id="three">
+      <p class="kicker"><span class="ix">03</span> Three artifacts, three jobs</p>
+      <span class="phase">don't conflate them</span>
+      <h2>HTML, Flight, and client JS each answer a <em>different</em> question</h2>
+      <p class="lead">The browser receives three things from one render. They overlap in <em>content</em> — they describe the same UI — but each exists for a different consumer. Tap each to see the question it answers.</p>
+
+      <div class="qtabs" id="qtabs">
+        <button class="qtab h on" data-q="0"><span class="qk">HTML</span><span class="qq">What should be painted now?</span></button>
+        <button class="qtab f" data-q="1"><span class="qk">Flight</span><span class="qq">What React tree describes this UI?</span></button>
+        <button class="qtab j" data-q="2"><span class="qk">Client JS</span><span class="qq">What needs to become interactive?</span></button>
+      </div>
+      <div class="qpanel h" id="qpanel">
+        <span class="pa" id="qpa">HTML · for the browser's rasterizer</span>
+        <p id="qpb">HTML is the immediate, non-interactive structure for the first frame. The browser parses it and paints pixels with <strong>no JavaScript required</strong>. It is the answer to "what does the user see right now," and nothing more — it carries no notion of which parts are React components or where the client boundaries are.</p>
+      </div>
+    </section>
+
+    <!-- ================= 04 SC RUN FIRST ================= -->
+    <section class="block" id="scfirst">
+      <p class="kicker"><span class="ix">04</span> The first thing that happens</p>
+      <span class="phase">execute on the server · serialize to Flight</span>
+      <h2>Server Components run first</h2>
+      <p class="lead">A Server Component is a function the server <em>calls</em>. It can fetch data, read the filesystem, call server-only code, or await async work. React turns its returned tree into the Flight payload — not into component code sent to the browser.</p>
+
+      <p class="codecap">app/page.tsx · a Server Component</p>
+      <pre class="wire"><span class="c">// app/page.tsx</span>
+<span class="k">export default async function</span> <span class="v">Page</span>() {
+  <span class="k">const</span> posts = <span class="k">await</span> db.posts.<span class="v">findMany</span>()
+
+  <span class="k">return</span> (
+    &lt;<span class="v">main</span>&gt;
+      &lt;<span class="v">h1</span>&gt;Posts&lt;/<span class="v">h1</span>&gt;
+      &lt;<span class="v">PostList</span> posts={posts} /&gt;
+    &lt;/<span class="v">main</span>&gt;
+  )
+}</pre>
+
+      <div class="prose">
+        <p>The server calls <code>Page()</code>, which returns React elements. That returned JSX is <strong>not</strong> sent to the browser as component code. Instead React encodes it as the <span class="term" data-term="Flight payload">Flight payload</span>, which contains:</p>
+      </div>
+      <pre class="wire"><span class="c">- rendered Server Component output</span>
+<span class="c">- serialized props</span>
+<span class="c">- placeholders for suspended async work</span>
+<span class="c">- references to Client Component modules</span></pre>
+
+      <div class="callout">
+        <span class="lbl">streamed, not "finish then serialize"</span>
+        This is usually <strong>not</strong> a neat "finish the whole tree, then serialize it" phase. React can stream Flight rows as parts of the tree become ready: a ready Server Component emits its rows now, a still-waiting one emits a placeholder now and real rows later.
+      </div>
+    </section>
+
+    <!-- ================= 05 NOT MISSING ================= -->
+    <section class="block" id="nothtml">
+      <p class="kicker"><span class="ix">05</span> The most common confusion</p>
+      <span class="phase">Server Components produce HTML too</span>
+      <h2>Server Components are <em>not</em> missing from the HTML</h2>
+      <p class="lead">It is tempting to think Server Components only become Flight while Client Components are what become HTML. That is not right. A Server Component can absolutely produce visible UI — it simply does not ship JavaScript for it.</p>
+
+      <div class="toggle-wrap">
+        <div class="seg" id="mythSeg">
+          <button class="wrong on" data-m="wrong">✕ wrong mental model</button>
+          <button class="right" data-m="right">✓ what actually happens</button>
+        </div>
+        <div class="togpanel" id="mythPanel">
+          <span class="tl" id="mythTl">the wrong model</span>
+          <p id="mythP1"><strong>"Server Components only become Flight. Client Components are what become HTML."</strong></p>
+          <p id="mythP2">This makes you imagine Server Components vanishing from the page — as if anything you can see must have shipped JavaScript. It leads people to "optimize" by deleting server-rendered markup, or to assume a static page needs a client bundle to appear.</p>
+        </div>
+      </div>
+
+      <p class="codecap">app/page.tsx · a pure Server Component, no client code</p>
+      <pre class="wire"><span class="k">export default function</span> <span class="v">Page</span>() {
+  <span class="k">return</span> (
+    &lt;<span class="v">main</span>&gt;
+      &lt;<span class="v">h1</span>&gt;Hello from the server&lt;/<span class="v">h1</span>&gt;
+      &lt;<span class="v">p</span>&gt;This is a Server Component.&lt;/<span class="v">p</span>&gt;
+    &lt;/<span class="v">main</span>&gt;
+  )
+}</pre>
+      <div class="prose">
+        <p>There is no Client Component here. The server runs <code>Page()</code>, and React DOM Server emits ordinary HTML for it — <code>&lt;main&gt;&lt;h1&gt;Hello from the server&lt;/h1&gt;…</code>. No browser JavaScript is needed for that markup to appear. So the clean rule is: Server Component JSX runs on the server, is included in the server-rendered result, and <strong>can become HTML</strong>. It just does not ship component JavaScript.</p>
+      </div>
+    </section>
+
+    <!-- ================= 06 BOUNDARY ================= -->
+    <section class="block" id="boundary">
+      <p class="kicker"><span class="ix">06</span> Where the client begins</p>
+      <span class="phase">"use client" marks a boundary</span>
+      <h2>Client Components appear as <em>boundaries</em></h2>
+      <p class="lead">Add a Client Component and React cannot treat it like a Server Component — the <code>"use client"</code> directive marks it. The server records a reference to it, server-renders its initial HTML so the page is not blank, and the browser brings it to life later.</p>
+
+      <div class="vs">
+        <div>
+          <p class="codecap">app/page.tsx · Server Component</p>
+          <pre class="wire"><span class="k">import</span> Counter <span class="k">from</span> <span class="s">"./Counter"</span>
+
+<span class="k">export default function</span> <span class="v">Page</span>() {
+  <span class="k">return</span> (
+    &lt;<span class="v">main</span>&gt;
+      &lt;<span class="v">h1</span>&gt;Dashboard&lt;/<span class="v">h1</span>&gt;
+      &lt;<span class="l">Counter</span> initialCount={0} /&gt;
+    &lt;/<span class="v">main</span>&gt;
+  )
+}</pre>
+        </div>
+        <div>
+          <p class="codecap">app/Counter.tsx · Client Component</p>
+          <pre class="wire"><span class="l">"use client"</span>
+<span class="k">import</span> { useState } <span class="k">from</span> <span class="s">"react"</span>
+
+<span class="k">export default function</span> <span class="v">Counter</span>({ initialCount }) {
+  <span class="k">const</span> [count, setCount] = <span class="v">useState</span>(initialCount)
+  <span class="k">return</span> &lt;<span class="v">button</span> onClick={() =&gt; <span class="v">setCount</span>(count + 1)}&gt;
+    {count}
+  &lt;/<span class="v">button</span>&gt;
+}</pre>
+        </div>
+      </div>
+
+      <div class="figure" id="bdFig">
+        <div class="fig-bar">
+          <span class="title">▶ server records the boundary &amp; initial HTML · browser downloads, hydrates, attaches onClick</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-inspect="bdSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="bdSvg">
+          <svg class="diagram" id="bdSvg" viewBox="0 0 1200 560" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="bdVP"></g></svg>
+        </div>
+        <div class="player">
+          <button class="pbtn" id="bd_prev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17V7l-7 5zM8 7h-2v10h2z"/></svg></button>
+          <button class="pbtn play" id="bd_play"><svg id="bd_playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg></button>
+          <button class="pbtn" id="bd_next"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 7v10l7-5zM16 7h2v10h-2z"/></svg></button>
+          <div class="scrub" id="bd_scrub"><div class="fill" id="bd_fill"></div><div class="ticks" id="bd_ticks"></div></div>
+          <span class="stepno" id="bd_stepno">00 / 00</span>
+        </div>
+        <div class="caption">
+          <div class="cn"><span id="bd_capn">STEP 00</span> · <span class="lane" id="bd_lane">—</span></div>
+          <p class="ch" id="bd_caph">Press play to trace one client boundary</p>
+          <p class="cb" id="bd_capb">On the left the server discovers the boundary, records a module reference plus props, and renders the button's initial HTML. On the right the browser paints it, downloads the module, and hydrates it into a live control.</p>
+        </div>
+      </div>
+
+      <div class="callout live">
+        <span class="lbl">initial pixels vs interactivity</span>
+        The initial <code>&lt;button&gt;0&lt;/button&gt;</code> came from <strong>server-rendered HTML</strong>. The click handler came from the <strong>client bundle</strong>, attached during hydration. A Client Component is pre-rendered to HTML on the server <em>and</em> ships JS to the browser — both are true.
+      </div>
+    </section>
+
+    <!-- ================= 07 BRAID ================= -->
+    <section class="block" id="braid">
+      <p class="kicker"><span class="ix">07</span> What React DOM Server emits</p>
+      <span class="phase">one streamed response · HTML + inlined Flight</span>
+      <h2>One response can contain <em>both</em> HTML and Flight</h2>
+      <p class="lead"><span class="term" data-term="React DOM Server">React DOM Server</span> does not only render Client Components to HTML. It produces HTML for the renderable result of the whole tree — Server Component output, server-rendered Client Component markup, Suspense placeholders, and the marker scripts that fill streamed regions later. On the first load, that HTML arrives in the same response as the inlined Flight data.</p>
+
+      <div class="figure" id="brFig">
+        <div class="fig-bar">
+          <span class="title">▶ one HTTP response · the HTML shell, then chunks, then fallbacks replaced</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-inspect="brSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="brSvg">
+          <svg class="diagram" id="brSvg" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="brVP"></g></svg>
+        </div>
+        <div class="player">
+          <button class="pbtn" id="br_prev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17V7l-7 5zM8 7h-2v10h2z"/></svg></button>
+          <button class="pbtn play" id="br_play"><svg id="br_playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg></button>
+          <button class="pbtn" id="br_next"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 7v10l7-5zM16 7h2v10h-2z"/></svg></button>
+          <div class="scrub" id="br_scrub"><div class="fill" id="br_fill"></div><div class="ticks" id="br_ticks"></div></div>
+          <span class="stepno" id="br_stepno">00 / 00</span>
+        </div>
+        <div class="caption">
+          <div class="cn"><span id="br_capn">FRAME 00</span> · <span class="lane" id="br_lane">—</span></div>
+          <p class="ch" id="br_caph">Press play to stream one response</p>
+          <p class="cb" id="br_capb">Cyan blocks are visible HTML. Amber blocks are inlined Flight pushed into self.__next_f. They interleave in one response — not "HTML now, Flight in a second request."</p>
+        </div>
+      </div>
+
+      <div class="callout press">
+        <span class="lbl">it is not a second request</span>
+        For the initial load it is closer to <strong>one streamed response</strong> with two parts: visible HTML, and inlined React/Flight instructions (in Next.js, script chunks such as <code>self.__next_f</code>). Later navigations can fetch only the RSC payload without a full HTML document.
+      </div>
+    </section>
+
+    <!-- ================= 08 PAINT THEN HYDRATE ================= -->
+    <section class="block" id="paint">
+      <p class="kicker"><span class="ix">08</span> Two milestones, not one</p>
+      <span class="phase">visible before interactive</span>
+      <h2>The browser paints first, <em>then</em> hydrates</h2>
+      <p class="lead">When the response arrives, the browser can paint the HTML before the page is interactive. Client JS loads, React reads the inlined Flight data, client modules load, and hydration attaches event listeners. A page can be visible long before it can respond to a click.</p>
+
+      <div class="figure" id="ptFig">
+        <div class="fig-bar">
+          <span class="title">▶ blank → painted (FCP) → JS + Flight → hydrated (TTI)</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-inspect="ptSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="ptSvg">
+          <svg class="diagram" id="ptSvg" viewBox="0 0 1200 560" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="ptVP"></g></svg>
+        </div>
+        <div class="player">
+          <button class="pbtn" id="pt_prev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17V7l-7 5zM8 7h-2v10h2z"/></svg></button>
+          <button class="pbtn play" id="pt_play"><svg id="pt_playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg></button>
+          <button class="pbtn" id="pt_next"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 7v10l7-5zM16 7h2v10h-2z"/></svg></button>
+          <div class="scrub" id="pt_scrub"><div class="fill" id="pt_fill"></div><div class="ticks" id="pt_ticks"></div></div>
+          <span class="stepno" id="pt_stepno">00 / 00</span>
+        </div>
+        <div class="caption">
+          <div class="cn"><span id="pt_capn">FRAME 00</span> · <span class="lane" id="pt_lane">—</span></div>
+          <p class="ch" id="pt_caph">Press play to separate paint from interactivity</p>
+          <p class="cb" id="pt_capb">The viewport fills with grey, paintable HTML first — that is First Contentful Paint. Only after JS loads and hydration runs do the controls light up — Time to Interactive.</p>
+        </div>
+      </div>
+
+      <div class="vs">
+        <div class="vscol" style="border-top-color:var(--flow)">
+          <h4 style="color:var(--flow)">FCP</h4>
+          <span class="sub">first contentful paint</span>
+          <p style="margin:0;font-size:14.5px;color:var(--ink2)">The user can see something. Real markup from the server, painted with no JavaScript.</p>
+        </div>
+        <div class="vscol" style="border-top-color:var(--live)">
+          <h4 style="color:var(--live)">TTI</h4>
+          <span class="sub">time to interactive</span>
+          <p style="margin:0;font-size:14.5px;color:var(--ink2)">The relevant client JavaScript has loaded and hydrated. Now clicks do something.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="lbl">remember</span>
+        <strong>Painted HTML ≠ hydrated React UI.</strong> Decoupling the two is what makes a page feel instant even though interactivity arrives a beat later.
+      </div>
+    </section>
+
+    <!-- ================= 09 THE SPLIT ================= -->
+    <section class="block" id="split">
+      <p class="kicker"><span class="ix">09</span> The difference that actually matters</p>
+      <span class="phase">by capability, not by artifact</span>
+      <h2>Server vs Client — the real split</h2>
+      <p class="lead">The useful contrast is not "Server Components produce Flight, Client Components produce HTML." Both can produce HTML. The real difference is what each can <em>do</em> and what each <em>ships</em>.</p>
+
+      <div class="vs">
+        <div class="vscol s">
+          <h4>Server Component</h4>
+          <span class="sub">runs on the server</span>
+          <div class="vsrow"><span class="rk">output</span><span class="rv">server-rendered UI + Flight data</span></div>
+          <div class="vsrow"><span class="rk">browser JS</span><span class="rv no">no component code</span></div>
+          <div class="vsrow"><span class="rk">hydration</span><span class="rv no">no</span></div>
+          <div class="vsrow"><span class="rk">state / effects</span><span class="rv no">cannot use them</span></div>
+          <div class="vsrow"><span class="rk">can do</span><span class="rv">fetch data, read files, call server-only code</span></div>
+        </div>
+        <div class="vscol c">
+          <h4>Client Component</h4>
+          <span class="sub">pre-rendered on the server, lives in the browser</span>
+          <div class="vsrow"><span class="rk">output</span><span class="rv">initial HTML + a client reference</span></div>
+          <div class="vsrow"><span class="rk">browser JS</span><span class="rv yes">yes</span></div>
+          <div class="vsrow"><span class="rk">hydration</span><span class="rv yes">yes</span></div>
+          <div class="vsrow"><span class="rk">state / effects</span><span class="rv yes">state, effects, events, refs, browser APIs</span></div>
+          <div class="vsrow"><span class="rk">marked by</span><span class="rv"><code>"use client"</code></span></div>
+        </div>
+      </div>
+
+      <h3>What "React DOM Server walks the tree" really means</h3>
+      <p class="prose" style="max-width:72ch">In older SSR you could imagine React walking the tree, calling every component the same way, and turning the result into HTML. In an RSC app the tree is split by capability — React does not treat every component the same. Tap a branch.</p>
+
+      <div class="figure" id="treeFig">
+        <div class="fig-bar">
+          <span class="title">▣ one node in the tree · routed by capability</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-inspect="treeSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="treeSvg">
+          <svg class="diagram" id="treeSvg" viewBox="0 0 1200 470" preserveAspectRatio="xMidYMid meet"><g class="viewport" id="treeVP"></g></svg>
+        </div>
+        <div class="caption">
+          <div class="cn"><span>INTERACTIVE</span> · <span class="lane" id="tree_lane">tap a branch</span></div>
+          <p class="ch" id="tree_caph">Is this a Server Component or a Client Component?</p>
+          <p class="cb" id="tree_capb">React asks one question of each node — does it carry "use client"? — and routes it down one of two very different paths.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 10 RULE + MYTHS ================= -->
+    <section class="block" id="myths">
+      <p class="kicker"><span class="ix">10</span> Lock it in</p>
+      <span class="phase">the one rule · and what it corrects</span>
+      <h2>HTML is downstream of the server-rendered React result</h2>
+      <p class="lead">The two streams can overlap in time, but they are not independent. There is no need to imagine Server Components disappearing from HTML — they are part of the server-rendered output. They just do not become JavaScript components in the browser.</p>
+
+      <div class="lockin">
+        <div class="lock">
+          <span class="lh">HTML answers</span>
+          <span class="lq">"What should the browser paint now?"</span>
+        </div>
+        <div class="lock f">
+          <span class="lh">Flight answers</span>
+          <span class="lq">"What React tree, props, and module references describe this UI?"</span>
+        </div>
+        <div class="lock j">
+          <span class="lh">Client JS answers</span>
+          <span class="lq">"What parts need to become interactive?"</span>
+        </div>
+      </div>
+
+      <h3>Four myths this corrects</h3>
+      <p class="prose">Each card is a tidy mental model that quietly breaks. Tap one for the correction.</p>
+      <div class="cards" id="mythCards"></div>
+
+      <div class="callout live">
+        <span class="lbl">the whole pipeline, one breath</span>
+        One request starts a server render. Server Components execute and produce a serializable result — the Flight payload — including normal output, serialized props, suspended regions, and client boundaries. React DOM Server uses the renderable result to produce the HTML stream, which can include Server Component markup and initial Client Component markup. Client Components also ship JS, so React hydrates them and attaches listeners. <strong>HTML says what to paint; Flight says what tree describes it; client JS makes the boundaries live.</strong>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <span>RSC · Flight · HTML · hydration — the exact order, from first principles</span>
+  <span>one render → two outputs → one streamed response → paint → hydrate</span>
+</footer>
+
+<div id="tip"></div>
+
+<div class="scrim" id="scrim">
+  <div class="modal" id="modal">
+    <button class="mclose" id="mClose">×</button>
+    <div class="mhead">
+      <div class="mtag"><span id="mTag">MYTH</span><span id="mNum"></span></div>
+      <h4 id="mTitle">—</h4>
+    </div>
+    <div class="mbody" id="mBody"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================ SHARED HELPERS ============================================================ */
+function defsArrows(){
+  return `<defs>
+    <marker id="aFlow" markerWidth="10" markerHeight="10" refX="7" refY="3.5" orient="auto"><path d="M0 0L7 3.5L0 7z" fill="var(--flow)"/></marker>
+    <marker id="aPress" markerWidth="10" markerHeight="10" refX="7" refY="3.5" orient="auto"><path d="M0 0L7 3.5L0 7z" fill="var(--press)"/></marker>
+    <marker id="aBuf" markerWidth="10" markerHeight="10" refX="7" refY="3.5" orient="auto"><path d="M0 0L7 3.5L0 7z" fill="var(--buf)"/></marker>
+    <marker id="aLive" markerWidth="10" markerHeight="10" refX="7" refY="3.5" orient="auto"><path d="M0 0L7 3.5L0 7z" fill="var(--live)"/></marker>
+    <marker id="aMut" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0L7 3L0 6z" fill="var(--ink3)"/></marker>
+  </defs>`;
+}
+function _dots(x1,y1,x2,y2,color,dur,n){
+  n=n||2; let s='';
+  for(let i=0;i<n;i++){const beg=(i*(dur/n)).toFixed(2);
+    s+=`<circle r="5" fill="${color}"><animate attributeName="cx" from="${x1}" to="${x2}" dur="${dur}s" begin="${beg}s" repeatCount="indefinite"/><animate attributeName="cy" from="${y1}" to="${y2}" dur="${dur}s" begin="${beg}s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;0" dur="${dur}s" begin="${beg}s" repeatCount="indefinite"/></circle>`;
+  } return s;
+}
+function _pill(cx,cy,text,color){
+  const w=text.length*7.0+22,h=25;
+  return `<g><rect x="${cx-w/2}" y="${cy-h/2}" width="${w}" height="${h}" rx="12" fill="${color}" opacity="0.16"/><rect x="${cx-w/2}" y="${cy-h/2}" width="${w}" height="${h}" rx="12" fill="none" stroke="${color}"/>
+    <text x="${cx}" y="${cy+4.5}" text-anchor="middle" font-family="var(--mono)" font-size="11.5" font-weight="700" fill="${color}">${text}</text></g>`;
+}
+function _blk(x,y,w,h,kind,label,color,on,opt){
+  opt=opt||{};
+  const op=on?1:0.28, dash=opt.dash?'stroke-dasharray="7 5"':'', sw=opt.head?2.6:1.5;
+  return `<g opacity="${op}" style="transition:opacity .4s">
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="${color}" opacity="0.11"/>
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="none" stroke="${color}" stroke-width="${sw}" ${dash}/>
+    ${kind?`<text x="${x+18}" y="${y+19}" font-family="var(--mono)" font-size="9.5" letter-spacing="0.06em" fill="${color}">${kind}</text>`:''}
+    <text x="${x+18}" y="${kind?y+38:y+h/2+5}" font-family="var(--mono)" font-size="13" font-weight="700" fill="var(--ink)">${label}</text>
+  </g>`;
+}
+
+/* ============================================================ FRAME PLAYER ============================================================ */
+const PLAYERS=[];
+function makePlayer(prefix, frames, renderFn, vpId, ms){
+  ms=ms||2100;
+  const vp=document.getElementById(vpId);
+  const ticks=document.getElementById(prefix+'_ticks');
+  frames.forEach(()=>{const t=document.createElement('div');t.className='tk';ticks.appendChild(t);});
+  let step=0,playing=false,timer=null;
+  const $=id=>document.getElementById(prefix+'_'+id);
+  const pad=n=>String(n).padStart(2,'0');
+  function set(i){
+    step=Math.max(0,Math.min(frames.length-1,i));
+    const f=frames[step];
+    vp.innerHTML=renderFn(step);
+    $('capn').textContent='FRAME '+pad(step);
+    $('lane').textContent=(f.lane||'').toUpperCase();
+    $('caph').textContent=f.title;
+    $('capb').textContent=f.body;
+    $('stepno').textContent=pad(step)+' / '+pad(frames.length-1);
+    $('fill').style.width=(step/(frames.length-1)*100)+'%';
+  }
+  function pIcon(){$('playIcon').innerHTML=playing?'<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>':'<path d="M7 5v14l12-7z"/>';}
+  function play(){playing=true;pIcon();if(step>=frames.length-1)set(0);timer=setInterval(()=>{if(step>=frames.length-1){pause();return;}set(step+1);},ms);}
+  function pause(){playing=false;clearInterval(timer);pIcon();}
+  $('play').onclick=()=>{playing?pause():play();};
+  $('next').onclick=()=>{pause();set(step>=frames.length-1?0:step+1);};
+  $('prev').onclick=()=>{pause();set(step-1);};
+  $('scrub').onclick=e=>{pause();const r=e.currentTarget.getBoundingClientRect();set(Math.round((e.clientX-r.left)/r.width*(frames.length-1)));};
+  set(0);
+  const api={set,play,pause,get step(){return step;}};
+  PLAYERS.push(api);
+  return api;
+}
+
+/* ============================================================ FIG 1 · DEPENDENCY CHAIN (depVP 1200x760) ============================================================ */
+const DEP=[
+ {kind:'REQUEST', t:'Request',           sub:'one request in',              c:'var(--ink2)', note:'one request → one server render'},
+ {kind:'SERVER',  t:'Server Components', sub:'execute on the server',       c:'var(--buf)',  note:'run data fetches & server-only code · ship 0 KB of JS'},
+ {kind:'FLIGHT',  t:'Flight payload',    sub:'the React model',             c:'var(--press)',note:'output + serialized props + suspended regions + client refs'},
+ {kind:'RENDER',  t:'React DOM Server',  sub:'reads the renderable result', c:'var(--flow)', note:'turns that same result into an HTML stream'},
+ {kind:'HTML',    t:'HTML stream',       sub:'paintable bytes',             c:'var(--flow)', note:'answers: what should the browser paint now?'},
+ {kind:'PAINT',   t:'Browser paints',    sub:'first pixels',                c:'var(--flow)', note:'FCP — visible, but not yet interactive'},
+ {kind:'HYDRATE', t:'Hydrate',           sub:'attach listeners',            c:'var(--live)', note:'Flight + client JS → interactive (TTI)'},
+];
+const DEP_FRAMES=[
+ {lane:'request', title:'One request arrives', body:'The browser asks for a page. Nothing has rendered yet — no markup to paint, no model to hydrate.'},
+ {lane:'server', title:'Server Components execute', body:'React calls your Server Components on the server. They fetch data, read files, call server-only code — and ship zero component JavaScript.'},
+ {lane:'flight', title:'The Flight payload is produced', body:'React encodes the result as Flight: Server Component output, serialized props, placeholders for suspended work, and references to Client Component modules.'},
+ {lane:'react dom server', title:'React DOM Server reads the result', body:'It takes the renderable result of that same tree — not only the client parts — and begins turning it into an HTML stream.'},
+ {lane:'html', title:'HTML streams to the browser', body:'The shell flushes first: the first useful HTML the browser can paint. More HTML streams as suspended regions resolve.'},
+ {lane:'paint', title:'The browser paints', body:'Pixels appear with no JavaScript required. This is First Contentful Paint — visible, but not yet interactive.'},
+ {lane:'hydrate', title:'Hydration makes it live', body:'The runtime reads the inlined Flight data, loads Client Component modules, and attaches event listeners. The painted DOM becomes a live React app.'},
+];
+function _mk(c){return c==='var(--live)'?'aLive':c==='var(--press)'?'aPress':c==='var(--buf)'?'aBuf':'aFlow';}
+function renderDep(step){
+  const X=120,W=300,H=64,y0=44,gap=38,STEP=H+gap, CX=X+W/2, NX=X+W+34;
+  let g=defsArrows();
+  g+=`<text x="${X}" y="26" font-family="var(--mono)" font-size="11" letter-spacing="0.14em" fill="var(--ink3)">ONE RENDER · WHAT FEEDS WHAT</text>`;
+  g+=`<text x="44" y="400" font-family="var(--mono)" font-size="10.5" letter-spacing="0.34em" fill="var(--ink3)" transform="rotate(-90 44 400)">DOWNSTREAM →</text>`;
+  for(let i=0;i<DEP.length-1;i++){
+    const y1=y0+i*STEP+H, y2=y0+(i+1)*STEP, on=(i+1)<=step, c=DEP[i+1].c;
+    g+=`<line x1="${CX}" y1="${y1}" x2="${CX}" y2="${y2-2}" stroke="${on?c:'var(--line2)'}" stroke-width="2" marker-end="url(#${on?_mk(c):'aMut'})" opacity="${on?0.9:0.5}" style="transition:all .4s"/>`;
+    if((i+1)===step) g+=_dots(CX,y1+2,CX,y2-6,c,1.1,2);
+  }
+  DEP.forEach((n,i)=>{
+    const y=y0+i*STEP, on=i<=step, head=(i===step);
+    g+=`<g opacity="${on?1:0.3}" style="transition:opacity .4s">
+      <rect x="${X}" y="${y}" width="${W}" height="${H}" rx="12" fill="${n.c}" opacity="0.10"/>
+      <rect x="${X}" y="${y}" width="${W}" height="${H}" rx="12" fill="none" stroke="${n.c}" stroke-width="${head?2.6:1.5}"/>
+      <text x="${X+20}" y="${y+21}" font-family="var(--mono)" font-size="9.5" letter-spacing="0.08em" fill="${n.c}">${n.kind}</text>
+      <text x="${X+20}" y="${y+41}" font-family="var(--disp)" font-size="17" font-weight="700" fill="var(--ink)">${n.t}</text>
+      <text x="${X+20}" y="${y+57}" font-family="var(--mono)" font-size="10" fill="var(--ink3)">${n.sub}</text>`;
+    if(head) g+=`<rect x="${X-4}" y="${y-4}" width="${W+8}" height="${H+8}" rx="14" fill="none" stroke="${n.c}" stroke-width="1.4" opacity="0.45"><animate attributeName="opacity" values="0.15;0.5;0.15" dur="2s" repeatCount="indefinite"/></rect>`;
+    g+=`</g>`;
+    if(on){
+      g+=`<line x1="${X+W}" y1="${y+H/2}" x2="${NX-6}" y2="${y+H/2}" stroke="${head?n.c:'var(--line)'}" stroke-width="1.2" stroke-dasharray="4 4" opacity="${head?0.8:0.5}"/>`;
+      g+=`<text x="${NX}" y="${y+H/2+4}" font-family="var(--mono)" font-size="12.5" fill="${head?n.c:'var(--ink3)'}" style="transition:fill .3s">${n.note}</text>`;
+    }
+  });
+  return g;
+}
+
+/* ============================================================ FIG 2 · OVERLAP / GATE (ovVP 1200x470) ============================================================ */
+const SLOT={A:370,B:620,C:870};
+const _OV=[
+ {now:250, fr:[],             hb:[]},
+ {now:370, fr:['A'],          hb:[]},
+ {now:380, fr:['A'],          hb:[{r:'A',real:true}]},
+ {now:620, fr:['A'],          hb:[{r:'A',real:true},{r:'B',real:false}]},
+ {now:620, fr:['A','B'],      hb:[{r:'A',real:true},{r:'B',real:false}]},
+ {now:760, fr:['A','B'],      hb:[{r:'A',real:true},{r:'B',real:true}]},
+ {now:870, fr:['A','B','C?'], hb:[{r:'A',real:true},{r:'B',real:true}]},
+];
+const OV_FRAMES=[
+ {lane:'t = 0', title:'Nothing yet', body:'The request is out. No Flight rows exist, so no HTML can stream. Watch one region at a time first, then watch the whole row.'},
+ {lane:'within a region', title:'Region A’s model is produced first', body:'The server finishes region A and emits its Flight rows. Call this ① for region A — the prerequisite for its HTML.'},
+ {lane:'within a region', title:'…then region A’s HTML — never before', body:'With A’s rows in hand, React DOM Server emits A’s HTML (②) and the browser paints it. Within a single region the order is fixed: Flight, then HTML.'},
+ {lane:'the gate', title:'Region B has no Flight yet → it cannot be HTML', body:'B’s rows are not ready, so B’s HTML literally cannot be produced. React streams a fallback and moves on. Meanwhile A is already painted — so the two regions overlap in time.'},
+ {lane:'across regions', title:'Region B’s model resolves later', body:'B finishes on the server, out of document order. That is fine: a stream does not require regions to finish in order.'},
+ {lane:'across regions', title:'Now B’s HTML can replace the fallback', body:'B’s Flight rows now exist, so B’s HTML can finally be produced and swaps out the fallback in place.'},
+ {lane:'both axes', title:'Concurrent across regions · ordered within one', body:'At this instant the server is still cooking region C while the browser already shows A and B. Across regions: overlap. Within any one region: Flight always came before HTML. No paradox — just two different axes.'},
+];
+
+function renderOv(step){
+  const s=_OV[step]; let g=defsArrows();
+  const L=170,Rx=1130, sLaneY=88, bLaneY=250, laneH=72, axisY=396, bw=150, bh=56;
+  const s1=sLaneY+(laneH-bh)/2, s2=s1+bh;     // server block y span
+  const b1=bLaneY+(laneH-bh)/2, b2=b1+bh;     // browser block y span
+  const gapMid=(s2+b1)/2;
+  // background "now" time-cursor — drawn first so all content sits on top of it
+  g+=`<line x1="${s.now}" y1="40" x2="${s.now}" y2="${axisY}" stroke="var(--ink2)" stroke-width="1.4" stroke-dasharray="3 5" opacity="0.30"/>`;
+  // lane backgrounds
+  g+=`<rect x="${L}" y="${sLaneY-6}" width="${Rx-L}" height="${laneH+12}" rx="11" fill="var(--bg2)" stroke="var(--line)" opacity="0.6"/>`;
+  g+=`<rect x="${L}" y="${bLaneY-6}" width="${Rx-L}" height="${laneH+12}" rx="11" fill="var(--bg2)" stroke="var(--line)" opacity="0.6"/>`;
+  // rotated lane identity labels in the left margin, clear of the blocks
+  g+=`<text x="150" y="${sLaneY+laneH/2}" text-anchor="middle" font-family="var(--mono)" font-size="10" letter-spacing="0.12em" fill="var(--press)" transform="rotate(-90 150 ${sLaneY+laneH/2})">SERVER · FLIGHT</text>`;
+  g+=`<text x="150" y="${bLaneY+laneH/2}" text-anchor="middle" font-family="var(--mono)" font-size="10" letter-spacing="0.12em" fill="var(--flow)" transform="rotate(-90 150 ${bLaneY+laneH/2})">BROWSER · HTML</text>`;
+  // region guides + top labels
+  ['A','B','C'].forEach(r=>{const cx=SLOT[r];
+    g+=`<rect x="${cx-80}" y="${sLaneY-6}" width="160" height="${(bLaneY+laneH+6)-(sLaneY-6)}" rx="8" fill="var(--ink3)" opacity="0.04"/>`;
+    g+=`<text x="${cx}" y="26" text-anchor="middle" font-family="var(--mono)" font-size="10" letter-spacing="0.1em" fill="var(--ink3)">REGION ${r}</text>`;
+  });
+  // now pill in its own band (between region labels and the lane)
+  g+=_pill(s.now, 54,'now','var(--ink2)');
+  // server lane blocks (Flight rows)
+  s.fr.forEach(r=>{
+    const real=(r!=='C?'); const key=real?r:'C'; const cx=SLOT[key];
+    const head=(real && r==='A' && step>=1 && step<=2);
+    g+=_blk(cx-bw/2, s1, bw, bh, 'FLIGHT', real?('Flight '+r):'Flight C · …', 'var(--press)', true, {dash:!real, head:head});
+  });
+  // browser lane blocks (HTML / fallback)
+  s.hb.forEach(it=>{const cx=SLOT[it.r];
+    g+=_blk(cx-bw/2, b1, bw, bh, it.real?'HTML':'FALLBACK', it.real?('HTML '+it.r):('fallback '+it.r), 'var(--flow)', true, {dash:!it.real, head:false});
+  });
+  // within a region: Flight (1) -> HTML (2)
+  s.hb.forEach(it=>{ if(it.real && s.fr.indexOf(it.r)>=0){const cx=SLOT[it.r];
+    g+=`<line x1="${cx}" y1="${s2}" x2="${cx}" y2="${b1}" stroke="var(--press)" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#aPress)" opacity="0.8"/>`;
+    g+=`<circle cx="${cx-18}" cy="${s2+10}" r="9" fill="var(--press)" opacity="0.2"/><text x="${cx-18}" y="${s2+14}" text-anchor="middle" font-family="var(--mono)" font-size="11" font-weight="700" fill="var(--press)">1</text>`;
+    g+=`<circle cx="${cx-18}" cy="${b1-10}" r="9" fill="var(--flow)" opacity="0.2"/><text x="${cx-18}" y="${b1-6}" text-anchor="middle" font-family="var(--mono)" font-size="11" font-weight="700" fill="var(--flow)">2</text>`;
+    g+=`<text x="${cx+12}" y="${gapMid+4}" font-family="var(--mono)" font-size="9.5" fill="var(--press)">then</text>`;
+  }});
+  // the gate: a fallback exists only because the Flight row above is missing
+  s.hb.forEach(it=>{ if(!it.real){const cx=SLOT[it.r];
+    g+=`<line x1="${cx+36}" y1="${b1}" x2="${cx+36}" y2="${s2}" stroke="var(--danger)" stroke-width="1.6" stroke-dasharray="4 4" marker-end="url(#aMut)" opacity="0.85"/>`;
+    g+=`<text x="${cx+46}" y="${gapMid-3}" font-family="var(--mono)" font-size="9.5" fill="var(--danger)">waiting for</text>`;
+    g+=`<text x="${cx+46}" y="${gapMid+11}" font-family="var(--mono)" font-size="9.5" fill="var(--danger)">Flight ${it.r}</text>`;
+    g+=_pill(cx, b2+30,'✕ no Flight '+it.r+' → no HTML '+it.r,'var(--danger)');
+  }});
+  // time axis
+  g+=`<line x1="${L}" y1="${axisY}" x2="${Rx}" y2="${axisY}" stroke="var(--line2)" stroke-width="1.4" marker-end="url(#aMut)"/>`;
+  g+=`<text x="${Rx}" y="${axisY+20}" text-anchor="end" font-family="var(--mono)" font-size="10.5" fill="var(--ink3)">time →</text>`;
+  // final frame: spell out both axes
+  if(step===_OV.length-1){
+    g+=`<text x="${L}" y="${axisY+34}" font-family="var(--mono)" font-size="12" fill="var(--press)"><tspan font-weight="700">↕ within one region —</tspan> ordered: Flight ① then HTML ②</text>`;
+    g+=`<text x="${L}" y="${axisY+58}" font-family="var(--mono)" font-size="12" fill="var(--flow)"><tspan font-weight="700">↔ across regions —</tspan> concurrent: A is painted while C still cooks</text>`;
+    g+=`<g><rect x="${L}" y="${axisY+72}" width="640" height="32" rx="9" fill="var(--live)" opacity="0.12"/><rect x="${L}" y="${axisY+72}" width="640" height="32" rx="9" fill="none" stroke="var(--live)"/>
+      <text x="${L+16}" y="${axisY+93}" font-family="var(--mono)" font-size="12" font-weight="700" fill="var(--live)">overlap in time · strict in dependency — two different axes, no paradox</text></g>`;
+  }
+  return g;
+}
+
+/* ============================================================ FIG 3 · CLIENT BOUNDARY (bdVP 1200x560) ============================================================ */
+const BD_FRAMES=[
+ {lane:'server', title:'Page() runs on the server', body:'The Server Component returns an h1 and a Counter. The h1 is ordinary server-renderable output.'},
+ {lane:'server', title:'Counter is a client boundary', body:'Counter has "use client", so React cannot run it like a Server Component. It records a boundary: which module, and which props to pass.'},
+ {lane:'flight', title:'A client reference, not code', body:'In the Flight payload the boundary is a reference — module path + props — not the component’s code. The code loads later as a normal JS chunk.'},
+ {lane:'html', title:'The server renders its initial HTML', body:'So the page is not blank before hydration, the server pre-renders a real button: <button>0</button>. First pixels for this region.'},
+ {lane:'browser', title:'The browser paints the button', body:'The button appears immediately from the HTML — visible, but inert. No handler is attached yet.'},
+ {lane:'browser', title:'The module downloads', body:'The browser fetches Counter.js, the actual client module the Flight reference pointed to.'},
+ {lane:'hydrate', title:'Hydration attaches the handler', body:'React adopts the existing button, wires onClick using props from Flight, and the control becomes interactive — no markup recreated.'},
+];
+function renderBd(step){
+  let g=defsArrows();
+  g+=`<text x="60" y="30" font-family="var(--mono)" font-size="11" letter-spacing="0.12em" fill="var(--buf)">SERVER</text>`;
+  g+=`<text x="660" y="30" font-family="var(--mono)" font-size="11" letter-spacing="0.12em" fill="var(--live)">BROWSER</text>`;
+  g+=`<line x1="600" y1="40" x2="600" y2="528" stroke="var(--line2)" stroke-dasharray="3 5" stroke-width="1.4"/>`;
+  // left
+  g+=_blk(60,52,300,50,'RUNS ON SERVER','Page()','var(--buf)',true,{head:step===0});
+  g+=`<text x="62" y="128" font-family="var(--mono)" font-size="10" letter-spacing="0.06em" fill="var(--ink3)">RETURNS</text>`;
+  g+=_blk(80,138,330,42,'','h1 · “Dashboard”','var(--buf)',true,{});
+  g+=_blk(80,188,330,42,'','Counter · “use client”','var(--live)',true,{dash:true,head:step===1});
+  g+=_blk(60,256,440,66,'BOUNDARY RECORDED','module ./Counter · props { initialCount: 0 }','var(--live)',step>=1,{head:step===1});
+  g+=_blk(60,340,440,50,'FLIGHT ROW','client reference  $L1 → ./Counter','var(--press)',step>=2,{head:step===2});
+  g+=_blk(60,416,440,50,'INITIAL HTML','&lt;button&gt;0&lt;/button&gt;','var(--flow)',step>=3,{head:step===3});
+  // right button
+  const btnOn=step>=4, live6=step>=6, bc=live6?'var(--live)':'var(--ink3)';
+  g+=`<g opacity="${btnOn?1:0.28}" style="transition:opacity .4s">`;
+  if(live6) g+=`<rect x="736" y="96" width="168" height="74" rx="12" fill="none" stroke="var(--live)" stroke-width="1.4" opacity="0.5"><animate attributeName="opacity" values="0.2;0.55;0.2" dur="1.8s" repeatCount="indefinite"/></rect>`;
+  g+=`<rect x="740" y="100" width="160" height="66" rx="11" fill="${bc}" opacity="0.12"/>
+    <rect x="740" y="100" width="160" height="66" rx="11" fill="none" stroke="${bc}" stroke-width="1.8"/>
+    <text x="820" y="142" text-anchor="middle" font-family="var(--mono)" font-size="24" font-weight="800" fill="${bc}">0</text>
+    <text x="820" y="188" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="${live6?'var(--live)':'var(--ink3)'}">${live6?'interactive ✓ · onClick live':'painted · not interactive'}</text></g>`;
+  g+=_blk(680,250,300,50,'CLIENT MODULE','Counter.js','var(--live)',step>=5,{head:step===5});
+  g+=_blk(680,360,440,66,'HYDRATE','adopt &lt;button&gt; · attach onClick','var(--live)',step>=6,{head:step===6});
+  // arrows
+  if(step>=4){
+    g+=`<path d="M 500 441 C 600 441, 640 133, 740 133" fill="none" stroke="var(--flow)" stroke-width="2" marker-end="url(#aFlow)" opacity="0.85"/>`;
+    g+=`<text x="600" y="300" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="var(--flow)">ships in HTML</text>`;
+    if(step===4) g+=_dots(520,430,740,140,'var(--flow)',1.4,2);
+  }
+  if(step>=5) g+=`<text x="830" y="240" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--live)">↓ browser downloads</text>`;
+  if(step>=6){
+    g+=`<path d="M 500 365 C 600 365, 600 393, 680 393" fill="none" stroke="var(--press)" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#aPress)" opacity="0.85"/>`;
+    g+=`<text x="600" y="345" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="var(--press)">Flight guides hydration</text>`;
+  }
+  return g;
+}
+
+/* ============================================================ FIG 4 · BRAIDED RESPONSE (brVP 1200x640) ============================================================ */
+const _BRSTEPS=[
+ {add:[]},
+ {add:[{t:'h',s:'&lt;html&gt; … &lt;head&gt; … &lt;body&gt;'}]},
+ {add:[{t:'f',s:'self.__next_f.push([0])'}]},
+ {add:[{t:'h',s:'&lt;main&gt;&lt;h1&gt;Dashboard&lt;/h1&gt;'}]},
+ {add:[{t:'h',s:'&lt;button&gt;0&lt;/button&gt; · client markup'}]},
+ {add:[{t:'f',s:'self.__next_f.push([1, …rows…])'}]},
+ {add:[{t:'h',s:'&lt;footer&gt; … &lt;/footer&gt;'},{t:'f',s:'self.__next_f.push([1, …])'}]},
+];
+function brBlocks(step){ let arr=[]; for(let i=0;i<=step;i++) arr=arr.concat(_BRSTEPS[i].add); return arr; }
+const BR_FRAMES=[
+ {lane:'request', title:'The response has not started', body:'The browser made one request. The single HTTP response will carry everything below, in order.'},
+ {lane:'html shell', title:'The HTML shell flushes first', body:'html, head, and the top of body — the first paintable HTML. The browser can render pixels before the rest arrives.'},
+ {lane:'bootstrap', title:'A bootstrap Flight script', body:'self.__next_f.push([0]) sets up the client reader before any data chunks. It is an ordinary inline script in the same response.'},
+ {lane:'server output', title:'Server Component HTML', body:'The server-rendered output of your Server Components — here main and h1 — streams as plain markup.'},
+ {lane:'client markup', title:'Client Component initial HTML', body:'The pre-rendered markup for Client Components streams too: the button. It will be hydrated later, not re-created.'},
+ {lane:'flight chunk', title:'An inlined Flight chunk', body:'self.__next_f.push([1, …]) carries serialized React rows — the model React uses to hydrate and to navigate.'},
+ {lane:'braided', title:'One response, braided', body:'HTML and Flight interleave down the single response. It is not "HTML now, Flight in a second request" — it is one streamed body with both.'},
+];
+function renderBr(step){
+  let g=defsArrows();
+  const CX0=220,CY0=60,CW=680,CH=520, BX=240,BW=600,BH=54,BY0=84,GAP=12,ST=BH+GAP;
+  g+=`<text x="60" y="330" font-family="var(--mono)" font-size="10.5" letter-spacing="0.28em" fill="var(--ink3)" transform="rotate(-90 60 330)">STREAM ORDER ↓</text>`;
+  g+=`<rect x="${CX0}" y="${CY0}" width="${CW}" height="${CH}" rx="14" fill="var(--panel2)" stroke="var(--line2)" stroke-width="1.5"/>`;
+  g+=`<text x="${CX0+22}" y="${CY0-12}" font-family="var(--mono)" font-size="11" letter-spacing="0.1em" fill="var(--ink3)">THE RESPONSE · one text/html stream</text>`;
+  const blocks=brBlocks(step), n=blocks.length;
+  blocks.forEach((b,i)=>{
+    const y=BY0+i*ST, col=b.t==='h'?'var(--flow)':'var(--press)', head=(i===n-1 && step>0);
+    g+=_blk(BX,y,BW,BH,b.t==='h'?'HTML':'FLIGHT',b.s,col,true,{head:head});
+  });
+  if(n>0){
+    const y0=BY0, y1=BY0+(n-1)*ST+BH, bx=BX+BW+16;
+    g+=`<path d="M ${bx} ${y0} h 12 V ${y1} h -12" fill="none" stroke="var(--ink3)" stroke-width="1.4" opacity="0.7"/>`;
+    g+=`<text x="${bx+30}" y="${(y0+y1)/2}" font-family="var(--mono)" font-size="10.5" letter-spacing="0.18em" fill="var(--ink3)" transform="rotate(90 ${bx+30} ${(y0+y1)/2})" text-anchor="middle">ONE HTTP RESPONSE</text>`;
+  }
+  if(step===BR_FRAMES.length-1){
+    g+=`<g><rect x="${CX0}" y="${CY0+CH+12}" width="${CW}" height="32" rx="9" fill="var(--live)" opacity="0.12"/><rect x="${CX0}" y="${CY0+CH+12}" width="${CW}" height="32" rx="9" fill="none" stroke="var(--live)"/>
+      <text x="${CX0+CW/2}" y="${CY0+CH+33}" text-anchor="middle" font-family="var(--mono)" font-size="12" font-weight="700" fill="var(--live)">one response · visible HTML + inlined Flight, interleaved</text></g>`;
+  }
+  return g;
+}
+
+/* ============================================================ FIG 5 · PAINT then HYDRATE (ptVP 1200x560) ============================================================ */
+const PT_FRAMES=[
+ {lane:'blank', title:'Blank — the request is in flight', body:'Before any HTML arrives there is nothing to show.'},
+ {lane:'painted · FCP', title:'The HTML paints', body:'The browser parses the streamed HTML and paints it — shown in grey to mean "pixels, but inert." This is First Contentful Paint. No JavaScript ran to show it.'},
+ {lane:'js loading', title:'The client JavaScript loads', body:'The page is visible, but the interactive layer is still downloading. Clicks do nothing yet.'},
+ {lane:'reading flight', title:'React reads the inlined Flight', body:'The runtime decodes the Flight data already in the page to learn the React tree and where the client boundaries are.'},
+ {lane:'modules', title:'Client modules load', body:'The actual Client Component modules referenced by Flight are fetched.'},
+ {lane:'interactive · TTI', title:'Hydration completes', body:'React attaches event listeners to the existing DOM. The controls light up — Time to Interactive. Painted HTML is now a live React app.'},
+];
+function ptUI(mode){
+  if(mode==='blank') return `<text x="600" y="250" text-anchor="middle" font-family="var(--mono)" font-size="13" fill="var(--ink3)">waiting for the first byte…</text>`;
+  const inter=mode==='interactive';
+  const head=inter?'var(--flow)':'var(--ink3)', txt=inter?'var(--ink2)':'var(--ink3)', big=inter?'var(--live)':'var(--ink3)', b2=inter?'var(--flow)':'var(--ink3)';
+  let u='';
+  u+=`<rect x="274" y="124" width="460" height="30" rx="7" fill="${head}" opacity="${inter?0.18:0.10}"/><rect x="274" y="124" width="460" height="30" rx="7" fill="none" stroke="${head}" stroke-width="1.3"/>`;
+  if(inter) u+=`<rect x="270" y="172" width="158" height="78" rx="11" fill="none" stroke="var(--live)" stroke-width="1.3" opacity="0.5"><animate attributeName="opacity" values="0.2;0.55;0.2" dur="1.8s" repeatCount="indefinite"/></rect>`;
+  u+=`<rect x="274" y="176" width="150" height="70" rx="10" fill="${big}" opacity="${inter?0.16:0.10}"/><rect x="274" y="176" width="150" height="70" rx="10" fill="none" stroke="${big}" stroke-width="1.5"/><text x="349" y="220" text-anchor="middle" font-family="var(--mono)" font-size="22" font-weight="800" fill="${big}">0</text>`;
+  u+=`<rect x="444" y="184" width="290" height="14" rx="5" fill="${txt}" opacity="0.5"/>`;
+  u+=`<rect x="444" y="210" width="230" height="14" rx="5" fill="${txt}" opacity="0.35"/>`;
+  u+=`<rect x="274" y="270" width="170" height="40" rx="9" fill="${b2}" opacity="${inter?0.16:0.10}"/><rect x="274" y="270" width="170" height="40" rx="9" fill="none" stroke="${b2}" stroke-width="1.4"/><text x="359" y="295" text-anchor="middle" font-family="var(--mono)" font-size="12" font-weight="700" fill="${b2}">Refresh</text>`;
+  return u;
+}
+function renderPt(step){
+  let g=defsArrows();
+  const mode = step===0?'blank':(step>=5?'interactive':'painted');
+  g+=`<rect x="230" y="46" width="740" height="360" rx="14" fill="var(--panel2)" stroke="var(--line2)" stroke-width="1.5"/>`;
+  g+=`<path d="M 230 60 a14 14 0 0 1 14 -14 h 712 a14 14 0 0 1 14 14 v 24 h -740 z" fill="var(--bg2)"/>`;
+  g+=`<circle cx="256" cy="65" r="5" fill="var(--danger)" opacity="0.7"/><circle cx="274" cy="65" r="5" fill="var(--press)" opacity="0.7"/><circle cx="292" cy="65" r="5" fill="var(--live)" opacity="0.7"/>`;
+  g+=`<rect x="330" y="54" width="420" height="22" rx="11" fill="var(--panel)" stroke="var(--line)"/><text x="346" y="69" font-family="var(--mono)" font-size="11" fill="var(--ink3)">yourapp.com/dashboard</text>`;
+  g+=`<rect x="250" y="100" width="700" height="290" rx="8" fill="var(--bg)" opacity="0.55"/>`;
+  g+=ptUI(mode);
+  const badges={2:['client.js loading…','var(--live)'],3:['reading Flight','var(--press)'],4:['loading modules','var(--live)'],5:['hydrated ✓','var(--live)']};
+  if(badges[step]) g+=_pill(842,120,badges[step][0],badges[step][1]);
+  g+=`<text x="600" y="436" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="${mode==='interactive'?'var(--live)':(mode==='painted'?'var(--flow)':'var(--ink3)')}">${mode==='interactive'?'visible · interactive':(mode==='painted'?'visible · not interactive':'blank')}</text>`;
+  const tlx1=250,tlx2=950,tly=482, frac=[0.05,0.30,0.45,0.6,0.78,1.0][step];
+  g+=`<line x1="${tlx1}" y1="${tly}" x2="${tlx2}" y2="${tly}" stroke="var(--line2)" stroke-width="4" stroke-linecap="round"/>`;
+  g+=`<line x1="${tlx1}" y1="${tly}" x2="${tlx1+(tlx2-tlx1)*frac}" y2="${tly}" stroke="var(--flow)" stroke-width="4" stroke-linecap="round" style="transition:all .4s"/>`;
+  const fcpX=tlx1+(tlx2-tlx1)*0.26, ttiX=tlx1+(tlx2-tlx1)*0.83, fcpOn=step>=1, ttiOn=step>=5;
+  g+=`<circle cx="${fcpX}" cy="${tly}" r="7" fill="${fcpOn?'var(--flow)':'var(--bg2)'}" stroke="var(--flow)" stroke-width="2"/>`;
+  g+=`<text x="${fcpX}" y="${tly+24}" text-anchor="middle" font-family="var(--mono)" font-size="10.5" font-weight="700" fill="${fcpOn?'var(--flow)':'var(--ink3)'}">FCP</text>`;
+  g+=`<text x="${fcpX}" y="${tly-15}" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--ink3)">first paint</text>`;
+  g+=`<circle cx="${ttiX}" cy="${tly}" r="7" fill="${ttiOn?'var(--live)':'var(--bg2)'}" stroke="var(--live)" stroke-width="2"/>`;
+  g+=`<text x="${ttiX}" y="${tly+24}" text-anchor="middle" font-family="var(--mono)" font-size="10.5" font-weight="700" fill="${ttiOn?'var(--live)':'var(--ink3)'}">TTI</text>`;
+  g+=`<text x="${ttiX}" y="${tly-15}" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--ink3)">interactive</text>`;
+  return g;
+}
+
+/* ============================================================ FIG 6 · DECISION BY CAPABILITY (treeVP 1200x470, interactive) ============================================================ */
+let treeSide=null;
+function treeBranch(id,x,title,color,lines,active,dim){
+  const op=dim?0.32:(active?1:0.86);
+  let s=`<g id="${id}" style="cursor:pointer" opacity="${op}">`;
+  if(active) s+=`<rect x="${x-6}" y="194" width="392" height="232" rx="16" fill="none" stroke="${color}" stroke-width="1.4" opacity="0.5"/>`;
+  s+=`<rect x="${x}" y="200" width="380" height="56" rx="12" fill="${color}" opacity="0.12"/><rect x="${x}" y="200" width="380" height="56" rx="12" fill="none" stroke="${color}" stroke-width="${active?2.4:1.6}"/>`;
+  s+=`<text x="${x+190}" y="234" text-anchor="middle" font-family="var(--disp)" font-size="19" font-weight="700" fill="${color}">${title}</text>`;
+  s+=`<rect x="${x}" y="272" width="380" height="148" rx="11" fill="var(--bg2)" stroke="var(--line)"/>`;
+  lines.forEach((ln,i)=>{ s+=`<circle cx="${x+24}" cy="${300+i*40}" r="3.5" fill="${color}"/><text x="${x+40}" y="${305+i*40}" font-family="var(--mono)" font-size="12.5" fill="var(--ink)">${ln}</text>`; });
+  s+=`</g>`; return s;
+}
+function renderTree(){
+  let g=defsArrows();
+  g+=`<rect x="450" y="36" width="300" height="56" rx="12" fill="var(--ink2)" opacity="0.08"/><rect x="450" y="36" width="300" height="56" rx="12" fill="none" stroke="var(--ink2)" stroke-width="1.6"/><text x="600" y="70" text-anchor="middle" font-family="var(--disp)" font-size="17" font-weight="700" fill="var(--ink)">a component in the tree</text>`;
+  g+=_pill(600,124,'has  "use client" ?','var(--ink2)');
+  g+=`<path d="M 555 92 C 460 132, 320 150, 300 198" fill="none" stroke="var(--buf)" stroke-width="1.8" marker-end="url(#aBuf)" opacity="0.7"/>`;
+  g+=`<text x="400" y="124" text-anchor="middle" font-family="var(--mono)" font-size="11.5" font-weight="700" fill="var(--buf)">NO</text>`;
+  g+=`<path d="M 645 92 C 740 132, 880 150, 900 198" fill="none" stroke="var(--live)" stroke-width="1.8" marker-end="url(#aLive)" opacity="0.7"/>`;
+  g+=`<text x="800" y="124" text-anchor="middle" font-family="var(--mono)" font-size="11.5" font-weight="700" fill="var(--live)">YES</text>`;
+  g+=treeBranch('brServer',110,'Server Component','var(--buf)',['execute on the server','becomes Flight + can become HTML','ships no JS · does not hydrate'], treeSide==='server', treeSide==='client');
+  g+=treeBranch('brClient',710,'Client Component','var(--live)',['record a boundary','serialize props · module reference','ship JS · hydrate in the browser'], treeSide==='client', treeSide==='server');
+  return g;
+}
+function updateTreeCap(){
+  const cap={
+   'null':['tap a branch','Is this a Server Component or a Client Component?','React asks one question of each node — does it carry "use client"? — and routes it down one of two very different paths.'],
+   'server':['no “use client”','Server Component → runs on the server','It executes during the render, contributes to the Flight result and the HTML, and ships no component JavaScript. No state, effects, or browser APIs.'],
+   'client':['has “use client”','Client Component → lives in the browser','React records a boundary, serializes its props, and includes a module reference. The server still pre-renders its initial HTML; the browser hydrates it into an interactive control.'],
+  }[treeSide||'null'];
+  document.getElementById('tree_lane').textContent=cap[0];
+  document.getElementById('tree_caph').textContent=cap[1];
+  document.getElementById('tree_capb').textContent=cap[2];
+}
+function renderTreeInto(){
+  document.getElementById('treeVP').innerHTML=renderTree();
+  const s=document.getElementById('brServer'), c=document.getElementById('brClient');
+  if(s) s.addEventListener('click',()=>{treeSide=(treeSide==='server')?null:'server'; updateTreeCap(); renderTreeInto();});
+  if(c) c.addEventListener('click',()=>{treeSide=(treeSide==='client')?null:'client'; updateTreeCap(); renderTreeInto();});
+}
+
+/* ============================================================ GLOSSARY TOOLTIPS ============================================================ */
+const GLOSSARY={
+ "Server Component":["buf","A component React executes on the server. It can fetch data, read the filesystem, and call server-only code; its rendered output becomes part of the Flight result and can be turned into HTML. It ships no component JavaScript and cannot use state, effects, or browser APIs."],
+ "Client Component":["live","A component marked with \"use client\". The server can pre-render its initial HTML, but it also ships JavaScript to the browser and is hydrated there, so it can use state, effects, events, refs, and browser APIs."],
+ "Flight payload":["press","React’s serializable description of a Server Component render: rendered output, serialized props, placeholders for suspended work, and references to Client Component modules. It is the model — not HTML, not your component code."],
+ "RSC payload":["press","Another name for the Flight payload — the serialized output of React Server Components. On first load it is inlined into the HTML response; later navigations can fetch it on its own."],
+ "React DOM Server":["flow","The renderer that turns the renderable result of the tree into an HTML stream — Server Component output, initial Client Component markup, Suspense placeholders, and the marker scripts that fill streamed regions later."],
+ "renderable result":["flow","The part of the server-rendered React result that can be turned into markup. HTML is produced from it; it is downstream of running the Server Components."],
+ "hydration":["live","Attaching React to server-rendered DOM so it becomes interactive — wiring event handlers and state without recreating the markup. The Flight payload tells React the structure and where the client boundaries are."],
+ "use client":["live","A directive at the top of a file that marks its exports as Client Components. It is the boundary signal: React records a reference instead of running the component on the server."],
+ "self.__next_f":["press","The global array Next.js pushes its inlined Flight chunks into on the client. The server writes self.__next_f.push([...]) scripts straight into the HTML response as it streams."],
+ "Suspense boundary":["concept","A point in the tree where React can show a fallback while real content streams in. On the server, each boundary that resolves can be flushed as its own HTML + Flight chunk — a big reason the response is braided."],
+ "FCP":["flow","First Contentful Paint: the moment the browser shows real markup from the server, with no JavaScript required."],
+ "TTI":["live","Time to Interactive: the moment the relevant client JavaScript has loaded and hydration has run, so the UI responds to input."],
+ "client reference":["press","Inside the payload, a Client Component is a reference — a module path plus props — not its code. The runtime lazy-loads the real module and hydrates it."],
+ "shell":["flow","The first paintable HTML the server sends: html, head, and the top of body, so the browser can render pixels before the rest of the stream arrives."],
+};
+const KIND_LABEL={press:"flight payload",buf:"server",live:"client",flow:"browser / render",concept:"concept"};
+const tip=document.getElementById('tip');
+const termKeys=Object.keys(GLOSSARY).sort((a,b)=>b.length-a.length);
+const escRe=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+function tagTerms(scope){
+  const blocks=scope.querySelectorAll('p, li, .lead');
+  blocks.forEach(block=>{
+    if(block.closest('pre')) return;
+    const used=new Set();
+    block.querySelectorAll('.term').forEach(t=>used.add(t.dataset.term.toLowerCase()));
+    const walker=document.createTreeWalker(block,NodeFilter.SHOW_TEXT,{
+      acceptNode(n){const p=n.parentElement;if(!p)return NodeFilter.FILTER_REJECT;
+        if(p.closest('code,pre,.term,a,h1,h2,h3,h4'))return NodeFilter.FILTER_REJECT;
+        return n.nodeValue.trim()?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT;}});
+    const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
+    nodes.forEach(node=>{
+      const text=node.nodeValue;
+      for(const term of termKeys){
+        if(used.has(term.toLowerCase()))continue;
+        const re=new RegExp('\\b'+escRe(term)+'\\b','i');const m=re.exec(text);
+        if(m){used.add(term.toLowerCase());
+          const frag=document.createDocumentFragment();
+          const before=text.slice(0,m.index),after=text.slice(m.index+m[0].length);
+          if(before)frag.appendChild(document.createTextNode(before));
+          const span=document.createElement('span');span.className='term';span.dataset.term=term;span.textContent=text.substr(m.index,m[0].length);
+          frag.appendChild(span);
+          if(after)frag.appendChild(document.createTextNode(after));
+          node.parentNode.replaceChild(frag,node);return;}
+      }
+    });
+  });
+}
+let tipHideT;
+function showTip(elm){
+  const key=elm.dataset.term;
+  const entry=GLOSSARY[key]||GLOSSARY[Object.keys(GLOSSARY).find(k=>k.toLowerCase()===key.toLowerCase())];
+  if(!entry)return;
+  clearTimeout(tipHideT);
+  tip.className=(entry[0]==='buf'?'kind-buf':entry[0]==='live'?'kind-live':entry[0]==='press'?'kind-press':'');
+  tip.innerHTML='<span class="t-kind">'+KIND_LABEL[entry[0]]+'</span><span class="t-name">'+key+'</span>'+entry[1];
+  tip.classList.add('show');
+  const r=elm.getBoundingClientRect();
+  const tw=Math.min(340,tip.offsetWidth||340),th=tip.offsetHeight;
+  let left=r.left+r.width/2-tw/2;left=Math.max(12,Math.min(left,window.innerWidth-tw-12));
+  let top=r.top-th-12,flip=false;if(top<10){top=r.bottom+12;flip=true;}
+  tip.style.left=left+'px';tip.style.top=top+'px';
+  tip.style.setProperty('--ax',(r.left+r.width/2-left-6)+'px');
+  tip.classList.toggle('flip',flip);
+}
+function hideTip(){tipHideT=setTimeout(()=>tip.classList.remove('show'),60);}
+document.addEventListener('mouseover',e=>{const t=e.target.closest('.term');if(t)showTip(t);});
+document.addEventListener('mouseout',e=>{if(e.target.closest('.term'))hideTip();});
+document.addEventListener('click',e=>{const t=e.target.closest('.term');if(t){showTip(t);setTimeout(hideTip,3600);}});
+
+/* ============================================================ THREE QUESTIONS · MYTH TOGGLE · MYTH CARDS ============================================================ */
+const QDATA=[
+ ['h','HTML · for the browser’s rasterizer','HTML is the immediate, non-interactive structure for the first frame. The browser parses it and paints pixels with <strong>no JavaScript required</strong>. It answers "what does the user see right now" — and carries no notion of which parts are React components or where the client boundaries are.'],
+ ['f','Flight · for React’s reconciler','Flight is the serialized React model: elements, props, suspended regions, and <strong>references to Client Components by module</strong>. It paints nothing. It tells React what tree the painted HTML represents, so hydration can adopt that exact DOM instead of rebuilding it.'],
+ ['j','Client JS · for interactivity','The Client Component modules ship JavaScript. After paint, React reads the Flight data, loads those modules, and <strong>attaches event listeners</strong> during hydration. This is the only part concerned with making boundaries respond to clicks, typing, and effects.'],
+];
+function initQTabs(){
+  const tabs=[...document.querySelectorAll('.qtab')];
+  const panel=document.getElementById('qpanel'), pa=document.getElementById('qpa'), pb=document.getElementById('qpb');
+  function sel(i){ tabs.forEach((t,k)=>t.classList.toggle('on',k===i)); const d=QDATA[i]; panel.className='qpanel '+d[0]; pa.textContent=d[1]; pb.innerHTML=d[2]; }
+  tabs.forEach((t,i)=>t.addEventListener('click',()=>sel(i))); sel(0);
+}
+const MYTHTOG={
+ wrong:['the wrong model','<strong>"Server Components only become Flight. Client Components are what become HTML."</strong>','This makes you imagine Server Components vanishing from the page — as if anything visible must have shipped JavaScript. It tempts people to delete server-rendered markup, or to assume a static page needs a client bundle to appear.'],
+ right:['what actually happens','A Server Component’s JSX runs on the server, is included in the server-rendered result, and <strong>can become HTML</strong> the browser paints.','It simply ships <strong>no component JavaScript</strong>. The clean rule: a Server Component outputs server-rendered UI + Flight data and does not hydrate; a Client Component adds an initial HTML render plus a client bundle that hydrates.'],
+};
+function initMythToggle(){
+  const seg=document.getElementById('mythSeg'), panel=document.getElementById('mythPanel');
+  const tl=document.getElementById('mythTl'),p1=document.getElementById('mythP1'),p2=document.getElementById('mythP2');
+  seg.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+    seg.querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+    const d=MYTHTOG[b.dataset.m]; panel.classList.toggle('right', b.dataset.m==='right');
+    tl.textContent=d[0]; p1.innerHTML=d[1]; p2.innerHTML=d[2];
+  }));
+}
+const MYTHS=[
+ {n:'01',title:'“Server Components only become Flight”',short:'They produce visible HTML too — they just ship no component JS.',body:'<p>A Server Component’s rendered output is part of the server-rendered result, so it <strong>can become HTML</strong> the browser paints. What it does not do is send its code to the browser.</p>',better:'Server Component rendering and Flight serialization are streamed — and the same result also feeds the HTML.'},
+ {n:'02',title:'“React DOM Server only renders Client Components”',short:'It renders the whole renderable result — including Server Component output.',body:'<p>React DOM Server produces HTML for the renderable result of the entire tree: Server Component output, initial Client Component markup, Suspense placeholders, and the marker scripts that fill streamed regions later.</p>',better:'HTML covers Server Component output and initial Client Component markup, not only the interactive parts.'},
+ {n:'03',title:'“HTML and Flight are produced independently”',short:'They overlap in time, but HTML depends on the React/Flight result.',body:'<p>The two streams may be flushed at overlapping times, but the dependency is one-directional. An HTML region cannot exist before the Flight rows that describe it.</p>',better:'Overlap in time — strict in dependency. HTML is downstream of the server-rendered React result.'},
+ {n:'04',title:'“The browser fetches Flight in a second request”',short:'On first load, HTML and inlined Flight ship in the same streamed response.',body:'<p>For the initial load, Next.js sends HTML and inlined Flight data together (for example <code>self.__next_f</code> scripts). The browser paints the HTML and keeps the Flight for hydration and later navigation.</p>',better:'One streamed response carries both. Later navigations can fetch only the RSC payload.'},
+];
+const scrim=document.getElementById('scrim');
+function buildMythCards(){
+  const wrap=document.getElementById('mythCards');
+  MYTHS.forEach(m=>{ const c=document.createElement('div'); c.className='card';
+    c.innerHTML=`<div class="fn"><span>MYTH</span><span class="mx">#${m.n}</span></div><div class="ft">${m.title}</div><div class="fs2">${m.short}</div><span class="chip">tap for the correction →</span>`;
+    c.addEventListener('click',()=>openMyth(m)); wrap.appendChild(c);
+  });
+}
+function openMyth(m){
+  document.getElementById('mTag').textContent='MYTH';
+  document.getElementById('mNum').textContent='#'+m.n;
+  document.getElementById('mTitle').textContent=m.title.replace(/[“”]/g,'"');
+  document.getElementById('mBody').innerHTML=m.body+'<div class="better"><span class="bl">better mental model</span>'+m.better+'</div>';
+  scrim.classList.add('open');
+}
+function closeMyth(){scrim.classList.remove('open');}
+document.getElementById('mClose').onclick=closeMyth;
+scrim.onclick=e=>{if(e.target===scrim)closeMyth();};
+
+/* ============================================================ INSPECT / FULLSCREEN / ZOOM ============================================================ */
+let fsFig=null, fsApi=null;
+function enterFs(fig,api){ if(fsFig) exitFs(); fsFig=fig; fsApi=api; fig.classList.add('fs'); document.body.classList.add('fs-lock');
+  const b=fig.querySelector('[data-inspect]'); if(b) b.lastChild.textContent=' Exit'; }
+function exitFs(){ if(!fsFig) return; if(fsApi&&fsApi.reset) fsApi.reset();
+  const b=fsFig.querySelector('[data-inspect]'); if(b) b.lastChild.textContent=' Inspect';
+  fsFig.classList.remove('fs'); document.body.classList.remove('fs-lock'); fsFig=null; fsApi=null; }
+function makeInspectable(svgId){
+  const svg=document.getElementById(svgId); if(!svg) return;
+  const canvas=svg.closest('.canvas'); const fig=svg.closest('.figure');
+  const hintTag=document.createElement('div'); hintTag.className='inspect-hint'; hintTag.textContent='⤢ tap to inspect'; canvas.appendChild(hintTag);
+  const ctl=document.createElement('div'); ctl.className='zoomctl';
+  ctl.innerHTML='<button data-z="in">+</button><button data-z="out">−</button><button data-z="reset">⟲</button>';
+  canvas.appendChild(ctl);
+  const lvl=document.createElement('div'); lvl.className='zlevel'; lvl.textContent='100%'; canvas.appendChild(lvl);
+  const zh=document.createElement('div'); zh.className='zhint'; zh.textContent='scroll / pinch to zoom · drag to pan · Esc to exit'; canvas.appendChild(zh);
+  let s=1,tx=0,ty=0,drag=false,sx=0,sy=0; const pts=new Map(); let pinchD=0,pinchS=1;
+  const isFs=()=>fig.classList.contains('fs');
+  const clamp=v=>Math.max(0.5,Math.min(6,v));
+  const getVP=()=>svg.querySelector('.viewport')||svg.firstElementChild;
+  const apply=()=>{getVP().setAttribute('transform',`translate(${tx},${ty}) scale(${s})`);lvl.textContent=Math.round(s*100)+'%';};
+  const reset=()=>{s=1;tx=0;ty=0;getVP().removeAttribute('transform');lvl.textContent='100%';};
+  function toVB(cx,cy){const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;return[(cx-r.left)/r.width*vb.width,(cy-r.top)/r.height*vb.height];}
+  function zoomAt(cx,cy,f){const ns=clamp(s*f);const[px,py]=toVB(cx,cy);tx=px-(px-tx)*(ns/s);ty=py-(py-ty)*(ns/s);s=ns;apply();}
+  canvas.addEventListener('click',e=>{ if(isFs())return; if(e.target.closest('button'))return; enterFs(fig,{reset}); });
+  canvas.addEventListener('wheel',e=>{ if(!isFs())return; e.preventDefault(); zoomAt(e.clientX,e.clientY,e.deltaY<0?1.12:0.89); },{passive:false});
+  canvas.addEventListener('dblclick',e=>{ if(!isFs())return; zoomAt(e.clientX,e.clientY,1.5); });
+  canvas.addEventListener('pointerdown',e=>{ if(!isFs())return; pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){const a=[...pts.values()];pinchD=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);pinchS=s;drag=false;return;}
+    drag=true;sx=e.clientX;sy=e.clientY;canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove',e=>{ if(!isFs())return;
+    if(pts.has(e.pointerId))pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){const a=[...pts.values()];const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);if(pinchD>0){const ns=clamp(pinchS*(d/pinchD));const cx=(a[0].x+a[1].x)/2,cy=(a[0].y+a[1].y)/2;const[px,py]=toVB(cx,cy);tx=px-(px-tx)*(ns/s);ty=py-(py-ty)*(ns/s);s=ns;apply();}return;}
+    if(!drag)return;const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;
+    tx+=(e.clientX-sx)/r.width*vb.width;ty+=(e.clientY-sy)/r.height*vb.height;sx=e.clientX;sy=e.clientY;apply(); });
+  function up(e){pts.delete(e.pointerId);if(pts.size<2)pinchD=0;drag=false;}
+  canvas.addEventListener('pointerup',up); canvas.addEventListener('pointercancel',up);
+  ctl.querySelectorAll('button').forEach(b=>{ b.onclick=ev=>{ ev.stopPropagation(); const r=svg.getBoundingClientRect();
+    if(b.dataset.z==='in')zoomAt(r.left+r.width/2,r.top+r.height/2,1.25);
+    else if(b.dataset.z==='out')zoomAt(r.left+r.width/2,r.top+r.height/2,0.8); else reset(); };});
+  const tog=fig.querySelector('[data-inspect="'+svgId+'"]');
+  if(tog) tog.addEventListener('click',()=>{ isFs()?exitFs():enterFs(fig,{reset}); });
+}
+
+/* ============================================================ THEME · TOC · SCROLL ============================================================ */
+const root=document.documentElement;
+const sunIcon='<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/>';
+const moonIcon='<path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/>';
+function setTheme(t){root.setAttribute('data-theme',t);document.getElementById('themeTxt').textContent=t.toUpperCase();document.getElementById('themeIcon').innerHTML=t==='dark'?sunIcon:moonIcon;if(typeof window.__rerenderAll==='function')window.__rerenderAll();}
+if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)setTheme('light');
+document.getElementById('themeBtn').onclick=()=>setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+const tocLinks=[...document.querySelectorAll('nav.toc a')];
+if('IntersectionObserver' in window){
+  const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)tocLinks.forEach(l=>l.classList.toggle('active',l.getAttribute('href')==='#'+e.target.id));});},{rootMargin:'-25% 0px -65% 0px'});
+  document.querySelectorAll('section.block').forEach(s=>io.observe(s));
+}
+const topNav=document.getElementById('topNav'), scrollProg=document.getElementById('scrollProg');
+let lastY=window.scrollY;
+window.addEventListener('scroll',()=>{
+  const y=window.scrollY, docH=document.documentElement.scrollHeight-window.innerHeight;
+  scrollProg.style.width=(docH>0?(y/docH*100):0)+'%';
+  if(y>lastY&&y>240) topNav.classList.add('hidden'); else topNav.classList.remove('hidden');
+  lastY=y;
+},{passive:true});
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeMyth(); exitFs();
+  const tf=document.getElementById('treeFig'); if(tf.classList.contains('fs')){tf.classList.remove('fs');document.body.classList.remove('fs-lock');const b=tf.querySelector('[data-inspect]');if(b)b.lastChild.textContent=' Inspect';}
+}});
+
+/* ============================================================ BOOT ============================================================ */
+makePlayer('dp',DEP_FRAMES,renderDep,'depVP',2300);
+makePlayer('ov',OV_FRAMES,renderOv,'ovVP',2200);
+makePlayer('bd',BD_FRAMES,renderBd,'bdVP',2100);
+makePlayer('br',BR_FRAMES,renderBr,'brVP',2000);
+makePlayer('pt',PT_FRAMES,renderPt,'ptVP',2100);
+['depSvg','ovSvg','bdSvg','brSvg','ptSvg'].forEach(makeInspectable);
+
+renderTreeInto(); updateTreeCap();
+(function(){ const fig=document.getElementById('treeFig'); const canvas=fig.querySelector('.canvas'); if(canvas) canvas.style.cursor='default';
+  const btn=fig.querySelector('[data-inspect="treeSvg"]');
+  if(btn) btn.addEventListener('click',()=>{ const on=fig.classList.toggle('fs'); document.body.classList.toggle('fs-lock',on); btn.lastChild.textContent=on?' Exit':' Inspect'; });
+})();
+
+initQTabs(); initMythToggle(); buildMythCards();
+tagTerms(document.querySelector('main'));
+window.__rerenderAll=()=>{ PLAYERS.forEach(p=>p.set(p.step)); renderTreeInto(); };
+</script>
+</body>
+</html>

@@ -1,0 +1,2677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mechanical Sympathy in C · Hardware-Shaped Code</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap" rel="stylesheet">
+<style>
+/* ════════════════════════════════════════════════════════════════════
+   THEME · K&R / BELL LABS / PHOSPHOR-TUBE
+   Adapted from the C compilation pipeline aesthetic
+   ════════════════════════════════════════════════════════════════════ */
+:root{
+  --bg:#0a1526;
+  --surface:#0e1c30;
+  --surface2:#142640;
+  --surface3:#1c3252;
+  --border:#1f3450;
+  --border-hi:#2e4a72;
+  --text:#cdd5e2;
+  --text-dim:#7d8aa3;
+  --text-hi:#f4ead2;
+  --c-logo:#a8b9cc;
+  --c-logo-soft:rgba(168,185,204,.14);
+  --c-deep:#03589c;
+  --paper:#f4ead2;
+  --amber:#d4a23f;
+
+  /* Per-section tints */
+  --abstract:#e8dcb8;  --abstract-soft:rgba(232,220,184,.12);   /* C's abstract machine */
+  --cache:#a8b9cc;     --cache-soft:rgba(168,185,204,.14);      /* memory hierarchy   */
+  --pipe:#7fa9d4;      --pipe-soft:rgba(127,169,212,.14);       /* CPU pipeline       */
+  --thru:#d4a23f;      --thru-soft:rgba(212,162,63,.13);        /* latency / throughput */
+  --branch:#c87553;    --branch-soft:rgba(200,117,83,.13);      /* branch prediction  */
+  --coh:#5d89b4;       --coh-soft:rgba(93,137,180,.14);         /* cache coherence    */
+  --comp:#5fc4d8;      --comp-soft:rgba(95,196,216,.16);        /* compiler / meta    */
+
+  --mono:'IBM Plex Mono','JetBrains Mono','Courier New',monospace;
+  --sans:'IBM Plex Sans','Inter',system-ui,sans-serif;
+  --code-bg:#0a1526;
+  --shadow:none;
+}
+html.light{
+  --bg:#f1e8d2;
+  --surface:#f8f0d8;
+  --surface2:#ebe2c6;
+  --surface3:#ddd2b0;
+  --border:#c5b896;
+  --border-hi:#9a8e6f;
+  --text:#1a2436;
+  --text-dim:#5a6478;
+  --text-hi:#0a1526;
+  --c-logo:#03589c;
+  --c-logo-soft:rgba(3,88,156,.10);
+  --paper:#f1e8d2;
+
+  --abstract:#7a5c3c;--abstract-soft:rgba(122,92,60,.10);
+  --cache:#1f4068;--cache-soft:rgba(31,64,104,.10);
+  --pipe:#2a5b8a;--pipe-soft:rgba(42,91,138,.10);
+  --thru:#8a5e16;--thru-soft:rgba(138,94,22,.12);
+  --branch:#9c4d2c;--branch-soft:rgba(156,77,44,.10);
+  --coh:#1d3a5c;--coh-soft:rgba(29,58,92,.10);
+  --comp:#1a6c80;--comp-soft:rgba(26,108,128,.13);
+
+  --shadow:0 1px 3px rgba(20,30,40,.10);
+  --code-bg:#ebe2c6;
+}
+html.light .grain{opacity:.018}
+html.light .section-nav{background:rgba(241,232,210,.95)}
+html.light .card{box-shadow:var(--shadow)}
+html.light ::selection{background:var(--c-logo);color:#fff}
+
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:var(--sans);font-size:14px;line-height:1.6;
+  overflow-x:hidden;
+  transition:background .25s,color .25s;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+::selection{background:var(--c-logo);color:var(--bg)}
+.grain{position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:.04;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+/* ────── HEADER ────── */
+header{padding:60px 40px 36px;max-width:1000px;margin:0 auto;position:relative}
+header::before{
+  content:'';display:block;height:2px;width:80px;background:var(--c-logo);
+  margin-bottom:24px;opacity:.7;
+}
+.eyebrow{
+  display:inline-flex;align-items:center;gap:10px;
+  font-family:var(--mono);font-size:10px;letter-spacing:3px;text-transform:uppercase;
+  color:var(--c-logo);margin-bottom:18px;
+  padding:5px 12px;background:var(--c-logo-soft);border:1px solid var(--c-logo-soft);
+  border-radius:2px;font-weight:500;
+  opacity:0;animation:fadeUp .6s ease forwards .1s;
+}
+.eyebrow::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--c-logo);
+  box-shadow:0 0 10px var(--c-logo);animation:pulse 2s ease infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+header h1{
+  font-family:var(--sans);font-size:clamp(30px,4.8vw,50px);
+  font-weight:600;color:var(--text-hi);line-height:1.1;letter-spacing:-1.4px;
+  opacity:0;animation:fadeUp .6s ease forwards .2s;
+  max-width:920px;
+}
+header h1 em{color:var(--c-logo);font-weight:600;font-style:normal}
+header h1 .accent2{color:var(--comp)}
+.subtitle{margin-top:18px;font-size:15px;color:var(--text);max-width:720px;line-height:1.7;
+  font-family:var(--sans);font-weight:400;
+  opacity:0;animation:fadeUp .6s ease forwards .35s}
+.subtitle em{color:var(--c-logo);font-weight:600;font-style:normal}
+.subtitle code{font-family:var(--mono);font-size:.85em;color:var(--c-logo);
+  background:var(--c-logo-soft);padding:1px 5px;border-radius:2px}
+.imprint{
+  margin-top:30px;padding-top:18px;border-top:1px dashed var(--border-hi);
+  display:flex;flex-wrap:wrap;gap:8px 28px;align-items:baseline;
+  font-family:var(--mono);font-size:10.5px;color:var(--text-dim);
+  letter-spacing:1.2px;text-transform:uppercase;
+  opacity:0;animation:fadeUp .6s ease forwards .75s;
+}
+.imprint .imp-label{color:var(--text-dim);opacity:.7}
+.imprint .imp-val{color:var(--c-logo);letter-spacing:.5px}
+.imprint .imp-sep{color:var(--text-dim);opacity:.4}
+.hero-tip{margin-top:18px;font-size:11.5px;font-family:var(--mono);color:var(--text-dim);
+  display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+  opacity:0;animation:fadeUp .6s ease forwards .65s;
+}
+.hero-tip .kbd{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;
+  border:1px solid var(--border-hi);border-radius:3px;background:var(--surface);
+  color:var(--c-logo);font-size:10.5px;letter-spacing:.5px}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+
+/* ────── STICKY NAV ────── */
+.section-nav{
+  position:sticky;top:0;z-index:100;
+  background:rgba(10,21,38,.94);backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--border);padding:0 40px;
+  transition:transform .35s cubic-bezier(.4,0,.2,1),box-shadow .25s;
+}
+.section-nav.hidden{transform:translateY(-100%)}
+.section-nav.scrolled{box-shadow:0 4px 20px rgba(0,0,0,.35)}
+html.light .section-nav.scrolled{box-shadow:0 4px 20px rgba(20,30,50,.10)}
+.section-nav-inner{
+  display:flex;gap:0;max-width:1100px;margin:0 auto;
+  overflow-x:auto;scrollbar-width:none;align-items:center;
+}
+.section-nav-inner::-webkit-scrollbar{display:none}
+.nav-brand{
+  display:flex;align-items:center;gap:10px;padding:11px 16px 11px 0;
+  border-right:1px solid var(--border);margin-right:8px;flex-shrink:0;
+}
+.nav-mark{
+  width:28px;height:28px;border-radius:4px;
+  background:var(--c-deep);color:var(--c-logo);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--sans);font-weight:700;font-size:15px;letter-spacing:-.04em;
+  line-height:1;
+  border:1px solid var(--c-logo);
+  box-shadow:0 0 0 2px rgba(168,185,204,.08);
+}
+html.light .nav-mark{background:var(--c-deep);color:var(--paper);border-color:var(--c-deep)}
+.nav-title-block{display:flex;flex-direction:column;line-height:1.15}
+.nav-title{font-size:12.5px;font-weight:600;letter-spacing:-.01em;color:var(--text-hi);font-family:var(--sans)}
+.nav-sub{font-size:9.5px;color:var(--text-dim);font-family:var(--mono);letter-spacing:1px;text-transform:uppercase}
+.section-btn{
+  padding:14px 12px;font-family:var(--mono);
+  font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;
+  background:none;border:none;color:var(--text-dim);cursor:pointer;
+  transition:color .2s;white-space:nowrap;border-bottom:2px solid transparent;
+  display:flex;align-items:center;gap:7px;
+}
+.section-btn .num{font-size:9px;color:var(--c-logo);opacity:.55;font-weight:500}
+.section-btn:hover{color:var(--text)}
+.section-btn.active{color:var(--c-logo);border-bottom-color:var(--c-logo)}
+.section-btn.active .num{opacity:1}
+
+.theme-toggle{
+  display:flex;align-items:center;gap:8px;padding:0 14px;
+  border-left:1px solid var(--border);margin-left:auto;
+  cursor:pointer;background:none;border-top:none;border-right:none;border-bottom:none;
+  color:var(--text-dim);font-family:var(--mono);
+  font-size:10.5px;letter-spacing:.5px;transition:color .2s;white-space:nowrap;flex-shrink:0;
+  text-transform:uppercase;
+}
+.theme-toggle:hover{color:var(--text)}
+.tog-track{width:32px;height:18px;border-radius:9px;background:var(--surface2);
+  border:1px solid var(--border);position:relative;transition:.25s;flex-shrink:0}
+.tog-thumb{position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;
+  background:var(--text-dim);transition:.25s}
+html.light .tog-track{background:var(--c-deep);border-color:var(--c-deep)}
+html.light .tog-thumb{background:var(--paper);transform:translateX(14px)}
+
+/* ────── MAIN ────── */
+main{max-width:1000px;margin:0 auto;padding:36px 40px 100px}
+
+/* ────── HERO INTERACTIVE: MEMORY LATENCY ────── */
+.lat-frame{
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  margin:30px 0 36px;overflow:hidden;
+}
+.lat-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 20px;background:var(--surface2);
+  border-bottom:1px solid var(--border);gap:14px;flex-wrap:wrap;
+}
+.lat-head .lhs{display:flex;align-items:center;gap:10px;
+  font-family:var(--mono);font-size:10px;letter-spacing:2px;
+  text-transform:uppercase;color:var(--text-dim);}
+.lat-head .lhs .dot{width:7px;height:7px;border-radius:50%;background:var(--cache);
+  box-shadow:0 0 8px var(--cache);animation:pulse 2s infinite}
+.lat-head .lhs strong{color:var(--c-logo);font-weight:500}
+.lat-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.lat-btn{
+  padding:6px 12px;background:var(--surface);border:1px solid var(--border);
+  color:var(--text);font-family:var(--mono);font-size:10.5px;letter-spacing:.6px;
+  border-radius:3px;cursor:pointer;transition:all .15s;text-transform:uppercase;
+  display:inline-flex;align-items:center;gap:6px;
+}
+.lat-btn:hover{border-color:var(--cache);color:var(--cache)}
+.lat-btn.primary{background:var(--cache);color:var(--bg);border-color:var(--cache);font-weight:500}
+.lat-btn.primary:hover{filter:brightness(1.15);color:var(--bg)}
+
+.lat-body{padding:24px 24px 22px;background:var(--surface);position:relative;overflow:hidden}
+.lat-row{
+  display:grid;grid-template-columns:90px 1fr auto;
+  align-items:center;gap:14px;
+  padding:9px 0;
+  border-bottom:1px solid var(--border);
+}
+.lat-row:last-of-type{border-bottom:none}
+.lat-label{
+  font-family:var(--mono);font-size:11.5px;letter-spacing:1.6px;
+  text-transform:uppercase;color:var(--text-hi);font-weight:500;
+}
+.lat-label .sub{display:block;font-size:9.5px;color:var(--text-dim);
+  letter-spacing:1px;margin-top:2px;font-weight:400;}
+.lat-bar-wrap{position:relative;height:24px}
+.lat-bar{
+  height:24px;border-radius:3px;
+  background:var(--c-logo);
+  width:0;min-width:0;
+  transition:width 1.2s cubic-bezier(.2,.7,.3,1);
+  position:relative;overflow:hidden;
+  display:flex;align-items:center;
+}
+.lat-bar.l1{background:var(--abstract)}
+.lat-bar.l2{background:var(--cache)}
+.lat-bar.l3{background:var(--pipe)}
+.lat-bar.ram{background:var(--thru)}
+.lat-bar.ssd{background:var(--branch)}
+.lat-row.visible .lat-bar{width:var(--w,5%);min-width:54px}
+.lat-bar-cap{
+  padding-left:9px;
+  font-family:var(--mono);font-size:10.5px;color:var(--bg);
+  font-weight:600;letter-spacing:.5px;white-space:nowrap;
+  opacity:0;transition:opacity .4s .8s;
+}
+.lat-row.visible .lat-bar-cap{opacity:1}
+.lat-cycles{
+  font-family:var(--mono);font-size:13px;color:var(--c-logo);
+  font-weight:500;letter-spacing:.5px;min-width:90px;text-align:right;
+}
+.lat-cycles .sub{display:block;color:var(--text-dim);font-size:10px;margin-top:2px}
+
+.lat-footnote{
+  margin-top:14px;padding:11px 14px;background:var(--surface2);border-radius:4px;
+  font-family:var(--mono);font-size:11px;color:var(--text-dim);line-height:1.6;
+  border-left:3px solid var(--amber);
+}
+.lat-footnote strong{color:var(--amber);font-weight:600}
+
+/* ────── MAJOR SECTIONS ────── */
+.major-section{display:block;padding-top:44px;scroll-margin-top:64px}
+.major-section + .major-section{padding-top:28px}
+.major-section-head{
+  margin:0 auto 16px;max-width:880px;
+  display:flex;flex-direction:column;gap:6px;
+  position:relative;padding-left:0;
+}
+.major-section-num{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:3px;
+  text-transform:uppercase;color:var(--c-logo);font-weight:500;
+  display:flex;align-items:center;gap:14px;
+}
+.major-section-num::before{
+  content:'§';font-style:normal;font-family:var(--sans);
+  font-size:14px;line-height:1;color:var(--c-logo);opacity:.7;letter-spacing:0;
+  font-weight:500;
+}
+.major-section-num::after{
+  content:'';flex:1;height:1px;background:var(--border-hi);
+  max-width:140px;
+}
+.major-section-title{
+  font-family:var(--sans);font-size:clamp(28px,4vw,42px);
+  color:var(--text-hi);line-height:1.05;letter-spacing:-1px;
+  font-weight:600;
+}
+.major-section-title em{color:var(--c-logo);font-weight:600;font-style:normal}
+.major-section-sub{
+  font-family:var(--sans);font-size:14px;color:var(--text);
+  max-width:62ch;line-height:1.65;margin-top:8px;
+}
+.major-section-sub code{font-family:var(--mono);color:var(--c-logo);
+  background:var(--c-logo-soft);padding:1px 5px;border-radius:2px;font-size:.86em}
+[data-color="abstract"] .major-section-num,
+[data-color="abstract"] .major-section-num::before{color:var(--abstract)}
+[data-color="cache"] .major-section-num,
+[data-color="cache"] .major-section-num::before{color:var(--cache)}
+[data-color="pipe"] .major-section-num,
+[data-color="pipe"] .major-section-num::before{color:var(--pipe)}
+[data-color="thru"] .major-section-num,
+[data-color="thru"] .major-section-num::before{color:var(--thru)}
+[data-color="branch"] .major-section-num,
+[data-color="branch"] .major-section-num::before{color:var(--branch)}
+[data-color="coh"] .major-section-num,
+[data-color="coh"] .major-section-num::before{color:var(--coh)}
+[data-color="comp"] .major-section-num,
+[data-color="comp"] .major-section-num::before{color:var(--comp)}
+
+/* ────── CARDS ────── */
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:6px;
+  padding:28px 32px 26px;margin:0 auto 18px;position:relative;overflow:hidden;
+  max-width:920px;
+}
+.card::before{
+  content:attr(data-label);position:absolute;top:0;right:0;
+  padding:5px 14px;font-size:9px;letter-spacing:2.2px;text-transform:uppercase;
+  background:var(--surface2);color:var(--c-logo);
+  border-radius:0 5px 0 6px;border-left:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+  font-family:var(--mono);font-weight:500;
+}
+.card.abstract-edge{border-left:3px solid var(--abstract)}
+.card.cache-edge{border-left:3px solid var(--cache)}
+.card.pipe-edge{border-left:3px solid var(--pipe)}
+.card.thru-edge{border-left:3px solid var(--thru)}
+.card.branch-edge{border-left:3px solid var(--branch)}
+.card.coh-edge{border-left:3px solid var(--coh)}
+.card.comp-edge{border-left:3px solid var(--comp)}
+
+.card h2{
+  font-family:var(--sans);font-size:26px;color:var(--text-hi);
+  margin-bottom:14px;font-weight:600;letter-spacing:-.5px;line-height:1.15;
+  padding-bottom:12px;border-bottom:1px solid var(--border);
+}
+.card h2 .secnum{
+  font-family:var(--mono);font-size:10.5px;color:var(--c-logo);font-style:normal;
+  letter-spacing:2.4px;display:block;margin-bottom:8px;font-weight:500;
+}
+.card.abstract-edge h2 .secnum{color:var(--abstract)}
+.card.cache-edge h2 .secnum{color:var(--cache)}
+.card.pipe-edge h2 .secnum{color:var(--pipe)}
+.card.thru-edge h2 .secnum{color:var(--thru)}
+.card.branch-edge h2 .secnum{color:var(--branch)}
+.card.coh-edge h2 .secnum{color:var(--coh)}
+.card.comp-edge h2 .secnum{color:var(--comp)}
+.card h3{
+  font-family:var(--sans);font-size:18px;color:var(--text-hi);
+  margin:20px 0 8px;font-weight:600;letter-spacing:-.3px;
+}
+.card h4{
+  font-family:var(--mono);font-size:10.5px;color:var(--c-logo);
+  letter-spacing:1.8px;text-transform:uppercase;margin:16px 0 8px;font-weight:500;
+}
+.card.abstract-edge h4{color:var(--abstract)}
+.card.cache-edge h4{color:var(--cache)}
+.card.pipe-edge h4{color:var(--pipe)}
+.card.thru-edge h4{color:var(--thru)}
+.card.branch-edge h4{color:var(--branch)}
+.card.coh-edge h4{color:var(--coh)}
+.card.comp-edge h4{color:var(--comp)}
+.card h2 + h4,.card h3 + h4,.card h2 + p,.card h3 + p,.card h4 + p{margin-top:0}
+.card h4:first-child,.card h3:first-child,.card h2:first-child{margin-top:0}
+.card p{
+  color:var(--text);margin-bottom:10px;max-width:68ch;line-height:1.65;
+  font-family:var(--sans);font-size:14.5px;
+}
+.card p:last-child{margin-bottom:0}
+.card strong{color:var(--text-hi);font-weight:600}
+.card em{color:var(--c-logo);font-weight:600;font-style:normal}
+.card.abstract-edge em{color:var(--abstract)}
+.card.cache-edge em{color:var(--cache)}
+.card.pipe-edge em{color:var(--pipe)}
+.card.thru-edge em{color:var(--thru)}
+.card.branch-edge em{color:var(--branch)}
+.card.coh-edge em{color:var(--coh)}
+.card.comp-edge em{color:var(--comp)}
+.card ul,.card ol{
+  margin:6px 0 14px 24px;color:var(--text);max-width:68ch;
+  font-family:var(--sans);font-size:14.5px;line-height:1.6;
+}
+.card li{margin-bottom:3px;line-height:1.55}
+.card li::marker{color:var(--c-logo)}
+.card blockquote{
+  border-left:3px solid var(--c-logo);padding:10px 20px;margin:12px 0;
+  background:var(--c-logo-soft);border-radius:0 3px 3px 0;
+  color:var(--text-hi);font-family:var(--sans);font-size:15px;line-height:1.55;
+  font-weight:400;max-width:68ch;
+}
+.card.abstract-edge blockquote{border-left-color:var(--abstract);background:var(--abstract-soft)}
+.card.cache-edge blockquote{border-left-color:var(--cache);background:var(--cache-soft)}
+.card.pipe-edge blockquote{border-left-color:var(--pipe);background:var(--pipe-soft)}
+.card.thru-edge blockquote{border-left-color:var(--thru);background:var(--thru-soft)}
+.card.branch-edge blockquote{border-left-color:var(--branch);background:var(--branch-soft)}
+.card.coh-edge blockquote{border-left-color:var(--coh);background:var(--coh-soft)}
+.card.comp-edge blockquote{border-left-color:var(--comp);background:var(--comp-soft)}
+
+/* ────── INLINE CODE ────── */
+code{
+  font-family:var(--mono);font-size:.86em;font-weight:500;
+  background:var(--code-bg);color:var(--c-logo);
+  padding:1px 6px;border-radius:3px;border:1px solid var(--border);
+  word-break:break-word;
+}
+.card p code,.card li code{font-size:.84em}
+
+/* ────── CODE BLOCKS ────── */
+.code-block{
+  background:var(--code-bg);border:1px solid var(--border);
+  border-radius:6px;margin:10px 0 14px;overflow:hidden;
+  font-family:var(--mono);font-size:13px;line-height:1.5;
+  position:relative;max-width:880px;
+}
+.code-block + .code-block{margin-top:8px}
+.code-header{
+  display:flex;align-items:center;gap:10px;
+  padding:7px 14px;background:var(--surface2);
+  border-bottom:1px solid var(--border);
+  font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:var(--text-dim);
+}
+.code-dots{display:flex;gap:5px}
+.code-dot{width:9px;height:9px;border-radius:50%;background:var(--border)}
+.code-dot.r{background:#c87553}
+.code-dot.y{background:#d4a23f}
+.code-dot.g{background:#5fc4d8}
+.code-lang{font-weight:500;color:var(--c-logo);font-family:var(--mono)}
+.code-meta{margin-left:auto;color:var(--text-dim);font-size:10px;font-style:italic;text-transform:none;letter-spacing:.5px}
+.code-body{
+  padding:10px 0;overflow-x:auto;
+  background:var(--code-bg);
+}
+.code-body pre{
+  margin:0;padding:0 18px;
+  white-space:pre;font-family:var(--mono);font-size:12.5px;
+  line-height:1.55;color:var(--text);
+}
+
+/* syntax tokens */
+.t-key{color:var(--comp);font-weight:500}
+.t-fn{color:var(--c-logo);font-weight:500}
+.t-str{color:var(--amber)}
+.t-num{color:var(--amber);font-weight:500}
+.t-com{color:var(--text-dim);font-style:italic}
+.t-prep{color:var(--branch)}
+.t-type{color:var(--comp);font-weight:500}
+.t-op{color:var(--text-hi)}
+.t-reg{color:var(--comp);font-weight:600}
+.t-byte{color:var(--amber);font-weight:500}
+.t-hi{color:var(--text-hi);font-weight:500}
+.t-dim{color:var(--text-dim)}
+
+/* ────── LOCK CALLOUT ────── */
+.lock{
+  display:flex;gap:14px;align-items:flex-start;
+  padding:16px 22px 16px 24px;margin:16px 0 14px;
+  background:linear-gradient(135deg, rgba(212,162,63,.10) 0%, var(--surface2) 60%);
+  border:1px solid var(--amber);border-left:4px solid var(--amber);
+  border-radius:6px;position:relative;max-width:880px;
+  box-shadow:0 1px 0 var(--border);
+}
+.lock::before{
+  content:'';position:absolute;top:0;right:0;width:80px;height:80px;
+  background:radial-gradient(circle at top right, rgba(212,162,63,.14), transparent 70%);
+  pointer-events:none;border-radius:0 6px 0 0;
+}
+html.light .lock{background:linear-gradient(135deg, rgba(212,162,63,.10) 0%, var(--surface2) 60%)}
+.lock-icon{
+  flex-shrink:0;width:34px;height:34px;border-radius:50%;
+  background:var(--amber);color:var(--surface);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--sans);font-size:15px;font-weight:700;letter-spacing:-.5px;
+  box-shadow:0 0 0 4px rgba(212,162,63,.16);
+  position:relative;z-index:1;
+}
+.lock-body{flex:1;position:relative;z-index:1}
+.lock-tag{
+  display:inline-block;font-family:var(--mono);font-size:10px;
+  letter-spacing:2.8px;text-transform:uppercase;color:var(--amber);
+  margin-bottom:9px;font-weight:700;
+}
+.lock-tag::before{content:'§ ';opacity:.7}
+.lock-text{
+  font-family:var(--sans);font-size:14.5px;color:var(--text-hi);
+  line-height:1.65;font-weight:400;
+}
+.lock-text code{
+  font-family:var(--mono);font-size:.86em;font-weight:500;
+  background:var(--code-bg);color:var(--c-logo);
+  padding:1px 5px;border-radius:2px;border:1px solid var(--border);
+}
+.lock-text em{color:var(--amber);font-weight:600;font-style:normal}
+
+/* ────── TABLE ────── */
+.tbl{
+  width:100%;border-collapse:collapse;font-size:13px;margin:14px 0;
+  font-family:var(--mono);max-width:880px;
+}
+.tbl th{
+  text-align:left;padding:10px 12px;background:var(--surface2);
+  color:var(--c-logo);font-weight:500;font-size:10.5px;letter-spacing:1.6px;
+  text-transform:uppercase;border-bottom:1px solid var(--border);
+}
+.tbl td{
+  padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text);
+  vertical-align:top;line-height:1.5;
+}
+.tbl td code{font-size:.92em}
+.tbl td.num{text-align:left;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tbl tr:hover td{background:var(--surface2)}
+
+/* ────── CACHE-LINE WIDGET ────── */
+.cl-frame{
+  background:var(--surface);border:1px solid var(--border);border-radius:7px;
+  margin:14px 0 16px;overflow:hidden;max-width:880px;
+}
+.cl-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:11px 16px;background:var(--surface2);
+  border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap;
+}
+.cl-tag{
+  font-family:var(--mono);font-size:10px;letter-spacing:1.8px;
+  text-transform:uppercase;color:var(--cache);font-weight:700;
+  padding:3px 9px;border:1px solid var(--cache);border-radius:3px;
+}
+.cl-title{
+  font-family:var(--sans);font-size:13.5px;color:var(--text);font-weight:500;
+}
+.cl-controls{display:flex;gap:6px}
+.cl-tab{
+  padding:5px 11px;background:transparent;border:1px solid var(--border);
+  color:var(--text-dim);font-family:var(--mono);font-size:10px;letter-spacing:1px;
+  text-transform:uppercase;border-radius:3px;cursor:pointer;transition:all .15s;
+}
+.cl-tab:hover{color:var(--cache);border-color:var(--cache)}
+.cl-tab.active{background:var(--cache);color:var(--bg);border-color:var(--cache);font-weight:600}
+.cl-body{padding:18px 20px 14px;background:var(--surface)}
+.cl-line{
+  display:grid;grid-template-columns:repeat(16,1fr);gap:3px;
+  margin:8px 0 6px;
+}
+.cl-byte{
+  aspect-ratio:1;border-radius:2px;background:var(--surface3);
+  border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:9px;color:var(--text-dim);
+  transition:all .35s cubic-bezier(.2,.7,.3,1);
+  position:relative;
+}
+.cl-byte.use{background:var(--cache);border-color:var(--cache);color:var(--bg);font-weight:600}
+.cl-byte.waste{background:var(--surface2);border-color:var(--border);color:var(--text-dim);opacity:.5}
+.cl-byte.padding{background:var(--surface);border-color:var(--border);color:var(--text-dim);opacity:.3}
+.cl-byte.use-alt{background:var(--abstract);border-color:var(--abstract);color:#1a1a1a;font-weight:600}
+.cl-legend{
+  display:flex;gap:18px;margin-top:14px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:10.5px;color:var(--text-dim);
+  padding-top:12px;border-top:1px dashed var(--border);
+}
+.cl-leg-item{display:inline-flex;align-items:center;gap:7px}
+.cl-leg-swatch{width:12px;height:12px;border-radius:2px}
+.cl-leg-swatch.use{background:var(--cache)}
+.cl-leg-swatch.use-alt{background:var(--abstract)}
+.cl-leg-swatch.waste{background:var(--surface2);border:1px solid var(--border)}
+.cl-leg-swatch.padding{background:var(--surface);border:1px solid var(--border)}
+.cl-stat{
+  display:flex;gap:14px;flex-wrap:wrap;margin-top:14px;
+}
+.cl-stat-card{
+  flex:1 1 0;min-width:140px;padding:11px 14px;
+  background:var(--surface2);border:1px solid var(--border);border-radius:5px;
+  border-left:3px solid var(--cache);
+}
+.cl-stat-lbl{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:1.5px;
+  text-transform:uppercase;color:var(--text-dim);margin-bottom:4px;
+}
+.cl-stat-val{
+  font-family:var(--mono);font-size:18px;color:var(--text-hi);font-weight:500;
+}
+.cl-stat-val .unit{font-size:11px;color:var(--text-dim);margin-left:4px}
+.cl-explain{
+  margin-top:10px;font-family:var(--sans);font-size:13.5px;color:var(--text);
+  line-height:1.6;
+}
+.cl-explain code{font-family:var(--mono);font-size:.86em}
+
+/* ────── DEPENDENCY-CHAIN WIDGET ────── */
+.dep-frame{
+  background:var(--surface);border:1px solid var(--border);border-radius:7px;
+  margin:14px 0 16px;overflow:hidden;max-width:880px;
+}
+.dep-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:11px 16px;background:var(--surface2);
+  border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap;
+}
+.dep-tag{
+  font-family:var(--mono);font-size:10px;letter-spacing:1.8px;
+  text-transform:uppercase;color:var(--thru);font-weight:700;
+  padding:3px 9px;border:1px solid var(--thru);border-radius:3px;
+}
+.dep-controls{display:flex;gap:6px;align-items:center}
+.dep-tab{
+  padding:5px 11px;background:transparent;border:1px solid var(--border);
+  color:var(--text-dim);font-family:var(--mono);font-size:10px;letter-spacing:1px;
+  text-transform:uppercase;border-radius:3px;cursor:pointer;transition:all .15s;
+}
+.dep-tab:hover{color:var(--thru);border-color:var(--thru)}
+.dep-tab.active{background:var(--thru);color:var(--bg);border-color:var(--thru);font-weight:600}
+.dep-body{padding:18px 18px 14px;background:var(--surface)}
+.dep-pipeline{
+  display:flex;flex-direction:column;gap:6px;
+  font-family:var(--mono);font-size:11px;
+}
+.dep-track{
+  display:grid;grid-template-columns:80px 1fr;gap:10px;align-items:center;
+}
+.dep-track-lbl{
+  font-family:var(--mono);font-size:10px;color:var(--thru);letter-spacing:1.2px;
+  text-transform:uppercase;font-weight:600;
+}
+.dep-cells{
+  display:flex;gap:2px;height:24px;
+}
+.dep-cell{
+  flex:1;background:var(--surface2);border-radius:2px;border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:9px;color:var(--text-dim);
+  transition:all .25s;min-width:14px;
+}
+.dep-cell.active{background:var(--thru);color:var(--bg);border-color:var(--thru);font-weight:600}
+.dep-cell.stall{background:var(--surface3);color:var(--text-dim);border-color:var(--border);
+  background-image:repeating-linear-gradient(45deg,transparent,transparent 3px,rgba(125,138,163,.18) 3px,rgba(125,138,163,.18) 5px);}
+.dep-meter{
+  display:flex;gap:14px;flex-wrap:wrap;margin-top:14px;
+  padding-top:12px;border-top:1px dashed var(--border);
+}
+.dep-meter-card{
+  flex:1 1 0;min-width:130px;padding:10px 14px;
+  background:var(--surface2);border:1px solid var(--border);border-radius:5px;
+  border-left:3px solid var(--thru);
+}
+.dep-meter-lbl{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:1.5px;
+  text-transform:uppercase;color:var(--text-dim);margin-bottom:4px;
+}
+.dep-meter-val{
+  font-family:var(--mono);font-size:18px;color:var(--text-hi);font-weight:500;
+}
+.dep-meter-val .unit{font-size:11px;color:var(--text-dim);margin-left:4px}
+.dep-time{
+  display:flex;align-items:center;gap:14px;margin-top:14px;
+  font-family:var(--mono);font-size:11px;color:var(--text-dim);
+}
+.dep-time .btn{
+  padding:6px 14px;background:var(--thru);color:var(--bg);
+  border:1px solid var(--thru);font-family:var(--mono);font-size:10.5px;
+  letter-spacing:1px;text-transform:uppercase;border-radius:3px;cursor:pointer;
+  font-weight:600;transition:filter .15s;
+}
+.dep-time .btn:hover{filter:brightness(1.15)}
+.dep-time .btn.alt{background:transparent;color:var(--text);border-color:var(--border)}
+.dep-time .btn.alt:hover{border-color:var(--thru);color:var(--thru)}
+.dep-cycle{
+  font-family:var(--mono);font-size:13px;color:var(--c-logo);letter-spacing:.5px;
+}
+
+/* ────── BRANCH PREDICTOR DEMO ────── */
+.bp-frame{
+  background:var(--surface);border:1px solid var(--border);border-radius:7px;
+  margin:14px 0 16px;overflow:hidden;max-width:880px;
+}
+.bp-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:11px 16px;background:var(--surface2);
+  border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap;
+}
+.bp-tag{
+  font-family:var(--mono);font-size:10px;letter-spacing:1.8px;
+  text-transform:uppercase;color:var(--branch);font-weight:700;
+  padding:3px 9px;border:1px solid var(--branch);border-radius:3px;
+}
+.bp-body{padding:18px 20px 16px;background:var(--surface)}
+.bp-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:680px){.bp-grid{grid-template-columns:1fr}}
+.bp-lane{
+  background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+  padding:14px 14px;border-left:3px solid var(--branch);
+}
+.bp-lane-title{
+  font-family:var(--sans);font-size:14px;color:var(--text-hi);font-weight:600;
+  margin-bottom:3px;
+}
+.bp-lane-sub{
+  font-family:var(--mono);font-size:10px;color:var(--text-dim);
+  letter-spacing:.8px;margin-bottom:10px;
+}
+.bp-stream{
+  display:flex;gap:2px;flex-wrap:wrap;margin-bottom:10px;
+  min-height:24px;
+}
+.bp-bit{
+  width:14px;height:22px;border-radius:1px;border:1px solid var(--border);
+  background:var(--surface3);
+  transition:all .12s;
+  font-family:var(--mono);font-size:8px;color:var(--text-dim);
+  display:flex;align-items:center;justify-content:center;
+}
+.bp-bit.hit{background:var(--comp);border-color:var(--comp);color:var(--bg);font-weight:600}
+.bp-bit.miss{background:var(--branch);border-color:var(--branch);color:#fff;font-weight:600}
+.bp-meter{
+  display:flex;gap:10px;margin-top:8px;
+  padding-top:10px;border-top:1px dashed var(--border);
+}
+.bp-meter-card{
+  flex:1;padding:8px 11px;background:var(--surface);border:1px solid var(--border);
+  border-radius:4px;
+}
+.bp-meter-lbl{
+  font-family:var(--mono);font-size:9px;letter-spacing:1.3px;
+  text-transform:uppercase;color:var(--text-dim);margin-bottom:2px;
+}
+.bp-meter-val{
+  font-family:var(--mono);font-size:14px;color:var(--text-hi);font-weight:500;
+}
+.bp-meter-val.good{color:var(--comp)}
+.bp-meter-val.bad{color:var(--branch)}
+.bp-meter-val .unit{font-size:10px;color:var(--text-dim);margin-left:3px}
+.bp-actions{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);
+}
+.bp-actions .btns{display:flex;gap:6px}
+.bp-actions .btn{
+  padding:6px 14px;background:var(--branch);color:#fff;
+  border:1px solid var(--branch);font-family:var(--mono);font-size:10.5px;
+  letter-spacing:1px;text-transform:uppercase;border-radius:3px;cursor:pointer;
+  font-weight:600;transition:filter .15s;
+}
+.bp-actions .btn:hover{filter:brightness(1.15)}
+.bp-actions .btn.alt{background:transparent;color:var(--text);border-color:var(--border)}
+.bp-actions .btn.alt:hover{border-color:var(--branch);color:var(--branch)}
+.bp-actions .label{
+  font-family:var(--mono);font-size:10.5px;color:var(--text-dim);letter-spacing:.5px;
+}
+
+/* ────── FALSE-SHARING WIDGET ────── */
+.fs-frame{
+  background:var(--surface);border:1px solid var(--border);border-radius:7px;
+  margin:14px 0 16px;overflow:hidden;max-width:880px;
+}
+.fs-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:11px 16px;background:var(--surface2);
+  border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap;
+}
+.fs-tag{
+  font-family:var(--mono);font-size:10px;letter-spacing:1.8px;
+  text-transform:uppercase;color:var(--coh);font-weight:700;
+  padding:3px 9px;border:1px solid var(--coh);border-radius:3px;
+}
+.fs-body{padding:20px 20px 16px;background:var(--surface)}
+.fs-scene{
+  display:grid;grid-template-columns:1fr auto 1fr;gap:18px;align-items:center;
+  margin-bottom:14px;
+}
+@media (max-width:680px){.fs-scene{grid-template-columns:1fr}}
+.fs-core{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:6px;padding:14px 14px;text-align:center;position:relative;
+  border-top:3px solid var(--coh);
+  transition:all .25s;
+}
+.fs-core.active{background:var(--coh-soft);border-color:var(--coh);transform:scale(1.02)}
+.fs-core-lbl{
+  font-family:var(--mono);font-size:10px;color:var(--coh);letter-spacing:1.4px;
+  text-transform:uppercase;font-weight:700;margin-bottom:4px;
+}
+.fs-core-name{
+  font-family:var(--sans);font-size:14px;color:var(--text-hi);font-weight:600;
+}
+.fs-core-state{
+  font-family:var(--mono);font-size:10px;color:var(--text-dim);
+  letter-spacing:1px;margin-top:6px;
+}
+.fs-core.active .fs-core-state{color:var(--coh)}
+.fs-line{
+  background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+  padding:12px 14px;position:relative;
+  border-left:3px solid var(--cache);
+}
+.fs-line-lbl{
+  font-family:var(--mono);font-size:9.5px;color:var(--cache);letter-spacing:1.4px;
+  text-transform:uppercase;font-weight:700;margin-bottom:6px;
+}
+.fs-line-cells{
+  display:grid;grid-template-columns:repeat(8,1fr);gap:2px;
+}
+.fs-line-cell{
+  aspect-ratio:1;background:var(--surface3);border:1px solid var(--border);
+  border-radius:2px;font-family:var(--mono);font-size:8.5px;color:var(--text-dim);
+  display:flex;align-items:center;justify-content:center;
+  transition:all .25s;
+}
+.fs-line-cell.var-a{background:var(--branch);color:#fff;border-color:var(--branch);font-weight:700}
+.fs-line-cell.var-b{background:var(--comp);color:var(--bg);border-color:var(--comp);font-weight:700}
+.fs-arrows{position:relative;height:20px;margin:6px 0}
+.fs-arrow{
+  position:absolute;left:0;right:0;height:2px;
+  background:var(--coh);opacity:0;transition:opacity .25s;
+}
+.fs-arrow.show{opacity:1}
+.fs-stat{
+  display:flex;gap:12px;margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);
+  flex-wrap:wrap;
+}
+.fs-stat-card{
+  flex:1 1 0;min-width:130px;padding:10px 14px;
+  background:var(--surface2);border:1px solid var(--border);border-radius:5px;
+  border-left:3px solid var(--coh);
+}
+.fs-stat-lbl{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:1.5px;
+  text-transform:uppercase;color:var(--text-dim);margin-bottom:4px;
+}
+.fs-stat-val{
+  font-family:var(--mono);font-size:16px;color:var(--text-hi);font-weight:500;
+}
+.fs-stat-val .unit{font-size:10px;color:var(--text-dim);margin-left:4px}
+.fs-controls{
+  display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center;
+}
+.fs-controls .btn{
+  padding:6px 14px;background:var(--coh);color:#fff;
+  border:1px solid var(--coh);font-family:var(--mono);font-size:10.5px;
+  letter-spacing:1px;text-transform:uppercase;border-radius:3px;cursor:pointer;
+  font-weight:600;transition:filter .15s;
+}
+.fs-controls .btn:hover{filter:brightness(1.15)}
+.fs-controls .btn.alt{background:transparent;color:var(--text);border-color:var(--border)}
+.fs-controls .btn.alt:hover{border-color:var(--coh);color:var(--coh)}
+.fs-status{
+  font-family:var(--mono);font-size:11px;color:var(--text-dim);letter-spacing:.5px;
+  margin-left:auto;
+}
+.fs-status.good{color:var(--comp)}
+.fs-status.bad{color:var(--branch)}
+
+/* ────── ROOFLINE WIDGET ────── */
+.rl-frame{
+  background:var(--surface);border:1px solid var(--border);border-radius:7px;
+  margin:14px 0 16px;overflow:hidden;max-width:880px;
+}
+.rl-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:11px 16px;background:var(--surface2);
+  border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap;
+}
+.rl-tag{
+  font-family:var(--mono);font-size:10px;letter-spacing:1.8px;
+  text-transform:uppercase;color:var(--comp);font-weight:700;
+  padding:3px 9px;border:1px solid var(--comp);border-radius:3px;
+}
+.rl-body{padding:18px 20px;background:var(--surface)}
+
+/* ────── FOOTER ────── */
+.eof{
+  margin-top:60px;padding-top:30px;border-top:1px dashed var(--border-hi);
+  font-family:var(--mono);font-size:10.5px;color:var(--text-dim);
+  letter-spacing:1.5px;text-transform:uppercase;
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  max-width:880px;margin-left:auto;margin-right:auto;
+}
+.eof::before{
+  content:'';width:8px;height:8px;background:var(--c-logo);border-radius:50%;
+  box-shadow:0 0 10px var(--c-logo);
+}
+.eof span{color:var(--c-logo)}
+
+/* ────── GLOSSARY TERMS (auto-annotated, clickable) ────── */
+.gterm{
+  color:var(--c-logo);cursor:pointer;position:relative;padding:0 1px;
+  border-bottom:1px dotted currentColor;
+  transition:color .15s,background .15s,filter .15s,border-color .15s;
+}
+.gterm:hover{filter:brightness(1.18);background:var(--c-logo-soft);border-bottom-style:solid}
+.gterm[data-cat="abstract"]{color:var(--abstract)}
+.gterm[data-cat="abstract"]:hover{background:var(--abstract-soft)}
+.gterm[data-cat="cache"]{color:var(--cache)}
+.gterm[data-cat="cache"]:hover{background:var(--cache-soft)}
+.gterm[data-cat="pipe"]{color:var(--pipe)}
+.gterm[data-cat="pipe"]:hover{background:var(--pipe-soft)}
+.gterm[data-cat="thru"]{color:var(--thru)}
+.gterm[data-cat="thru"]:hover{background:var(--thru-soft)}
+.gterm[data-cat="branch"]{color:var(--branch)}
+.gterm[data-cat="branch"]:hover{background:var(--branch-soft)}
+.gterm[data-cat="coh"]{color:var(--coh)}
+.gterm[data-cat="coh"]:hover{background:var(--coh-soft)}
+.gterm[data-cat="comp"]{color:var(--comp)}
+.gterm[data-cat="comp"]:hover{background:var(--comp-soft)}
+.gterm.gterm-code{
+  border-bottom:none;background:var(--code-bg);
+  font-family:var(--mono);font-size:.86em;padding:1px 6px;border-radius:3px;
+  border:1px solid var(--border);font-weight:500;
+}
+.gterm.gterm-code:hover{filter:brightness(1.18)}
+
+.glossary-pop{
+  position:absolute;top:0;left:0;
+  width:360px;max-width:calc(100vw - 24px);
+  padding:18px 20px;
+  background:var(--surface);border:1px solid var(--border-hi);
+  border-radius:10px;box-shadow:0 16px 48px rgba(0,0,0,.6);
+  font-family:var(--sans);font-size:13px;color:var(--text);
+  line-height:1.6;z-index:300;
+  opacity:0;pointer-events:none;transform:translateY(-4px);
+  transition:opacity .15s,transform .15s;
+}
+html.light .glossary-pop{box-shadow:0 16px 48px rgba(20,30,50,.18)}
+.glossary-pop.show{opacity:1;pointer-events:auto;transform:translateY(0)}
+.glossary-pop::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:10px 10px 0 0;
+  background:var(--c-logo);
+}
+.glossary-pop[data-cat="abstract"]::before{background:var(--abstract)}
+.glossary-pop[data-cat="cache"]::before{background:var(--cache)}
+.glossary-pop[data-cat="pipe"]::before{background:var(--pipe)}
+.glossary-pop[data-cat="thru"]::before{background:var(--thru)}
+.glossary-pop[data-cat="branch"]::before{background:var(--branch)}
+.glossary-pop[data-cat="coh"]::before{background:var(--coh)}
+.glossary-pop[data-cat="comp"]::before{background:var(--comp)}
+.gpop-cat{
+  display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:1.5px;
+  text-transform:uppercase;font-weight:600;padding:2px 8px;border-radius:3px;margin-bottom:10px;
+}
+.gpop-cat[data-cat="abstract"]{background:var(--abstract-soft);color:var(--abstract)}
+.gpop-cat[data-cat="cache"]{background:var(--cache-soft);color:var(--cache)}
+.gpop-cat[data-cat="pipe"]{background:var(--pipe-soft);color:var(--pipe)}
+.gpop-cat[data-cat="thru"]{background:var(--thru-soft);color:var(--thru)}
+.gpop-cat[data-cat="branch"]{background:var(--branch-soft);color:var(--branch)}
+.gpop-cat[data-cat="coh"]{background:var(--coh-soft);color:var(--coh)}
+.gpop-cat[data-cat="comp"]{background:var(--comp-soft);color:var(--comp)}
+.gpop-title{
+  font-family:var(--sans);font-size:16.5px;color:var(--text-hi);
+  font-weight:600;margin-bottom:9px;letter-spacing:-.3px;line-height:1.2;
+}
+.gpop-body{font-family:var(--sans);font-size:13px;color:var(--text);line-height:1.65}
+.gpop-body p{margin-bottom:8px}
+.gpop-body p:last-child{margin-bottom:0}
+.gpop-body code{font-family:var(--mono);font-size:.86em;color:var(--c-logo);
+  background:var(--code-bg);padding:1px 5px;border-radius:2px;border:1px solid var(--border)}
+.gpop-body strong{color:var(--text-hi)}
+.gpop-body em{color:var(--c-logo);font-weight:600;font-style:normal}
+
+/* ────── RESPONSIVE ────── */
+@media (max-width:760px){
+  header{padding:40px 22px 22px}
+  main{padding:24px 22px 60px}
+  .section-nav{padding:0 22px}
+  .card{padding:22px 20px 20px}
+  .lat-row{grid-template-columns:80px 1fr auto;gap:10px}
+  .lat-label{font-size:10px}
+  .lat-cycles{font-size:11.5px;min-width:70px}
+  .cl-line{grid-template-columns:repeat(16,1fr);gap:2px}
+  .cl-byte{font-size:7px}
+  .fs-line-cells{grid-template-columns:repeat(8,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="grain"></div>
+
+<!-- HEADER -->
+<header>
+  <div class="eyebrow">FIELD GUIDE · ANTHROPIC · 2026</div>
+  <h1>Writing C that <em>fits the silicon</em>.</h1>
+  <p class="subtitle">C presents a model where memory is flat, instructions run sequentially, and every operation costs the same. <em>None of that is true.</em> Mechanical sympathy is the discipline of writing code shaped by the physical reality of the machine, not by the abstraction C hands you.</p>
+
+  <div class="hero-tip">
+    <span><span class="kbd">click underlined terms</span> for definitions</span>
+    <span><span class="kbd">T</span> toggle theme</span>
+    <span><span class="kbd">1–7</span> jump to chapter</span>
+  </div>
+
+  <div class="imprint">
+    <span><span class="imp-label">Subject ›</span> <span class="imp-val">Mechanical Sympathy</span></span>
+    <span class="imp-sep">│</span>
+    <span><span class="imp-label">Language ›</span> <span class="imp-val">C / x86-64</span></span>
+    <span class="imp-sep">│</span>
+    <span><span class="imp-label">Chapters ›</span> <span class="imp-val">7</span></span>
+    <span class="imp-sep">│</span>
+    <span><span class="imp-label">Read time ›</span> <span class="imp-val">~25 min</span></span>
+  </div>
+</header>
+
+<!-- STICKY NAV -->
+<nav class="section-nav" id="section-nav">
+  <div class="section-nav-inner">
+    <div class="nav-brand">
+      <div class="nav-mark">C</div>
+      <div class="nav-title-block">
+        <span class="nav-title">Mechanical Sympathy</span>
+        <span class="nav-sub">hardware-shaped C</span>
+      </div>
+    </div>
+    <button class="section-btn" data-target="sec-lie"><span class="num">01</span>The lie</button>
+    <button class="section-btn" data-target="sec-cache"><span class="num">02</span>Memory</button>
+    <button class="section-btn" data-target="sec-pipe"><span class="num">03</span>The CPU</button>
+    <button class="section-btn" data-target="sec-thru"><span class="num">04</span>Throughput</button>
+    <button class="section-btn" data-target="sec-branch"><span class="num">05</span>Branches</button>
+    <button class="section-btn" data-target="sec-coh"><span class="num">06</span>Coherence</button>
+    <button class="section-btn" data-target="sec-comp"><span class="num">07</span>Compiler</button>
+    <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+      <span class="tog-track"><span class="tog-thumb"></span></span>
+      <span class="tog-label">DARK</span>
+    </button>
+  </div>
+</nav>
+
+<main>
+  <!-- HERO INTERACTIVE — MEMORY LATENCY -->
+  <div class="lat-frame" id="lat-frame">
+    <div class="lat-head">
+      <div class="lhs"><span class="dot"></span><strong>Memory latency, log-scaled</strong> · each step ≈ one order of magnitude</div>
+      <div class="lat-controls">
+        <button class="lat-btn" id="lat-replay">↻ Replay</button>
+      </div>
+    </div>
+    <div class="lat-body" id="lat-body">
+      <div class="lat-row" data-cycles="1" data-pct="3" data-cls="">
+        <div class="lat-label">Register<span class="sub">in core</span></div>
+        <div class="lat-bar-wrap"><div class="lat-bar"><span class="lat-bar-cap">1×</span></div></div>
+        <div class="lat-cycles">~1 cycle<span class="sub">≈ instant</span></div>
+      </div>
+      <div class="lat-row" data-cycles="4" data-pct="12" data-cls="l1">
+        <div class="lat-label">L1 cache<span class="sub">32–64 KB</span></div>
+        <div class="lat-bar-wrap"><div class="lat-bar l1"><span class="lat-bar-cap">4×</span></div></div>
+        <div class="lat-cycles">~4 cycles<span class="sub">≈ a few adds</span></div>
+      </div>
+      <div class="lat-row" data-cycles="12" data-pct="21.6" data-cls="l2">
+        <div class="lat-label">L2 cache<span class="sub">512 KB – 2 MB</span></div>
+        <div class="lat-bar-wrap"><div class="lat-bar l2"><span class="lat-bar-cap">12×</span></div></div>
+        <div class="lat-cycles">~12 cycles<span class="sub">≈ a multiply</span></div>
+      </div>
+      <div class="lat-row" data-cycles="40" data-pct="32" data-cls="l3">
+        <div class="lat-label">L3 cache<span class="sub">10–64 MB shared</span></div>
+        <div class="lat-bar-wrap"><div class="lat-bar l3"><span class="lat-bar-cap">40×</span></div></div>
+        <div class="lat-cycles">~40 cycles<span class="sub">≈ FP divide</span></div>
+      </div>
+      <div class="lat-row" data-cycles="250" data-pct="48" data-cls="ram">
+        <div class="lat-label">DRAM<span class="sub">main memory</span></div>
+        <div class="lat-bar-wrap"><div class="lat-bar ram"><span class="lat-bar-cap">250×</span></div></div>
+        <div class="lat-cycles">~250 cycles<span class="sub">≈ 60 adds</span></div>
+      </div>
+      <div class="lat-row" data-cycles="100000" data-pct="100" data-cls="ssd">
+        <div class="lat-label">SSD<span class="sub">block device</span></div>
+        <div class="lat-bar-wrap"><div class="lat-bar ssd"><span class="lat-bar-cap">100,000×</span></div></div>
+        <div class="lat-cycles">~100k cycles<span class="sub">an eternity</span></div>
+      </div>
+      <div class="lat-footnote"><strong>Read this carefully.</strong> A cache miss to DRAM costs the same as <strong>~60 floating-point adds</strong> (250 cycles ÷ 4-cycle add latency). The bars above are <strong>log-scaled</strong> so every layer stays visible — on a true linear scale, the DRAM bar would be ~60× the L1 bar and the SSD bar would be longer than this page. That asymmetry between computing and waiting is the central fact every other section orbits around.</div>
+    </div>
+  </div>
+
+  <!-- ════════════ SECTION 01 · THE LIE ════════════ -->
+  <section class="major-section" id="sec-lie" data-color="abstract">
+    <div class="major-section-head">
+      <div class="major-section-num">Chapter 01 · The Lie</div>
+      <div class="major-section-title">C presents a uniform machine. <em>That machine doesn't exist.</em></div>
+      <div class="major-section-sub">Before any optimization, you have to see the gap. C describes a world that hasn't been real for thirty years — and the gap between that world and the silicon is where mechanical sympathy lives.</div>
+    </div>
+
+    <div class="card abstract-edge" data-label="01 · ABSTRACT">
+      <h2><span class="secnum">SECTION 01</span>The C abstract machine</h2>
+      <p>Open the C standard and you'll find a description of an imagined computer. Bytes are uniform. Memory is a flat array. Instructions execute in the order you wrote them. Every operation takes roughly the same time. The standard never quite says these things outright, but it builds a world where reasoning about them otherwise feels unnatural.</p>
+      <blockquote>This world is convenient. It is also <em>false</em> in ways that span six orders of magnitude.</blockquote>
+      <p>The real machine is asymmetric to a degree that's hard to believe until you measure it. A register access is essentially free. A main-memory access can stall the entire pipeline for hundreds of cycles. A predictable branch is invisible. A mispredicted branch flushes 15+ stages of speculative work. A linear scan of an array can run 50× faster than a linked list with the same big-O.</p>
+      <p>None of this is in the C standard. None of it is visible in your source. But all of it is the difference between a program that uses 5% of the machine and one that uses 95%.</p>
+
+      <h4>The two models</h4>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span></div>
+          <span class="code-lang">C · what you write</span>
+          <span class="code-meta">uniform, sequential</span>
+        </div>
+        <div class="code-body"><pre><span class="t-com">/* Looks like: read a, read b, add, store result. */</span>
+<span class="t-com">/* Each step seems equal-cost. Order seems fixed.   */</span>
+<span class="t-type">int</span> <span class="t-fn">sum</span>(<span class="t-key">const</span> <span class="t-type">int</span> *a, <span class="t-key">const</span> <span class="t-type">int</span> *b) {
+    <span class="t-key">return</span> *a + *b;
+}</pre></div>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span></div>
+          <span class="code-lang">silicon · what actually happens</span>
+          <span class="code-meta">parallel, speculative, asymmetric</span>
+        </div>
+        <div class="code-body"><pre><span class="t-com">/* load *a → may hit L1 (~4c), miss to L3 (~40c), or miss to DRAM (~250c) */</span>
+<span class="t-com">/* load *b → can run in parallel with *a when there's no dependency      */</span>
+<span class="t-com">/* the ADD is ~1 cycle — completely dominated by either load             */</span>
+<span class="t-com">/* meanwhile the CPU is speculating ~500 µops ahead                      */</span>
+<span class="t-com">/* the "return" is just the retirement of a result that already finished */</span></pre></div>
+      </div>
+
+      <p>The same six lines of C can run with wildly different performance depending on what the machine is doing underneath. Mechanical sympathy is the practice of holding both models in your head <em>at once</em>, and writing code where they line up.</p>
+
+      <div class="lock">
+        <div class="lock-icon">§</div>
+        <div class="lock-body">
+          <div class="lock-tag">Lock this in</div>
+          <div class="lock-text">The source code is a <em>proposal</em>. The program is what the silicon actually does. Mechanical sympathy is the gap between the two — and the practice of closing it.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ SECTION 02 · THE MEMORY HIERARCHY ════════════ -->
+  <section class="major-section" id="sec-cache" data-color="cache">
+    <div class="major-section-head">
+      <div class="major-section-num">Chapter 02 · The Memory Hierarchy</div>
+      <div class="major-section-title">The CPU is not slow at computing. It is <em>slow at waiting</em>.</div>
+      <div class="major-section-sub">Internalize this and most performance intuition reshapes itself. Cache lines, not bytes, are the unit of memory traffic. Layout, not algorithm, is often the deciding factor.</div>
+    </div>
+
+    <div class="card cache-edge" data-label="02 · HIERARCHY">
+      <h2><span class="secnum">SECTION 02</span>Cache lines are the actual unit</h2>
+      <p>When your code reads one byte, the CPU does not fetch one byte. It fetches <em>64 bytes</em>: an aligned chunk called a cache line, which becomes the smallest unit of memory traffic from there to the bottom of the hierarchy. Every load, every store, every coherence message — they all operate on cache lines.</p>
+      <p>This single fact has enormous consequences. Reading <code>arr[0]</code> and then <code>arr[1]</code> is essentially free for the second access — it's already there. Reading <code>arr[0]</code> and then <code>arr[1000000]</code> is two full misses. Linear traversal isn't just slightly faster than random access; it can be <strong>50–100× faster</strong>, with the same big-O.</p>
+
+      <h4>Latency the way the silicon sees it</h4>
+      <table class="tbl">
+        <thead>
+          <tr><th>Layer</th><th><span class="gterm" data-term="latency" data-cat="thru">Latency</span></th><th><span class="gterm" data-term="bandwidth" data-cat="cache">Bandwidth</span></th><th><span class="gterm" data-term="capacity" data-cat="cache">Capacity</span></th><th>Shared?</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="gterm" data-term="register" data-cat="pipe">Register</span></td><td class="num">~1c</td><td class="num">∞</td><td class="num">16 GPR</td><td>per-core</td></tr>
+          <tr><td><span class="gterm" data-term="cache level" data-cat="cache">L1d</span></td><td class="num">~4c</td><td class="num">~1 TB/s</td><td class="num">32–64 KB</td><td>per-core</td></tr>
+          <tr><td><span class="gterm" data-term="cache level" data-cat="cache">L2</span></td><td class="num">~12c</td><td class="num">~500 GB/s</td><td class="num">0.5–2 MB</td><td>per-core</td></tr>
+          <tr><td><span class="gterm" data-term="cache level" data-cat="cache">L3</span></td><td class="num">~40c</td><td class="num">~200 GB/s</td><td class="num">10–64 MB</td><td>shared</td></tr>
+          <tr><td><span class="gterm" data-term="DRAM" data-cat="cache">DRAM</span></td><td class="num">~250c</td><td class="num">~50 GB/s</td><td class="num">GBs</td><td>shared</td></tr>
+          <tr><td><span class="gterm" data-term="SSD" data-cat="cache">SSD</span></td><td class="num">~100,000c</td><td class="num">~5 GB/s</td><td class="num">TBs</td><td>device</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Array of structs vs. struct of arrays</h3>
+      <p>Try this — toggle between two layouts of the same logical data. The cache-line view shows what the CPU actually fetches when your hot loop touches a single field across many entities.</p>
+
+      <div class="cl-frame" id="cl-frame">
+        <div class="cl-head">
+          <span class="cl-tag">64-BYTE CACHE LINE</span>
+          <span class="cl-title">One cache line, two layouts — same fields, very different fate</span>
+          <div class="cl-controls">
+            <button class="cl-tab active" data-mode="aos">AoS</button>
+            <button class="cl-tab" data-mode="soa">SoA</button>
+          </div>
+        </div>
+        <div class="cl-body">
+          <div class="cl-line" id="cl-line"></div>
+          <div class="cl-legend">
+            <span class="cl-leg-item"><span class="cl-leg-swatch use"></span> used by loop</span>
+            <span class="cl-leg-item"><span class="cl-leg-swatch use-alt"></span> alt field (also used)</span>
+            <span class="cl-leg-item"><span class="cl-leg-swatch waste"></span> in line, never read</span>
+            <span class="cl-leg-item"><span class="cl-leg-swatch padding"></span> struct padding</span>
+          </div>
+          <div class="cl-stat">
+            <div class="cl-stat-card">
+              <div class="cl-stat-lbl">Useful bytes / line</div>
+              <div class="cl-stat-val" id="cl-useful">4<span class="unit">/ 64</span></div>
+            </div>
+            <div class="cl-stat-card">
+              <div class="cl-stat-lbl">Bandwidth efficiency</div>
+              <div class="cl-stat-val" id="cl-eff">6.25<span class="unit">%</span></div>
+            </div>
+            <div class="cl-stat-card">
+              <div class="cl-stat-lbl">x values per fetch</div>
+              <div class="cl-stat-val" id="cl-perfetch">1<span class="unit">×</span></div>
+            </div>
+          </div>
+          <div class="cl-explain" id="cl-explain"></div>
+        </div>
+      </div>
+
+      <h4>The same code, two layouts</h4>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span></div>
+          <span class="code-lang">AoS · array of structs</span>
+          <span class="code-meta">the natural OO layout</span>
+        </div>
+        <div class="code-body"><pre><span class="t-key">typedef</span> <span class="t-key">struct</span> {
+    <span class="t-type">float</span>  x, y, z;     <span class="t-com">/*  0..11 */</span>
+    <span class="t-type">float</span>  health;      <span class="t-com">/* 12..15 */</span>
+    <span class="t-type">char</span>   name[<span class="t-num">32</span>];    <span class="t-com">/* 16..47 */</span>
+    <span class="t-type">int</span>    id;          <span class="t-com">/* 48..51 */</span>
+    <span class="t-type">double</span> weight;      <span class="t-com">/* 52..55 pad, 56..63 → 64 B total */</span>
+} Entity;
+
+Entity es[<span class="t-num">10000</span>];
+<span class="t-key">for</span> (<span class="t-type">int</span> i = <span class="t-num">0</span>; i &lt; <span class="t-num">10000</span>; i++)
+    es[i].x += dt;            <span class="t-com">/* 1 useful float per cache line */</span></pre></div>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span></div>
+          <span class="code-lang">SoA · struct of arrays</span>
+          <span class="code-meta">the data-oriented layout</span>
+        </div>
+        <div class="code-body"><pre><span class="t-key">typedef</span> <span class="t-key">struct</span> {
+    <span class="t-type">float</span> x[<span class="t-num">10000</span>], y[<span class="t-num">10000</span>], z[<span class="t-num">10000</span>];
+    <span class="t-type">float</span> health[<span class="t-num">10000</span>];
+    <span class="t-type">char</span>  name[<span class="t-num">10000</span>][<span class="t-num">32</span>];
+    <span class="t-type">int</span>   id[<span class="t-num">10000</span>];
+} Entities;
+
+Entities es;
+<span class="t-key">for</span> (<span class="t-type">int</span> i = <span class="t-num">0</span>; i &lt; <span class="t-num">10000</span>; i++)
+    es.x[i] += dt;            <span class="t-com">/* 16 useful floats per cache line */</span></pre></div>
+      </div>
+
+      <p>The first version wastes 60 of every 64 bytes the CPU fetches. The second uses every byte. On a memory-bound loop, the SoA version is commonly <strong>5–10× faster</strong> — no algorithmic change, no parallelism, just code shaped around how memory actually moves.</p>
+
+      <h3>Pointer chasing is the enemy</h3>
+      <p>A linked list of a million nodes scattered across the heap is a performance disaster, even though traversal is O(n). The reason is geometric: each <code>node = node-&gt;next</code> is almost certainly a cache miss, and worse, it's a <em>dependent</em> load — the CPU cannot prefetch the next access because it doesn't know the next address until this load completes. You've serialized yourself against memory latency at full ~250-cycle cost.</p>
+      <p>An array traversal of the same logical data has none of this pathology. The prefetcher sees the stride, pulls lines ahead of demand, and the CPU mostly sees throughput, not latency. Same algorithm, same big-O, two completely different programs.</p>
+
+      <div class="lock">
+        <div class="lock-icon">§</div>
+        <div class="lock-body">
+          <div class="lock-tag">Lock this in</div>
+          <div class="lock-text">Cache lines, not bytes, are the unit of memory traffic. Layout determines what fraction of each fetch you actually use. <em>Big-O is not the model</em> — at this layer, geometry is.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ SECTION 03 · THE CPU IS WIDE ════════════ -->
+  <section class="major-section" id="sec-pipe" data-color="pipe">
+    <div class="major-section-head">
+      <div class="major-section-num">Chapter 03 · The CPU is Wide</div>
+      <div class="major-section-title">A modern core is a small dataflow engine <em>pretending to be sequential</em>.</div>
+      <div class="major-section-sub">Pipelines, reorder buffers, register renaming, ~500 µops in flight. The serial illusion you see at the C level is the result of an enormous parallel machinery you don't.</div>
+    </div>
+
+    <div class="card pipe-edge" data-label="03 · MICROARCH">
+      <h2><span class="secnum">SECTION 03</span>Inside the dataflow engine</h2>
+      <p>The C standard talks about "the abstract machine" executing one statement after another. A real CPU like Intel's Golden Cove or Apple's Firestorm does nothing of the sort. Underneath, it is closer to a small superscalar dataflow processor that pretends to be sequential because the architects committed to that illusion forty years ago.</p>
+
+      <h4>What's actually in there</h4>
+      <ul>
+        <li>A <em>frontend</em> that fetches instruction bytes, decodes them into the CPU's internal RISC-like <strong>micro-ops</strong> (a single <code>add [rax+8], rbx</code> becomes 2–3 µops), and queues them up.</li>
+        <li>A <em>reorder buffer (ROB)</em> holding ~500+ in-flight µops simultaneously. This is the window of instructions the CPU is actively considering at any moment.</li>
+        <li><em>Register renaming</em> that maps the architectural registers you see in assembly (<code>rax</code>, <code>rbx</code>, …) onto a pool of hundreds of physical registers, eliminating false dependencies.</li>
+        <li>A <em>backend</em> with 8–12 specialized <strong>execution ports</strong> — some integer, some FP, some load, some store, some branch — picking ready µops and running several per cycle, out of program order.</li>
+        <li>A <em>retirement</em> unit that commits completed µops to architectural state <strong>in program order</strong>. This is what creates the illusion you started with.</li>
+      </ul>
+
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span></div>
+          <span class="code-lang">conceptual flow</span>
+          <span class="code-meta">µop lifecycle</span>
+        </div>
+        <div class="code-body"><pre>fetch  →  decode  →  rename  →  <span class="t-hi">[ROB · ~500 in flight]</span>  →  dispatch
+                                       ↓
+                              <span class="t-hi">execution ports</span>  (8–12 in parallel)
+                              ↓ ↓ ↓ ↓ ↓ ↓ ↓ ↓
+                            int  int  fp  fp  ld  ld  st  br
+                                       ↓
+                                  <span class="t-hi">retirement</span>  (in program order)
+                                       ↓
+                              architectural state</pre></div>
+      </div>
+
+      <p>The headline number is <strong>IPC</strong> — instructions per cycle. A well-tuned numerical kernel can sustain <strong>4–6 IPC</strong>; it is using the wide machine. A pointer-chasing loop sits at <strong>0.3 IPC</strong> because the dataflow engine is stalled waiting for memory. <em>Same hardware. The code decides which one you get.</em></p>
+
+      <h3>Speculation: the CPU runs the future</h3>
+      <p>When the CPU hits a branch, it does not wait for the condition to resolve. The branch predictor guesses, the frontend keeps feeding µops down the predicted path, and the backend executes them <em>speculatively</em>. If the prediction was right (and it usually is, for predictable branches), the speculative work retires and you get its results for free. If it was wrong, the entire pipeline flushes, the speculative state is thrown away, and you pay 15–20 cycles to restart from the correct address.</p>
+      <p>This is also true for memory: the CPU speculates that a load won't alias with a recent store, executes the load early, and rolls back if it turns out the store mattered. It speculates that a function will return to where it was called from. It speculates that an indirect branch goes where it last went. The entire machine is forecasting your program a few hundred µops in advance, and the only thing that gives you the illusion of sequential execution is that mistakes get cleaned up before retirement.</p>
+
+      <div class="lock">
+        <div class="lock-icon">§</div>
+        <div class="lock-body">
+          <div class="lock-tag">Lock this in</div>
+          <div class="lock-text">Performance is not "how many instructions did I write?" — it is <em>how full are the execution ports?</em> A loop's speed is set by whether the dataflow engine can keep itself busy, not by your instruction count.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ SECTION 04 · LATENCY vs THROUGHPUT ════════════ -->
+  <section class="major-section" id="sec-thru" data-color="thru">
+    <div class="major-section-head">
+      <div class="major-section-num">Chapter 04 · Latency vs Throughput</div>
+      <div class="major-section-title">Every instruction has <em>two numbers</em>, and they are very different.</div>
+      <div class="major-section-sub">This is the conceptual key that unlocks most of mechanical sympathy. Once you see latency and throughput as separate quantities, dependency chains become visible everywhere.</div>
+    </div>
+
+    <div class="card thru-edge" data-label="04 · TIMING">
+      <h2><span class="secnum">SECTION 04</span>The two numbers</h2>
+      <p><em>Latency</em> is the number of cycles between issuing an instruction and being able to use its result. <em>Throughput</em> is how often you can issue another one regardless of who's waiting on the result. The same instruction can have a small latency and a tiny reciprocal throughput at the same time — they are not in conflict, they measure different things.</p>
+
+      <table class="tbl">
+        <thead>
+          <tr><th>Instruction</th><th>Latency</th><th>Rec. throughput</th><th>What it means</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>add r, r</code></td><td class="num">1c</td><td class="num">0.25</td><td>4 per cycle if independent</td></tr>
+          <tr><td><code>imul r, r</code></td><td class="num">3c</td><td class="num">1</td><td>1 per cycle, 3-cycle wait for result</td></tr>
+          <tr><td><code>vfmadd</code></td><td class="num">4c</td><td class="num">0.5</td><td>2 per cycle, 4-cycle dep distance</td></tr>
+          <tr><td><code>div r</code></td><td class="num">12–40c</td><td class="num">4–17</td><td>slow, non-pipelined</td></tr>
+          <tr><td><code>load L1</code></td><td class="num">4–5c</td><td class="num">0.5</td><td>2 loads/cycle, but 4c to value</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Dependency chains serialize the machine</h3>
+      <p>Consider the most innocent loop in C:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span></div>
+          <span class="code-lang">C · the naive sum</span>
+          <span class="code-meta">one chain</span>
+        </div>
+        <div class="code-body"><pre><span class="t-type">double</span> sum = <span class="t-num">0</span>;
+<span class="t-key">for</span> (<span class="t-type">int</span> i = <span class="t-num">0</span>; i &lt; n; i++)
+    sum += a[i];      <span class="t-com">/* sum depends on prior sum */</span></pre></div>
+      </div>
+
+      <p>Each <code>sum += a[i]</code> depends on the previous one. The chain is n adds long, each with 4-cycle latency. The total time is bound to <strong>~4n cycles</strong> regardless of how wide the machine is, because the dataflow engine cannot execute the next add until the previous one's result is ready. You are using a tiny fraction of the FP unit's throughput.</p>
+
+      <p>Now break the chain into four independent ones:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span></div>
+          <span class="code-lang">C · four parallel accumulators</span>
+          <span class="code-meta">throughput-bound</span>
+        </div>
+        <div class="code-body"><pre><span class="t-type">double</span> s0=<span class="t-num">0</span>, s1=<span class="t-num">0</span>, s2=<span class="t-num">0</span>, s3=<span class="t-num">0</span>;
+<span class="t-key">for</span> (<span class="t-type">int</span> i = <span class="t-num">0</span>; i &lt; n; i += <span class="t-num">4</span>) {
+    s0 += a[i];     s1 += a[i+<span class="t-num">1</span>];
+    s2 += a[i+<span class="t-num">2</span>];   s3 += a[i+<span class="t-num">3</span>];
+}
+<span class="t-type">double</span> sum = (s0 + s1) + (s2 + s3);</pre></div>
+      </div>
+
+      <p>Four independent chains, each n/4 long. The CPU interleaves them across its FP ports, hiding the 4-cycle add latency behind unrelated work. Throughput rises from one add every four cycles to roughly one add per cycle, so the loop finishes in <strong>~n cycles</strong> — about <strong>4× faster</strong>. (Fully saturating two FP ports would take even more accumulators; four is already enough to win big.)</p>
+
+      <div class="dep-frame" id="dep-frame">
+        <div class="dep-head">
+          <span class="dep-tag">PORT UTILIZATION</span>
+          <div class="dep-controls">
+            <button class="dep-tab active" data-mode="chain">1 chain</button>
+            <button class="dep-tab" data-mode="parallel">4 chains</button>
+          </div>
+        </div>
+        <div class="dep-body">
+          <div class="dep-pipeline" id="dep-pipeline"></div>
+          <div class="dep-meter">
+            <div class="dep-meter-card">
+              <div class="dep-meter-lbl">Cycles for 16 adds</div>
+              <div class="dep-meter-val" id="dep-cycles">64<span class="unit">c</span></div>
+            </div>
+            <div class="dep-meter-card">
+              <div class="dep-meter-lbl">IPC (FP)</div>
+              <div class="dep-meter-val" id="dep-ipc">0.25</div>
+            </div>
+            <div class="dep-meter-card">
+              <div class="dep-meter-lbl">Port utilization</div>
+              <div class="dep-meter-val" id="dep-util">13<span class="unit">%</span></div>
+            </div>
+          </div>
+          <div class="dep-time">
+            <button class="btn" id="dep-step">► Step</button>
+            <button class="btn alt" id="dep-reset">↻ Reset</button>
+            <span class="dep-cycle" id="dep-state">cycle 0 / 16</span>
+          </div>
+        </div>
+      </div>
+
+      <p>The compiler will sometimes do this for integer types automatically. For floating-point it cannot, because reordering FP additions changes the result and the standard forbids it without explicit permission (<code>-ffast-math</code>, <code>-fassociative-math</code>). This is why people who care write code that <em>explicitly exposes parallelism the compiler is forbidden from creating.</em></p>
+
+      <h3>Dependency chains hide everywhere</h3>
+      <p>Once you have this frame, you start seeing them in code you'd never have suspected:</p>
+      <ul>
+        <li>A linked list is a chain of dependent memory loads at full DRAM latency.</li>
+        <li>A pointer-chasing tree traversal is the same, branching.</li>
+        <li><code>i++</code> with a complex termination check can chain the loop counter with the body.</li>
+        <li>Building a <code>min</code> via <code>if</code> chains compares; replacing with <code>(x &lt; y ? x : y)</code> may break it depending on whether the compiler emits a <code>cmov</code> or a branch.</li>
+        <li>Updating a hash table's probe index by chained modular arithmetic serializes lookups.</li>
+      </ul>
+
+      <div class="lock">
+        <div class="lock-icon">§</div>
+        <div class="lock-body">
+          <div class="lock-tag">Lock this in</div>
+          <div class="lock-text">Throughput is what fills the machine. Latency is what each dependency hop costs. If your loop is bound by a long dependency chain, no amount of clever instruction selection will help — you have to <em>break the chain</em>.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ SECTION 05 · BRANCH PREDICTION ════════════ -->
+  <section class="major-section" id="sec-branch" data-color="branch">
+    <div class="major-section-head">
+      <div class="major-section-num">Chapter 05 · Branch Prediction</div>
+      <div class="major-section-title">A predictable branch is free. A random one is <em>catastrophic</em>.</div>
+      <div class="major-section-sub">The CPU predicts every branch and speculates past it. When it's right, your control flow is invisible. When it's wrong, you pay 15–20 cycles to flush and restart — over and over.</div>
+    </div>
+
+    <div class="card branch-edge" data-label="05 · BRANCHES">
+      <h2><span class="secnum">SECTION 05</span>The famous demo</h2>
+      <p>One of the most-cited Stack Overflow answers of all time is about the following loop running ~6× faster on a sorted array than on a random one, with no other changes:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span></div>
+          <span class="code-lang">C · the canonical example</span>
+          <span class="code-meta">conditional sum</span>
+        </div>
+        <div class="code-body"><pre><span class="t-type">long</span> sum = <span class="t-num">0</span>;
+<span class="t-key">for</span> (<span class="t-type">int</span> i = <span class="t-num">0</span>; i &lt; N; i++)
+    <span class="t-key">if</span> (data[i] &gt;= <span class="t-num">128</span>)         <span class="t-com">/* branch depends on the data */</span>
+        sum += data[i];</pre></div>
+      </div>
+
+      <p>The instructions are identical. The data is identical. What changes is whether the branch predictor can <em>guess correctly</em>. On a sorted array the branch is taken consistently (no, no, no, … yes, yes, yes); the predictor learns this in two iterations. On a random array there is no pattern; the predictor is essentially flipping a coin and getting it wrong half the time. Every mispredict flushes ~15–20 cycles of speculative work. Over a few million iterations, this is the entire difference between fast and slow.</p>
+
+      <h3>Try it</h3>
+      <p>Feed the predictor a stream. Watch the hit/miss rate evolve over time. The "sorted" stream is what your branch sees when the data is ordered; "random" is the coin-flip case.</p>
+
+      <div class="bp-frame" id="bp-frame">
+        <div class="bp-head">
+          <span class="bp-tag">BRANCH PREDICTOR · 2-bit saturating counter</span>
+          <span style="font-family:var(--mono);font-size:10.5px;color:var(--text-dim);letter-spacing:.5px">~15–20 cycle penalty per miss</span>
+        </div>
+        <div class="bp-body">
+          <div class="bp-grid">
+            <div class="bp-lane">
+              <div class="bp-lane-title">Sorted data</div>
+              <div class="bp-lane-sub">predictable · branch settles fast</div>
+              <div class="bp-stream" id="bp-sorted-stream"></div>
+              <div class="bp-meter">
+                <div class="bp-meter-card">
+                  <div class="bp-meter-lbl">Hit rate</div>
+                  <div class="bp-meter-val good" id="bp-sorted-hit">—</div>
+                </div>
+                <div class="bp-meter-card">
+                  <div class="bp-meter-lbl">Penalty cycles</div>
+                  <div class="bp-meter-val" id="bp-sorted-pen">—</div>
+                </div>
+              </div>
+            </div>
+            <div class="bp-lane">
+              <div class="bp-lane-title">Random data</div>
+              <div class="bp-lane-sub">unpredictable · predictor gives up</div>
+              <div class="bp-stream" id="bp-random-stream"></div>
+              <div class="bp-meter">
+                <div class="bp-meter-card">
+                  <div class="bp-meter-lbl">Hit rate</div>
+                  <div class="bp-meter-val bad" id="bp-random-hit">—</div>
+                </div>
+                <div class="bp-meter-card">
+                  <div class="bp-meter-lbl">Penalty cycles</div>
+                  <div class="bp-meter-val" id="bp-random-pen">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="bp-actions">
+            <span class="label" id="bp-status">stream: 0 / 64 branches</span>
+            <div class="btns">
+              <button class="btn alt" id="bp-step">► Step</button>
+              <button class="btn" id="bp-run">▶ Run all</button>
+              <button class="btn alt" id="bp-reset">↻ Reset</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3>Branchless code, and when it helps</h3>
+      <p>If a branch is unpredictable and small, sometimes the best fix is to eliminate it. Replacing a conditional store with a <em>conditional move</em> (<code>cmov</code> on x86) turns a possibly-mispredicted branch into a guaranteed-cheap data dependency. The compiler does this automatically in many cases:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span></div>
+          <span class="code-lang">C · branchless max</span>
+          <span class="code-meta">often compiles to cmov</span>
+        </div>
+        <div class="code-body"><pre><span class="t-com">/* branchy — speed hinges on the predictor guessing right */</span>
+<span class="t-type">int</span> <span class="t-fn">max_branch</span>(<span class="t-type">int</span> a, <span class="t-type">int</span> b) {
+    <span class="t-key">if</span> (a &gt; b) <span class="t-key">return</span> a;
+    <span class="t-key">return</span> b;
+}
+
+<span class="t-com">/* ternary — the compiler often lowers this to a cmov */</span>
+<span class="t-type">int</span> <span class="t-fn">max_cmov</span>(<span class="t-type">int</span> a, <span class="t-type">int</span> b) {
+    <span class="t-key">return</span> a &gt; b ? a : b;
+}
+
+<span class="t-com">/* explicit bit trick — branchless and portable */</span>
+<span class="t-type">int</span> <span class="t-fn">max_bits</span>(<span class="t-type">int</span> a, <span class="t-type">int</span> b) {
+    <span class="t-type">int</span> mask = -(a &gt; b);          <span class="t-com">/* 0 or all-ones (two's complement) */</span>
+    <span class="t-key">return</span> (a &amp; mask) | (b &amp; ~mask);
+}</pre></div>
+      </div>
+
+      <p>The tradeoff: a branch you can predict is essentially free; you "execute" it for one cycle and the rest is speculative. A <code>cmov</code> always costs that cycle and creates a data dependency. So branchless wins only when the branch is hard to predict — typically when the condition depends on input data with no structure.</p>
+
+      <div class="lock">
+        <div class="lock-icon">§</div>
+        <div class="lock-body">
+          <div class="lock-tag">Lock this in</div>
+          <div class="lock-text">A branch isn't slow because it's a branch — it's slow because the CPU couldn't predict it. <em>Sort your data, structure your loops, hint your hot/cold paths.</em> Give the predictor a pattern, and your control flow becomes invisible.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ SECTION 06 · CACHE COHERENCE ════════════ -->
+  <section class="major-section" id="sec-coh" data-color="coh">
+    <div class="major-section-head">
+      <div class="major-section-num">Chapter 06 · Cache Coherence</div>
+      <div class="major-section-title">Shared memory is a <em>distributed protocol</em> you cannot see.</div>
+      <div class="major-section-sub">Each core has its own L1 and L2. The illusion of a single shared memory is maintained by MESI/MOESI — a constant exchange of invalidation messages between cores. Once you see the protocol, parallel performance bugs stop being mysterious.</div>
+    </div>
+
+    <div class="card coh-edge" data-label="06 · COHERENCE">
+      <h2><span class="secnum">SECTION 06</span>MESI in one paragraph</h2>
+      <p>Every cache line in every core's cache carries a <strong>state</strong>: <em>Modified</em>, <em>Exclusive</em>, <em>Shared</em>, or <em>Invalid</em>. To write a line, a core must first own it Modified or Exclusive — which means messaging every other core that has a copy and making them <em>invalidate</em> theirs. To read a line another core has Modified, the owning core must first write it back. These messages travel a coherence interconnect that crosses the entire die.</p>
+
+      <p>So an atomic increment of a contended counter is not really one instruction. It is a <em>cache-line ownership transfer</em>: invalidate every other copy, fetch the latest data, modify, possibly write back. Uncontended, this takes ~20 cycles. Contended across 16 cores, it can take <strong>thousands</strong>. This is why "atomic" feels free in benchmarks and catastrophic in production.</p>
+
+      <h3>False sharing</h3>
+      <p>The most painful version of this happens when two threads write to <em>different</em> variables that happen to live on the <em>same</em> cache line. From your C-level view, the variables are independent. From the hardware view, they are the same coherence unit. Every write by one thread invalidates the other's copy. The cache line ping-pongs between cores on every write.</p>
+
+      <div class="fs-frame" id="fs-frame">
+        <div class="fs-head">
+          <span class="fs-tag">FALSE SHARING · TWO CORES, ONE CACHE LINE</span>
+          <span class="fs-status" id="fs-status">Idle — click step</span>
+        </div>
+        <div class="fs-body">
+          <div class="fs-scene">
+            <div class="fs-core" id="fs-core-a">
+              <div class="fs-core-lbl">CORE 0</div>
+              <div class="fs-core-name">Thread A</div>
+              <div class="fs-core-state" id="fs-state-a">idle</div>
+            </div>
+            <div style="font-family:var(--mono);font-size:18px;color:var(--coh)" id="fs-bus">↔</div>
+            <div class="fs-core" id="fs-core-b">
+              <div class="fs-core-lbl">CORE 1</div>
+              <div class="fs-core-name">Thread B</div>
+              <div class="fs-core-state" id="fs-state-b">idle</div>
+            </div>
+          </div>
+          <div class="fs-line">
+            <div class="fs-line-lbl">Shared cache line · 64 bytes</div>
+            <div class="fs-line-cells" id="fs-cells"></div>
+          </div>
+          <div class="fs-stat">
+            <div class="fs-stat-card">
+              <div class="fs-stat-lbl">Coherence events</div>
+              <div class="fs-stat-val" id="fs-events">0</div>
+            </div>
+            <div class="fs-stat-card">
+              <div class="fs-stat-lbl">Wasted cycles (est.)</div>
+              <div class="fs-stat-val" id="fs-wasted">0<span class="unit">c</span></div>
+            </div>
+            <div class="fs-stat-card">
+              <div class="fs-stat-lbl">Layout</div>
+              <div class="fs-stat-val" id="fs-layout" style="font-size:13px">packed</div>
+            </div>
+          </div>
+          <div class="fs-controls">
+            <button class="btn alt" id="fs-step">► Step</button>
+            <button class="btn" id="fs-run">▶ Run</button>
+            <button class="btn alt" id="fs-pad">Pad to cache line</button>
+            <button class="btn alt" id="fs-reset">↻ Reset</button>
+          </div>
+        </div>
+      </div>
+
+      <h4>What this looks like in C</h4>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span></div>
+          <span class="code-lang">C · the trap</span>
+          <span class="code-meta">two counters, one cache line</span>
+        </div>
+        <div class="code-body"><pre><span class="t-key">struct</span> Counters {
+    <span class="t-type">long</span> a;     <span class="t-com">/* thread A increments this — only this */</span>
+    <span class="t-type">long</span> b;     <span class="t-com">/* thread B increments this — only this */</span>
+};                  <span class="t-com">/* 16 bytes total · same 64 B cache line */</span>
+
+<span class="t-com">/* Looks parallel. Runs ~100x slower than the padded version below. */</span></pre></div>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span></div>
+          <span class="code-lang">C · the fix</span>
+          <span class="code-meta">cache-line padding</span>
+        </div>
+        <div class="code-body"><pre><span class="t-prep">#include</span> <span class="t-str">&lt;stdalign.h&gt;</span>
+
+<span class="t-key">struct</span> Counters {
+    <span class="t-key">alignas</span>(<span class="t-num">64</span>) <span class="t-type">long</span> a;   <span class="t-com">/* a starts on its own cache line  */</span>
+    <span class="t-key">alignas</span>(<span class="t-num">64</span>) <span class="t-type">long</span> b;   <span class="t-com">/* b forced onto the next line     */</span>
+};                          <span class="t-com">/* sizeof == 128: one line each    */</span>
+
+<span class="t-com">/* Each counter owns a cache line — no ping-pong.
+   alignas already inserts the gap; no manual padding needed. */</span></pre></div>
+      </div>
+
+      <p>Nothing in C tells you this layout matters. Nothing in your algorithm changes. But the geometry of the cache-coherence protocol does not care about your intent — only about which 64-byte chunks two cores want at the same time.</p>
+
+      <h3>Atomics, locks, and the same underlying truth</h3>
+      <p>Every lock-free data structure you've admired is fighting this geometry. A well-tuned MPMC queue carefully separates its head and tail onto different cache lines so producers and consumers don't fight. A sharded counter gives each thread its own line and sums on read. A spinlock with backoff is trying to limit how often it touches a hot line. All of these are designs <em>against the coherence protocol's tendencies</em>.</p>
+
+      <div class="lock">
+        <div class="lock-icon">§</div>
+        <div class="lock-body">
+          <div class="lock-tag">Lock this in</div>
+          <div class="lock-text">Multi-threaded performance is geometry as much as algorithm. <em>Two cores that write to the same cache line are taking turns, no matter what your code says.</em> Sharing is opt-in: pad your hot, per-thread state to cache-line size.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ SECTION 07 · THE COMPILER ════════════ -->
+  <section class="major-section" id="sec-comp" data-color="comp">
+    <div class="major-section-head">
+      <div class="major-section-num">Chapter 07 · The Compiler is a Participant</div>
+      <div class="major-section-title">You are not writing for the CPU. You are writing <em>for the compiler</em>.</div>
+      <div class="major-section-sub">The compiler operates under a strict contract — the C abstract machine plus the assumption that undefined behaviour never happens. Once you see UB as a contract instead of a footgun, optimization stops being magic.</div>
+    </div>
+
+    <div class="card comp-edge" data-label="07 · COMPILER">
+      <h2><span class="secnum">SECTION 07</span>Undefined behaviour as license</h2>
+      <p>The single thing most C programmers underrate about their compiler is this: when the standard says some behaviour is undefined, the compiler is not granted "permission to do something weird." It is granted <em>permission to assume the behaviour never happens, and optimize accordingly</em>.</p>
+
+      <p>Signed integer overflow is the cleanest example. The C standard says it's UB. So when the compiler sees:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span></div>
+          <span class="code-lang">C · loop bounds</span>
+          <span class="code-meta">signed vs unsigned</span>
+        </div>
+        <div class="code-body"><pre><span class="t-key">for</span> (<span class="t-type">int</span> i = <span class="t-num">0</span>; i &lt;= n; i++) { <span class="t-com">/* … */</span> }</pre></div>
+      </div>
+
+      <p>…it knows <code>i</code> cannot wrap. So it can prove the loop terminates, vectorize aggressively, widen the index to 64-bit pointer arithmetic without checks. Change <code>int</code> to <code>unsigned</code>, and wrapping becomes <em>defined</em> — those optimizations now have to assume the loop might wrap, and some of them disappear. UB is not a curse word; it's a contract you make with the compiler about what it doesn't have to prove.</p>
+
+      <h3>Aliasing, restrict, alignment</h3>
+      <p>Most of the compiler's optimization power depends on what it can <em>prove</em> about your pointers. Specifically: do these two pointers refer to the same memory? If they might, the compiler must conservatively assume that writing through one invalidates reads through the other — which kills load reordering, vectorization, and dependency-breaking. If it can prove they don't, the gloves come off.</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span></div>
+          <span class="code-lang">C · the aliasing problem</span>
+          <span class="code-meta">restrict matters</span>
+        </div>
+        <div class="code-body"><pre><span class="t-com">/* compiler must assume a, b, c may overlap →
+   it cannot vectorize or reorder the loads/stores */</span>
+<span class="t-key">void</span> <span class="t-fn">add</span>(<span class="t-key">const</span> <span class="t-type">float</span> *a, <span class="t-key">const</span> <span class="t-type">float</span> *b, <span class="t-type">float</span> *c, <span class="t-type">int</span> n) {
+    <span class="t-key">for</span> (<span class="t-type">int</span> i = <span class="t-num">0</span>; i &lt; n; i++)
+        c[i] = a[i] + b[i];
+}
+
+<span class="t-com">/* you promise no overlap → it can vectorize freely */</span>
+<span class="t-key">void</span> <span class="t-fn">add_restrict</span>(<span class="t-key">const</span> <span class="t-type">float</span> *<span class="t-key">restrict</span> a,
+                  <span class="t-key">const</span> <span class="t-type">float</span> *<span class="t-key">restrict</span> b,
+                  <span class="t-type">float</span> *<span class="t-key">restrict</span> c, <span class="t-type">int</span> n) {
+    <span class="t-key">for</span> (<span class="t-type">int</span> i = <span class="t-num">0</span>; i &lt; n; i++)
+        c[i] = a[i] + b[i];
+}</pre></div>
+      </div>
+
+      <p>Same story with alignment. SIMD loads on aligned data are faster than unaligned ones; <code>__builtin_assume_aligned(ptr, 64)</code> tells the compiler to emit the fast form. With strict aliasing rules, type information lets the compiler reorder accesses to different types. The whole optimization pipeline is a chain of proofs, and you are either supplying the premises or denying them.</p>
+
+      <h3>Read the assembly</h3>
+      <p>Everything in this guide collapses to one habit: <em>look at what the compiler produced</em>. Godbolt makes it trivial. You write a function, see the asm at <code>-O2</code>, and if it isn't what you expected, you ask why. Usually the answer is a missing <code>restrict</code>, a function call that couldn't inline, a memory access the compiler couldn't prove was safe to reorder, or an FP reduction the standard forbade.</p>
+
+      <p>Once you do this for a while, you stop guessing. You stop saying "the compiler is smart, it'll figure it out." You start writing C with a mental model of the asm it produces. That is the closing move of mechanical sympathy.</p>
+
+      <div class="lock">
+        <div class="lock-icon">§</div>
+        <div class="lock-body">
+          <div class="lock-tag">Lock this in</div>
+          <div class="lock-text">The compiler is not a tool. It is a <em>collaborator</em> with a strict contract. UB tells it what it doesn't have to prove. <code>restrict</code> and alignment hints tell it what you've already proved. Read the asm — it's the only way to close the loop.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- META FRAME · ROOFLINE -->
+    <div class="card comp-edge" data-label="META · ROOFLINE">
+      <h2><span class="secnum">CLOSING</span>The meta-frame: think in bottlenecks</h2>
+      <p>After all of this, the unifying mental move is this: <em>at any moment, your code is bottlenecked on exactly one resource.</em> Identifying which one is the entire game.</p>
+
+      <h4>The candidates</h4>
+      <table class="tbl">
+        <thead>
+          <tr><th>Bottleneck</th><th>Symptom</th><th>How to find it</th><th>What helps</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Memory bandwidth</td><td>High cache miss, low IPC</td><td><code>perf stat cache-misses</code></td><td>better layout, fewer bytes/op</td></tr>
+          <tr><td>Memory latency</td><td>Backend stalls, deps</td><td><code>perf stat stalled-cycles-backend</code></td><td>prefetch, break deps, locality</td></tr>
+          <tr><td>FP / int throughput</td><td>High IPC at port limit</td><td><code>perf stat uops_dispatched</code></td><td>SIMD, more parallelism</td></tr>
+          <tr><td>Branch mispredict</td><td>High mispredict count</td><td><code>perf stat branch-misses</code></td><td>sort data, branchless</td></tr>
+          <tr><td>Coherence</td><td>Scaling tanks past 1 core</td><td><code>perf c2c</code> for false-share</td><td>pad, shard, batch writes</td></tr>
+          <tr><td>Frontend</td><td>Decode/uop-cache pressure</td><td><code>perf stat idq.*</code></td><td>smaller hot code, align loops</td></tr>
+        </tbody>
+      </table>
+
+      <h3>The roofline picture</h3>
+      <p>The classic visualization is the <em>roofline model</em>: on the x-axis, your operational intensity (FLOPs performed per byte of memory loaded). On the y-axis, the performance you actually achieve. The ceiling is two lines: a sloped line representing memory bandwidth, and a flat line representing peak compute. Where they meet is the only place your code can sit.</p>
+
+      <p>If you are below the sloped line, you are <strong>memory-bound</strong> — more FP units would not help, but better locality would. If you are below the flat line, you are <strong>compute-bound</strong> — more bandwidth would not help, but vectorization would. The reshaping of code that mechanical sympathy enables is, almost always, an attempt to <em>move your operating point</em> from one regime into another.</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span></div>
+          <span class="code-lang">roofline · conceptual</span>
+          <span class="code-meta">log–log axes</span>
+        </div>
+        <div class="code-body"><pre>perf
+  ^
+  |          ─────────────────  peak compute (flat)
+  |        ╱
+  |      ╱
+  |    ╱   <span class="t-hi">← memory bandwidth (sloped)</span>
+  |  ╱
+  └─────────────────────────────────────────→  ops per byte loaded
+       memory-bound   |   compute-bound</pre></div>
+      </div>
+
+      <h3>The deepest level</h3>
+      <p>If everything in this guide compressed to a single sentence, it would be this:</p>
+
+      <blockquote><em>Identify the gap between the model your code assumes and the machine your code runs on, then close it where it costs you.</em></blockquote>
+
+      <p>Sometimes that means a different algorithm. Often it means the same algorithm with a different memory layout. Occasionally it means writing assembly. Always it means <strong>measuring</strong> rather than guessing — because intuition is wrong often enough that the only durable habit is to look at what the silicon actually did.</p>
+
+      <p>The mechanically sympathetic programmer has not memorized a list of tricks. They have stopped believing that the source code <em>is</em> the program. The program is what the silicon does. The source code is a proposal.</p>
+
+      <div class="lock">
+        <div class="lock-icon">∎</div>
+        <div class="lock-body">
+          <div class="lock-tag">The whole discipline</div>
+          <div class="lock-text">Hold C's model and the machine's reality in your head at the same time. Notice where they diverge. <em>Reshape the code where the divergence costs you</em> — and ignore it everywhere else. That's the whole job.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="eof">
+    <span>END OF DOCUMENT</span>
+    <span style="color:var(--text-dim)">·</span>
+    <span style="color:var(--text-dim)">7 chapters</span>
+    <span style="color:var(--text-dim)">·</span>
+    <span style="color:var(--text-dim)">5 interactive widgets</span>
+    <span style="color:var(--text-dim)">·</span>
+    <span style="color:var(--text-dim)">read the asm</span>
+  </div>
+</main>
+
+<!-- glossary popup (auto-annotation tooltips) -->
+<div class="glossary-pop" id="glossary-pop">
+  <div class="gpop-cat" id="gpop-cat">Glossary</div>
+  <div class="gpop-title" id="gpop-title">term</div>
+  <div class="gpop-body" id="gpop-body"></div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════════════
+   MECHANICAL SYMPATHY · interactive widgets
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ────── THEME TOGGLE ────── */
+(function(){
+  const tog = document.getElementById('theme-toggle');
+  const lbl = tog && tog.querySelector('.tog-label');
+  const apply = (mode) => {
+    document.documentElement.classList.toggle('light', mode === 'light');
+    if(lbl) lbl.textContent = mode === 'light' ? 'LIGHT' : 'DARK';
+    try{ localStorage.setItem('ms-theme', mode); }catch(e){}
+  };
+  let saved = null;
+  try{ saved = localStorage.getItem('ms-theme'); }catch(e){}
+  if(saved) apply(saved);
+  if(tog) tog.addEventListener('click', () => {
+    apply(document.documentElement.classList.contains('light') ? 'dark' : 'light');
+  });
+  document.addEventListener('keydown', (e) => {
+    if(e.key === 't' || e.key === 'T'){
+      if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      apply(document.documentElement.classList.contains('light') ? 'dark' : 'light');
+    }
+  });
+})();
+
+/* ────── STICKY NAV · scroll-spy + jump ────── */
+(function(){
+  const nav = document.getElementById('section-nav');
+  const buttons = document.querySelectorAll('.section-btn[data-target]');
+  const sections = Array.from(buttons).map(b => document.getElementById(b.dataset.target)).filter(Boolean);
+  buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tgt = document.getElementById(btn.dataset.target);
+      if(tgt) tgt.scrollIntoView({behavior:'smooth', block:'start'});
+    });
+  });
+  let lastScroll = 0;
+  const onScroll = () => {
+    const y = window.scrollY;
+    if(nav){
+      nav.classList.toggle('scrolled', y > 24);
+      // retract on fast scroll-down past the hero
+      if(y > 400 && y > lastScroll + 6) nav.classList.add('hidden');
+      else if(y < lastScroll - 6 || y < 400) nav.classList.remove('hidden');
+      lastScroll = y;
+    }
+    // scroll-spy
+    let active = null;
+    const probe = y + 120;
+    for(const s of sections){
+      if(s.offsetTop <= probe) active = s.id;
+    }
+    buttons.forEach(b => b.classList.toggle('active', b.dataset.target === active));
+  };
+  window.addEventListener('scroll', onScroll, {passive:true});
+  onScroll();
+  // keyboard shortcuts 1-7
+  document.addEventListener('keydown', (e) => {
+    if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    const n = parseInt(e.key, 10);
+    if(n >= 1 && n <= buttons.length){
+      buttons[n-1].click();
+    }
+  });
+})();
+
+/* ────── HERO · MEMORY LATENCY ────── */
+(function(){
+  const rows = document.querySelectorAll('.lat-row');
+  const replay = document.getElementById('lat-replay');
+  const animate = () => {
+    rows.forEach(r => r.classList.remove('visible'));
+    rows.forEach((r, i) => {
+      const pct = Math.min(100, parseFloat(r.dataset.pct || '5'));
+      r.style.setProperty('--w', pct + '%');
+      setTimeout(() => r.classList.add('visible'), 120 + i * 160);
+    });
+  };
+  // First animate when scrolled into view (guarded: a missing/throwing
+  // IntersectionObserver must not halt the rest of the script).
+  let started = false;
+  const runAnimate = () => { if(!started){ started = true; animate(); } };
+  const frame = document.getElementById('lat-frame');
+  if(frame && typeof IntersectionObserver === 'function'){
+    try{
+      const ob = new IntersectionObserver((entries) => {
+        entries.forEach(e => { if(e.isIntersecting) runAnimate(); });
+      }, {threshold:0.2});
+      ob.observe(frame);
+    }catch(e){ runAnimate(); }
+  } else {
+    runAnimate();
+  }
+  // Replay
+  if(replay) replay.addEventListener('click', animate);
+})();
+
+/* ────── CACHE-LINE WIDGET ────── */
+(function(){
+  const frame = document.getElementById('cl-frame');
+  if(!frame) return;
+  const lineEl = document.getElementById('cl-line');
+  const tabs = frame.querySelectorAll('.cl-tab');
+  const usefulEl = document.getElementById('cl-useful');
+  const effEl = document.getElementById('cl-eff');
+  const perfetchEl = document.getElementById('cl-perfetch');
+  const explainEl = document.getElementById('cl-explain');
+
+  // AoS: 64-byte cache line holds ONE Entity struct.
+  // Layout for this Entity: x(4) y(4) z(4) health(4) name(32) id(4) pad(12) = 64B
+  // The loop touches only .x — useful = 4 bytes (one float).
+  // AoS: 64-byte cache line holds ONE Entity struct.
+  // x(0-3) y(4-7) z(8-11) health(12-15) name[32](16-47) id(48-51) PAD(52-55) weight/f64(56-63)
+  // The loop touches only .x — useful = 4 bytes (one float).
+  const aos = {
+    cells: [],
+    useful: 4, perFetch: 1,
+    label: 'AoS · array of structs',
+    explain: 'One <code>Entity</code> fills the line. The loop reads <code>.x</code> — 4 useful bytes out of 64. Everything else (<code>name</code>, <code>weight</code>, the alignment <code>pad</code>) is pulled in but never touched. <em>~94% of the bandwidth is wasted.</em>'
+  };
+  for(let i = 0; i < 64; i++){
+    let cls = 'waste', label = '';
+    if(i < 4){ cls = 'use'; if(i === 1) label = 'x'; }
+    else if(i < 8){ if(i === 5) label = 'y'; }
+    else if(i < 12){ if(i === 9) label = 'z'; }
+    else if(i < 16){ if(i === 13) label = 'hp'; }
+    else if(i < 48){ if(i === 28) label = 'name'; }
+    else if(i < 52){ if(i === 49) label = 'id'; }
+    else if(i < 56){ cls = 'padding'; if(i === 53) label = 'pad'; }
+    else { if(i === 58) label = 'f64'; }
+    aos.cells.push({cls, label});
+  }
+
+  // SoA: line holds 16 contiguous floats from the x[] array — all used.
+  const soa = {
+    cells: [],
+    useful: 64, perFetch: 16,
+    label: 'SoA · struct of arrays',
+    explain: 'The line holds 16 contiguous floats from <code>x[]</code> — every byte feeds the loop. <em>100% bandwidth efficiency, 16× more useful work per fetch.</em> Same logical data, completely different geometry.'
+  };
+  for(let i = 0; i < 64; i++){
+    let cls = 'use', label = '';
+    if(i % 4 === 1) label = 'x' + Math.floor(i/4);
+    soa.cells.push({cls, label});
+  }
+
+  function render(mode){
+    const m = (mode === 'soa') ? soa : aos;
+    lineEl.innerHTML = '';
+    m.cells.forEach((c) => {
+      const d = document.createElement('div');
+      d.className = 'cl-byte ' + c.cls;
+      if(c.label) d.textContent = c.label;
+      lineEl.appendChild(d);
+    });
+    if(usefulEl){
+      // animate the number
+      const target = m.useful;
+      const cur = parseInt(usefulEl.firstChild.textContent, 10) || 0;
+      animNum(cur, target, 500, (v) => {
+        usefulEl.innerHTML = Math.round(v) + '<span class="unit">/ 64</span>';
+      });
+    }
+    if(effEl){
+      const target = Math.round((m.useful / 64) * 10000) / 100;
+      const cur = parseFloat(effEl.firstChild.textContent) || 0;
+      animNum(cur, target, 500, (v) => {
+        const txt = (Math.round(v * 100) / 100).toString();
+        effEl.innerHTML = txt + '<span class="unit">%</span>';
+      });
+    }
+    if(perfetchEl){
+      perfetchEl.innerHTML = m.perFetch + '<span class="unit">×</span>';
+    }
+    if(explainEl){
+      explainEl.innerHTML = m.explain;
+    }
+  }
+  function animNum(from, to, dur, cb){
+    const t0 = performance.now();
+    function tick(now){
+      const t = Math.min(1, (now - t0) / dur);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const v = from + (to - from) * eased;
+      cb(v);
+      if(t < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+  tabs.forEach(t => {
+    t.addEventListener('click', () => {
+      tabs.forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      render(t.dataset.mode);
+    });
+  });
+  render('aos');
+})();
+
+/* ────── DEPENDENCY-CHAIN WIDGET ────── */
+(function(){
+  const frame = document.getElementById('dep-frame');
+  if(!frame) return;
+  const tabs = frame.querySelectorAll('.dep-tab');
+  const pipeline = document.getElementById('dep-pipeline');
+  const cyclesEl = document.getElementById('dep-cycles');
+  const ipcEl = document.getElementById('dep-ipc');
+  const utilEl = document.getElementById('dep-util');
+  const stepBtn = document.getElementById('dep-step');
+  const resetBtn = document.getElementById('dep-reset');
+  const stateEl = document.getElementById('dep-state');
+
+  const TOTAL_ADDS = 16;
+  const LATENCY = 4;       // FP add latency
+  const PORTS = 2;         // two FP ports — matches the prose
+  const WINDOW = 16;       // displayed cycle columns
+  let mode = 'chain';
+  let cycle = 0;
+  let timer = null;
+
+  // True total cycles to finish all 16 adds:
+  //   chain    → 16 adds × 4-cycle latency, fully serial          = 64
+  //   parallel → 4 chains issuing 4 adds/round over 4 rounds       = 16
+  function totalCyclesFor(m){ return m === 'chain' ? TOTAL_ADDS * LATENCY : (TOTAL_ADDS / 4) * LATENCY; }
+
+  // Does an add issue on (port, col)?
+  //   chain:    only port 0, once every LATENCY cycles (0,4,8,12,…)
+  //   parallel: both ports, on the first 2 cycles of each 4-cycle round
+  function isIssue(port, col){
+    if(mode === 'chain') return port === 0 && col % LATENCY === 0;
+    return col % LATENCY < 2;            // cols 0,1,4,5,8,9,12,13 on both ports
+  }
+
+  // Adds issued by a given cycle (used for the live IPC readout).
+  function addsIssued(cyc){
+    let n = 0;
+    for(let col = 0; col < cyc; col++){
+      for(let p = 0; p < PORTS; p++) if(isIssue(p, col)) n++;
+    }
+    return n;
+  }
+
+  function build(){
+    pipeline.innerHTML = '';
+    for(let p = 0; p < PORTS; p++){
+      const row = document.createElement('div');
+      row.className = 'dep-track';
+      const lbl = document.createElement('div');
+      lbl.className = 'dep-track-lbl';
+      lbl.textContent = 'FP port ' + p;
+      const cells = document.createElement('div');
+      cells.className = 'dep-cells';
+      for(let c = 0; c < WINDOW; c++){
+        const cell = document.createElement('div');
+        cell.className = 'dep-cell';
+        cell.dataset.port = p;
+        cell.dataset.cycle = c;
+        cells.appendChild(cell);
+      }
+      row.appendChild(lbl);
+      row.appendChild(cells);
+      pipeline.appendChild(row);
+    }
+  }
+
+  function update(){
+    const cells = pipeline.querySelectorAll('.dep-cell');
+    cells.forEach(c => {
+      const p = parseInt(c.dataset.port, 10);
+      const col = parseInt(c.dataset.cycle, 10);
+      c.classList.remove('active', 'stall');
+      if(col < cycle){
+        if(isIssue(p, col)) c.classList.add('active');
+        else c.classList.add('stall');   // reached cycle, port idle / waiting on latency
+      }
+    });
+
+    const total = totalCyclesFor(mode);
+    const shown = Math.min(cycle, WINDOW);
+    if(stateEl){
+      const tail = (mode === 'chain' && total > WINDOW) ? (' · ' + WINDOW + ' of ' + total + ' shown') : '';
+      stateEl.textContent = 'cycle ' + shown + ' / ' + WINDOW + tail;
+    }
+    // Live IPC = adds issued so far ÷ cycles elapsed. Settles at 0.25 (chain) / 1.0 (parallel).
+    const ipc = cycle > 0 ? (addsIssued(cycle) / cycle) : (TOTAL_ADDS / total);
+    const util = Math.min(100, Math.round(ipc / PORTS * 100));
+    if(cyclesEl) cyclesEl.innerHTML = total + '<span class="unit">c</span>';
+    if(ipcEl) ipcEl.textContent = ipc.toFixed(2);
+    if(utilEl) utilEl.innerHTML = util + '<span class="unit">%</span>';
+  }
+
+  function reset(){
+    if(timer){ clearInterval(timer); timer = null; if(stepBtn) stepBtn.textContent = '► Step'; }
+    cycle = 0;
+    build();
+    update();   // at rest, shows steady-state IPC / util / total for the mode
+  }
+
+  function step(){
+    if(cycle >= WINDOW){
+      if(timer){ clearInterval(timer); timer = null; if(stepBtn) stepBtn.textContent = '► Step'; }
+      return;
+    }
+    cycle++;
+    update();
+    if(cycle >= WINDOW && timer){ clearInterval(timer); timer = null; if(stepBtn) stepBtn.textContent = '► Step'; }
+  }
+
+  function play(){
+    if(timer){ clearInterval(timer); timer = null; stepBtn.textContent = '► Step'; return; }
+    if(cycle >= WINDOW){ cycle = 0; build(); }
+    timer = setInterval(step, 240);
+    stepBtn.textContent = '⏸ Pause';
+  }
+
+  tabs.forEach(t => {
+    t.addEventListener('click', () => {
+      tabs.forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      mode = t.dataset.mode;
+      reset();
+    });
+  });
+  if(stepBtn) stepBtn.addEventListener('click', play);
+  if(resetBtn) resetBtn.addEventListener('click', reset);
+  reset();
+})();
+
+/* ────── BRANCH-PREDICTION DEMO ────── */
+(function(){
+  const frame = document.getElementById('bp-frame');
+  if(!frame) return;
+  const sortedStream = document.getElementById('bp-sorted-stream');
+  const randomStream = document.getElementById('bp-random-stream');
+  const sortedHit = document.getElementById('bp-sorted-hit');
+  const sortedPen = document.getElementById('bp-sorted-pen');
+  const randomHit = document.getElementById('bp-random-hit');
+  const randomPen = document.getElementById('bp-random-pen');
+  const statusEl = document.getElementById('bp-status');
+  const stepBtn = document.getElementById('bp-step');
+  const runBtn = document.getElementById('bp-run');
+  const resetBtn = document.getElementById('bp-reset');
+
+  const N = 64;
+  const MISS_PENALTY = 18;
+
+  // 2-bit saturating counter: 0=strong NT, 1=weak NT, 2=weak T, 3=strong T
+  function makePredictor(){
+    return {
+      state: 1,
+      predict(){ return this.state >= 2 ? 1 : 0; },
+      update(actual){
+        if(actual === 1 && this.state < 3) this.state++;
+        else if(actual === 0 && this.state > 0) this.state--;
+      }
+    };
+  }
+
+  // streams
+  function makeSorted(){
+    // 0 0 0 0 ... 0 1 1 1 ... 1 (sorted threshold at midpoint)
+    const arr = [];
+    for(let i = 0; i < N; i++) arr.push(i < N/2 ? 0 : 1);
+    return arr;
+  }
+  function makeRandom(){
+    const arr = [];
+    for(let i = 0; i < N; i++) arr.push(Math.random() < 0.5 ? 0 : 1);
+    return arr;
+  }
+
+  let sorted = makeSorted();
+  let randomArr = makeRandom();
+  let pSorted = makePredictor();
+  let pRandom = makePredictor();
+  let cursor = 0;
+  let sortedHits = 0, sortedMisses = 0;
+  let randomHits = 0, randomMisses = 0;
+  let runTimer = null;
+
+  function buildStreams(){
+    sortedStream.innerHTML = '';
+    randomStream.innerHTML = '';
+    for(let i = 0; i < N; i++){
+      const a = document.createElement('div');
+      a.className = 'bp-bit';
+      a.textContent = sorted[i];
+      sortedStream.appendChild(a);
+      const b = document.createElement('div');
+      b.className = 'bp-bit';
+      b.textContent = randomArr[i];
+      randomStream.appendChild(b);
+    }
+  }
+
+  function reset(){
+    if(runTimer){ clearInterval(runTimer); runTimer = null; runBtn.textContent = '▶ Run all'; }
+    sorted = makeSorted();
+    randomArr = makeRandom();
+    pSorted = makePredictor();
+    pRandom = makePredictor();
+    cursor = 0;
+    sortedHits = 0; sortedMisses = 0;
+    randomHits = 0; randomMisses = 0;
+    buildStreams();
+    paint();
+  }
+
+  function paint(){
+    if(statusEl) statusEl.textContent = 'stream: ' + cursor + ' / ' + N + ' branches';
+    const sortedDone = sortedHits + sortedMisses;
+    const randomDone = randomHits + randomMisses;
+    sortedHit.innerHTML = sortedDone ? (Math.round(sortedHits / sortedDone * 1000) / 10).toFixed(1) + '<span class="unit">%</span>' : '—';
+    randomHit.innerHTML = randomDone ? (Math.round(randomHits / randomDone * 1000) / 10).toFixed(1) + '<span class="unit">%</span>' : '—';
+    sortedPen.innerHTML = sortedMisses ? (sortedMisses * MISS_PENALTY) + '<span class="unit">c</span>' : '—';
+    randomPen.innerHTML = randomMisses ? (randomMisses * MISS_PENALTY) + '<span class="unit">c</span>' : '—';
+  }
+
+  function step(){
+    if(cursor >= N){
+      if(runTimer){ clearInterval(runTimer); runTimer = null; runBtn.textContent = '▶ Run all'; }
+      return false;
+    }
+    // sorted
+    const sa = sorted[cursor];
+    const sp = pSorted.predict();
+    const sBit = sortedStream.children[cursor];
+    if(sa === sp){ sortedHits++; sBit.classList.add('hit'); }
+    else        { sortedMisses++; sBit.classList.add('miss'); }
+    pSorted.update(sa);
+    // random
+    const ra = randomArr[cursor];
+    const rp = pRandom.predict();
+    const rBit = randomStream.children[cursor];
+    if(ra === rp){ randomHits++; rBit.classList.add('hit'); }
+    else         { randomMisses++; rBit.classList.add('miss'); }
+    pRandom.update(ra);
+    cursor++;
+    paint();
+    return true;
+  }
+
+  if(stepBtn) stepBtn.addEventListener('click', step);
+  if(runBtn) runBtn.addEventListener('click', () => {
+    if(runTimer){ clearInterval(runTimer); runTimer = null; runBtn.textContent = '▶ Run all'; return; }
+    if(cursor >= N) reset();
+    runBtn.textContent = '⏸ Pause';
+    runTimer = setInterval(() => {
+      const ok = step();
+      if(!ok && runTimer){ clearInterval(runTimer); runTimer = null; runBtn.textContent = '▶ Run all'; }
+    }, 60);
+  });
+  if(resetBtn) resetBtn.addEventListener('click', reset);
+
+  // initial
+  reset();
+})();
+
+/* ────── FALSE-SHARING WIDGET ────── */
+(function(){
+  const frame = document.getElementById('fs-frame');
+  if(!frame) return;
+  const cellsEl = document.getElementById('fs-cells');
+  const coreA = document.getElementById('fs-core-a');
+  const coreB = document.getElementById('fs-core-b');
+  const stateA = document.getElementById('fs-state-a');
+  const stateB = document.getElementById('fs-state-b');
+  const eventsEl = document.getElementById('fs-events');
+  const wastedEl = document.getElementById('fs-wasted');
+  const layoutEl = document.getElementById('fs-layout');
+  const statusEl = document.getElementById('fs-status');
+  const stepBtn = document.getElementById('fs-step');
+  const runBtn = document.getElementById('fs-run');
+  const padBtn = document.getElementById('fs-pad');
+  const resetBtn = document.getElementById('fs-reset');
+
+  let padded = false;
+  let cursor = 0;     // alternates write target
+  let events = 0;
+  let wasted = 0;
+  // owner of the line: 'a' | 'b' | null
+  let owner = null;
+  let runTimer = null;
+  const PER_TRANSFER = 60;  // approx cycles for a coherence transfer
+
+  function buildCells(){
+    cellsEl.innerHTML = '';
+    for(let i = 0; i < 64; i++){
+      const d = document.createElement('div');
+      d.className = 'fs-line-cell';
+      if(padded){
+        // variables A and B are on different cache lines — only show line of A (B is on another line not shown)
+        if(i === 0) d.classList.add('var-a');
+      } else {
+        if(i === 0) d.classList.add('var-a');
+        if(i === 8) d.classList.add('var-b');
+      }
+      if(i % 8 === 0) d.textContent = (padded ? (i === 0 ? 'A' : '') : (i === 0 ? 'A' : i === 8 ? 'B' : ''));
+      cellsEl.appendChild(d);
+    }
+  }
+
+  function paint(){
+    eventsEl.textContent = events;
+    wastedEl.innerHTML = wasted + '<span class="unit">c</span>';
+    layoutEl.textContent = padded ? 'padded' : 'packed';
+    if(padBtn) padBtn.textContent = padded ? 'Remove padding' : 'Pad to cache line';
+    coreA.classList.toggle('active', owner === 'a');
+    coreB.classList.toggle('active', owner === 'b');
+    if(stateA) stateA.textContent = owner === 'a' ? 'MODIFIED' : (owner === null ? 'idle' : 'invalid');
+    if(stateB) stateB.textContent = owner === 'b' ? 'MODIFIED' : (owner === null ? 'idle' : 'invalid');
+    if(padded){
+      statusEl.textContent = 'Padded: writes don\'t collide';
+      statusEl.className = 'fs-status good';
+    } else if(events > 0){
+      statusEl.textContent = 'Ping-pong: line bouncing between cores';
+      statusEl.className = 'fs-status bad';
+    } else {
+      statusEl.textContent = 'Idle — click step';
+      statusEl.className = 'fs-status';
+    }
+  }
+
+  function step(){
+    cursor++;
+    const writingCore = (cursor % 2 === 1) ? 'a' : 'b';
+    if(padded){
+      // independent lines — no transfer cost
+      owner = writingCore;
+    } else {
+      if(owner !== writingCore){
+        events++;
+        wasted += PER_TRANSFER;
+      }
+      owner = writingCore;
+    }
+    paint();
+  }
+
+  function reset(){
+    if(runTimer){ clearInterval(runTimer); runTimer = null; runBtn.textContent = '▶ Run'; }
+    cursor = 0;
+    events = 0;
+    wasted = 0;
+    owner = null;
+    buildCells();
+    paint();
+  }
+
+  if(stepBtn) stepBtn.addEventListener('click', step);
+  if(padBtn) padBtn.addEventListener('click', () => {
+    padded = !padded;
+    cursor = 0;
+    events = 0;
+    wasted = 0;
+    owner = null;
+    buildCells();
+    paint();
+  });
+  if(runBtn) runBtn.addEventListener('click', () => {
+    if(runTimer){ clearInterval(runTimer); runTimer = null; runBtn.textContent = '▶ Run'; return; }
+    runBtn.textContent = '⏸ Pause';
+    runTimer = setInterval(() => {
+      step();
+      if(cursor > 30){
+        clearInterval(runTimer);
+        runTimer = null;
+        runBtn.textContent = '▶ Run';
+      }
+    }, 220);
+  });
+  if(resetBtn) resetBtn.addEventListener('click', reset);
+  reset();
+})();
+
+/* ────── GLOSSARY · aggressive auto-annotation + click popup ────── */
+(function(){
+  // term → { cat, title, body }.  cat drives the color (matches section themes).
+  const G = {
+    /* ABSTRACT MACHINE */
+    'abstract machine': {cat:'abstract', title:'The C abstract machine', body:'<p>The idealized computer the C standard describes: flat uniform memory, sequential execution, and roughly equal-cost operations.</p><p>It is convenient to reason about and <em>false</em> in ways that span six orders of magnitude on real silicon.</p>'},
+
+    /* MEMORY HIERARCHY */
+    'cache line': {cat:'cache', title:'Cache line', body:'<p>The 64-byte aligned chunk that is the <em>smallest unit of memory traffic</em>. Reading one byte fetches the whole line.</p><p>Layout that packs useful data into the same line is the difference between using 6% and 100% of each fetch.</p>'},
+    'cache miss': {cat:'cache', title:'Cache miss', body:'<p>The requested line is not present at this cache level, so it must be fetched from a slower one — L2 (~12c), L3 (~40c), or DRAM (~250c) — stalling dependent work.</p>'},
+    'locality': {cat:'cache', title:'Locality', body:'<p><strong>Spatial:</strong> nearby addresses are likely used together (same line). <strong>Temporal:</strong> recently used data is likely reused. Both keep accesses in fast cache.</p>'},
+    'prefetcher': {cat:'cache', title:'Hardware prefetcher', body:'<p>Silicon that watches your access pattern, detects sequential or constant strides, and pulls lines into cache <em>ahead</em> of demand — paying latency in parallel with compute. Random access defeats it.</p>'},
+    'TLB': {cat:'cache', title:'TLB — translation lookaside buffer', body:'<p>A small cache of virtual→physical address translations (tens to a few thousand entries). Exceed its reach and every "cache hit" is preceded by a page-table walk of 10–100 cycles. Huge pages widen its coverage.</p>'},
+    'working set': {cat:'cache', title:'Working set', body:'<p>The amount of memory a program actively touches over a time window. When it fits in a cache level, the program runs at that level\'s speed; when it spills, performance falls off a cliff.</p>'},
+    'pointer chasing': {cat:'cache', title:'Pointer chasing', body:'<p>Following <code>node->next</code> through scattered memory. Each load is both a likely <em>cache miss</em> and a <em>dependent</em> load — the next address isn\'t known until this one returns, so the prefetcher can\'t help. Serialized at full memory latency.</p>'},
+    'DRAM': {cat:'cache', title:'DRAM — main memory', body:'<p>Off-chip main memory, ~250-cycle latency. Internally organized into rows/banks/channels; a memory controller reorders requests to maximize row-buffer hits.</p>'},
+
+    /* CPU PIPELINE */
+    'reorder buffer': {cat:'pipe', title:'Reorder buffer (ROB)', body:'<p>A ~500-entry window of in-flight <em>micro-ops</em>. The CPU considers this whole window at once, executing ops as their inputs become ready — not in program order.</p>'},
+    'ROB': {cat:'pipe', title:'ROB — reorder buffer', body:'<p>Holds ~500+ in-flight micro-ops. Results are computed out of order but <em>retired</em> in program order, which is what creates the illusion of sequential execution.</p>'},
+    'micro-op': {cat:'pipe', title:'Micro-op (µop)', body:'<p>The internal RISC-like operation a CPU instruction decodes into. A single <code>add [rax+8], rbx</code> becomes 2–3 µops (load, add, store).</p>'},
+    'register renaming': {cat:'pipe', title:'Register renaming', body:'<p>The architectural registers in assembly (<code>rax</code>, <code>rbx</code>…) are just tags; the core maps them onto hundreds of physical registers, eliminating false dependencies so independent work can run in parallel.</p>'},
+    'execution port': {cat:'pipe', title:'Execution port', body:'<p>One of 8–12 backend pipes, each able to execute a class of µops (integer, FP, load, store, branch). Several fire per cycle. Performance is largely "how full are the ports?"</p>'},
+    'retirement': {cat:'pipe', title:'Retirement', body:'<p>The final stage: completed µops are committed to architecturally-visible state <em>in program order</em>. Speculative mistakes are discarded here before they ever become visible.</p>'},
+    'superscalar': {cat:'pipe', title:'Superscalar', body:'<p>Able to issue and execute multiple instructions per cycle across parallel execution ports — the opposite of the one-at-a-time model C implies.</p>'},
+    'speculation': {cat:'pipe', title:'Speculation', body:'<p>The CPU guesses the outcome of branches and runs the predicted path <em>before</em> the condition resolves. Correct guesses retire for free; wrong ones are rolled back.</p>'},
+    'speculative execution': {cat:'pipe', title:'Speculative execution', body:'<p>Running work down a predicted path before it is confirmed. Applies to branches, loads-vs-stores, return addresses, and indirect jumps. The whole machine forecasts your program hundreds of µops ahead.</p>'},
+    'IPC': {cat:'pipe', title:'IPC — instructions per cycle', body:'<p>The headline throughput number. A tuned numerical kernel sustains 4–6 IPC; a pointer-chasing loop sits near 0.3 IPC. Same hardware — the code decides.</p>'},
+    'frontend': {cat:'pipe', title:'Frontend', body:'<p>The fetch + decode machinery that turns instruction bytes into micro-ops and feeds them into the reorder buffer for the backend to execute.</p>'},
+
+    /* LATENCY / THROUGHPUT */
+    'latency': {cat:'thru', title:'Latency', body:'<p>Cycles between issuing an instruction and being able to <em>use</em> its result. A long chain of dependent ops is bound by the sum of their latencies.</p>'},
+    'throughput': {cat:'thru', title:'Throughput', body:'<p>How often you can issue an operation, regardless of who consumes the result. Often expressed as <em>reciprocal throughput</em> (cycles per issue). An FP add: latency 4, reciprocal throughput 0.5.</p>'},
+    'reciprocal throughput': {cat:'thru', title:'Reciprocal throughput', body:'<p>Cycles between successive issues of the same instruction. 0.25 means four can start per cycle. Distinct from latency, which is the wait for one result.</p>'},
+    'dependency chain': {cat:'thru', title:'Dependency chain', body:'<p>A sequence where each operation needs the previous one\'s result, so it runs at the sum of their latencies regardless of how wide the machine is. Breaking the chain into independent ones is the core throughput trick.</p>'},
+    'accumulator': {cat:'thru', title:'Accumulator', body:'<p>An independent partial result (e.g. <code>s0, s1, s2, s3</code>) used to split one long reduction chain into several short ones the CPU can interleave — turning a latency-bound loop into a throughput-bound one.</p>'},
+
+    /* BRANCHES */
+    'branch predictor': {cat:'branch', title:'Branch predictor', body:'<p>Hardware that guesses each branch\'s direction so the frontend can keep feeding the pipeline. Predictable branches become effectively free; unpredictable ones are very expensive.</p>'},
+    'misprediction': {cat:'branch', title:'Branch misprediction', body:'<p>A wrong guess. The pipeline flushes all speculative work and restarts from the correct address — a ~15–20 cycle penalty, paid on every wrong guess.</p>'},
+    'cmov': {cat:'branch', title:'cmov — conditional move', body:'<p>An x86 instruction that selects a value based on a condition without branching. Replaces a possibly-mispredicted branch with a guaranteed-cheap data dependency. Wins when the branch is hard to predict.</p>'},
+    'branchless': {cat:'branch', title:'Branchless code', body:'<p>Code restructured to remove an unpredictable branch — via <code>cmov</code>, masks, or arithmetic. Costs a fixed cycle and a data dependency, so it only pays off when the branch couldn\'t be predicted.</p>'},
+    '2-bit saturating counter': {cat:'branch', title:'2-bit saturating counter', body:'<p>A classic predictor cell with four states (strongly/weakly taken, weakly/strongly not-taken). It takes two consecutive surprises to flip its prediction, so it tolerates the occasional outlier.</p>'},
+
+    /* COHERENCE */
+    'cache coherence': {cat:'coh', title:'Cache coherence', body:'<p>The protocol (MESI/MOESI) that maintains the illusion of a single shared memory across per-core caches by exchanging invalidation and ownership messages on the on-die interconnect.</p>'},
+    'MESI': {cat:'coh', title:'MESI', body:'<p>The four states each cached line can hold: <strong>M</strong>odified, <strong>E</strong>xclusive, <strong>S</strong>hared, <strong>I</strong>nvalid. Writing requires acquiring M/E, which invalidates every other core\'s copy.</p>'},
+    'false sharing': {cat:'coh', title:'False sharing', body:'<p>Two cores writing to <em>different</em> variables that happen to share one cache line. The line ping-pongs between cores on every write — independent in your code, contended in hardware. Fixed by padding to cache-line size.</p>'},
+    'atomic': {cat:'coh', title:'Atomic operation', body:'<p>An indivisible read-modify-write. Cheap (~20c) uncontended; under contention it becomes a cache-line ownership transfer that can cost thousands of cycles across cores.</p>'},
+    'coherence interconnect': {cat:'coh', title:'Coherence interconnect', body:'<p>The on-die fabric that carries invalidation and ownership messages between cores. Every contended write traverses it — which is why sharing a line across cores is so costly.</p>'},
+
+    /* COMPILER */
+    'undefined behaviour': {cat:'comp', title:'Undefined behaviour (UB)', body:'<p>Behaviour the standard leaves open — e.g. signed integer overflow. The compiler is permitted to <em>assume it never happens</em> and optimize on that basis. UB is a contract about what the compiler doesn\'t have to prove.</p>'},
+    'UB': {cat:'comp', title:'UB — undefined behaviour', body:'<p>A license, not a curse: the compiler assumes UB never occurs and optimizes accordingly. <code>i &lt;= n</code> with <code>int i</code> can be vectorized because signed overflow is UB.</p>'},
+    'restrict': {cat:'comp', title:'restrict', body:'<p>A pointer qualifier promising the compiler that this pointer doesn\'t alias others. That promise unlocks load/store reordering and vectorization the compiler otherwise can\'t prove safe.</p>'},
+    'strict aliasing': {cat:'comp', title:'Strict aliasing', body:'<p>The rule that pointers of different types don\'t refer to the same memory. It lets the compiler reorder accesses across differently-typed pointers — a premise you can break with type punning.</p>'},
+    'vectorization': {cat:'comp', title:'Vectorization', body:'<p>Rewriting a scalar loop to use SIMD instructions that process several elements per instruction. Blocked by aliasing it can\'t rule out, loop-carried dependencies, or non-associative FP reductions.</p>'},
+    'SIMD': {cat:'comp', title:'SIMD', body:'<p>Single Instruction, Multiple Data — vector lanes that apply one operation to many values at once (SSE, AVX, NEON). The main lever once a loop is compute-bound.</p>'},
+    'alignment': {cat:'comp', title:'Alignment', body:'<p>Placing data on natural address boundaries. Aligned SIMD loads are faster than unaligned ones; <code>alignas</code> and <code>__builtin_assume_aligned</code> let you state alignment the compiler can rely on.</p>'},
+    'roofline': {cat:'comp', title:'Roofline model', body:'<p>Plots attainable performance against operational intensity (FLOPs per byte loaded). Below the sloped line you\'re <em>memory-bound</em> (fix locality); below the flat line you\'re <em>compute-bound</em> (add parallelism).</p>'},
+    'store buffer': {cat:'comp', title:'Store buffer', body:'<p>A queue between the core and L1 that absorbs writes so the core doesn\'t stall on stores. It\'s the hardware reason x86 isn\'t sequentially consistent, and why memory fences exist.</p>'},
+    'memory ordering': {cat:'comp', title:'Memory ordering', body:'<p>The rules for what stores other cores can observe, and in what order. x86 is strong (TSO); ARM/RISC-V are weak and need explicit fences for acquire/release. The store buffer is the underlying cause.</p>'},
+
+    /* MEMORY — added */
+    'bandwidth': {cat:'cache', title:'Bandwidth', body:'<p>Bytes per second a memory level can deliver — distinct from <em>latency</em>, which is the wait for a single access. You can be bandwidth-bound (saturating the bus) even when latency is fully hidden.</p><p>Fixing it means moving fewer bytes per useful operation: better layout, more reuse per line.</p>'},
+    'SSD': {cat:'cache', title:'SSD', body:'<p>A block storage device with ~100,000-cycle access latency — roughly four orders of magnitude slower than DRAM. Touching it mid-computation is catastrophic for throughput.</p>'},
+    'stride': {cat:'cache', title:'Stride', body:'<p>The fixed byte distance between successive memory accesses. Unit or small constant strides are prefetchable; large or random strides defeat the prefetcher and waste most of every cache line.</p>'},
+    'cache level': {cat:'cache', title:'Cache levels (L1/L2/L3)', body:'<p>On-chip SRAM caches arranged in a hierarchy: <strong>L1</strong> (~4c, per-core, tiny), <strong>L2</strong> (~12c, per-core), <strong>L3</strong> (~40c, shared across cores). Each level trades latency for capacity.</p>'},
+    'cache': {cat:'cache', title:'Cache', body:'<p>Small, fast on-chip memory holding recently or likely-used lines so the core avoids the ~250-cycle trip to DRAM. Organized in levels (L1/L2/L3) and operated on in 64-byte lines.</p>'},
+    'AoS': {cat:'cache', title:'AoS — array of structs', body:'<p>Fields interleaved per entity (<code>struct{float x,y,z;…} arr[N]</code>). Natural for object-oriented code, but a loop over one field drags whole structs through cache, wasting most of each line.</p>'},
+    'SoA': {cat:'cache', title:'SoA — struct of arrays', body:'<p>Each field in its own contiguous array (<code>struct{float x[N],y[N],…}</code>). A loop over one field touches only the bytes it needs — every fetched line is fully used. The canonical data-oriented layout.</p>'},
+    'data-oriented': {cat:'cache', title:'Data-oriented design', body:'<p>Designing data layout around access patterns and cache behaviour rather than around objects. SoA is the canonical move; the goal is making the common loop\'s memory traffic contiguous and dense.</p>'},
+
+    /* CPU — added */
+    'register': {cat:'pipe', title:'Register', body:'<p>A fast storage slot inside the core (~16 general-purpose on x86-64, plus vector registers). The only memory with ~1-cycle access; register renaming multiplies the physical pool behind the names.</p>'},
+    'pipeline': {cat:'pipe', title:'Pipeline', body:'<p>The staged path an instruction flows through — fetch, decode, rename, execute, retire. A misprediction or stall that empties it costs roughly its depth (15–20 stages) in cycles to refill.</p>'},
+    'core': {cat:'pipe', title:'Core', body:'<p>One physical execution engine with its own registers, L1/L2 caches, and pipeline. Cores share L3 and main memory — which is exactly where cache-coherence costs arise.</p>'},
+    'x86-64': {cat:'pipe', title:'x86-64', body:'<p>The dominant desktop/server ISA. Strongly-ordered memory model (TSO), CISC instructions decoded into micro-ops, 16 general-purpose registers. ARM and RISC-V are weakly-ordered alternatives.</p>'},
+
+    /* BRANCH — added */
+    'branch': {cat:'branch', title:'Branch', body:'<p>A conditional or indirect change in control flow. The predictor guesses its direction so the pipeline keeps running speculatively; the entire cost lives in whether that guess is right.</p>'},
+
+    /* COHERENCE — added */
+    'thread': {cat:'coh', title:'Thread', body:'<p>An independent stream of execution. Threads on different cores that share data pay coherence costs; per-thread state should be padded to its own cache line to avoid false sharing.</p>'},
+    'padding': {cat:'coh', title:'Padding', body:'<p>Filler bytes inserted to push fields onto separate cache lines (or to satisfy alignment). The standard fix for false sharing — each hot, per-thread value gets its own 64-byte line.</p>'},
+    'MOESI': {cat:'coh', title:'MOESI', body:'<p>An extension of MESI adding an <strong>O</strong>wned state, letting a modified line be shared without an immediate write-back. Same idea: track who may read or write each line.</p>'},
+    'lock-free': {cat:'coh', title:'Lock-free', body:'<p>Concurrency that avoids locks using atomics and careful memory ordering. Both correctness and speed hinge on reasoning about what stores other cores can observe, and when.</p>'},
+    'spinlock': {cat:'coh', title:'Spinlock', body:'<p>A lock that busy-waits on a shared flag. Backoff schemes limit how often it touches the hot line, easing coherence traffic under contention.</p>'},
+    'MPMC queue': {cat:'coh', title:'MPMC queue', body:'<p>A multi-producer, multi-consumer queue. Well-designed ones place head and tail on different cache lines so producers and consumers don\'t fight over the same line.</p>'},
+    'sharding': {cat:'coh', title:'Sharding', body:'<p>Giving each thread its own slot (e.g. a per-thread counter) and combining on read — trading a little memory to eliminate contention on a single hot line.</p>'},
+
+    /* COMPILER — added */
+    'aliasing': {cat:'comp', title:'Aliasing', body:'<p>When two pointers may refer to the same memory. If the compiler can\'t rule it out, it must serialize loads and stores conservatively; <code>restrict</code> or type rules let you deny it and unlock reordering.</p>'},
+    'inlining': {cat:'comp', title:'Inlining', body:'<p>Replacing a call with the callee\'s body, enabling constant propagation and optimization across the former boundary. A call that <em>can\'t</em> inline often blocks vectorization of the surrounding loop.</p>'},
+    'godbolt': {cat:'comp', title:'Godbolt (Compiler Explorer)', body:'<p>A web tool that shows the assembly a compiler emits for your source. The fastest way to confirm whether an optimization — vectorization, a <code>cmov</code>, inlining — actually happened.</p>'},
+    'assembly': {cat:'comp', title:'Assembly', body:'<p>Human-readable text mapping closely to machine instructions. Reading it at <code>-O2</code> is how you confirm vectorization and inlining, or spot a stubborn dependency chain the compiler couldn\'t break.</p>'},
+    'operational intensity': {cat:'comp', title:'Operational intensity', body:'<p>FLOPs performed per byte loaded from memory — the x-axis of the roofline model. Low intensity puts you in the memory-bound regime; high intensity in the compute-bound one.</p>'},
+
+    /* ABSTRACT — added */
+    'big-O': {cat:'abstract', title:'Big-O complexity', body:'<p>Asymptotic operation counts. It models <em>how many</em> operations, not their memory geometry — which is why an O(n) linked list can lose badly to an O(n) array scan with identical complexity.</p>'},
+    'capacity': {cat:'cache', title:'Capacity', body:'<p>How much a memory level holds. Each step down the hierarchy trades latency for size: a few registers, tens of KB of L1, MBs of L3, GBs of DRAM. When the working set outgrows a level, accesses spill to the next, slower one.</p>'}
+  };
+
+  // Regex matchers. Multi-word / specific terms first so they win over substrings.
+  // Acronyms are case-sensitive; words are case-insensitive.
+  const proseTerms = [
+    {re:/\babstract machine\b/i, key:'abstract machine'},
+    {re:/\bcache[- ]lines?\b/i, key:'cache line'},
+    {re:/\bcache misses?\b/i, key:'cache miss'},
+    {re:/\bpointer[- ]chasing\b/i, key:'pointer chasing'},
+    {re:/\bworking set\b/i, key:'working set'},
+    {re:/\bprefetchers?\b/i, key:'prefetcher'},
+    {re:/\bTLB\b/, key:'TLB'},
+    {re:/\bDRAM\b/, key:'DRAM'},
+    {re:/\blocality\b/i, key:'locality'},
+    {re:/\breorder buffers?\b/i, key:'reorder buffer'},
+    {re:/\bROB\b/, key:'ROB'},
+    {re:/(?:\bmicro-ops?\b|µops?\b)/i, key:'micro-op'},
+    {re:/\bregister renaming\b/i, key:'register renaming'},
+    {re:/\bexecution ports?\b/i, key:'execution port'},
+    {re:/\bretirement\b/i, key:'retirement'},
+    {re:/\bsuperscalar\b/i, key:'superscalar'},
+    {re:/\bspeculative execution\b/i, key:'speculative execution'},
+    {re:/\bspeculat(?:ion|ing|es?)\b/i, key:'speculation'},
+    {re:/\bIPC\b/, key:'IPC'},
+    {re:/\bfrontend\b/i, key:'frontend'},
+    {re:/\breciprocal throughput\b/i, key:'reciprocal throughput'},
+    {re:/\bdependency chains?\b/i, key:'dependency chain'},
+    {re:/\baccumulators?\b/i, key:'accumulator'},
+    {re:/\blatency\b/i, key:'latency'},
+    {re:/\bthroughput\b/i, key:'throughput'},
+    {re:/\bbranch predictor\b/i, key:'branch predictor'},
+    {re:/\b2-bit saturating counter\b/i, key:'2-bit saturating counter'},
+    {re:/\bmispredict(?:ion|s|ed|ing)?\b/i, key:'misprediction'},
+    {re:/\bbranchless\b/i, key:'branchless'},
+    {re:/\bcmov\b/i, key:'cmov'},
+    {re:/\bcache coherence\b/i, key:'cache coherence'},
+    {re:/\bcoherence interconnect\b/i, key:'coherence interconnect'},
+    {re:/\bMESI\b/, key:'MESI'},
+    {re:/\bfalse sharing\b/i, key:'false sharing'},
+    {re:/\batomics?\b/i, key:'atomic'},
+    {re:/\bundefined behaviou?r\b/i, key:'undefined behaviour'},
+    {re:/\bUB\b/, key:'UB'},
+    {re:/\bstrict aliasing\b/i, key:'strict aliasing'},
+    {re:/\bvectoriz(?:e|es|ed|ation|ing)\b/i, key:'vectorization'},
+    {re:/\bSIMD\b/, key:'SIMD'},
+    {re:/\balignment\b/i, key:'alignment'},
+    {re:/\brooflines?\b/i, key:'roofline'},
+    {re:/\bstore buffers?\b/i, key:'store buffer'},
+    {re:/\bmemory ordering\b/i, key:'memory ordering'},
+    {re:/\bmemory bandwidth\b/i, key:'bandwidth'},
+    {re:/\bbandwidth\b/i, key:'bandwidth'},
+    {re:/\bSSD\b/, key:'SSD'},
+    {re:/\bstrides?\b/i, key:'stride'},
+    {re:/\bL[123]\b/, key:'cache level'},
+    {re:/\bAoS\b/, key:'AoS'},
+    {re:/\bSoA\b/, key:'SoA'},
+    {re:/\bdata-oriented\b/i, key:'data-oriented'},
+    {re:/\bx86-64\b/i, key:'x86-64'},
+    {re:/\bMPMC( queue)?\b/i, key:'MPMC queue'},
+    {re:/\bMOESI\b/, key:'MOESI'},
+    {re:/\block-free\b/i, key:'lock-free'},
+    {re:/\bspinlocks?\b/i, key:'spinlock'},
+    {re:/\bshard(?:ed|s|ing)?\b/i, key:'sharding'},
+    {re:/\boperational intensity\b/i, key:'operational intensity'},
+    {re:/\baliasing\b/i, key:'aliasing'},
+    {re:/\binlin(?:e|es|ed|ing)\b/i, key:'inlining'},
+    {re:/\bgodbolt\b/i, key:'godbolt'},
+    {re:/\bassembly\b/i, key:'assembly'},
+    {re:/\bbig-O\b/i, key:'big-O'},
+    {re:/\bpadding\b/i, key:'padding'},
+    {re:/\bthreads?\b/i, key:'thread'},
+    /* generic terms last so multi-word phrases above win at equal positions */
+    {re:/\bpipelines?\b/i, key:'pipeline'},
+    {re:/\bregisters?\b/i, key:'register'},
+    {re:/\bcaches?\b/i, key:'cache'},
+    {re:/\bbranch(?:es|ing)?\b/i, key:'branch'},
+    {re:/(?<![\w-])cores?\b/i, key:'core'}
+  ];
+
+  // Inline <code> tokens that map to a glossary entry (exact text).
+  const codeTerms = { 'restrict':'restrict', 'cmov':'cmov' };
+
+  // Walk prose text nodes, skip code / headings / widgets / nav.
+  const SKIP_TAGS = new Set(['SCRIPT','STYLE','PRE','CODE','H1','H2','H3','H4','BUTTON']);
+  const SKIP_CLASSES = ['code-block','lock','lat-frame','cl-frame','dep-frame','bp-frame','fs-frame',
+                        'glossary-pop','section-nav','major-section-title','major-section-num',
+                        'eyebrow','imprint','hero-tip','eof','gterm'];
+  function shouldSkip(node){
+    let n = node;
+    while(n && n !== document.body){
+      if(n.nodeType === 1){
+        if(SKIP_TAGS.has(n.tagName)) return true;
+        if(n.classList){ for(const c of SKIP_CLASSES) if(n.classList.contains(c)) return true; }
+      }
+      n = n.parentNode;
+    }
+    return false;
+  }
+
+  function buildSpan(text, key){
+    const e = G[key]; if(!e) return null;
+    const s = document.createElement('span');
+    s.className = 'gterm';
+    s.dataset.term = key;
+    s.dataset.cat = e.cat;
+    s.textContent = text;
+    return s;
+  }
+
+  function processTextNode(node){
+    if(!node.nodeValue || !node.nodeValue.trim()) return;
+    if(shouldSkip(node.parentNode)) return;
+    const text = node.nodeValue;
+    let earliest = null;
+    for(const t of proseTerms){
+      t.re.lastIndex = 0;
+      const m = t.re.exec(text);
+      if(m && (!earliest || m.index < earliest.m.index)) earliest = {m, t};
+    }
+    if(!earliest) return;
+    const m = earliest.m;
+    const before = text.slice(0, m.index);
+    const matched = text.slice(m.index, m.index + m[0].length);
+    const after = text.slice(m.index + m[0].length);
+    const span = buildSpan(matched, earliest.t.key);
+    if(!span) return;
+    const parent = node.parentNode;
+    if(before) parent.insertBefore(document.createTextNode(before), node);
+    parent.insertBefore(span, node);
+    const afterNode = document.createTextNode(after);
+    parent.insertBefore(afterNode, node);
+    parent.removeChild(node);
+    processTextNode(afterNode);   // handle further matches in the remainder
+  }
+
+  function wrapProse(){
+    const root = document.querySelector('main');
+    if(!root) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    const nodes = [];
+    let n; while((n = walker.nextNode())) nodes.push(n);
+    nodes.forEach(processTextNode);
+  }
+
+  function wrapCode(){
+    document.querySelectorAll('main p code, main li code').forEach(c => {
+      let p = c.parentNode;
+      while(p && p !== document.body){
+        if(p.tagName === 'PRE') return;
+        if(p.classList && p.classList.contains('code-body')) return;
+        p = p.parentNode;
+      }
+      const key = codeTerms[c.textContent.trim()];
+      if(!key || !G[key]) return;
+      c.classList.add('gterm','gterm-code');
+      c.dataset.term = key;
+      c.dataset.cat = G[key].cat;
+    });
+  }
+
+  wrapProse();
+  wrapCode();
+
+  // popup
+  const pop = document.getElementById('glossary-pop');
+  const popCat = document.getElementById('gpop-cat');
+  const popTitle = document.getElementById('gpop-title');
+  const popBody = document.getElementById('gpop-body');
+
+  function positionPop(target){
+    if(!pop || !target) return;
+    const r = target.getBoundingClientRect();
+    const pw = Math.min(360, window.innerWidth - 24);
+    pop.style.width = pw + 'px';
+    let left = r.left + window.scrollX;
+    let top = r.bottom + window.scrollY + 8;
+    if(left + pw > window.scrollX + window.innerWidth - 12) left = window.scrollX + window.innerWidth - pw - 12;
+    if(left < window.scrollX + 12) left = window.scrollX + 12;
+    pop.style.left = left + 'px';
+    pop.style.top = top + 'px';
+  }
+  function showPop(target, key){
+    const e = G[key]; if(!e || !pop) return;
+    pop.dataset.cat = e.cat;
+    popCat.dataset.cat = e.cat;
+    popCat.textContent = e.cat.toUpperCase();
+    popTitle.textContent = e.title;
+    popBody.innerHTML = e.body;
+    positionPop(target);
+    pop.classList.add('show');
+  }
+  function hidePop(){ if(pop) pop.classList.remove('show'); }
+
+  document.addEventListener('click', (ev) => {
+    const t = ev.target.closest('.gterm');
+    if(t){ ev.stopPropagation(); showPop(t, t.dataset.term); }
+    else if(pop && !pop.contains(ev.target)) hidePop();
+  });
+  document.addEventListener('keydown', (ev) => { if(ev.key === 'Escape') hidePop(); });
+  window.addEventListener('scroll', hidePop, {passive:true});
+  window.addEventListener('resize', hidePop);
+})();
+</script>
+</body>
+</html>

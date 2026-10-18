@@ -1,0 +1,2283 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>emit ↻ listeners · EventEmitter from first principles</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800;1,400;1,500&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* ===== FIVE LANES. One colour, one meaning, document-wide. =====
+     amber  the emitter and the emit for-loop
+     teal   listeners / your callbacks
+     violet the JS call stack (always synchronous)
+     blue   libuv / the event loop / the kernel (the asynchronous machine)
+     red    errors, leaks, footguns                                        */
+  --emit:#e6a93c; --emit-soft:rgba(230,169,60,.16);
+  --listen:#36d6c3; --listen-soft:rgba(54,214,195,.14);
+  --stack:#b48cff; --stack-soft:rgba(180,140,255,.16);
+  --loop:#5aa9f8;  --loop-soft:rgba(90,169,248,.15);
+  --danger:#f0735f; --danger-soft:rgba(240,115,95,.16);
+  /* syntax palette — deliberately OUTSIDE the lane hues so code panes never
+     borrow a lane colour and imply an architectural meaning it doesn't have */
+  --sx-kw:#ff8ad4; --sx-str:#9fe07a;
+  /* legacy aliases so shared logic keeps working */
+  --js:var(--emit); --js-soft:var(--emit-soft);
+  --engine:var(--listen); --engine-soft:var(--listen-soft);
+  --native:var(--loop); --native-soft:var(--loop-soft);
+  --r:14px; --maxw:1180px;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --serif:'JetBrains Mono',ui-monospace,monospace;
+}
+html[data-theme="dark"]{
+  --bg:#0a0e13; --bg2:#0d1219; --panel:#10161f; --panel2:#141c27;
+  --ink:#e9e7df; --ink2:#aab2bf; --ink3:#8d97a5;
+  --line:rgba(150,170,195,.14); --line2:rgba(150,170,195,.26);
+  --grid:rgba(120,150,185,.05); --grid2:rgba(120,150,185,.09);
+  --shadow:0 24px 60px -20px rgba(0,0,0,.7);
+}
+html[data-theme="light"]{
+  --bg:#ece7da; --bg2:#f0ece1; --panel:#f6f2e8; --panel2:#fbf8f0;
+  --ink:#171c22; --ink2:#454e59; --ink3:#4f554d;
+  --line:rgba(30,42,58,.18); --line2:rgba(30,42,58,.34);
+  --grid:rgba(40,60,85,.05); --grid2:rgba(40,60,85,.1);
+  --emit:#8a5408; --listen:#076b5f; --stack:#6d49c4; --loop:#1a5ea8; --danger:#b03a27;
+  --emit-soft:rgba(138,84,8,.13); --listen-soft:rgba(7,107,95,.12);
+  --stack-soft:rgba(109,73,196,.13); --loop-soft:rgba(26,94,168,.12);
+  --danger-soft:rgba(176,58,39,.12);
+  --sx-kw:#a01e78; --sx-str:#2f6b1f;
+  --shadow:0 24px 50px -22px rgba(40,50,70,.4);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);font-family:var(--serif);
+  font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;letter-spacing:-.01em;
+  background-image:
+    linear-gradient(var(--grid) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid) 1px,transparent 1px),
+    linear-gradient(var(--grid2) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid2) 1px,transparent 1px);
+  background-size:28px 28px,28px 28px,140px 140px,140px 140px;
+  transition:background-color .4s,color .4s;
+}
+body.fs-lock{overflow:hidden}
+::selection{background:var(--emit-soft);color:var(--ink)}
+.mono{font-family:var(--mono)}
+code,pre{font-family:var(--mono)}
+
+/* ===== CUSTOM SCROLLBARS (themed to the emit/listen accents) ===== */
+*{scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+*::-webkit-scrollbar{width:11px;height:11px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{
+  background:linear-gradient(var(--line2),var(--line2)) padding-box;
+  border:3px solid transparent;border-radius:99px;background-clip:padding-box;
+}
+*::-webkit-scrollbar-thumb:hover{background:var(--listen);background-clip:padding-box;border:3px solid transparent}
+*::-webkit-scrollbar-corner{background:transparent}
+html::-webkit-scrollbar{width:13px}
+html::-webkit-scrollbar-thumb{background:linear-gradient(var(--emit),var(--listen));background-clip:padding-box;border:4px solid transparent;border-radius:99px}
+html::-webkit-scrollbar-thumb:hover{background:var(--emit);background-clip:padding-box;border:4px solid transparent}
+
+/* ===== RETRACTABLE TOP NAV ===== */
+header.top{position:fixed;top:0;left:0;right:0;z-index:60;backdrop-filter:blur(14px);
+  background:color-mix(in srgb,var(--bg) 80%,transparent);border-bottom:1px solid var(--line);
+  transform:translateY(0);transition:transform .38s cubic-bezier(.4,0,.2,1)}
+header.top.hidden{transform:translateY(-104%)}
+.top-inner{max-width:var(--maxw);margin:0 auto;padding:13px 24px;display:flex;align-items:center;gap:18px}
+.brand{font-family:var(--mono);font-weight:800;letter-spacing:.04em;font-size:14px;display:flex;align-items:center;gap:10px}
+.brand .dot{width:10px;height:10px;border-radius:50%;background:var(--emit);box-shadow:0 0 0 4px var(--emit-soft);animation:pulse 2.2s infinite}
+.brand .arr{color:var(--ink3)} .brand .k{color:var(--listen)} .brand .v{color:var(--emit)}
+@keyframes pulse{50%{box-shadow:0 0 0 9px transparent}}
+.vol{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--ink2);border:1px solid var(--line);border-radius:999px;padding:3px 9px;text-transform:uppercase}
+.top-spacer{flex:1}
+.scrollprog{position:absolute;left:0;bottom:-1px;height:2px;background:linear-gradient(90deg,var(--emit),var(--listen),var(--stack),var(--loop));width:0%;transition:width .1s linear}
+.theme-btn{font-family:var(--mono);font-size:12px;letter-spacing:.05em;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);padding:8px 14px;border-radius:999px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:.2s}
+.theme-btn:hover{color:var(--ink);border-color:var(--listen)}
+.theme-btn svg{width:15px;height:15px}
+
+/* layout shell */
+.shell{max-width:860px;margin:0 auto;padding:0 24px;transition:max-width .4s}
+
+/* ===== RETRACTABLE SIDE NAV ===== */
+nav.toc{display:none;position:fixed;top:96px;left:max(20px,calc(50% - 620px));width:194px;
+  height:calc(100vh - 130px);font-family:var(--mono);font-size:12.5px;overflow:auto;
+  transition:transform .4s cubic-bezier(.4,0,.2,1),opacity .3s;z-index:40}
+nav.toc.collapsed{transform:translateX(-128%);opacity:0;pointer-events:none}
+.toc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-left:14px}
+.toc-head .tt{font-size:10px;letter-spacing:.18em;color:var(--ink2);text-transform:uppercase}
+.toc-retract{width:26px;height:26px;border-radius:7px;border:1px solid var(--line2);background:var(--panel);
+  color:var(--ink2);cursor:pointer;display:grid;place-items:center;transition:.18s;flex-shrink:0}
+.toc-retract:hover{color:var(--ink);border-color:var(--listen)}
+.toc-retract svg{width:14px;height:14px}
+nav.toc a{display:flex;gap:10px;align-items:baseline;color:var(--ink2);text-decoration:none;padding:7px 0;border-left:2px solid transparent;padding-left:14px;margin-left:-2px;transition:.2s;letter-spacing:.02em}
+nav.toc a .num{color:var(--ink3);font-weight:700;font-size:11px;font-variant-numeric:tabular-nums}
+nav.toc a:hover{color:var(--ink)}
+nav.toc a.active{color:var(--ink);border-left-color:var(--listen)}
+nav.toc a.active .num{color:var(--listen)}
+.toc-show{position:fixed;top:50%;left:0;transform:translateY(-50%);z-index:41;display:none;
+  align-items:center;gap:8px;writing-mode:vertical-rl;font-family:var(--mono);font-size:11px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);background:var(--panel2);
+  border:1px solid var(--line2);border-left:none;border-radius:0 10px 10px 0;padding:14px 7px;cursor:pointer;transition:.2s}
+.toc-show:hover{color:var(--listen);border-color:var(--listen)}
+.toc-show.show{display:flex}
+.toc-show svg{width:13px;height:13px}
+main{padding:96px 0 140px;min-width:0}
+
+.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--listen);display:flex;align-items:center;gap:12px;margin:0 0 14px}
+.kicker .ix{color:var(--emit);font-weight:800}
+.kicker::after{content:"";flex:1;height:1px;background:var(--line)}
+h1.hero-h{font-weight:800;font-size:clamp(27px,4.2vw,46px);line-height:1.1;letter-spacing:-.03em;margin:0 0 18px}
+h1.hero-h .a{color:var(--emit)} h1.hero-h .b{color:var(--listen)} h1.hero-h .c{color:var(--stack)}
+h2{font-weight:700;font-size:clamp(21px,2.8vw,30px);letter-spacing:-.02em;margin:0 0 16px;line-height:1.18}
+h2 em{font-style:italic;color:var(--listen)}
+h3{font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2);margin:30px 0 10px}
+.lead{font-size:17px;line-height:1.55;color:var(--ink2);max-width:70ch}
+.prose{max-width:68ch}
+.prose p{margin:0 0 16px} .prose strong{color:var(--ink);font-weight:600}
+.prose em{color:var(--ink);font-style:italic}
+section.block{padding:70px 0;border-bottom:1px solid var(--line);scroll-margin-top:96px}
+section.block:first-of-type{padding-top:18px}
+
+/* tooltip terms */
+.term{cursor:help;border-bottom:1.5px dotted var(--listen);position:relative;color:inherit;transition:background .15s}
+.term:hover{background:var(--listen-soft)}
+#tip{position:fixed;z-index:1200;max-width:330px;background:var(--panel2);border:1px solid var(--line2);border-radius:12px;padding:13px 15px;box-shadow:var(--shadow);font-size:14.5px;line-height:1.5;color:var(--ink2);pointer-events:none;opacity:0;transform:translateY(4px);transition:opacity .14s,transform .14s;font-family:var(--serif)}
+#tip.show{opacity:1;transform:translateY(0)}
+#tip:empty{display:none}
+#tip .t-name{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--listen);text-transform:uppercase;display:block;margin-bottom:5px}
+#tip .t-kind{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--emit);text-transform:uppercase;float:right}
+#tip.kind-native .t-name{color:var(--loop)} #tip.kind-native .t-kind{color:var(--loop)}
+#tip::after{content:"";position:absolute;left:var(--ax,20px);bottom:-7px;width:12px;height:12px;background:var(--panel2);border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);transform:rotate(45deg)}
+#tip.flip::after{bottom:auto;top:-7px;transform:rotate(225deg)}
+
+
+/* ===== PROSE COLOUR CODING =========================================
+   Two registers, deliberately different so they never blur:
+     code chip   -> a MACHINE owns it. Lane colour + lane underline.
+     .term       -> an IDEA. Prose-coloured text, kind-coloured dotted rule.
+   ================================================================== */
+.prose code,.lead code,.callout code,table.spec code,.card .fs2 code,
+.modal .mbody code,.why code,.deep code,.legend code,figcaption code{
+  font-family:var(--mono);font-size:.87em;line-height:1.35;
+  padding:1.5px 5px 1px;border-radius:5px;
+  background:var(--panel2);border:1px solid var(--line);
+  color:var(--ink);white-space:nowrap}
+code.ann{cursor:help;transition:background .15s,border-color .15s}
+code.ann:hover{background:var(--panel);border-color:currentColor}
+code.ann:focus-visible{outline:2px solid var(--listen);outline-offset:2px}
+/* lane colours are applied at the end of this sheet — see LANE COLOUR OVERRIDES.
+   They cannot live here: context selectors like `table.spec code` outrank them. */
+/* terms: kind-coloured rule, prose-coloured text */
+.term{cursor:help;border-bottom:1.5px dotted var(--ink3);position:relative;color:inherit;
+  transition:background .15s,border-color .15s;padding-bottom:.5px}
+.term:hover{background:var(--listen-soft);border-bottom-color:currentColor}
+.term[data-kind="node"]{border-bottom-color:var(--emit)}
+.term[data-kind="os"]{border-bottom-color:var(--loop)}
+.term[data-kind="spec"]{border-bottom-color:var(--stack)}
+.term[data-kind="concept"]{border-bottom-color:var(--ink3)}
+.term:hover[data-kind="node"]{background:var(--emit-soft)}
+.term:hover[data-kind="os"]{background:var(--loop-soft)}
+.term:hover[data-kind="spec"]{background:var(--stack-soft)}
+
+/* tooltip gains a lane-tinted rail so the popover matches the token you hovered */
+#tip{border-left:3px solid var(--line2)}
+#tip[data-lane="emit"]{border-left-color:var(--emit)}
+#tip[data-lane="listen"]{border-left-color:var(--listen)}
+#tip[data-lane="stack"]{border-left-color:var(--stack)}
+#tip[data-lane="loop"]{border-left-color:var(--loop)}
+#tip[data-lane="danger"]{border-left-color:var(--danger)}
+#tip .t-name{color:var(--ink)}
+#tip[data-lane="emit"] .t-name,#tip[data-lane="emit"] .t-kind{color:var(--emit)}
+#tip[data-lane="listen"] .t-name,#tip[data-lane="listen"] .t-kind{color:var(--listen)}
+#tip[data-lane="stack"] .t-name,#tip[data-lane="stack"] .t-kind{color:var(--stack)}
+#tip[data-lane="loop"] .t-name,#tip[data-lane="loop"] .t-kind{color:var(--loop)}
+#tip[data-lane="danger"] .t-name,#tip[data-lane="danger"] .t-kind{color:var(--danger)}
+
+/* ===== THE KEY — colour is load-bearing, so it gets a real legend ===== */
+.keybar{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:10px;margin:24px 0 8px;
+  border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;background:var(--panel)}
+.keybar .kh{grid-column:1/-1;font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink2);margin-bottom:2px}
+.keyitem{display:flex;gap:10px;align-items:flex-start}
+.keyitem i{width:12px;height:12px;border-radius:4px;flex-shrink:0;margin-top:3px}
+.keyitem .kt{font-family:var(--mono);font-size:12px;font-weight:700;display:block;line-height:1.3}
+.keyitem .kd{font-size:12.5px;color:var(--ink2);line-height:1.4;display:block;margin-top:2px}
+
+/* callouts */
+.callout{border:1px solid var(--line);border-left:3px solid var(--emit);background:var(--panel);border-radius:0 var(--r) var(--r) 0;padding:20px 24px;margin:26px 0;font-size:17px}
+.callout.eng{border-left-color:var(--listen)}
+.callout.nat{border-left-color:var(--loop)}
+.callout.stk{border-left-color:var(--stack)}
+.callout.dgr{border-left-color:var(--danger)}
+.callout .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--emit);display:block;margin-bottom:8px}
+.callout.eng .lbl{color:var(--listen)} .callout.nat .lbl{color:var(--loop)} .callout.stk .lbl{color:var(--stack)} .callout.dgr .lbl{color:var(--danger)}
+
+pre.wire{font-family:var(--mono);font-size:13.5px;line-height:1.7;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow:auto;color:var(--ink2);margin:22px 0}
+/* syntax roles use the OUT-OF-LANE palette; only identifiers that genuinely
+   belong to a lane are painted with a lane colour (.e .l .o below) */
+pre.wire .k{color:var(--sx-kw)} pre.wire .v{color:var(--sx-str)} pre.wire .c{color:var(--ink3);font-style:italic}
+pre.wire .d{color:var(--danger)} pre.wire .n{color:var(--ink);font-weight:600}
+pre.wire .e{color:var(--emit);font-weight:600} pre.wire .l{color:var(--listen);font-weight:600} pre.wire .o{color:var(--loop);font-weight:600}
+pre.wire{position:relative}
+pre.wire .cap{position:absolute;right:12px;top:9px;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
+
+table.spec{width:100%;border-collapse:collapse;font-size:15px;margin:8px 0 4px;font-family:var(--mono)}
+table.spec th{text-align:left;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line2)}
+table.spec td{padding:11px 14px;border-bottom:1px solid var(--line);color:var(--ink2);vertical-align:top}
+table.spec td:first-child{color:var(--ink);font-weight:600;white-space:normal}
+table.spec th:first-child{width:30%} table.spec th:nth-child(2){width:28%}
+/* the subject column carries its lane; the consequence column marks the sharp edges */
+table.spec td.l-emit  {color:var(--emit)}
+table.spec td.l-listen{color:var(--listen)}
+table.spec td.l-stack {color:var(--stack)}
+table.spec td.l-loop  {color:var(--loop)}
+table.spec td.l-danger{color:var(--danger)}
+table.spec td.l-mut   {color:var(--ink2)}
+table.spec td .bite{color:var(--danger);font-weight:600}
+table.spec td .good{color:var(--listen);font-weight:600}
+table.spec td em{color:var(--ink);font-style:italic}
+table.spec td strong{color:var(--ink)}
+@media(max-width:620px){table.spec td:first-child{white-space:normal}}
+table.spec tr:hover td{background:color-mix(in srgb,var(--panel) 60%,transparent)}
+.pill{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;padding:2px 8px;border-radius:999px;border:1px solid currentColor}
+.pill{background:var(--panel2)}
+.pill.js{color:var(--emit)} .pill.eng{color:var(--listen)} .pill.nat{color:var(--stack)}
+.pill.os{color:var(--loop)} .pill.dgr{color:var(--danger)} .pill.mut{color:var(--ink2);border-color:var(--line2)}
+
+/* figure / canvas / inspect */
+.figure{margin:30px 0;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);overflow:hidden;box-shadow:var(--shadow)}
+.figure.fs{position:fixed;inset:12px;z-index:400;margin:0;max-width:none;display:flex;flex-direction:column}
+.fig-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.fig-bar .title{font-family:var(--mono);font-size:12px;letter-spacing:.05em;color:var(--ink2);text-transform:uppercase}
+.fig-bar .grow{flex:1}
+.fbtn{font-family:var(--mono);font-size:11.5px;letter-spacing:.03em;border:1px solid var(--line2);background:transparent;color:var(--ink2);padding:6px 11px;border-radius:8px;cursor:pointer;transition:.18s;display:inline-flex;align-items:center;gap:6px}
+.fbtn:hover{color:var(--ink);border-color:var(--listen)}
+.fbtn.on{color:var(--bg);background:var(--listen);border-color:var(--listen)}
+.fbtn.on.js{background:var(--emit);border-color:var(--emit)}
+.fbtn.dgr:hover{border-color:var(--danger);color:var(--danger)}
+.fbtn svg{width:13px;height:13px}
+.canvas{position:relative;background:radial-gradient(circle at 1px 1px,var(--grid2) 1px,transparent 0) 0 0/22px 22px}
+.figure.fs .canvas{flex:1;min-height:0}
+.figure:not(.fs) .canvas[data-zoom]{cursor:zoom-in}
+.figure:not(.fs) .canvas .node{cursor:pointer}
+.figure.fs .canvas{cursor:grab}
+.figure.fs .canvas:active{cursor:grabbing}
+svg.diagram{display:block;width:100%;height:auto;touch-action:auto}
+.figure.fs svg.diagram{height:100%;touch-action:none}
+.zoomctl{position:absolute;right:12px;bottom:12px;display:none;flex-direction:column;gap:6px;z-index:5}
+.figure.fs .zoomctl{display:flex}
+.zoomctl button{width:34px;height:34px;border-radius:8px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);font-family:var(--mono);font-size:15px;cursor:pointer;line-height:1;transition:.15s;display:grid;place-items:center}
+.zoomctl button:hover{color:var(--ink);border-color:var(--listen)}
+.zlevel{position:absolute;left:12px;bottom:12px;display:none;font-family:var(--mono);font-size:11px;color:var(--ink2);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:5;user-select:none}
+.figure.fs .zlevel{display:block}
+.zhint{position:absolute;left:12px;top:12px;display:none;font-family:var(--mono);font-size:10.5px;color:var(--ink2);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:5;opacity:.85;pointer-events:none}
+.figure.fs .zhint{display:block}
+.inspect-hint{position:absolute;right:12px;top:12px;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;color:var(--ink2);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;z-index:4;pointer-events:none;opacity:0;transition:opacity .2s}
+.figure:not(.fs) .canvas[data-zoom]:hover .inspect-hint{opacity:.9}
+.figure.fs .inspect-hint{display:none}
+
+.node{cursor:pointer}
+.node .nbox{transition:transform .35s cubic-bezier(.4,1.3,.5,1),filter .25s}
+.node:hover .nbox{filter:brightness(1.12)}
+
+/* player */
+.player{display:flex;align-items:center;gap:10px;padding:14px 16px;border-top:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.pbtn{width:40px;height:40px;border-radius:50%;border:1px solid var(--line2);background:var(--panel);color:var(--ink);cursor:pointer;display:grid;place-items:center;transition:.18s}
+.pbtn:hover{border-color:var(--listen);color:var(--listen)}
+.pbtn.play{background:var(--listen);border-color:var(--listen);color:var(--bg);width:46px;height:46px}
+.pbtn.play:hover{filter:brightness(1.08);color:var(--bg)}
+.pbtn svg{width:18px;height:18px}
+.pbtn.reset svg{width:17px;height:17px}
+/* dim reports "already at the start" — still clickable, because reset is idempotent */
+.pbtn.reset.dim{color:var(--ink3);border-color:var(--line)}
+.pbtn.reset:hover{border-color:var(--emit);color:var(--emit)}
+.pbtn:focus-visible{outline:2px solid var(--listen);outline-offset:2px}
+.scrub{flex:1;min-width:160px;height:6px;border-radius:999px;background:var(--line);position:relative;cursor:pointer}
+.scrub .fill{position:absolute;left:0;top:0;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--emit),var(--listen));width:0%}
+.scrub .ticks{position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center;padding:0 1px}
+.scrub .tk{width:2px;height:2px;border-radius:50%;background:var(--ink3)}
+.stepno{font-family:var(--mono);font-size:12px;color:var(--ink2);min-width:62px;text-align:right;font-variant-numeric:tabular-nums}
+.caption{padding:18px 22px;border-top:1px solid var(--line);min-height:104px}
+.caption .cn{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--emit);display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.caption .cn .lane{color:var(--listen)}
+.caption .ch{font-size:21px;font-weight:600;margin:0 0 4px;letter-spacing:-.01em}
+.caption .cb{color:var(--ink2);font-size:16px;margin:0;max-width:78ch}
+
+/* cards */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(236px,1fr));gap:14px;margin:24px 0}
+.card{border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:var(--panel);cursor:pointer;transition:.2s;position:relative;overflow:hidden}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--emit);opacity:.6}
+.card.eng::before{background:var(--listen)} .card.nat::before{background:var(--loop)} .card.stk::before{background:var(--stack)} .card.dgr::before{background:var(--danger)}
+.card:hover{transform:translateY(-3px);border-color:var(--line2);box-shadow:var(--shadow)}
+.card .fn{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--ink2);text-transform:uppercase;margin-bottom:6px;display:flex;justify-content:space-between;gap:8px}
+.card .ft{font-family:var(--mono);font-weight:700;font-size:15px;line-height:1.25;margin-bottom:5px;color:var(--ink)}
+.card .fs2{font-size:14.5px;color:var(--ink2);font-family:var(--serif)}
+.card .deepchip{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--listen);border:1px solid var(--listen);border-radius:999px;padding:1px 6px;margin-top:9px;display:inline-block}
+
+/* modal */
+.scrim{position:fixed;inset:0;z-index:600;background:rgba(5,8,12,.62);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;pointer-events:none;transition:opacity .25s}
+.scrim.open{opacity:1;pointer-events:auto}
+.modal{background:var(--panel2);border:1px solid var(--line2);border-radius:18px;max-width:660px;width:100%;max-height:88vh;overflow:auto;box-shadow:var(--shadow);transform:translateY(16px) scale(.98);transition:transform .3s cubic-bezier(.3,1.2,.4,1);position:relative}
+.scrim.open .modal{transform:none}
+.modal .mhead{padding:24px 26px 0}
+.modal .mtag{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--emit);display:flex;gap:10px;align-items:center}
+.modal .mtag .lane{color:var(--listen)}
+.modal h4{font-size:25px;font-weight:600;margin:8px 0 0;letter-spacing:-.01em;font-family:var(--mono)}
+.modal .mbody{padding:16px 26px 26px;color:var(--ink2);font-size:16.5px}
+.modal .mbody p{margin:0 0 14px}
+.modal .mbody code{background:var(--panel);padding:1px 5px;border-radius:5px;font-size:14px;color:var(--ink)}
+.mclose{position:absolute;right:18px;top:18px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);cursor:pointer;font-size:18px;line-height:1;z-index:2}
+.mclose:hover{color:var(--ink);border-color:var(--danger)}
+.why{border-left:3px solid var(--listen);background:var(--listen-soft);padding:12px 16px;border-radius:0 10px 10px 0;font-size:15px;margin-top:8px}
+.why .wl{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--listen);display:block;margin-bottom:5px}
+.deephd{margin-top:22px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--loop);display:flex;align-items:center;gap:9px}
+.deephd::after{content:"";flex:1;height:1px;background:var(--line)}
+.deep{display:grid;margin-top:12px;gap:12px;grid-template-columns:1fr 1fr}
+.deep .dcol{border:1px solid var(--line);border-radius:10px;padding:13px 15px;background:var(--bg2)}
+.deep .dcol p{font-size:14px;margin:0;line-height:1.55}
+.deep .dl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:8px}
+.deep .dl.os{color:var(--loop)} .deep .dl.spec{color:var(--emit)}
+.deep code{font-size:12.5px;color:var(--ink);background:var(--panel);padding:1px 4px;border-radius:4px}
+@media(max-width:560px){.deep{grid-template-columns:1fr}}
+
+/* console / terminal shared look */
+.term-out{font-family:var(--mono);font-size:12.5px;line-height:1.7;background:#05080c;border:1px solid var(--line2);border-radius:10px;padding:14px 16px;color:#c8d2dd;min-height:60px;overflow:auto;
+  /* the terminal is dark in BOTH themes, so it carries the bright lane set */
+  --emit:#e6a93c;--listen:#36d6c3;--stack:#b48cff;--loop:#5aa9f8;--danger:#f0735f;--ink3:#8b95a3;--ink:#e9e7df;--ink2:#c3ccd8}
+html[data-theme="light"] .term-out{background:#1c2330;color:#d7dde6}
+.term-out .ln{display:block;white-space:pre-wrap;word-break:break-word}
+.term-out .gd{color:var(--listen)} .term-out .em{color:var(--emit)} .term-out .dg{color:var(--danger)} .term-out .mut{color:var(--ink3)} .term-out .st{color:var(--stack)}
+.term-out .lp{color:var(--loop)} .term-out .js{color:var(--emit)} .term-out .mut2{color:#8b95a3}
+
+footer{max-width:var(--maxw);margin:0 auto;padding:40px 24px 80px;font-family:var(--mono);font-size:12px;color:var(--ink2);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;border-top:1px solid var(--line)}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;color:var(--ink2);margin:18px 0 0}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+/* wide reference tables get their own scroll context rather than blowing out the page */
+.tablewrap{overflow-x:auto;margin:8px 0 4px;border-radius:10px;
+  scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+.tablewrap table.spec{margin:0;min-width:620px}
+.tablewrap+.scrollnote{font-family:var(--mono);font-size:10.5px;color:var(--ink2);margin:6px 0 0;display:none}
+
+/* ===== LANE COLOUR OVERRIDES =======================================
+   Last in the sheet, and 0-2-1 via the doubled attribute selector, so a
+   code chip keeps its lane in prose, tables, cards, modals and callouts
+   alike. Verified by the lane-colour check in the audit harness.
+   ================================================================== */
+code[data-lane][data-lane="emit"]  {color:var(--emit)}
+code[data-lane][data-lane="listen"]{color:var(--listen)}
+code[data-lane][data-lane="stack"] {color:var(--stack)}
+code[data-lane][data-lane="loop"]  {color:var(--loop)}
+code[data-lane][data-lane="danger"]{color:var(--danger)}
+code[data-lane][data-lane="none"]  {color:var(--ink)}
+code[data-lane].ann{cursor:help}
+.modal .mbody code[data-lane],.card .fs2 code[data-lane]{background:var(--panel2);border:1px solid var(--line)}
+
+@media(min-width:1280px){ nav.toc{display:block} }
+@media(max-width:920px){ body{font-size:17px} main{padding:84px 0 100px}
+  .vol{display:none}
+  .tablewrap+.scrollnote{display:block}
+}
+@media(max-width:620px){
+  .shell{padding:0 16px}
+  section.block{padding:52px 0}
+  .figure{margin:22px 0}
+  .fig-bar{padding:10px 14px}
+  .caption{padding:14px 16px}
+  .player{padding:12px 14px;gap:8px}
+  .pbtn{width:36px;height:36px} .pbtn.play{width:42px;height:42px}
+  .callout{padding:16px 18px;font-size:16px}
+  pre.wire{margin:18px 0;font-size:12.5px}
+  /* long tokens may wrap on a phone rather than push the column open */
+  .prose code,.lead code,.callout code,table.spec code{white-space:normal;word-break:break-word}
+  .keybar{padding:14px}
+  h1.hero-h{letter-spacing:-.02em}
+}
+</style>
+</head>
+<body>
+
+<header class="top" id="topNav">
+  <div class="top-inner">
+    <div class="brand"><span class="dot"></span><span class="v">emit</span><span class="arr">↻</span><span class="k">listeners</span></div>
+    <span class="vol">Vol. III · the synchronous for-loop</span>
+    <div class="top-spacer"></div>
+    <button class="theme-btn" id="themeBtn" aria-label="toggle theme">
+      <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>
+      <span id="themeTxt">DARK</span>
+    </button>
+  </div>
+  <div class="scrollprog" id="scrollProg"></div>
+</header>
+
+<div class="toc-show" id="tocShow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg> contents</div>
+
+<div class="shell">
+  <nav class="toc" id="toc">
+    <div class="toc-head">
+      <span class="tt">Contents</span>
+      <button class="toc-retract" id="tocRetract" title="retract sidebar" aria-label="retract sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+    </div>
+    <a href="#loop"><span class="num">00</span> The one fact</a>
+    <a href="#problem"><span class="num">01</span> The core problem</a>
+    <a href="#build"><span class="num">02</span> Build it yourself</a>
+    <a href="#once"><span class="num">03</span> once &amp; identity</a>
+    <a href="#mutation"><span class="num">04</span> Mutation mid-emit</a>
+    <a href="#error"><span class="num">05</span> The 'error' case</a>
+    <a href="#leaks"><span class="num">06</span> Leaks &amp; maxListeners</a>
+    <a href="#eventloop"><span class="num">07</span> ≠ the event loop</a>
+    <a href="#async"><span class="num">08</span> Promises &amp; iteration</a>
+    <a href="#api"><span class="num">09</span> The full API</a>
+    <a href="#patterns"><span class="num">10</span> Patterns &amp; TS</a>
+    <a href="#compare"><span class="num">11</span> The wider family</a>
+    <a href="#close"><span class="num">12</span> The one sentence</a>
+  </nav>
+
+  <main>
+
+    <!-- ===== 00 HERO / THE ONE FACT ===== -->
+    <section class="block" id="loop" style="border-bottom:none">
+      <p class="kicker"><span class="ix">00</span> Explorable explanation · EventEmitter from first principles</p>
+      <h1 class="hero-h">Why <span class="a">emit</span> is a <span class="b">synchronous for-loop</span> over an array of callbacks — and not the <span class="c">event loop</span> at all.</h1>
+      <p class="lead">Almost every confusion about EventEmitter dissolves the moment you internalize one fact: <code>emit('data', x)</code> walks an array of listener functions and <em>calls each one, in order, on the current call stack, before it returns</em>. It is not asynchronous. It does not touch libuv. It is a <code>for</code> loop. Press play to watch a single <code>emit</code> run to completion while the event loop sits untouched — then notice that the line <em>after</em> emit only runs once every listener has finished.</p>
+
+      <div class="figure" id="dispatchFig">
+        <div class="fig-bar">
+          <span class="title">▶ one emit(), stepped · the array · the stack · the loop</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-inspect="dispatchSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="dispatchSvg">
+          <svg class="diagram" id="dispatchSvg" viewBox="0 0 1280 690" preserveAspectRatio="xMidYMid meet" role="img" aria-label="One emit call, stepped: the listener array, the call stack, and the event loop"><g class="viewport" id="dispatchVP"></g></svg>
+        </div>
+        <div class="player">
+          <button class="pbtn reset dim" id="dReset" title="reset to the start" aria-label="reset to the start"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg></button>
+          <button class="pbtn" id="dPrev" title="step back"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17V7l-7 5zM8 7h-2v10h2z"/></svg></button>
+          <button class="pbtn play" id="dPlay" title="play/pause"><svg id="dPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg></button>
+          <button class="pbtn" id="dNext" title="step forward"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 7v10l7-5zM16 7h2v10h-2z"/></svg></button>
+          <div class="scrub" id="dScrub"><div class="fill" id="dFill"></div><div class="ticks" id="dTicks"></div></div>
+          <span class="stepno" id="dStepNo">00 / 09</span>
+        </div>
+        <div class="caption">
+          <div class="cn"><span id="dCapN">FRAME 00</span> · <span class="lane" id="dCapLane">—</span></div>
+          <p class="ch" id="dCapH">Press play to run one emit() to completion</p>
+          <p class="cb" id="dCapB">Chips are the listeners registered on the 'data' channel; the middle column is the JS call stack; the blue ring is the event loop. Watch the connector: the chip the loop reaches becomes the frame on top of the stack.</p>
+        </div>
+      </div>
+      <div class="keybar">
+        <span class="kh">how to read the colour — in the figures AND in the prose, one colour answers one question: which machine owns this?</span>
+        <span class="keyitem"><i style="background:var(--emit)"></i><span><span class="kt" style="color:var(--emit)">the emitter</span><span class="kd">the channel map, and the for-loop that walks it</span></span></span>
+        <span class="keyitem"><i style="background:var(--listen)"></i><span><span class="kt" style="color:var(--listen)">your listeners</span><span class="kd">the callbacks, and registering or removing them</span></span></span>
+        <span class="keyitem"><i style="background:var(--stack)"></i><span><span class="kt" style="color:var(--stack)">the call stack</span><span class="kd">synchronous execution — always, in this document</span></span></span>
+        <span class="keyitem"><i style="background:var(--loop)"></i><span><span class="kt" style="color:var(--loop)">libuv &amp; the kernel</span><span class="kd">the asynchronous machine underneath</span></span></span>
+        <span class="keyitem"><i style="background:var(--danger)"></i><span><span class="kt" style="color:var(--danger)">the failure path</span><span class="kd">the 'error' channel, throws, leaks</span></span></span>
+        <span class="keyitem"><i style="background:var(--line2)"></i><span><span class="kt">dotted underline</span><span class="kd">an idea rather than a machine — hover for the definition</span></span></span>
+      </div>
+      <div class="callout">
+        <span class="lbl">the one-line spine</span>
+        <code>emit</code> is a synchronous for-loop over an array of callbacks → <strong>everything else</strong> (<code>once</code>, <code>off</code>, ordering, the <code>'error'</code> special case, leak warnings, the lack of backpressure) follows from that one fact → which is exactly why streams have to bolt buffering and flow-control on top.
+      </div>
+    </section>
+
+    <!-- ===== 01 THE CORE PROBLEM ===== -->
+    <section class="block" id="problem">
+      <p class="kicker"><span class="ix">01</span> The core problem · one-to-many decoupling</p>
+      <h2>A piece of code knows something <em>happened</em> — but not who cares.</h2>
+      <div class="prose">
+        <p>A socket receives bytes. A child process exits. A timer fires. The code that <strong>detects</strong> the occurrence should not have to know the list of things that want to <strong>react</strong> to it — that list changes over the program's life, and hard-wiring it couples producer to consumer forever. The EventEmitter is one concrete answer: the producer announces on a <span class="term" data-term="named channel">named channel</span>, and any number of consumers subscribe and unsubscribe freely.</p>
+        <p>This is the classic <span class="term" data-term="observer pattern">Observer pattern</span> / <span class="term" data-term="publish-subscribe">publish–subscribe</span>, and it rests on <span class="term" data-term="inversion of control">inversion of control</span>: a listener hands over a function and surrenders control of <em>when</em> it runs. It is fundamentally a <span class="term" data-term="push model">push</span> model — the emitter shoves notifications at listeners — which is the opposite of the <span class="term" data-term="pull model">pull</span> model you meet with async iterators. Three forces shape the whole design. Tap each.</p>
+      </div>
+      <div class="cards" id="problemCards"></div>
+      <div class="callout eng">
+        <span class="lbl">the unifying question</span>
+        Throughout this volume the question is always the same: <strong>when this channel fires, which functions run, in what order, on whose stack — and what happens to the ones nobody registered for?</strong> Hold that and the rest is derivable.
+      </div>
+    </section>
+
+    <!-- ===== 02 BUILD IT YOURSELF ===== -->
+    <section class="block" id="build">
+      <p class="kicker"><span class="ix">02</span> Build it yourself · the whole thing is ~30 lines</p>
+      <h2>A Map of names to arrays of functions. That's the entire idea.</h2>
+      <div class="prose">
+        <p>This is the centerpiece. Once you've built it, Node's full API is just named conveniences over what you wrote. The core is a <code>Map&lt;eventName, Function[]&gt;</code>: <code>on</code> pushes a function onto the array for a name; <code>emit</code> loops that array calling each. Below is a <strong>live emitter</strong> driving exactly that data structure. Click <code>on</code> a few times, then <code>emit</code> and watch the for-loop sweep the array left to right. Add a <code>once</code> listener and watch it remove itself after firing. Everything you see is mirrored in the internal-state panel.</p>
+      </div>
+      <div class="figure" id="buildFig">
+        <div class="fig-bar">
+          <span class="title">⊞ live emitter · watch the internal Map mutate</span>
+          <span class="grow"></span>
+          <button class="fbtn js" data-build="on">on('data', fn)</button>
+          <button class="fbtn js" data-build="once">once('data', g)</button>
+          <button class="fbtn" data-build="emit">emit('data', 42)</button>
+          <button class="fbtn" data-build="off">off('data', last)</button>
+          <button class="fbtn" data-build="reset">⟲ reset</button>
+        </div>
+        <div class="canvas" style="cursor:default">
+          <div id="buildUI" style="padding:20px"></div>
+        </div>
+      </div>
+      <div class="prose"><p>Here is the implementation the widget is running. It is short on purpose — read it next to the panel above and the mapping is exact.</p></div>
+      <pre class="wire"><span class="k">class</span> <span class="n">Tiny</span> {
+  <span class="n">events</span> = <span class="k">new</span> Map();                 <span class="c">// name → [fn, fn, …]</span>
+
+  <span class="n">on</span>(name, fn) {
+    <span class="k">const</span> a = <span class="k">this</span>.events.get(name) ?? [];
+    a.push(fn); <span class="k">this</span>.events.set(name, a);
+    <span class="k">return</span> <span class="k">this</span>;                          <span class="c">// chainable, like Node</span>
+  }
+  <span class="n">once</span>(name, fn) {
+    <span class="k">const</span> w = (...args) =&gt; {              <span class="c">// the wrapper ≠ fn</span>
+      <span class="k">this</span>.off(name, w); fn(...args);     <span class="c">// remove self, then call</span>
+    };
+    w.listener = fn;                       <span class="c">// remember the original</span>
+    <span class="k">return</span> <span class="k">this</span>.on(name, w);
+  }
+  <span class="n">off</span>(name, fn) {
+    <span class="k">const</span> a = <span class="k">this</span>.events.get(name); <span class="k">if</span> (!a) <span class="k">return</span> <span class="k">this</span>;
+    <span class="k">const</span> i = a.findIndex(f =&gt; f === fn || f.listener === fn);
+    <span class="k">if</span> (i !== -1) a.splice(i, 1);
+    <span class="k">return</span> <span class="k">this</span>;
+  }
+  <span class="n">emit</span>(name, ...args) {
+    <span class="k">const</span> a = <span class="k">this</span>.events.get(name);
+    <span class="k">if</span> (!a || a.length === <span class="v">0</span>) <span class="k">return</span> <span class="d">false</span>;   <span class="c">// emit's boolean</span>
+    <span class="k">for</span> (<span class="k">const</span> fn <span class="k">of</span> a.slice()) fn.call(<span class="k">this</span>, ...args); <span class="c">// snapshot!</span>
+    <span class="k">return</span> <span class="d">true</span>;
+  }
+}</pre>
+      <div class="callout eng">
+        <span class="lbl">three details that are not accidents</span>
+        <strong>(1)</strong> <code>emit</code> returns a boolean — trivially "did the array have length." <strong>(2)</strong> <code>once</code> stores a <em>wrapper</em>, not your function, which creates an identity gap we exploit in §03. <strong>(3)</strong> <code>emit</code> iterates <code>a.slice()</code> — a snapshot — so a listener that adds or removes listeners mid-emit can't corrupt the loop (§04). Node's real <code>lib/events.js</code> does all three, plus a micro-optimization: a lone listener is stored as a bare function and only promoted to an array on the second <code>on</code>.
+      </div>
+    </section>
+
+    <!-- ===== 03 ONCE & IDENTITY ===== -->
+    <section class="block" id="once">
+      <p class="kicker"><span class="ix">03</span> once &amp; the identity gap · listeners vs rawListeners</p>
+      <h2>What you registered is not what's stored.</h2>
+      <div class="prose">
+        <p>Because <code>once</code> wraps your function in a self-removing closure, the array holds the <strong>wrapper</strong>, not your function. That gap would bite when you removed a once-listener early — a plain identity scan for <code>yourFn</code> finds nothing, because what sits in the array is the wrapper. Node closes it two ways, so in practice <code>off(name, yourFn)</code> <em>does</em> work: the wrapper is stamped with a <code>.listener</code> property pointing back at your function, and removal matches against either one. <code>rawListeners()</code> is the escape hatch for reaching the wrapper directly. Try removing the once-listener both ways.</p>
+      </div>
+      <div class="figure" id="onceFig">
+        <div class="fig-bar">
+          <span class="title">⌖ once('data', g) — try to remove it</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-once="register">once('data', g)</button>
+          <button class="fbtn dgr" data-once="off-orig">off('data', g)</button>
+          <button class="fbtn" data-once="off-raw">off('data', rawListeners()[0])</button>
+          <button class="fbtn" data-once="reset">⟲ reset</button>
+        </div>
+        <div class="canvas" style="cursor:default">
+          <div id="onceUI" style="padding:20px"></div>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="lbl">the rule of thumb</span>
+        <code>listeners(name)</code> returns your original functions (it unwraps once-wrappers via <code>.listener</code>) — good for introspection. <code>rawListeners(name)</code> returns the actual stored functions including wrappers — the one you need if you want to remove a once-listener you no longer hold a reference to. In practice, keep the reference, or use an <span class="term" data-term="AbortController">AbortController</span> signal (§06) and let it do the removal for you.
+      </div>
+    </section>
+
+    <!-- ===== 04 MUTATION MID-EMIT ===== -->
+    <section class="block" id="mutation">
+      <p class="kicker"><span class="ix">04</span> Mutation during dispatch · the snapshot</p>
+      <h2>A listener that edits the listener list — during the loop.</h2>
+      <div class="prose">
+        <p>What happens if a listener calls <code>on</code> or <code>off</code> <em>while emit is still iterating</em>? This is <span class="term" data-term="reentrancy">reentrancy</span>, and the naive answer — iterate the live array — produces classic bugs: remove the current listener and the index shifts, silently skipping the next one; add a listener and it fires in the same round it was registered. Node sidesteps all of it by <strong>copying the array before the loop</strong>. The dispatch you started sees a frozen list; mutations land for <em>next</em> time. Run both models side by side: the middle listener removes itself and registers a new one.</p>
+      </div>
+      <div class="figure" id="mutFig">
+        <div class="fig-bar">
+          <span class="title">⇄ listeners [A, B, C] — B removes itself &amp; adds D, mid-emit</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-inspect="mutSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="mutSvg">
+          <svg class="diagram" id="mutSvg" viewBox="0 0 1120 526" preserveAspectRatio="xMidYMid meet" role="img" aria-label="A listener editing the listener list mid-emit: the live array versus the frozen copy"><g class="viewport" id="mutVP"></g></svg>
+        </div>
+        <div class="player">
+          <button class="pbtn reset dim" id="mReset" title="reset to the start" aria-label="reset to the start"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg></button>
+          <button class="pbtn" id="mPrev" title="step back"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17V7l-7 5zM8 7h-2v10h2z"/></svg></button>
+          <button class="pbtn play" id="mPlay" title="play/pause"><svg id="mPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg></button>
+          <button class="pbtn" id="mNext" title="step forward"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 7v10l7-5zM16 7h2v10h-2z"/></svg></button>
+          <div class="scrub" id="mScrub"><div class="fill" id="mFill"></div></div>
+          <span class="stepno" id="mStepNo">0 / 4</span>
+        </div>
+        <div class="caption">
+          <div class="cn"><span id="mCapN">STEP 0</span> · <span class="lane" id="mCapLane">—</span></div>
+          <p class="ch" id="mCapH"></p>
+          <p class="cb" id="mCapB"></p>
+        </div>
+      </div>
+      <div class="callout eng">
+        <span class="lbl">what you can rely on</span>
+        Within a single <code>emit</code>: ordering is registration order, every listener present <em>at the moment emit was called</em> runs exactly once, and any <code>on</code>/<code>off</code> performed by a listener takes effect only on the <strong>next</strong> emit. This is the same array-clone-per-emit you wrote in §02 with <code>a.slice()</code>.
+      </div>
+    </section>
+
+    <!-- ===== 05 THE 'error' CASE ===== -->
+    <section class="block" id="error">
+      <p class="kicker"><span class="ix">05</span> The 'error' event · the single biggest footgun</p>
+      <h2>Emit <code>'error'</code> with no listener and the process <em>throws</em>.</h2>
+      <div class="prose">
+        <p>Every other event is harmless to emit with zero listeners — the for-loop just finds an empty array and returns <code>false</code>. <code>'error'</code> is special-cased: if you <code>emit('error', err)</code> and nobody is listening, the emitter <strong>throws</strong> the error synchronously, and an unhandled throw on the main path takes the whole process down. Node did this deliberately — a silently dropped error is far more dangerous than a loud crash. Toggle a listener on or off, optionally attach an <span class="term" data-term="errorMonitor">errorMonitor</span>, and fire an error to see the three outcomes.</p>
+      </div>
+      <div class="figure" id="errFig">
+        <div class="fig-bar">
+          <span class="title">⚠ emit('error', new Error('boom'))</span>
+          <span class="grow"></span>
+          <button class="fbtn" id="errListenerBtn">'error' listener: OFF</button>
+          <button class="fbtn" id="errMonitorBtn">errorMonitor: OFF</button>
+          <button class="fbtn dgr" id="errFire">▶ emit('error')</button>
+          <button class="fbtn" id="errReset">⟲ clear</button>
+        </div>
+        <div class="canvas" style="cursor:default">
+          <div id="errUI" style="padding:20px"></div>
+        </div>
+      </div>
+      <div class="callout dgr">
+        <span class="lbl">the rule, and the subtlety</span>
+        Always attach an <code>'error'</code> listener to any long-lived emitter (sockets, streams, child processes). <code>errorMonitor</code> is for <em>observing</em> errors for logging/metrics <strong>without</strong> counting as a handler — so it does not suppress the throw. A thrown error inside a normal listener is a different thing entirely (§ below): it propagates synchronously and aborts the remaining listeners.
+      </div>
+      <h3>Thrown exceptions inside an ordinary listener</h3>
+      <div class="prose"><p>Distinct from the <code>'error'</code> channel: if listener #2 of three <em>throws</em>, the exception unwinds straight up through <code>emit</code> (because emit is a plain for-loop on your stack), so listener #3 never runs and the throw surfaces wherever <code>emit</code> was called. Wrap <code>emit</code> in a <code>try/catch</code> and you catch it — proof that dispatch is synchronous.</p></div>
+      <pre class="wire"><span class="k">try</span> {
+  ee.emit(<span class="v">'tick'</span>);     <span class="c">// listener #2 throws…</span>
+} <span class="k">catch</span> (e) {
+  <span class="c">// …caught HERE, synchronously. listener #3 was skipped.</span>
+}</pre>
+    </section>
+
+    <!-- ===== 06 LEAKS & MAXLISTENERS ===== -->
+    <section class="block" id="leaks">
+      <p class="kicker"><span class="ix">06</span> Memory leaks · the maxListeners warning</p>
+      <h2>The #1 practical bug: listeners added and never removed.</h2>
+      <div class="prose">
+        <p>EventEmitter has no garbage collection of subscriptions — a listener lives until you remove it. On a long-lived emitter (<code>process</code>, a socket, a global bus) it is fatally easy to add a listener per request and never take it off; the array grows without bound and so does the memory each closure captures. Node can't know your intent, so it ships a heuristic: once a single channel passes <span class="term" data-term="defaultMaxListeners">10 listeners</span> it prints a <span class="term" data-term="MaxListenersExceededWarning">MaxListenersExceededWarning</span> — <em>not</em> a hard limit, just a nudge that you probably forgot to clean up. Add listeners past the threshold and watch it fire; then mitigate.</p>
+      </div>
+      <div class="figure" id="leakFig">
+        <div class="fig-bar">
+          <span class="title">⚑ one channel · the leak detector</span>
+          <span class="grow"></span>
+          <button class="fbtn js" id="leakAdd">on('data', fn)</button>
+          <button class="fbtn" id="leakMax">setMaxListeners(20)</button>
+          <button class="fbtn" id="leakSignal">add with {signal}</button>
+          <button class="fbtn dgr" id="leakAbort">controller.abort()</button>
+          <button class="fbtn" id="leakReset">⟲ reset</button>
+        </div>
+        <div class="canvas" style="cursor:default">
+          <div id="leakUI" style="padding:20px"></div>
+        </div>
+      </div>
+      <div class="callout eng">
+        <span class="lbl">the modern cleanup story</span>
+        Three mitigations, in order of preference: <code>once</code> for genuinely one-shot listeners (self-removing); the <code>{ signal }</code> option wired to an <span class="term" data-term="AbortController">AbortController</span>, so one <code>abort()</code> removes a whole batch; and disciplined <code>off</code> pairing for everything else. Raise <code>setMaxListeners</code> only when you <em>legitimately</em> expect more than ten — never to silence a warning you haven't diagnosed.
+      </div>
+    </section>
+
+    <!-- ===== 07 ≠ THE EVENT LOOP ===== -->
+    <section class="block" id="eventloop">
+      <p class="kicker"><span class="ix">07</span> EventEmitter ≠ the event loop · clearing the big confusion</p>
+      <h2>Two orthogonal machines that meet at exactly one point.</h2>
+      <div class="prose">
+        <p>The deepest, most common misconception is that <code>emit</code> "schedules" listeners on the event loop. It does not. <span class="term" data-term="libuv">libuv</span>'s event loop is the OS-facing I/O scheduler; <code>emit</code> is a synchronous for-loop. They are unrelated — until they meet at one seam: when I/O completes, the kernel marks the descriptor ready, libuv's poll phase collects it and runs the JS callback registered for it, and <em>that callback</em> calls <code>emitter.emit('data', chunk)</code>. Step through the seven frames below and watch which machine owns the thread at each one. The asynchrony lives entirely in <strong>when the callback fires</strong>; once it fires, <code>emit</code> and all its listeners run to completion inside that single tick before the loop moves on.</p>
+      </div>
+      <div class="figure" id="seamFig">
+        <div class="fig-bar"><span class="title">⇌ one I/O completion, stepped · where the loop hands off to emit</span>
+          <span class="grow"></span>
+          <button class="fbtn" data-inspect="seamSvg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Inspect</button>
+        </div>
+        <div class="canvas" data-zoom="seamSvg">
+          <svg class="diagram" id="seamSvg" viewBox="0 0 1180 476" preserveAspectRatio="xMidYMid meet" role="img" aria-label="The one seam: libuv runs a callback, the callback calls emit, and dispatch is synchronous from there"><g class="viewport" id="seamVP"></g></svg>
+        </div>
+        <div class="player">
+          <button class="pbtn reset dim" id="sReset" title="reset to the start" aria-label="reset to the start"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg></button>
+          <button class="pbtn" id="sPrev" title="step back"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17V7l-7 5zM8 7h-2v10h2z"/></svg></button>
+          <button class="pbtn play" id="sPlay" title="play/pause"><svg id="sPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg></button>
+          <button class="pbtn" id="sNext" title="step forward"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 7v10l7-5zM16 7h2v10h-2z"/></svg></button>
+          <div class="scrub" id="sScrub"><div class="fill" id="sFill"></div></div>
+          <span class="stepno" id="sStepNo">0 / 6</span>
+        </div>
+        <div class="caption">
+          <div class="cn"><span id="sCapN">STEP 0</span> · <span class="lane" id="sCapLane">—</span></div>
+          <p class="ch" id="sCapH"></p>
+          <p class="cb" id="sCapB"></p>
+        </div>
+      </div>
+      <div class="callout nat">
+        <span class="lbl">the OS-internals tie-in</span>
+        <code>process</code> is itself an EventEmitter, and some of its events bridge the kernel straight into your code: <code>'SIGINT'</code>, <code>'SIGTERM'</code> are <span class="term" data-term="POSIX signal">POSIX signals</span> the kernel delivers; Node catches them and surfaces them as ordinary emitter events you can listen for. <code>'exit'</code>, <code>'beforeExit'</code>, <code>'uncaughtException'</code>, and <code>'unhandledRejection'</code> are the runtime's own lifecycle, exposed through the same synchronous-dispatch machinery.
+      </div>
+    </section>
+
+    <!-- ===== 08 PROMISES & ITERATION ===== -->
+    <section class="block" id="async">
+      <p class="kicker"><span class="ix">08</span> Bridging to promises &amp; async iteration · the buffering caveat</p>
+      <h2>Two adapters — and the one that quietly grows unbounded.</h2>
+      <div class="prose">
+        <p>Push-based events and pull-based <code>async/await</code> don't compose directly, so <code>node:events</code> ships two bridges. <span class="term" data-term="events.once">events.once(ee, name)</span> returns a promise that resolves on the next emission of <code>name</code> (and rejects on <code>'error'</code>), with <span class="term" data-term="AbortController">AbortSignal</span> support — perfect for "await this one event." <span class="term" data-term="events.on">events.on(ee, name)</span> returns an <span class="term" data-term="async iterator">async iterator</span> you consume with <code>for await</code> — and here is the trap: events that arrive while you are <em>not</em> currently awaiting are <strong>buffered, and by default that queue has no ceiling</strong>. Current Node does accept <code>highWaterMark</code> and <code>lowWaterMark</code> options here, but they are only honoured on emitters that implement <code>pause()</code> and <code>resume()</code> — and a plain EventEmitter implements neither. So against a plain emitter there is still no <span class="term" data-term="backpressure">backpressure</span> to be had, and a fast producer against a slow loop body grows memory without limit.</p>
+      </div>
+      <div class="figure" id="bufFig">
+        <div class="fig-bar">
+          <span class="title">≈ events.on() · producer → unbounded buffer → for-await body</span>
+          <span class="grow"></span>
+          <button class="fbtn on" id="bufToggle">⏸ running</button>
+        </div>
+        <div class="canvas" style="cursor:default">
+          <div id="bufUI" style="padding:22px"></div>
+        </div>
+      </div>
+      <pre class="wire"><span class="k">import</span> { once, on } <span class="k">from</span> <span class="v">'node:events'</span>;
+
+<span class="c">// one event, as a promise — resolves once, then you're done</span>
+<span class="k">const</span> [code] = <span class="k">await</span> once(child, <span class="v">'exit'</span>);
+
+<span class="c">// a stream of events — but buffers without limit between awaits</span>
+<span class="k">for</span> <span class="k">await</span> (<span class="k">const</span> [chunk] <span class="k">of</span> on(socket, <span class="v">'data'</span>)) {
+  <span class="k">await</span> slowProcess(chunk);   <span class="d">// ← producer keeps filling the queue meanwhile</span>
+}</pre>
+      <div class="callout dgr">
+        <span class="lbl">the explicit handoff to streams</span>
+        This is precisely why you cannot safely model a fast byte source as a raw EventEmitter: it has no flow control. Streams exist to add the missing pieces — an internal buffer with a <code>highWaterMark</code>, a <code>write()</code> that returns <code>false</code>, and a <code>'drain'</code> event — turning unbounded push into bounded, backpressured flow. EventEmitter is the substrate; streams are the discipline layered on top.
+      </div>
+    </section>
+
+    <!-- ===== 09 THE FULL API ===== -->
+    <section class="block" id="api">
+      <p class="kicker"><span class="ix">09</span> Node's actual API · everything maps onto §02</p>
+      <h2>Fifteen-odd methods, all named conveniences over a Map of arrays.</h2>
+      <div class="prose">
+        <p>With the primitive built, the real surface is unsurprising. Every row below is something you could add to the 30-line <code>Tiny</code> class in an afternoon. Hover the cross-referenced terms; the genuinely subtle ones got their own sections above.</p>
+      </div>
+      <div class="tablewrap">
+      <table class="spec">
+        <thead><tr><th>Method</th><th>Does</th><th>The detail that bites</th></tr></thead>
+        <tbody>
+          <tr><td class="l-listen">on / addListener</td><td>append a listener; returns <code>this</code> for chaining</td><td><span class="bite">same fn twice = called twice</span></td></tr>
+          <tr><td class="l-listen">once</td><td>fire-once, self-removing</td><td>stored as a <span class="term" data-term="wrapper">wrapper</span> — identity gap (§03)</td></tr>
+          <tr><td class="l-emit">emit(name, ...args)</td><td>synchronous for-loop, registration order</td><td>returns <code>boolean</code>; <code>'error'</code> throws if unhandled (§05)</td></tr>
+          <tr><td class="l-listen">off / removeListener</td><td>remove by identity</td><td>removes <strong>one</strong> instance if duplicated — <span class="bite">the rest stay</span></td></tr>
+          <tr><td class="l-listen">removeAllListeners([name])</td><td>bulk clear</td><td><span class="bite">footgun</span>: clears listeners you didn't register</td></tr>
+          <tr><td class="l-listen">prependListener / prependOnceListener</td><td>insert at the <em>front</em></td><td>the <span class="good">only</span> way to control &quot;runs first&quot;</td></tr>
+          <tr><td class="l-listen">listeners / rawListeners</td><td>introspect</td><td><code>raw</code> exposes once-wrappers (§03)</td></tr>
+          <tr><td class="l-listen">listenerCount / eventNames</td><td>counts &amp; channel names</td><td><span class="good">cheap, synchronous reads</span></td></tr>
+          <tr><td class="l-listen">setMaxListeners / getMaxListeners</td><td>per-emitter leak threshold</td><td>default <span class="term" data-term="defaultMaxListeners">10</span>, not a hard cap (§06)</td></tr>
+          <tr><td class="l-emit">'newListener' / 'removeListener'</td><td>meta-events on (un)registration</td><td><code>'newListener'</code> fires <em>before</em> the add</td></tr>
+          <tr><td class="l-loop">events.once / events.on</td><td>promise / async-iterator bridges</td><td><code>on()</code> buffers unbounded (§08)</td></tr>
+          <tr><td class="l-danger">captureRejections</td><td>route a rejecting async listener to <code>'error'</code></td><td><span class="term" data-term="captureRejections">off by default</span> — plain emit ignores returned promises</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <p class="scrollnote">the API table scrolls sideways →</p>
+      <div class="callout">
+        <span class="lbl">two more worth knowing exist</span>
+        <code>events.errorMonitor</code> (the observe-without-handling symbol, §05) and <code>EventEmitterAsyncResource</code>, which preserves <span class="term" data-term="AsyncLocalStorage">async-context</span> across listener invocations so <code>AsyncLocalStorage</code> survives the dispatch. You will reach for the latter rarely, but when you need request context inside a listener it is the only correct tool.
+      </div>
+    </section>
+
+    <!-- ===== 10 PATTERNS & TS ===== -->
+    <section class="block" id="patterns">
+      <p class="kicker"><span class="ix">10</span> Patterns &amp; TypeScript · using it well</p>
+      <h2>Streams are emitters. Typed emitters are a one-liner. Cleanup is a discipline.</h2>
+      <div class="prose">
+        <p>Almost every I/O object in core is an EventEmitter — <code>net.Socket</code>, <code>http.Server</code>, <code>child_process</code>, <code>fs.watch</code>, <code>worker_threads</code> — so the semantics above are not academic; they govern real production code. The remaining questions are practical: how to type the event→payload map, when to inherit vs compose, and how to avoid the leaks and spaghetti that events invite. Tap each pattern.</p>
+      </div>
+      <div class="cards" id="patternCards"></div>
+      <pre class="wire"><span class="c">// Typed events in TS via a payload map + generic EventEmitter</span>
+<span class="k">type</span> <span class="n">Events</span> = {
+  data: [chunk: Buffer];
+  done: [code: <span class="n">number</span>];
+  error: [err: <span class="n">Error</span>];
+};
+<span class="k">class</span> <span class="n">Job</span> <span class="k">extends</span> EventEmitter&lt;<span class="n">Events</span>&gt; {}   <span class="c">// Node ≥ recent: native generic</span>
+
+<span class="k">const</span> j = <span class="k">new</span> Job();
+j.on(<span class="v">'data'</span>, (chunk) =&gt; chunk.length);   <span class="c">// chunk: Buffer, fully inferred</span>
+j.emit(<span class="v">'done'</span>, <span class="v">0</span>);                       <span class="c">// wrong payload type → compile error</span></pre>
+      <div class="callout dgr">
+        <span class="lbl">the anti-patterns to name out loud</span>
+        <strong>Event soup:</strong> when control flow only exists as a web of emits, no one can trace it — prefer a promise or a direct call when there is exactly one consumer. <strong>The missed-first-event bug:</strong> emitting from inside a constructor, before any caller has had the chance to attach a listener, so the very first event vanishes (remember §01 — no buffering, no replay). <strong>Hidden control flow:</strong> the general cost of events is that the call graph becomes implicit; weigh that against the decoupling you actually need.
+      </div>
+    </section>
+
+    <!-- ===== 11 THE WIDER FAMILY ===== -->
+    <section class="block" id="compare">
+      <p class="kicker"><span class="ix">11</span> Comparative · the wider decoupling landscape</p>
+      <h2>The same push idea, with different ergonomics and guarantees.</h2>
+      <div class="prose">
+        <p>EventEmitter is Node's house style, but it is one point in a large design space. The browser's <span class="term" data-term="EventTarget">EventTarget</span> is the most direct cousin; Node even ships a Web-compatible <code>EventTarget</code> for cross-platform code. Further out sit Observables, reactive signals, and channel/actor models — each making a different trade between composition, completion semantics, and flow control.</p>
+      </div>
+      <div class="tablewrap">
+      <table class="spec">
+        <thead><tr><th>Mechanism</th><th>Dispatch</th><th>Key delta vs EventEmitter</th></tr></thead>
+        <tbody>
+          <tr><td class="l-emit">EventEmitter (Node)</td><td><span class="pill js">sync for-loop</span></td><td>spread args; <code>'error'</code> throws if unhandled; <span class="bite">no completion channel</span></td></tr>
+          <tr><td class="l-stack">EventTarget (Web/Node)</td><td><span class="pill eng">sync, event object</span></td><td><code>addEventListener</code>; capture/bubble; <code>preventDefault</code>; no error-throw special case</td></tr>
+          <tr><td class="l-stack">DOM events</td><td>3-phase propagation</td><td>capture → target → bubble; delegation; <code>stopPropagation</code></td></tr>
+          <tr><td class="l-mut">Observables (RxJS)</td><td>push, composable</td><td>explicit <code>error</code> + <code>complete</code> channels, operators; <span class="bite">still no real backpressure</span></td></tr>
+          <tr><td class="l-mut">Signals (Solid/Vue)</td><td><span class="pill nat">pull / tracked</span></td><td>fine-grained dependency tracking, not named channels — a different tool</td></tr>
+          <tr><td class="l-mut">Channels / actors (Go, Erlang)</td><td>message passing</td><td><span class="good">often bounded &amp; backpressured</span>; a concurrency primitive, not an in-process callback list</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <p class="scrollnote">the comparison table scrolls sideways →</p>
+      <div class="callout eng">
+        <span class="lbl">read the source</span>
+        The single best capstone is to read Node's <code>lib/events.js</code> — it is one of the most approachable files in the runtime. You will recognize all of it: the single-listener optimization, the array-copy-on-emit, the once wrapper with its <code>.listener</code> back-reference, the maxListeners warning, the rejection-capture path. Everything you built in §02, validated.
+      </div>
+    </section>
+
+    <!-- ===== 12 CLOSE ===== -->
+    <section class="block" id="close" style="border-bottom:none">
+      <p class="kicker"><span class="ix">12</span> The one sentence that regenerates the list</p>
+      <h2>Every behavior was one decision, made once.</h2>
+      <div class="callout eng" style="font-size:22px;font-family:var(--serif);line-height:1.5">
+        <span class="lbl">the thesis</span>
+        <code>emit</code> is a <strong>synchronous for-loop over an array of callbacks</strong> — and <code>once</code>, <code>off</code>, ordering, the snapshot, the <code>'error'</code> throw, the leak warning, and the unbounded async-iterator buffer are all just <em>consequences</em> of that one fact — which is exactly why streams must layer buffering and backpressure on top to make a fast byte source safe.
+      </div>
+      <p class="lead" style="margin-top:24px">Hold the for-loop in your head and the rest is derivable. The API is conveniences; the gotchas are corollaries; the event loop is a separate machine that merely decides <em>when</em> your <code>emit</code> gets called. That is the whole of it.</p>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <span>emit ↻ listeners · EventEmitter from first principles · synchronous dispatch, the error case, leaks &amp; the no-backpressure handoff to streams</span>
+  <span id="footTheme">engineering-blueprint mode · Vol. III</span>
+</footer>
+
+<div id="tip" role="tooltip"></div>
+
+<div class="scrim" id="scrim">
+  <div class="modal" role="dialog" aria-modal="true">
+    <button class="mclose" id="mClose" aria-label="close">✕</button>
+    <div class="mhead">
+      <div class="mtag"><span id="mTag">DETAIL</span><span class="lane" id="mLane"></span></div>
+      <h4 id="mTitle"></h4>
+    </div>
+    <div class="mbody" id="mBody"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   GLOSSARY — kind: spec | os | node | native | concept
+   ============================================================ */
+const GLOSSARY = {
+ "named channel":["concept","A string (or symbol) that names an event. Listeners subscribe to a channel by name; emit fires every listener on that channel. Internally it's just a key in the emitter's Map of name → function array."],
+ "observer pattern":["concept","The classic GoF design where a subject keeps a list of observers and notifies them on change. EventEmitter is one concrete implementation: the subject is the emitter, observers are the listener functions."],
+ "publish-subscribe":["concept","A generalization of observer where producers publish to named topics and consumers subscribe, without either knowing the other. EventEmitter is an in-process, synchronous pub/sub with no broker and no buffering."],
+ "inversion of control":["concept","\"Don't call us, we'll call you.\" A listener hands over a function and gives up control of WHEN it runs — the emitter decides that, by calling back during emit."],
+ "push model":["concept","The emitter shoves notifications at listeners as they happen. Contrast the pull model (async iterators), where the consumer asks for the next value. EventEmitter is push; events.on() adapts it to pull, and that adaptation is where buffering creeps in."],
+ "pull model":["concept","The consumer requests the next value when ready (e.g. for-await on an async iterator). The consumer sets the pace — which is what gives pull models natural backpressure that push models lack."],
+ "synchronous dispatch":["concept","The defining fact: emit runs every listener in order, on the current call stack, and does not return until all of them finish. It is a for-loop, not a scheduling operation — the event loop is never involved in emit itself."],
+ "reentrancy":["concept","A listener calling on/off (or emit) on the same emitter while emit is still iterating. Node makes this safe by iterating a copy of the listener array, so mid-emit changes apply only to the next emit."],
+ "wrapper":["node","The closure once() registers in place of your function. It calls your function then removes itself. Because the array holds the wrapper, not your function, off(name, yourFn) needs the .listener back-reference to find it."],
+ "errorMonitor":["node","A symbol (events.errorMonitor) you can listen on to observe 'error' events for logging/metrics WITHOUT counting as a handler — so it does not suppress the throw-on-no-listener behavior."],
+ "defaultMaxListeners":["node","EventEmitter.defaultMaxListeners = 10. When one channel exceeds it, Node prints a MaxListenersExceededWarning. It's a leak heuristic, not a hard cap; raise it per-emitter with setMaxListeners when you legitimately need more."],
+ "MaxListenersExceededWarning":["node","The warning Node emits when a single event name accumulates more than the max (default 10) listeners. Almost always a sign you registered listeners in a loop and forgot to remove them."],
+ "AbortController":["node","A standard controller exposing a signal. Pass { signal } to on()/once() and a single controller.abort() removes the listener(s) — the modern, leak-resistant cleanup story."],
+ "captureRejections":["node","Opt-in (default off) handling for async listeners that reject. Normally emit ignores the promise a listener returns; with captureRejections on, a rejection is routed to the 'error' event via Symbol.for('nodejs.rejection')."],
+ "libuv":["os","The C library under Node providing the event loop, the readiness poller (epoll/kqueue/IOCP), and the worker thread pool. It decides WHEN your JS callbacks run; it has nothing to do with what emit does once a callback calls it."],
+ "POSIX signal":["os","An OS-level asynchronous notification (SIGINT from Ctrl-C, SIGTERM from kill). The kernel delivers it; Node catches it and re-surfaces it as an ordinary event on the process emitter, e.g. process.on('SIGINT', …)."],
+ "events.once":["node","events.once(emitter, name[, opts]) returns a promise that resolves with the event's args on the next emission, or rejects if 'error' fires first. Supports an AbortSignal. The clean way to await a single event."],
+ "events.on":["node","events.on(emitter, name[, opts]) returns an async iterator over a channel's events, consumed with for await. Crucial caveat: events arriving while you're not awaiting are buffered in an unbounded queue — no backpressure."],
+ "async iterator":["concept","An object you pull values from with for await, each call awaiting a promise for the next value. It's the pull-model counterpart to push events; events.on() bridges push→pull, and the bridge needs a buffer."],
+ "backpressure":["concept","Flow control: when a consumer is slow, the producer is told to pause so unread items don't pile up in memory. A plain EventEmitter offers no such signal — it has no pause() to call and emit() returns only whether anyone was listening — which is the whole reason streams exist on top of it."],
+ "EventTarget":["spec","The Web platform's event interface (addEventListener / dispatchEvent). Node ships a compatible one. Differences from EventEmitter: listeners receive an Event object (not spread args), capture/bubble phases exist, and there is no 'error'-throws special case."],
+ "AsyncLocalStorage":["node","A Node API for keeping context (e.g. a request id) available across async hops. Plain emitter listeners can lose it; EventEmitterAsyncResource preserves it across listener invocations via async_hooks."],
+ "this binding":["concept","Node calls a listener with the emitter as `this` — unless the listener is an arrow function, which captures lexical `this` and ignores the emitter. A classic surprise when you reach for `this` inside a handler."],
+ "single-listener optimization":["node","Node stores a channel's first listener as a bare function and only promotes it to an array on the second on(). It saves an allocation for the overwhelmingly common one-listener case; emit branches on the type."],
+ "prepend":["node","prependListener and prependOnceListener insert at the FRONT of the array, which is the only supported way to guarantee a listener runs before the ones already registered."],
+ "poll phase":["os","The phase of a libuv loop iteration where it blocks on the OS readiness mechanism and then runs the callbacks for whatever became ready. It is the phase most I/O callbacks are invoked from."],
+ "closure":["concept","A function bundled with the variables it captured from its defining scope. Listeners are closures — which is why an event handler can be stateful without a class, and why a leaked listener also leaks everything it closed over."]
+};
+const KIND_LABEL={spec:"spec",os:"os / libuv",node:"node",native:"native",concept:"concept"};
+
+const tip=document.getElementById('tip');
+const termKeys=Object.keys(GLOSSARY).sort((a,b)=>b.length-a.length);
+const esc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+function tagTerms(scope){
+  const blocks=scope.querySelectorAll('p, li, td, .lead');
+  blocks.forEach(block=>{
+    if(block.closest('pre')) return;
+    const used=new Set();
+    block.querySelectorAll('.term').forEach(t=>{used.add(t.dataset.term.toLowerCase());
+      if(!t.dataset.kind&&GLOSSARY[t.dataset.term])t.dataset.kind=GLOSSARY[t.dataset.term][0];
+      t.tabIndex=0;});
+    const walker=document.createTreeWalker(block,NodeFilter.SHOW_TEXT,{
+      acceptNode(n){const p=n.parentElement;if(!p)return NodeFilter.FILTER_REJECT;
+        if(p.closest('code,pre,.term,a,.pill,h1,h2,h3,h4,.mono'))return NodeFilter.FILTER_REJECT;
+        return n.nodeValue.trim()?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT;}});
+    const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
+    nodes.forEach(node=>{
+      const text=node.nodeValue;
+      for(const term of termKeys){
+        if(used.has(term.toLowerCase()))continue;
+        const re=new RegExp('\\b'+esc(term)+'\\b','i');const m=re.exec(text);
+        if(m){used.add(term.toLowerCase());
+          const frag=document.createDocumentFragment();
+          const before=text.slice(0,m.index),after=text.slice(m.index+m[0].length);
+          if(before)frag.appendChild(document.createTextNode(before));
+          const span=document.createElement('span');span.className='term';span.dataset.term=term;span.dataset.kind=(GLOSSARY[term]||['concept'])[0];span.textContent=text.substr(m.index,m[0].length);span.tabIndex=0;
+          frag.appendChild(span);
+          if(after)frag.appendChild(document.createTextNode(after));
+          node.parentNode.replaceChild(frag,node);return;}
+      }
+    });
+  });
+}
+
+/* ============================================================
+   CODE ANNOTATIONS — every inline <code> in the prose gets a lane
+   colour and a popover. The lane answers one question: WHICH MACHINE
+   OWNS THIS THING?
+     emit   the emitter and its dispatch loop
+     listen your listeners, and registering / removing them
+     stack  the JS call stack and language execution
+     loop   libuv, the runtime, the OS underneath
+     danger the failure path
+   ============================================================ */
+const LANE_LABEL={emit:"emitter",listen:"listener",stack:"call stack",loop:"runtime / os",danger:"failure path",none:"language"};
+const CODE_NOTES={
+ /* ---- the emitter and its dispatch ---- */
+ "emit":["emit","The dispatch loop itself. Looks up the array stored for the event name, copies it, then calls each entry in order on the current call stack. Returns true if the array was non-empty."],
+ "emit('data', x)":["emit","One dispatch. Every listener on the 'data' channel is called with x, in registration order, before this expression finishes."],
+ "emit('error', err)":["danger","The one special case. If no 'error' listener is registered, the emitter throws err instead of returning false."],
+ "emitter.emit('data', chunk)":["emit","The call an I/O callback makes once libuv has handed control back to JavaScript. Everything after this point is synchronous."],
+ "a.slice()":["emit","The copy taken before the loop starts. It is what makes on/off safe to call from inside a listener: the running loop walks the copy, so edits land on the next emit."],
+ "_events":["emit","The emitter's internal store: event name to listener(s). Node creates it with Object.create(null) so inherited keys like 'constructor' can never be mistaken for a channel."],
+ "Tiny":["emit","The ~30-line emitter built in section 02. Node's real class is this plus named conveniences and a few optimisations."],
+ "'data'":["emit","A channel name. Nothing about it is special to the emitter — it is just a key in the internal map."],
+ "'drain'":["emit","A Writable stream's signal that its buffer has emptied and writing may resume. An ordinary event; the flow control around it is what streams add on top."],
+ "'newListener'":["emit","A meta-event the emitter fires on itself before a listener is added, so you can observe registration. Note the ordering: it fires BEFORE the new listener joins the array."],
+ "EventEmitter<Events>":["emit","Recent Node ships EventEmitter as a generic over a payload map, so on() and emit() check both the channel name and the argument tuple at compile time."],
+ /* ---- your listeners ---- */
+ "on":["listen","Append a listener to the array for a name and return the emitter for chaining. Registering the same function twice really does call it twice."],
+ "on()":["listen","Registration. Also the name of the module-level events.on() iterator helper, which is a different thing entirely."],
+ "once":["listen","Registers a self-removing wrapper rather than your function. The wrapper removes itself first, then calls you."],
+ "off":["listen","Remove by identity. Removes one instance, so a function registered twice needs removing twice."],
+ "off(name, yourFn)":["listen","Works even for a once-listener: Node compares against both the stored function and its .listener back-reference."],
+ "yourFn":["listen","The function you handed over. After once(), this is NOT what sits in the array — the wrapper is."],
+ ".listener":["listen","The back-reference Node stamps onto a once-wrapper, pointing at your original function, so off() can match either one."],
+ "rawListeners()":["listen","Returns what is actually stored, once-wrappers included — the handle you need to remove a once-listener you no longer hold a reference to."],
+ "rawListeners(name)":["listen","The stored array, wrappers and all."],
+ "listeners(name)":["listen","A copy of the listener array with once-wrappers unwrapped back to your functions. Good for introspection, not for removal."],
+ "raw":["listen","Shorthand here for rawListeners — the un-unwrapped view."],
+ "{ signal }":["listen","An AbortSignal passed at registration. One controller.abort() removes every listener registered with that signal."],
+ "abort()":["listen","Fires the signal, which removes the whole batch of listeners bound to it in a single call."],
+ "setMaxListeners":["listen","Raises the per-emitter warning threshold. It moves the smoke detector; it does not cap anything."],
+ "addEventListener":["listen","EventTarget's registration method. Same idea as on(), different ergonomics: listeners receive one Event object rather than spread arguments."],
+ "prependListener":["listen","Inserts at the front of the array instead of the end — the only supported way to say 'run this one first'."],
+ /* ---- the call stack ---- */
+ "for":["stack","The loop keyword. This is the whole of emit's machinery: no queue, no scheduler."],
+ "for await":["stack","Pull-side iteration. Each turn awaits a promise for the next value, which is why bridging push events to it needs a buffer in between."],
+ "async/await":["stack","Pull-shaped control flow. Events are push-shaped, which is the mismatch events.once() and events.on() exist to bridge."],
+ "try/catch":["stack","Catches a listener's throw when wrapped around the emit call — which only works because emit runs on your stack."],
+ "this":["stack","Inside a listener Node binds this to the emitter. An arrow function ignores that and keeps its lexical this."],
+ /* ---- the runtime and the OS ---- */
+ "process":["loop","The global process object is itself an EventEmitter. Some of its channels carry kernel signals; others carry the runtime's own lifecycle."],
+ "'SIGINT'":["loop","A POSIX signal from Ctrl-C. The kernel delivers it; Node catches it and re-surfaces it as an ordinary event on process."],
+ "'SIGTERM'":["loop","A POSIX termination signal, typically from kill or a container stop. Same bridge as SIGINT: kernel to emitter."],
+ "'exit'":["loop","A runtime lifecycle event, fired as the process winds down. Listeners must be synchronous — nothing async will get a chance to run."],
+ "'beforeExit'":["loop","Fired when the loop empties and Node is about to exit. Unlike 'exit', scheduling more work here keeps the process alive."],
+ "'uncaughtException'":["danger","The last-resort hook for a throw that reached the top of the stack. Use it to log and exit, not to keep running."],
+ "'unhandledRejection'":["danger","The promise-side counterpart: a rejection nobody handled."],
+ "node:events":["loop","The core module. Exports the EventEmitter class plus the once() and on() bridging helpers."],
+ "lib/events.js":["loop","The implementation inside the Node source tree. Everything in section 02 is in there, plus the optimisations."],
+ "AsyncLocalStorage":["loop","Keeps context alive across async hops. Plain listeners can lose it; EventEmitterAsyncResource preserves it across dispatch."],
+ "EventEmitterAsyncResource":["loop","An EventEmitter that carries async context into its listeners, so AsyncLocalStorage survives the call."],
+ "net.Socket":["loop","A core I/O object that is an EventEmitter: 'data', 'end', 'error', 'close' are ordinary channels on it."],
+ "http.Server":["loop","An EventEmitter whose 'request' channel is fired by the HTTP parser once headers are complete."],
+ "child_process":["loop","Spawned processes surface 'exit', 'close' and stream events through the same dispatch machinery."],
+ "fs.watch":["loop","Filesystem change notifications, delivered by the OS and re-surfaced as emitter events."],
+ "worker_threads":["loop","Worker and MessagePort are emitters; 'message' arrives on the receiving thread's loop, then dispatch is synchronous as always."],
+ "EventTarget":["spec","The Web platform's event interface. Node ships a compatible one. No spread arguments, no throw-on-unhandled-error, but it has capture and bubble phases."],
+ "libuv":["loop","The C library providing the event loop, the readiness poller and the thread pool. It decides WHEN your callbacks run, never what emit does once one calls it."],
+ /* ---- the failure path ---- */
+ "'error'":["danger","The only channel with special semantics. Emitted with no listener registered, the emitter throws instead of returning false — a loud crash in place of a silently dropped error."],
+ "error":["danger","As a channel name, the special-cased one. As an Observable channel, an explicit completion path EventEmitter has no equivalent for."],
+ "errorMonitor":["danger","A symbol you can listen on to OBSERVE 'error' events without counting as a handler — so it never suppresses the throw."],
+ "events.on":["loop","Returns an async iterator over a channel, consumed with for await. It is the push-to-pull bridge, and the buffer it needs to do that is where the memory risk lives."],
+ "events.once":["loop","Returns a promise that resolves with the next emission's arguments, or rejects if 'error' fires first. The clean way to await exactly one event."],
+ "[A, B, C]":["listen","The listener array at the moment emit was called. This ordering is registration order, and it is the only ordering guarantee the emitter makes."],
+ "events.errorMonitor":["danger","The exported symbol. Attach it for logging and metrics; it deliberately does not make the emitter consider the error handled."],
+ /* ---- language / neutral ---- */
+ "false":["none","What emit returns when the channel had no listeners. For every name except 'error', that is the entire consequence."],
+ "boolean":["none","emit's return type — simply whether the listener array had length."],
+ "name":["none","The channel key. A string or a symbol."],
+ "Map<eventName, Function[]>":["emit","The data structure the whole pattern reduces to: a name, and an ordered list of functions to call for it."],
+ "lowWaterMark":["none","The level the buffer must fall to before events.on() resumes a paused source. Like its high counterpart it only does anything on an emitter that has resume() to call."],
+ "pause":["none","A method streams have and plain emitters do not. Its absence is exactly why events.on() cannot exert backpressure on an ordinary EventEmitter."],
+ "resume":["none","The other half of the pausable contract. events.on() only honours its watermark options on emitters that implement both pause and resume."],
+ "highWaterMark":["none","A stream's buffer threshold — the piece EventEmitter has no equivalent for, and the reason streams exist on top of it."],
+ "write()":["none","Returns false once a Writable's buffer is past its threshold. That boolean is the backpressure signal a raw emitter never gives you."],
+ "complete":["none","An Observable's terminal channel. EventEmitter has no built-in notion of a channel being finished."],
+ "preventDefault":["spec","An EventTarget affordance with no EventEmitter equivalent — there is no default action for an emitter to cancel."],
+ "stopPropagation":["spec","Halts DOM bubbling. Meaningless for an emitter: there is no tree to propagate through."],
+ "type Events = { data: [Buffer]; done: [number] }":["none","The payload map: each channel name mapped to the tuple of arguments emit will pass."],
+ "typed-emitter":["none","A community package that adds the same channel-to-payload typing to older Node versions."]
+};
+/* normalise a couple of shapes so the map does not need every spelling */
+function codeKey(t){
+  t=t.trim();
+  if(CODE_NOTES[t]) return t;
+  const noCall=t.replace(/\(.*\)$/,'');
+  if(CODE_NOTES[noCall]) return noCall;
+  return null;
+}
+function laneGuess(t){
+  t=t.trim();
+  if(/^'.+'$/.test(t)) return "emit";              // an event-name literal is a channel
+  if(/^(EventEmitter|Buffer|Error|Map|Function)/.test(t)) return "none";
+  if(/^(on|once|off|add|remove|prepend|listener)/i.test(t)) return "listen";
+  return "none";
+}
+let paintQueued=false;
+function paintObserved(root){
+  new MutationObserver(()=>{ if(paintQueued)return; paintQueued=true;
+    requestAnimationFrame(()=>{paintQueued=false;paintCode(root);}); })
+    .observe(root,{childList:true,subtree:true});
+}
+function paintCode(scope){
+  scope.querySelectorAll('code').forEach(c=>{
+    if(c.closest('pre')) return;
+    if(c.dataset.lane) return;
+    const raw=(c.textContent||'').trim();
+    const key=codeKey(raw);
+    if(key){
+      const [lane,note]=CODE_NOTES[key];
+      c.dataset.lane=lane==='spec'?'stack':lane;
+      c.dataset.note=note; c.dataset.label=raw;
+      c.className=(c.className?c.className+' ':'')+'ann';
+      c.tabIndex=0;
+    } else {
+      c.dataset.lane=laneGuess(raw);
+    }
+  });
+}
+
+const KIND_LANE={concept:'none',node:'emit',os:'loop',spec:'stack',native:'loop'};
+let tipHideT;
+function showTip(elm){
+  let name,kindLabel,lane,text;
+  if(elm.classList.contains('term')){
+    const key=elm.dataset.term;
+    const entry=GLOSSARY[key]||GLOSSARY[Object.keys(GLOSSARY).find(k=>k.toLowerCase()===key.toLowerCase())];
+    if(!entry)return;
+    name=key; kindLabel=KIND_LABEL[entry[0]]; lane=KIND_LANE[entry[0]]||'none'; text=entry[1];
+  } else {
+    if(!elm.dataset.note)return;
+    name=elm.dataset.label; lane=elm.dataset.lane||'none'; kindLabel=LANE_LABEL[lane]||''; text=elm.dataset.note;
+  }
+  clearTimeout(tipHideT);
+  tip.className='';
+  tip.setAttribute('data-lane',lane);
+  tip.innerHTML='<span class="t-kind">'+kindLabel+'</span><span class="t-name">'+name+'</span>'+text;
+  tip.classList.add('show');
+  const r=elm.getBoundingClientRect();
+  const tw=Math.min(330,tip.offsetWidth||330),th=tip.offsetHeight;
+  let left=r.left+r.width/2-tw/2;left=Math.max(12,Math.min(left,window.innerWidth-tw-12));
+  let top=r.top-th-12,flip=false;if(top<10){top=r.bottom+12;flip=true;}
+  tip.style.left=left+'px';tip.style.top=top+'px';
+  tip.style.setProperty('--ax',(r.left+r.width/2-left-6)+'px');
+  tip.classList.toggle('flip',flip);
+}
+function hideTip(){tipHideT=setTimeout(()=>tip.classList.remove('show'),60);}
+const ANNSEL='.term, code.ann';
+document.addEventListener('mouseover',e=>{const t=e.target.closest(ANNSEL);if(t)showTip(t);});
+document.addEventListener('mouseout',e=>{if(e.target.closest(ANNSEL))hideTip();});
+document.addEventListener('click',e=>{const t=e.target.closest(ANNSEL);if(t){showTip(t);setTimeout(hideTip,3400);}});
+document.addEventListener('focusin',e=>{const t=e.target.closest(ANNSEL);if(t)showTip(t);});
+document.addEventListener('focusout',e=>{if(e.target.closest(ANNSEL))hideTip();});
+
+/* ============================================================
+   MODAL
+   ============================================================ */
+const scrim=document.getElementById('scrim');
+function modalBodyHTML(f){
+  let h=f.body+'<div class="why"><span class="wl">why it matters</span>'+f.why+'</div>';
+  if(f.deep){
+    h+='<div class="deephd">Under the hood — internals &amp; model</div><div class="deep">'+
+       '<div class="dcol"><span class="dl os">Node / runtime</span>'+f.deep.os+'</div>'+
+       '<div class="dcol"><span class="dl spec">Concept / model</span>'+f.deep.spec+'</div></div>';
+  }
+  return h;
+}
+function openModal(f){
+  document.getElementById('mTag').textContent=f.tag||'DETAIL';
+  document.getElementById('mLane').textContent=f.laneName?('· '+f.laneName):'';
+  document.getElementById('mTitle').textContent=f.title;
+  const mb=document.getElementById('mBody');
+  mb.innerHTML=modalBodyHTML(f);
+  tagTerms(mb); paintCode(mb);
+  scrim.classList.add('open');
+}
+function closeModal(){scrim.classList.remove('open');}
+document.getElementById('mClose').onclick=closeModal;
+scrim.onclick=e=>{if(e.target===scrim)closeModal();};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();if(typeof exitFs==='function')exitFs();}});
+
+/* ============================================================
+   CARDS
+   ============================================================ */
+function buildCards(id,list){
+  const wrap=document.getElementById(id);if(!wrap)return;
+  list.forEach(f=>{
+    const c=document.createElement('div');
+    c.className='card'+(f.cls?(' '+f.cls):'');
+    c.innerHTML='<div class="fn"><span>'+f.kicker+'</span><span>'+(f.right||'')+'</span></div>'+
+      '<div class="ft">'+f.title+'</div><div class="fs2">'+f.short+'</div>'+
+      '<span class="deepchip">▾ open detail</span>';
+    c.onclick=()=>openModal(f);
+    wrap.appendChild(c);
+  });
+}
+buildCards('problemCards',[
+ {kicker:"Force 1",right:"decoupling",cls:"eng",title:"Producer ≠ consumer",short:"The code that detects the event must not hold the list of who reacts — that list changes constantly.",
+  tag:"FORCE",laneName:"observer pattern",body:"<p>If the socket that received bytes had to name every handler, adding a feature would mean editing the socket. The emitter inverts that: the producer announces on a channel; consumers attach themselves. Neither knows the other's identity.</p>",
+  why:"This is the entire reason the pattern exists — to let subscribers come and go without touching the producer.",
+  deep:{os:"<p>In Node, core objects (sockets, streams) emit; your code subscribes. The core never imports your handlers.</p>",spec:"<p>Classic GoF Observer: subject holds observers, notifies on change.</p>"}},
+ {kicker:"Force 2",right:"control",cls:"eng",title:"Inversion of control",short:"You hand over a function and give up deciding when it runs. The emitter calls you back.",
+  tag:"FORCE",laneName:"don't call us",body:"<p>A listener is a promise to be available, not a call you make. \"Don't call us, we'll call you\" — the emitter owns the timing. Your function becomes a callback at the emitter's discretion.</p>",
+  why:"It's why handlers can be stateful closures and why ordering and reentrancy matter — the emitter, not you, drives execution.",
+  deep:{os:"<p>The for-loop inside emit is the moment control is handed back to your code.</p>",spec:"<p>Hollywood principle; the backbone of callback-style APIs.</p>"}},
+ {kicker:"Force 3",right:"no memory",cls:"dgr",title:"No buffering, no replay",short:"Emit to a channel with zero listeners and the event is simply gone. There is no queue.",
+  tag:"FORCE",laneName:"the absence",body:"<p>EventEmitter keeps no history. An event emitted before anyone subscribed is lost forever — there is no buffer, no replay, no backpressure. This single absence causes the 'missed first event' bug and is the reason streams add buffering on top.</p>",
+  why:"Knowing there's no buffer tells you to attach listeners BEFORE the producer can fire, and warns you that a fast source needs streams, not a raw emitter.",
+  deep:{os:"<p>emit() finds an empty array and returns false — nothing is stored.</p>",spec:"<p>Pure push: no persistence between emissions.</p>"}}
+]);
+buildCards('patternCards',[
+ {kicker:"Pattern",right:"streams",cls:"eng",title:"Streams ARE emitters",short:"'data' / 'end' / 'error' / 'drain' are just events — with synchronous dispatch and the error special case.",
+  tag:"PATTERN",laneName:"the substrate",body:"<p>A Readable emits 'data' chunks and 'end'; a Writable emits 'drain'. All of it is EventEmitter dispatch. What streams ADD is the buffer + highWaterMark + backpressure that raw emitters lack.</p>",why:"Everything you learned about ordering, the 'error' throw, and leaks applies directly to every stream you touch.",deep:{os:"<p>stream.Readable extends EventEmitter; the buffering machinery lives above the dispatch.</p>",spec:"<p>Push events + a flow-control layer = a stream.</p>"}},
+ {kicker:"Pattern",right:"inherit vs compose",title:"Extend or contain?",short:"Subclass EventEmitter for an 'is-an-emitter' type; hold one as a field when emitting is a detail.",
+  tag:"PATTERN",laneName:"design",body:"<p>Inheritance is right when the object genuinely IS an event source (a socket, a job). Composition — a private emitter field with a few delegating methods — is better when you want to expose only specific events and keep the full API hidden.</p>",why:"Blind inheritance leaks the entire emitter surface (removeAllListeners, setMaxListeners) into your public API.",deep:{os:"<p>Core mostly inherits; libraries often compose to control the surface.</p>",spec:"<p>'is-a' vs 'has-a' applied to event sources.</p>"}},
+ {kicker:"Pattern",right:"typescript",cls:"nat",title:"Typed event maps",short:"Map each event name to its payload tuple; recent Node EventEmitter is generic over that map.",
+  tag:"PATTERN",laneName:"TS",body:"<p>Define <code>type Events = { data: [Buffer]; done: [number] }</code> and either use the native generic <code>EventEmitter&lt;Events&gt;</code> or a library like <code>typed-emitter</code> / declaration merging. on() and emit() then check names and payloads at compile time.</p>",why:"Stringly-typed events are a top source of bugs; the type map turns a wrong payload or misspelled name into a compile error.",deep:{os:"<p>Node ships generic typings; older code used declaration merging.</p>",spec:"<p>The payload map is the source of truth for both directions.</p>"}},
+ {kicker:"Pattern",right:"cleanup",cls:"dgr",title:"Cleanup discipline",short:"once for one-shot, { signal } for batches, paired off otherwise. Leaks live on long-lived emitters.",
+  tag:"PATTERN",laneName:"hygiene",body:"<p>The leak is always the same shape: a listener added per-request on a process/socket/global, never removed. Prefer once when truly one-shot; wire an AbortController signal so one abort() clears a batch; pair on/off for the rest.</p>",why:"It's the #1 practical EventEmitter bug — and the maxListeners warning is your early smoke detector.",deep:{os:"<p>{ signal } removal is built into on()/once() in current Node.</p>",spec:"<p>No GC of subscriptions: removal is your job.</p>"}}
+]);
+
+/* ============================================================
+   SVG HELPERS
+   ============================================================ */
+const SVGNS='http://www.w3.org/2000/svg';
+function plate(cx,cy,text,color,fs){fs=fs||10.5;const w=text.length*(fs*0.6)+18,h=fs+12;
+  return `<rect x="${cx-w/2}" y="${cy-h/2}" width="${w}" height="${h}" rx="6" fill="var(--panel2)" stroke="var(--line)"/>`+
+    `<text x="${cx}" y="${cy+fs*0.35}" text-anchor="middle" font-size="${fs}" font-weight="700" fill="${color}">${text}</text>`;}
+
+/* ============================================================
+   00 — HERO: SYNCHRONOUS DISPATCH PLAYER
+   ============================================================ */
+const dispatchVP=document.getElementById('dispatchVP');
+
+/* ---- text metrics -------------------------------------------------------
+   Every face in this document is JetBrains Mono, so advance width is exactly
+   0.6em and layout can be computed rather than guessed. tw() is the contract
+   the geometry harness checks against. ---------------------------------- */
+const MONO=0.6;
+const tw=(t,fs,ls)=>String(t).length*(fs*MONO)+(ls||0)*Math.max(String(t).length-1,0);
+const esc4=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function T(x,y,t,{fill='var(--ink)',fs=12,w=400,anchor='start',ls=0,op=1,mono=true}={}){
+  return `<text x="${x}" y="${y}" fill="${fill}" font-size="${fs}" font-weight="${w}" text-anchor="${anchor}"`+
+         (ls?` letter-spacing="${ls}"`:'')+(op!==1?` opacity="${op}"`:'')+
+         ` font-family="var(--mono)" dominant-baseline="alphabetic">${esc4(t)}</text>`;
+}
+/* ---- orthogonal connector routing ------------------------------------
+   Corner radii have to know which way each leg is travelling, or the path
+   doubles back on itself. Every radius here is clamped to half the leg it
+   sits on, so a short leg degrades to a sharp corner instead of overshooting.
+   -------------------------------------------------------------------- */
+const sgn=v=>v<0?-1:1;
+const clamp=(r,...legs)=>Math.max(0,Math.min(r,...legs.map(l=>Math.abs(l))));
+/* down/up → across → up/down → across.  Used chip → stack frame. */
+function routeVHV(x1,y1,yc,xr,y2,x2,rMax){
+  const v1=sgn(yc-y1), h1=sgn(xr-x1), v2=sgn(y2-yc), h2=sgn(x2-xr);
+  const r1=clamp(rMax,(yc-y1)/2,(xr-x1)/2);
+  const r2=clamp(rMax,(y2-yc)/2,(xr-x1)/2);
+  const r3=clamp(rMax,(y2-yc)/2,(x2-xr));
+  return `M${x1} ${y1}`+
+    ` L${x1} ${(yc-v1*r1).toFixed(1)}`+
+    ` Q${x1} ${yc} ${(x1+h1*r1).toFixed(1)} ${yc}`+
+    ` L${(xr-h1*r2).toFixed(1)} ${yc}`+
+    ` Q${xr} ${yc} ${xr} ${(yc+v2*r2).toFixed(1)}`+
+    ` L${xr} ${(y2-v2*r3).toFixed(1)}`+
+    ` Q${xr} ${y2} ${(xr+h2*r3).toFixed(1)} ${y2}`+
+    ` L${x2} ${y2}`;
+}
+/* across → down/up → across.  Used call site → emit frame. */
+function routeHVH(x1,y1,xr,y2,x2,rMax){
+  const h1=sgn(xr-x1), v=sgn(y2-y1), h2=sgn(x2-xr);
+  const r1=clamp(rMax,(xr-x1)/2,(y2-y1)/2);
+  const r2=clamp(rMax,(y2-y1)/2,(x2-xr));
+  return `M${x1} ${y1}`+
+    ` L${(xr-h1*r1).toFixed(1)} ${y1}`+
+    ` Q${xr} ${y1} ${xr} ${(y1+v*r1).toFixed(1)}`+
+    ` L${xr} ${(y2-v*r2).toFixed(1)}`+
+    ` Q${xr} ${y2} ${(xr+h2*r2).toFixed(1)} ${y2}`+
+    ` L${x2} ${y2}`;
+}
+
+/* a plate sized from the measured string, never from a guess */
+function plate(cx,cy,t,color,fs=10,pad=11){
+  const w=tw(t,fs)+pad*2, h=fs+13;
+  return `<rect x="${(cx-w/2).toFixed(1)}" y="${(cy-h/2).toFixed(1)}" width="${w.toFixed(1)}" height="${h}" rx="7" fill="var(--panel2)" stroke="${color}" stroke-width="1.1" opacity=".97"/>`+
+         T(cx,cy+fs*0.36,t,{fill:color,fs,w:700,anchor:'middle'});
+}
+function zoneTitle(x,y,label,color){
+  return T(x,y,label,{fill:color,fs:12,w:800,ls:1.1});
+}
+
+const LISTENERS=[
+  {id:'[0]',label:'logBytes'},
+  {id:'[1]',label:'updateMetric'},
+  {id:'[2]',label:'forward'}
+];
+/* emit's own body, so the animation is anchored to lines of code.
+   line index -> which of these is executing */
+const EMIT_BODY=[
+  "emit(name, ...args) {",
+  "  const a = this._events.get(name);",
+  "  if (!a || !a.length) return false;",
+  "  for (const fn of a.slice())",
+  "    fn.call(this, ...args);",
+  "  return true;",
+  "}"
+];
+
+/* frame model
+   stack     bottom -> top
+   ptr       index of the listener currently executing, -1 for none
+   snap      is the frozen copy in force
+   con       console lines
+   src       which of the CALLER's two lines is live (0 = the emit call, 1 = the line after)
+   ebody     which line of EMIT_BODY is executing, -1 for none
+   loop      the event-loop readout for this frame                              */
+const D_FRAMES=[
+ {lane:"setup",title:"Three listeners, an empty stack, one thread",
+  body:"_events holds ['data' -> [logBytes, updateMetric, forward]]. The stack has only your calling frame. Note what the event loop is doing: nothing, because this same thread is the one running your code.",
+  stack:["main()"],ptr:-1,snap:false,con:[],src:0,ebody:-1,
+  loop:["the loop thread is HERE","running this JavaScript","0 callbacks pending"]},
+ {lane:"call",title:"emit('data', 42) is an ordinary function call",
+  body:"You call emit. Its frame is pushed on top of main's, exactly like any other call. Nothing is scheduled and nothing is queued: control transfers straight into emit's body.",
+  stack:["main()","emit('data', 42)"],ptr:-1,snap:false,con:[],src:0,ebody:0,
+  loop:["unchanged","a function call is not","an event-loop operation"]},
+ {lane:"snapshot",title:"emit copies the array before it loops",
+  body:"a.slice() freezes the listener list for this dispatch. This is what makes on() and off() safe to call from inside a listener: the loop you are about to run walks the copy, so edits land on the next emit.",
+  stack:["main()","emit('data', 42)"],ptr:-1,snap:true,con:[],src:0,ebody:3,
+  loop:["unchanged","still the same tick","0 callbacks pending"]},
+ {lane:"i = 0",title:"Call listener [0] — its frame goes on top",
+  body:"The loop calls logBytes(42). A new frame is pushed ABOVE emit's frame: the listener runs nested inside emit, on the very same stack. Follow the connector from the chip to the frame.",
+  stack:["main()","emit('data', 42)","logBytes(42)"],ptr:0,snap:true,con:["logBytes ← 42"],src:0,ebody:4,
+  loop:["still blocked","the thread is inside","your listener"]},
+ {lane:"i = 0",title:"listener [0] returns — its frame pops",
+  body:"logBytes finishes and returns. Its frame pops and we are back in emit's loop, about to advance the index. The loop never paused; it made an ordinary nested call and got control back.",
+  stack:["main()","emit('data', 42)"],ptr:0,snap:true,con:["logBytes ← 42"],src:0,ebody:3,
+  loop:["still blocked","one listener done,","two to go"]},
+ {lane:"i = 1",title:"Call listener [1]",
+  body:"updateMetric(42) is pushed and runs. The order is guaranteed: registration order, one after another, never interleaved and never concurrent.",
+  stack:["main()","emit('data', 42)","updateMetric(42)"],ptr:1,snap:true,con:["logBytes ← 42","updateMetric ← 42"],src:0,ebody:4,
+  loop:["still blocked","a slow listener here","stalls the whole loop"]},
+ {lane:"i = 2",title:"Call listener [2]",
+  body:"forward(42), the last one, is pushed and runs. Three listeners, three nested calls, all inside the one emit frame that is still sitting on the stack underneath them.",
+  stack:["main()","emit('data', 42)","forward(42)"],ptr:2,snap:true,con:["logBytes ← 42","updateMetric ← 42","forward ← 42"],src:0,ebody:4,
+  loop:["still blocked","same tick as frame 00","0 callbacks pending"]},
+ {lane:"return",title:"emit returns true — the stack unwinds",
+  body:"The loop is done. emit returns true, meaning the array had length, and its frame pops too. Everything that just happened was synchronous, and the event loop has not advanced a single phase.",
+  stack:["main()"],ptr:-1,snap:false,con:["logBytes ← 42","updateMetric ← 42","forward ← 42","emit() → true"],src:0,ebody:5,
+  loop:["still blocked","main() is still on","the stack"]},
+ {lane:"proof",title:"Only NOW does the next line run",
+  body:"The line after emit executes only once all three listeners have finished. That ordering is the proof that emit blocked until completion — if emit merely scheduled the listeners, this line would have printed first.",
+  stack:["main()"],ptr:-1,snap:false,con:["logBytes ← 42","updateMetric ← 42","forward ← 42","emit() → true","after emit"],src:1,ebody:-1,
+  loop:["about to be handed back","once main() returns, the","thread returns to the loop"]},
+ {lane:"thesis",title:"emit is a for-loop, not the event loop",
+  body:"The loop's only job is to decide WHEN emit('data', …) gets called — never what it does once called. Internalize that and \u201cis emit async?\u201d answers itself. The asynchrony lives one layer up.",
+  stack:["main()"],ptr:-1,snap:false,con:["logBytes ← 42","updateMetric ← 42","forward ← 42","emit() → true","after emit"],src:1,ebody:-1,
+  loop:["THESIS","the loop decides WHEN","emit is called — never what"]}
+];
+
+/* ---- geometry constants (all zones measured, none overlapping) ---------- */
+const G={
+  L:{x:32,w:438},                        // emitter column
+  C:{x:502,w:378},                       // call stack column
+  R:{x:912,w:336},                       // event loop column
+  srcY:64, srcH:88,
+  chipY:206, chipH:92, chipW:132, chipGap:21,
+  chan:352,                              // clear channel below the chips
+  gut:486,                               // the vertical lane inside the 470→502 gutter
+  bodyY:380, bodyH:112,
+  stackBase:462, frameH:50, frameGap:9,
+  ringCx:1080, ringCy:172, ringR:70,
+  conY:506, conH:168
+};
+
+function renderDispatch(step){
+  const f=D_FRAMES[step];
+  const thesis=f.loop[0]==='THESIS';
+  let h='<defs>'+
+    '<marker id="dArr" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto">'+
+      '<path d="M0 0L7.5 3L0 6z" fill="var(--stack)"/></marker>'+
+    '<marker id="dArrE" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto">'+
+      '<path d="M0 0L7.5 3L0 6z" fill="var(--emit)"/></marker>'+
+    '<marker id="dArrL" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto">'+
+      '<path d="M0 0L7.5 3L0 6z" fill="var(--listen)"/></marker>'+
+  '</defs>';
+
+  /* ============ column titles ============ */
+  h+=zoneTitle(G.L.x,34,"1 · THE EMITTER","var(--emit)");
+  h+=zoneTitle(G.C.x,34,"2 · THE CALL STACK","var(--stack)");
+  h+=zoneTitle(G.R.x,34,"3 · THE EVENT LOOP","var(--loop)");
+  h+=T(G.L.x,50,"_events.get('data') → Function[]",{fill:'var(--ink3)',fs:10.5});
+  h+=T(G.C.x,50,"grows upward · one thread",{fill:'var(--ink3)',fs:10.5});
+  h+=T(G.R.x,50,"libuv · the asynchronous machine",{fill:'var(--ink3)',fs:10.5});
+
+  /* ============ 1a — the caller's two lines ============ */
+  h+=`<rect x="${G.L.x}" y="${G.srcY}" width="${G.L.w}" height="${G.srcH}" rx="10" fill="var(--bg2)" stroke="var(--line)"/>`;
+  h+=T(G.L.x+12,G.srcY+15,"YOUR CODE",{fill:'var(--ink3)',fs:9,ls:1.2});
+  [["ee.emit('data', 42);",0,'var(--emit)'],["log('after emit');",1,'var(--listen)']].forEach(([code,i,col])=>{
+    const live=f.src===i, y=G.srcY+24+i*31;
+    h+=`<rect x="${G.L.x+8}" y="${y}" width="${G.L.w-16}" height="26" rx="6" fill="${live?'var(--panel2)':'transparent'}" stroke="${live?col:'transparent'}" stroke-width="${live?1.5:0}"/>`;
+    h+=T(G.L.x+18,y+18,code,{fill:live?col:'var(--ink3)',fs:12.5,w:live?700:400});
+  });
+
+  /* ============ 1b — the array ============ */
+  h+=T(G.L.x,G.chipY-34,"the array · registration order →",{fill:'var(--ink3)',fs:10.5});
+  const chipRunX=[];
+  const listenerOnStack=f.stack.length>2;
+  LISTENERS.forEach((L,i)=>{
+    const x=G.L.x+i*(G.chipW+G.chipGap);
+    const active=f.ptr===i && listenerOnStack;
+    const done=f.con.some(c=>c.indexOf(L.label)===0) && !active;
+    const stroke=active?'var(--stack)':(done?'var(--listen)':'var(--line2)');
+    const fill=active?'var(--stack-soft)':(done?'var(--listen-soft)':'var(--panel2)');
+    const inkc=active?'var(--stack)':(done?'var(--listen)':'var(--ink2)');
+    chipRunX.push({x,cx:x+G.chipW/2,right:x+G.chipW,active});
+    h+=`<rect x="${x}" y="${G.chipY}" width="${G.chipW}" height="${G.chipH}" rx="11" fill="${fill}" stroke="${stroke}" stroke-width="${active?2.6:1.5}"/>`;
+    h+=T(x+12,G.chipY+22,L.id,{fill:'var(--ink3)',fs:10.5,w:700});
+    /* the label is measured and shrunk if it would ever reach the chip wall */
+    let fs=12.5; while(tw(L.label,fs)>G.chipW-24 && fs>9) fs-=0.5;
+    h+=T(x+G.chipW/2,G.chipY+48,L.label,{fill:inkc,fs,w:800,anchor:'middle'});
+    const state=active?'▶ running':(done?'✓ returned':'waiting');
+    h+=T(x+G.chipW/2,G.chipY+72,state,{fill:active?'var(--stack)':(done?'var(--listen)':'var(--ink3)'),fs:10,w:700,anchor:'middle'});
+  });
+  const arrW=3*G.chipW+2*G.chipGap;
+  if(f.snap){
+    h+=`<rect x="${G.L.x-6}" y="${G.chipY-6}" width="${arrW+12}" height="${G.chipH+12}" rx="14" fill="none" stroke="var(--emit)" stroke-width="1.5" stroke-dasharray="7 6"/>`;
+    /* the tag sits ABOVE the array so the band beneath stays a clear routing channel */
+    const tag="a.slice() — frozen for this emit", tfs=10, twd=tw(tag,tfs)+20;
+    h+=`<rect x="${G.L.x+arrW-twd}" y="${G.chipY-49}" width="${twd}" height="21" rx="6" fill="var(--panel2)" stroke="var(--emit)" stroke-width="1.1"/>`;
+    h+=T(G.L.x+arrW-twd/2,G.chipY-34,tag,{fill:'var(--emit)',fs:tfs,w:700,anchor:'middle'});
+  }
+  if(f.ptr>=0 && listenerOnStack){
+    const px=chipRunX[f.ptr].cx;
+    h+=T(px,G.chipY-12,"i = "+f.ptr,{fill:'var(--stack)',fs:11.5,w:800,anchor:'middle'});
+  }
+
+  /* ============ 1c — emit's own body ============ */
+  h+=`<rect x="${G.L.x}" y="${G.bodyY}" width="${G.L.w}" height="${G.bodyH}" rx="10" fill="var(--bg2)" stroke="var(--line)"/>`;
+  h+=T(G.L.x+12,G.bodyY+15,"EMIT'S BODY",{fill:'var(--ink3)',fs:9,ls:1.2});
+  const shown=[0,2,3,4,5];
+  shown.forEach((li,row)=>{
+    const live=f.ebody===li, y=G.bodyY+36+row*17;
+    if(live) h+=`<rect x="${G.L.x+7}" y="${y-11}" width="${G.L.w-14}" height="16" rx="4" fill="var(--panel2)" stroke="var(--stack)" stroke-width="1.1"/>`;
+    let fs=10.5; while(tw(EMIT_BODY[li],fs)>G.L.w-28 && fs>7.5) fs-=0.25;
+    h+=T(G.L.x+15,y,EMIT_BODY[li],{fill:live?'var(--stack)':'var(--ink3)',fs,w:live?700:400});
+  });
+
+  /* ============ 2 — the call stack ============ */
+  h+=`<line x1="${G.C.x}" y1="${G.stackBase+8}" x2="${G.C.x+G.C.w}" y2="${G.stackBase+8}" stroke="var(--line2)" stroke-width="2"/>`;
+  h+=T(G.C.x+G.C.w/2,G.stackBase+26,"stack base",{fill:'var(--ink3)',fs:10,anchor:'middle'});
+  let topFrameY=null,topIsListener=false;
+  f.stack.forEach((frame,i)=>{
+    const y=G.stackBase-i*(G.frameH+G.frameGap)-G.frameH;
+    const isEmit=frame.indexOf('emit')===0, isBase=i===0, isTop=i===f.stack.length-1;
+    const col=isEmit?'var(--emit)':(isBase?'var(--ink2)':'var(--stack)');
+    const fill=isEmit?'var(--emit-soft)':(isBase?'var(--panel2)':'var(--stack-soft)');
+    if(isTop){topFrameY=y;topIsListener=!isEmit&&!isBase;}
+    h+=`<rect x="${G.C.x}" y="${y}" width="${G.C.w}" height="${G.frameH}" rx="9" fill="${fill}" stroke="${col}" stroke-width="${isTop?2.4:1.4}"/>`;
+    let fs=13; while(tw(frame,fs)>G.C.w-104 && fs>9) fs-=0.5;
+    h+=T(G.C.x+18,y+G.frameH/2+5,frame,{fill:col,fs,w:isEmit?800:600});
+    if(isTop&&!isBase) h+=T(G.C.x+G.C.w-16,y+G.frameH/2+5,"← top",{fill:col,fs:10,w:700,anchor:'end'});
+  });
+  /* the connector: this chip IS that frame. The one relationship the figure exists for. */
+  if(f.ptr>=0 && topIsListener && topFrameY!==null){
+    const cx0=chipRunX[f.ptr].cx, y0=G.chipY+G.chipH;
+    const y2=topFrameY+G.frameH/2;
+    h+=`<path d="${routeVHV(cx0,y0,G.chan,G.gut,y2,G.C.x-9,10)}" fill="none" stroke="var(--stack)" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#dArr)"/>`;
+    h+=`<circle cx="${cx0}" cy="${y0}" r="3.4" fill="var(--stack)"/>`;
+  }
+  /* the emit call site -> the emit frame */
+  if(f.stack.length>1 && f.ptr<0){
+    const ei=f.stack.findIndex(x=>x.indexOf('emit')===0);
+    if(ei>0){
+      const ey=G.stackBase-ei*(G.frameH+G.frameGap)-G.frameH+G.frameH/2;
+      const sy=G.srcY+37;
+      h+=`<path d="${routeHVH(G.L.x+G.L.w-4,sy,G.gut,ey,G.C.x-9,10)}" fill="none" stroke="var(--emit)" stroke-width="1.8" stroke-dasharray="6 5" marker-end="url(#dArrE)"/>`;
+      h+=`<circle cx="${G.L.x+G.L.w-4}" cy="${sy}" r="3.2" fill="var(--emit)"/>`;
+    }
+  }
+  if(listenerOnStack)
+    h+=plate(G.C.x+G.C.w/2,G.stackBase-f.stack.length*(G.frameH+G.frameGap)-4,
+             "chip "+LISTENERS[Math.max(f.ptr,0)].id+" is now this frame — nested inside emit","var(--stack)",10);
+
+  /* ============ 3 — the event loop ============ */
+  const R=G.R, rc=G.ringCx, ry=G.ringCy, rr=G.ringR;
+  h+=`<circle cx="${rc}" cy="${ry}" r="${rr}" fill="${thesis?'var(--loop-soft)':'none'}" stroke="var(--loop)" stroke-width="2.2" stroke-dasharray="7 8" opacity="${thesis?1:.55}"/>`;
+  h+=T(rc,ry-6,"EVENT",{fill:'var(--loop)',fs:13,w:800,anchor:'middle'});
+  h+=T(rc,ry+13,"LOOP",{fill:'var(--loop)',fs:13,w:800,anchor:'middle'});
+  /* a pause glyph inside the ring while JS holds the thread */
+  if(!thesis){
+    h+=`<rect x="${rc-9}" y="${ry+26}" width="6" height="17" rx="2" fill="var(--loop)" opacity=".5"/>`;
+    h+=`<rect x="${rc+3}" y="${ry+26}" width="6" height="17" rx="2" fill="var(--loop)" opacity=".5"/>`;
+  }
+  /* queue readouts — placed well clear of the ring, left-aligned in the column */
+  const qy=G.ringCy+rr+42;
+  h+=`<rect x="${R.x}" y="${qy-24}" width="${R.w}" height="62" rx="10" fill="var(--bg2)" stroke="var(--line)"/>`;
+  h+=T(R.x+14,qy-8,"timer / poll / check queues",{fill:'var(--ink3)',fs:10});
+  h+=T(R.x+14,qy+12,"( empty — nothing to run )",{fill:'var(--ink2)',fs:11.5,w:600});
+  h+=T(R.x+14,qy+30,"microtask queue: ( empty )",{fill:'var(--ink3)',fs:10.5});
+  /* per-frame readout — three measured lines, never wider than the column */
+  const vy=qy+62;
+  const vcol=thesis?'var(--loop)':'var(--ink2)';
+  h+=`<rect x="${R.x}" y="${vy}" width="${R.w}" height="96" rx="11" fill="${thesis?'var(--loop-soft)':'var(--panel2)'}" stroke="var(--loop)" stroke-width="${thesis?1.8:1.1}" opacity="${thesis?1:.9}"/>`;
+  f.loop.forEach((ln,i)=>{
+    let fs=i===0?11.5:12; while(tw(ln,fs)>R.w-30 && fs>8.5) fs-=0.25;
+    h+=T(R.x+15,vy+26+i*23,ln,{fill:i===0?'var(--loop)':vcol,fs,w:i===0?800:600});
+  });
+
+  /* ============ 4 — the console, full width ============ */
+  const CX=G.L.x, CW=(G.R.x+G.R.w)-G.L.x;
+  h+=`<rect x="${CX}" y="${G.conY}" width="${CW}" height="${G.conH}" rx="11" fill="#05080c" stroke="var(--line2)"/>`;
+  h+=T(CX+18,G.conY+26,"CONSOLE · a line appears the instant its listener runs",{fill:'#8b95a3',fs:10.5,ls:.9});
+  h+=`<line x1="${CX+18}" y1="${G.conY+36}" x2="${CX+CW-18}" y2="${G.conY+36}" stroke="rgba(139,149,163,.22)"/>`;
+  if(!f.con.length) h+=T(CX+18,G.conY+58,"— nothing logged yet —",{fill:'#8b95a3',fs:13});
+  f.con.forEach((line,i)=>{
+    let col='#36d6c3',glyph='• ';
+    if(line.indexOf('emit()')===0){col='#e6a93c';glyph='⇐ ';}
+    else if(line.indexOf('after')===0){col='#5aa9f8';glyph='» ';}
+    h+=T(CX+18,G.conY+56+i*25,glyph+line,{fill:col,fs:13.5,w:600});
+  });
+  /* the proof marker: the last line only appears after every listener line */
+  if(f.src===1){
+    const ly=G.conY+56+(f.con.length-1)*25, msg="printed LAST — emit had already returned";
+    const tx=CX+CW-18, sx=tx-tw(msg,11)-12;
+    h+=`<path d="M${sx-22} ${ly-4} L${sx-8} ${ly-4}" stroke="#5aa9f8" stroke-width="1.6" marker-end="url(#dArrL)"/>`;
+    h+=T(tx,ly-1,msg,{fill:'#5aa9f8',fs:11,w:700,anchor:'end'});
+  }
+
+  dispatchVP.innerHTML=h;
+}
+
+const dTicks=document.getElementById('dTicks');
+D_FRAMES.forEach(()=>{const t=document.createElement('div');t.className='tk';dTicks.appendChild(t);});
+let dStep=0,dPlaying=false,dPlayT=null;
+function dSet(i){
+  dStep=Math.max(0,Math.min(D_FRAMES.length-1,i));
+  const f=D_FRAMES[dStep];
+  renderDispatch(dStep);
+  document.getElementById('dCapN').textContent='FRAME '+String(dStep).padStart(2,'0');
+  document.getElementById('dCapLane').textContent=f.lane.toUpperCase();
+  document.getElementById('dCapH').textContent=f.title;
+  document.getElementById('dCapB').textContent=f.body;
+  document.getElementById('dStepNo').textContent=String(dStep).padStart(2,'0')+' / 0'+(D_FRAMES.length-1);
+  document.getElementById('dFill').style.width=(dStep/(D_FRAMES.length-1)*100)+'%';
+  document.getElementById('dReset').classList.toggle('dim',dStep===0);
+}
+function dPI(){document.getElementById('dPlayIcon').innerHTML=dPlaying?'<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>':'<path d="M7 5v14l12-7z"/>';}
+function dPlay(){dPlaying=true;dPI();if(dStep>=D_FRAMES.length-1)dSet(0);dPlayT=setInterval(()=>{if(dStep>=D_FRAMES.length-1){dPause();return;}dSet(dStep+1);},1900);}
+function dPause(){dPlaying=false;clearInterval(dPlayT);dPI();}
+document.getElementById('dPlay').onclick=()=>{dPlaying?dPause():dPlay();};
+document.getElementById('dNext').onclick=()=>{dPause();dSet(dStep+1);};
+document.getElementById('dPrev').onclick=()=>{dPause();dSet(dStep-1);};
+document.getElementById('dReset').onclick=()=>{dPause();dSet(0);};
+document.getElementById('dScrub').onclick=e=>{dPause();const r=e.currentTarget.getBoundingClientRect();dSet(Math.round((e.clientX-r.left)/r.width*(D_FRAMES.length-1)));};
+dSet(0);
+</script>
+
+<script>
+"use strict";
+/* ============================================================
+   02 — BUILD IT YOURSELF: live emitter over a real Map
+   ============================================================ */
+(function(){
+  const ui=document.getElementById('buildUI');
+  let fnCounter=0, onceCounter=0;
+  // events: Map name -> array of {key, label, kind:'on'|'once', orig?}
+  let events=new Map();
+  let log=[];          // console lines {t, txt}
+  let sweep=-1;        // index currently highlighted during an emit animation
+  let lastEmitRet=null;
+  let sweepTimer=null;
+
+  function reset(){events=new Map();log=[];sweep=-1;lastEmitRet=null;fnCounter=0;onceCounter=0;clearTimeout(sweepTimer);render();}
+
+  function addOn(){
+    fnCounter++;
+    const a=events.get('data')||[];
+    a.push({key:'on'+fnCounter,label:'fn'+fnCounter,kind:'on'});
+    events.set('data',a);
+    log.unshift({c:'em',t:`on('data', fn${fnCounter})  →  array length ${a.length}`});
+    render();
+  }
+  function addOnce(){
+    onceCounter++;
+    const a=events.get('data')||[];
+    a.push({key:'once'+onceCounter,label:'g'+onceCounter,kind:'once'});
+    events.set('data',a);
+    log.unshift({c:'st',t:`once('data', g${onceCounter})  →  stored as wrapper→g${onceCounter}`});
+    render();
+  }
+  function off(){
+    const a=events.get('data');
+    if(!a||!a.length){log.unshift({c:'mut',t:`off('data', last) → nothing to remove`});render();return;}
+    const removed=a.pop();
+    if(!a.length) events.delete('data');
+    log.unshift({c:'mut',t:`off('data', ${removed.kind==='once'?'wrapper→'+removed.label:removed.label}) → removed`});
+    render();
+  }
+  function emit(){
+    const a=events.get('data');
+    if(!a||!a.length){
+      lastEmitRet=false;
+      log.unshift({c:'mut',t:`emit('data', 42) → false  (no listeners — event is lost)`});
+      render();return;
+    }
+    // snapshot
+    const snap=a.slice();
+    lastEmitRet=true;
+    // animate sweep
+    let i=0;
+    clearTimeout(sweepTimer);
+    function tickSweep(){
+      if(i>=snap.length){
+        sweep=-1;
+        // remove once-listeners that fired
+        const fired=snap.filter(x=>x.kind==='once');
+        if(fired.length){
+          const cur=events.get('data')||[];
+          const keep=cur.filter(x=>!(x.kind==='once'&&fired.includes(x)));
+          if(keep.length) events.set('data',keep); else events.delete('data');
+          fired.forEach(x=>log.unshift({c:'st',t:`↺ ${x.label} (once) auto-removed itself`}));
+        }
+        log.unshift({c:'em',t:`emit('data', 42) → true  (swept ${snap.length} listener${snap.length>1?'s':''})`});
+        render();
+        return;
+      }
+      sweep=i;
+      const L=snap[i];
+      log.unshift({c:L.kind==='once'?'st':'gd',t:`${L.label}(42)  ← called on the stack`});
+      render();
+      i++;
+      sweepTimer=setTimeout(tickSweep,560);
+    }
+    tickSweep();
+  }
+
+  function render(){
+    const a=events.get('data')||[];
+    let h='';
+    // ---- internal Map panel ----
+    h+=`<div style="font-family:var(--mono);font-size:11px;color:var(--emit);font-weight:700;letter-spacing:.05em;margin-bottom:8px">emitter._events  ·  Map&lt;name, Function[]&gt;</div>`;
+    if(events.size===0){
+      h+=`<div style="border:1px dashed var(--line2);border-radius:10px;padding:18px;text-align:center;color:var(--ink3);font-family:var(--mono);font-size:12px">empty Map — no channels yet. Click <span style="color:var(--emit)">on('data', fn)</span>.</div>`;
+    }
+    events.forEach((arr,name)=>{
+      const opt = arr.length===1 ? 'stored as a bare fn (single-listener optimization)' : `promoted to array · length ${arr.length}`;
+      h+=`<div style="border:1px solid var(--line2);border-radius:11px;background:var(--bg2);padding:12px 14px;margin-bottom:10px">
+        <div style="font-family:var(--mono);font-size:12px;margin-bottom:10px"><span style="color:var(--emit);font-weight:700">'${name}'</span> <span style="color:var(--ink3)">→ ${opt}</span></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">`;
+      arr.forEach((L,i)=>{
+        const lit = sweep===i;
+        const isOnce=L.kind==='once';
+        const stroke = lit?'var(--stack)':(isOnce?'var(--emit)':'var(--listen)');
+        const fill = lit?'var(--stack-soft)':(isOnce?'var(--emit-soft)':'var(--listen-soft)');
+        h+=`<div style="position:relative;border:2px solid ${stroke};background:${fill};border-radius:10px;padding:10px 14px;min-width:96px;transition:.18s;transform:${lit?'translateY(-4px)':'none'}">
+            <div style="font-family:var(--mono);font-size:9px;color:var(--ink3)">[${i}]</div>
+            <div style="font-family:var(--mono);font-size:14px;font-weight:800;color:${lit?'var(--stack)':(isOnce?'var(--emit)':'var(--listen)')}">${L.label}</div>
+            <div style="font-family:var(--mono);font-size:8.5px;color:${isOnce?'var(--emit)':'var(--ink3)'}">${isOnce?'↺ once · wrapper':'on'}</div>
+            ${lit?'<div style="position:absolute;top:-9px;right:-6px;font-size:14px">▶</div>':''}
+          </div>`;
+      });
+      h+=`</div></div>`;
+    });
+    // the for-loop visual
+    h+=`<div style="font-family:var(--mono);font-size:11.5px;color:var(--ink2);margin:6px 0 14px;padding:8px 12px;border-left:3px solid var(--stack);background:var(--stack-soft);border-radius:0 8px 8px 0">
+        emit('data', 42) ⇒ <span style="color:var(--ink)">for (const fn of <span style="color:var(--emit)">array.slice()</span>) fn.call(this, 42)</span>
+        ${lastEmitRet!==null?`&nbsp;·&nbsp;returns <span style="color:${lastEmitRet?'var(--listen)':'var(--danger)'};font-weight:700">${lastEmitRet}</span>`:''}</div>`;
+    // ---- console ----
+    h+=`<div style="font-family:var(--mono);font-size:11px;color:var(--ink3);letter-spacing:.06em;margin-bottom:6px">CONSOLE</div>`;
+    h+=`<div class="term-out" style="max-height:150px">`;
+    if(!log.length) h+=`<span class="ln mut">— interact above; output appears here —</span>`;
+    log.slice(0,8).forEach(l=>{h+=`<span class="ln ${l.c}">${l.t}</span>`;});
+    h+=`</div>`;
+    ui.innerHTML=h;
+  }
+
+  document.querySelectorAll('#buildFig [data-build]').forEach(b=>b.onclick=()=>{
+    const k=b.dataset.build;
+    if(k==='on')addOn(); else if(k==='once')addOnce(); else if(k==='emit')emit();
+    else if(k==='off')off(); else reset();
+  });
+  reset();
+})();
+
+/* ============================================================
+   03 — ONCE IDENTITY GAP
+   ============================================================ */
+(function(){
+  const ui=document.getElementById('onceUI');
+  let state='empty'; // empty | registered | removed
+  let log=[];
+  function reset(){state='empty';log=[];render();}
+  function register(){
+    if(state==='registered'){log.unshift({c:'mut',t:'already registered'});render();return;}
+    state='registered';log.unshift({c:'st',t:"once('data', g) → array now holds [ wrapper ]  (wrapper.listener = g)"});render();
+  }
+  function offOrig(){
+    if(state!=='registered'){log.unshift({c:'mut',t:'nothing registered'});render();return;}
+    // In real Node, off(name, g) DOES match via .listener back-reference. We show the naive identity check failing,
+    // then the actual behavior, to teach the gap precisely.
+    log.unshift({c:'dg',t:"naive identity check  array[0] === g  →  false  (array[0] is the wrapper, not g)"});
+    log.unshift({c:'gd',t:"Node also checks array[0].listener === g  →  true  →  removed ✓"});
+    state='removed';render();
+  }
+  function offRaw(){
+    if(state!=='registered'){log.unshift({c:'mut',t:'nothing registered'});render();return;}
+    log.unshift({c:'gd',t:"off('data', rawListeners('data')[0])  →  removes the wrapper directly ✓"});
+    state='removed';render();
+  }
+  function render(){
+    let h='';
+    h+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">`;
+    // what you hold
+    h+=`<div style="border:1px solid var(--listen);border-radius:11px;background:var(--listen-soft);padding:14px">
+      <div style="font-family:var(--mono);font-size:11px;color:var(--listen);font-weight:700">YOUR REFERENCE</div>
+      <div style="font-family:var(--mono);font-size:22px;font-weight:800;color:var(--listen);margin-top:8px">g</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--ink3);margin-top:4px">the function you passed to once()</div></div>`;
+    // what's stored
+    h+=`<div style="border:1px solid var(--emit);border-radius:11px;background:var(--emit-soft);padding:14px">
+      <div style="font-family:var(--mono);font-size:11px;color:var(--emit);font-weight:700">WHAT'S STORED</div>
+      <div style="font-family:var(--mono);font-size:18px;font-weight:800;color:var(--emit);margin-top:8px">${state==='registered'?'wrapper':state==='removed'?'∅ (removed)':'∅ (empty)'}</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--ink3);margin-top:4px">${state==='registered'?'wrapper.listener → g':'array is empty'}</div></div>`;
+    h+=`</div>`;
+    // introspection
+    h+=`<div style="display:flex;gap:18px;flex-wrap:wrap;margin:16px 0;font-family:var(--mono);font-size:12px">
+      <div><span style="color:var(--ink3)">listeners('data')</span> → <span style="color:var(--listen)">${state==='registered'?'[ g ]':'[ ]'}</span> <span style="color:var(--ink3)">(unwrapped)</span></div>
+      <div><span style="color:var(--ink3)">rawListeners('data')</span> → <span style="color:var(--emit)">${state==='registered'?'[ wrapper ]':'[ ]'}</span> <span style="color:var(--ink3)">(raw)</span></div></div>`;
+    h+=`<div style="font-family:var(--mono);font-size:11px;color:var(--ink3);letter-spacing:.06em;margin-bottom:6px">CONSOLE</div><div class="term-out">`;
+    if(!log.length)h+=`<span class="ln mut">— register, then try removing g —</span>`;
+    log.slice(0,6).forEach(l=>h+=`<span class="ln ${l.c}">${l.t}</span>`);
+    h+=`</div>`;
+    ui.innerHTML=h;
+  }
+  document.querySelectorAll('#onceFig [data-once]').forEach(b=>b.onclick=()=>{
+    const k=b.dataset.once;
+    if(k==='register')register();else if(k==='off-orig')offOrig();else if(k==='off-raw')offRaw();else reset();
+  });
+  reset();
+})();
+
+/* ============================================================
+   04 — MUTATION DURING DISPATCH, drawn as what it is:
+   an index walking an array while the array is edited underneath it.
+   The lower panel shows BOTH arrays Node has at that moment — the frozen
+   copy the loop walks, and the live array on/off is editing.
+   ============================================================ */
+(function(){
+  const vp=document.getElementById('mutVP'); if(!vp) return;
+  const twM=(t,fs)=>String(t).length*(fs*0.6);
+  const escM=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  function TM(x,y,t,{fill='var(--ink)',fs=12,w=400,anchor='start',ls=0,deco=''}={}){
+    return `<text x="${x}" y="${y}" fill="${fill}" font-size="${fs}" font-weight="${w}" text-anchor="${anchor}"`+
+      (ls?` letter-spacing="${ls}"`:'')+(deco?` text-decoration="${deco}"`:'')+
+      ` font-family="var(--mono)">${escM(t)}</text>`;
+  }
+  const CW=78, CH=46, CG=12, X0=64;
+  /* cell states: pend | run | done | gone | fresh */
+  const STYLE={
+    pend :{s:'var(--line2)',f:'var(--panel2)',t:'var(--ink2)'},
+    run  :{s:'var(--stack)',f:'var(--panel2)',t:'var(--stack)'},
+    done :{s:'var(--listen)',f:'var(--panel2)',t:'var(--listen)'},
+    gone :{s:'var(--danger)',f:'var(--panel2)',t:'var(--danger)'},
+    fresh:{s:'var(--emit)',f:'var(--panel2)',t:'var(--emit)'}
+  };
+  function row(y,cells,ptr,dim){
+    let h='';
+    cells.forEach((c,i)=>{
+      const st=STYLE[c.st]||STYLE.pend, x=X0+i*(CW+CG);
+      h+=`<rect x="${x}" y="${y}" width="${CW}" height="${CH}" rx="9" fill="${st.f}" stroke="${st.s}" stroke-width="${c.st==='run'?2.6:1.4}" opacity="${dim?.45:1}"/>`;
+      h+=TM(x+7,y+14,'['+i+']',{fill:'var(--ink3)',fs:9.5,w:700});
+      h+=TM(x+CW/2,y+34,c.v,{fill:st.t,fs:17,w:800,anchor:'middle',deco:c.st==='gone'?'line-through':''});
+      if(c.tag){
+        let tf=9.5; while(twM(c.tag,tf)>CW+CG-4 && tf>7) tf-=0.25;
+        h+=TM(x+CW/2,y+CH+13,c.tag,{fill:st.t,fs:tf,w:700,anchor:'middle'});
+      }
+    });
+    if(ptr>=0 && ptr<cells.length){
+      /* a tagged row needs the pointer pushed clear of the tag line */
+      const drop=cells.some(c=>c.tag)?18:0;
+      const px=X0+ptr*(CW+CG)+CW/2;
+      h+=`<path d="M${px} ${y+CH+22+drop} L${px} ${y+CH+6+drop}" stroke="var(--stack)" stroke-width="2.4" marker-end="url(#mArr)"/>`;
+      h+=TM(px,y+CH+38+drop,'i = '+ptr,{fill:'var(--stack)',fs:11.5,w:800,anchor:'middle'});
+    }
+    return h;
+  }
+  function trail(x,y,items,bad){
+    let h=TM(x,y,'called so far',{fill:'var(--ink3)',fs:10,ls:.9});
+    if(!items.length) h+=TM(x,y+26,'—',{fill:'var(--ink3)',fs:14});
+    items.forEach((it,i)=>{
+      const cx=x+i*54;
+      h+=`<rect x="${cx}" y="${y+12}" width="42" height="30" rx="7" fill="var(--panel2)" stroke="${it.bad?'var(--danger)':'var(--listen)'}" stroke-width="1.6"/>`;
+      h+=TM(cx+21,y+33,it.v,{fill:it.bad?'var(--danger)':'var(--listen)',fs:15,w:800,anchor:'middle'});
+      if(i<items.length-1) h+=TM(cx+47,y+33,'›',{fill:'var(--ink3)',fs:14,anchor:'middle'});
+    });
+    if(bad) h+=TM(x,y+66,bad,{fill:'var(--danger)',fs:11.5,w:700});
+    return h;
+  }
+  const C=(v,st,tag)=>({v,st,tag});
+  /* the two models, step by step. Same events, two different arrays being walked. */
+  const M=[
+   {lane:"before",title:"Three listeners. B is about to misbehave.",
+    body:"The array is [A, B, C]. When B runs it will remove itself and register a new listener D. The question the whole section answers: what does the loop in progress do about that?",
+    naive:[C('A','pend'),C('B','pend'),C('C','pend')],np:-1,nt:[],
+    snap:[C('A','pend'),C('B','pend'),C('C','pend')],sp:-1,st:[],
+    live:[C('A','pend'),C('B','pend'),C('C','pend')],note:''},
+   {lane:"i = 0",title:"A runs. Nothing has changed yet.",
+    body:"Both models are identical so far — the index is at 0, A is called, and the array is untouched. Everything that follows is a consequence of what B does next.",
+    naive:[C('A','run'),C('B','pend'),C('C','pend')],np:0,nt:[],
+    snap:[C('A','run'),C('B','pend'),C('C','pend')],sp:0,st:[],
+    live:[C('A','pend'),C('B','pend'),C('C','pend')],note:''},
+   {lane:"i = 1",title:"B runs — and edits the array while the loop holds it",
+    body:"B calls off('x', B) and on('x', D). In the naive model that edits the very array being walked: B is spliced out, C slides down into index 1, and D lands at index 2. In Node the loop is walking a copy, so only the live array below it changes.",
+    naive:[C('A','done'),C('C','pend','slid from [2]'),C('D','fresh','appended')],np:1,nt:[{v:'A'},{v:'B'}],
+    nnote:'B ran, then spliced ITSELF out of the array the loop is holding',
+    snap:[C('A','done'),C('B','run'),C('C','pend')],sp:1,st:[{v:'A'}],
+    live:[C('A','pend'),C('C','pend'),C('D','fresh')],
+    note:'B spliced out · C slid from [2] to [1] · D appended'},
+   {lane:"i = 2",title:"The index advances — and the two models diverge",
+    body:"The index moves to 2 in both. The naive walk reads the LIVE array, where index 2 now holds D: C is stepped straight over and never runs, while D runs on the very emit that registered it. Node reads the frozen copy, where index 2 still holds C.",
+    naive:[C('A','done'),C('C','gone','SKIPPED'),C('D','run','ran early')],np:2,nt:[{v:'A'},{v:'B'},{v:'D',bad:true}],
+    nnote:'the index passed [1] before C slid into it — C is never visited',
+    snap:[C('A','done'),C('B','done'),C('C','run')],sp:2,st:[{v:'A'},{v:'B'}],
+    live:[C('A','pend'),C('C','pend'),C('D','pend')],
+    note:'index 2 now holds D, not C'},
+   {lane:"result",title:"A → B → D, with C skipped · versus A → B → C",
+    body:"The naive walk called D early and never called C at all — two bugs from one splice, and neither of them throws. Node's copy guarantees that every listener present when emit was called runs exactly once, in registration order, and that B's edits take effect on the NEXT emit, which will walk [A, C, D].",
+    naive:[C('A','done'),C('C','gone','SKIPPED'),C('D','done','ran early')],np:-1,nt:[{v:'A'},{v:'B'},{v:'D',bad:true}],
+    nnote:'two bugs from one splice — and neither of them throws',
+    snap:[C('A','done'),C('B','done'),C('C','done')],sp:-1,st:[{v:'A'},{v:'B'},{v:'C'}],
+    live:[C('A','pend'),C('C','pend'),C('D','pend')],
+    note:'the live array is what the NEXT emit will copy'}
+  ];
+
+  const PN={x:24,y:56,w:1072,h:176};
+  const PS={x:24,y:270,w:1072,h:240};
+
+  function render(i){
+    const f=M[i];
+    let h='<defs><marker id="mArr" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto">'+
+          '<path d="M0 0L7.5 3L0 6z" fill="var(--stack)"/></marker></defs>';
+
+    /* ---- naive ---- */
+    h+=`<rect x="${PN.x}" y="${PN.y}" width="${PN.w}" height="${PN.h}" rx="13" fill="var(--danger-soft)" stroke="var(--danger)" stroke-width="1.4" opacity=".92"/>`;
+    h+=TM(PN.x,PN.y-14,'✗  NAIVE — the loop walks the LIVE array',{fill:'var(--danger)',fs:12.5,w:800,ls:.9});
+    h+=TM(X0,PN.y+26,'one array. the loop and on/off share it.',{fill:'var(--ink3)',fs:10.5});
+    h+=row(PN.y+38,f.naive,f.np,false);
+    h+=trail(560,PN.y+30,f.nt, i>=3?'C never ran · D ran on the emit that registered it':'');
+    if(f.nnote) h+=TM(X0,PN.y+162,f.nnote,{fill:'var(--danger)',fs:11.5,w:600});
+
+    /* ---- node ---- */
+    h+=`<rect x="${PS.x}" y="${PS.y}" width="${PS.w}" height="${PS.h}" rx="13" fill="var(--listen-soft)" stroke="var(--listen)" stroke-width="1.4" opacity=".92"/>`;
+    h+=TM(PS.x,PS.y-14,'✓  NODE — the loop walks a FROZEN COPY',{fill:'var(--listen)',fs:12.5,w:800,ls:.9});
+    h+=TM(X0,PS.y+26,'a.slice() — what THIS emit walks',{fill:'var(--emit)',fs:10.5,w:700});
+    h+=row(PS.y+38,f.snap,f.sp,false);
+    h+=TM(X0,PS.y+158,'_events — what on/off edits, and what the NEXT emit will copy',{fill:'var(--ink3)',fs:10.5});
+    h+=row(PS.y+168,f.live,-1,true);
+    h+=trail(560,PS.y+30,f.st,'');
+    if(f.note) h+=TM(560,PS.y+200,f.note,{fill:'var(--ink2)',fs:11.5,w:600});
+
+    /* two arrays, one dashed rule between them — the separation IS the mechanism */
+    h+=`<line x1="${X0-14}" y1="${PS.y+140}" x2="${PS.x+PS.w-14}" y2="${PS.y+140}" stroke="var(--listen)" stroke-width="1.2" stroke-dasharray="5 5" opacity=".55"/>`;
+    vp.innerHTML=h;
+  }
+
+  let mi=0,mPlaying=false,mT=null;
+  const $=id=>document.getElementById(id);
+  function set(i){
+    mi=Math.max(0,Math.min(M.length-1,i)); render(mi);
+    const f=M[mi];
+    $('mCapN').textContent='STEP '+mi;
+    $('mCapLane').textContent=f.lane.toUpperCase();
+    $('mCapH').textContent=f.title;
+    $('mCapB').textContent=f.body;
+    $('mStepNo').textContent=mi+' / '+(M.length-1);
+    $('mFill').style.width=(mi/(M.length-1)*100)+'%';
+    $('mReset').classList.toggle('dim',mi===0);
+  }
+  function icon(){$('mPlayIcon').innerHTML=mPlaying?'<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>':'<path d="M7 5v14l12-7z"/>';}
+  function play(){mPlaying=true;icon();if(mi>=M.length-1)set(0);
+    mT=setInterval(()=>{if(mi>=M.length-1){pause();return;}set(mi+1);},2300);}
+  function pause(){mPlaying=false;clearInterval(mT);icon();}
+  $('mPlay').onclick=()=>{mPlaying?pause():play();};
+  $('mNext').onclick=()=>{pause();set(mi+1);};
+  $('mPrev').onclick=()=>{pause();set(mi-1);};
+  $('mReset').onclick=()=>{pause();set(0);};
+  $('mScrub').onclick=e=>{pause();const r=e.currentTarget.getBoundingClientRect();
+    set(Math.round((e.clientX-r.left)/r.width*(M.length-1)));};
+  set(0);
+})();
+</script>
+<script>
+"use strict";
+/* ============================================================
+   05 — THE 'error' SPECIAL CASE: three outcomes
+   ============================================================ */
+(function(){
+  const ui=document.getElementById('errUI');
+  const bL=document.getElementById('errListenerBtn');
+  const bM=document.getElementById('errMonitorBtn');
+  let hasListener=false, hasMonitor=false, out=null;
+  function setBtns(){
+    bL.textContent="'error' listener: "+(hasListener?'ON':'OFF');
+    bL.classList.toggle('on',hasListener);
+    bM.textContent='errorMonitor: '+(hasMonitor?'ON':'OFF');
+    bM.classList.toggle('on',hasMonitor);
+  }
+  function fire(){
+    const lines=[];
+    lines.push({c:'em',t:"ee.emit('error', new Error('boom'))"});
+    if(hasMonitor) lines.push({c:'st',t:'  [errorMonitor] observed: Error: boom   (logged, NOT consumed)'});
+    if(hasListener){
+      lines.push({c:'gd',t:"  'error' listener ran → caught & handled"});
+      lines.push({c:'gd',t:'  emit returned true · process keeps running ✓'});
+      out={ok:true,lines};
+    } else {
+      lines.push({c:'dg',t:'  no \'error\' listener — Node re-throws the Error'});
+      out={ok:false,lines};
+    }
+    render();
+  }
+  function render(){
+    let h='';
+    // state row
+    h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">';
+    h+=chip("'error' listener", hasListener, 'var(--listen)');
+    h+=chip('errorMonitor', hasMonitor, 'var(--stack)');
+    h+='</div>';
+    // terminal
+    h+='<div class="term-out" style="min-height:150px">';
+    if(!out){
+      h+='<span class="ln mut">$ node app.js</span><span class="ln mut">… waiting. toggle handlers, then ▶ emit(\'error\').</span>';
+    } else {
+      out.lines.forEach(l=>{h+=`<span class="ln ${l.c}">${l.t}</span>`;});
+      if(!out.ok){
+        h+='<span class="ln dg">'+'/app/node_modules/node:events:497</span>';
+        h+='<span class="ln dg">      throw err; // Unhandled \'error\' event</span>';
+        h+='<span class="ln dg">      ^</span>';
+        h+='<span class="ln dg">Error: boom</span>';
+        h+='<span class="ln mut">    at Object.&lt;anonymous&gt; (/app/app.js:9:6)</span>';
+        h+='<span class="ln dg" style="font-weight:700">[process exited with code 1]</span>';
+      }
+    }
+    h+='</div>';
+    // verdict
+    if(out){
+      const ok=out.ok;
+      h+=`<div style="margin-top:14px;font-family:var(--mono);font-size:12.5px;padding:11px 14px;border-radius:9px;font-weight:700;background:${ok?'var(--listen-soft)':'var(--danger-soft)'};color:${ok?'var(--listen)':'var(--danger)'}">`;
+      h+= ok ? '✓ handled — a single \'error\' listener is all that stands between you and a crash'
+             : '✗ crash — '+(hasMonitor?'errorMonitor observes but never counts as a handler, so the throw still fires':'an unhandled \'error\' throws synchronously and takes the process down');
+      h+='</div>';
+    }
+    ui.innerHTML=h;
+  }
+  function chip(label,on,color){
+    return `<div style="font-family:var(--mono);font-size:11.5px;padding:7px 12px;border-radius:20px;border:1px solid ${on?color:'var(--line2)'};color:${on?color:'var(--ink3)'};background:${on?'var(--bg2)':'transparent'};font-weight:700">${on?'●':'○'} ${label}</div>`;
+  }
+  bL.onclick=()=>{hasListener=!hasListener;setBtns();};
+  bM.onclick=()=>{hasMonitor=!hasMonitor;setBtns();};
+  document.getElementById('errFire').onclick=fire;
+  document.getElementById('errReset').onclick=()=>{out=null;render();};
+  setBtns();render();
+})();
+
+/* ============================================================
+   06 — LEAK SIMULATOR: the maxListeners heuristic
+   ============================================================ */
+(function(){
+  const ui=document.getElementById('leakUI');
+  let normal=0, signalled=0, max=10, log=[];
+  function total(){return normal+signalled;}
+  function reset(){normal=0;signalled=0;max=10;log=[];render();}
+  function add(){
+    normal++;
+    log.unshift({c:'js',t:`on('data', fn${total()})  →  ${total()} listener${total()>1?'s':''} on 'data'`});
+    checkWarn();render();
+  }
+  function addSignal(){
+    signalled++;
+    log.unshift({c:'gd',t:`on('data', fn, { signal })  →  ${total()} total · tracked by AbortController`});
+    checkWarn();render();
+  }
+  function abort(){
+    if(!signalled){log.unshift({c:'mut',t:'controller.abort() → no signal-bound listeners to remove'});render();return;}
+    const n=signalled;signalled=0;
+    log.unshift({c:'st',t:`controller.abort() → removed ${n} listener${n>1?'s':''} in one shot ✓`});
+    render();
+  }
+  function setMax(){max=20;log.unshift({c:'st',t:'setMaxListeners(20) → threshold raised to 20'});render();}
+  let warnedAt=-1;
+  function checkWarn(){
+    if(total()>max && warnedAt!==max){
+      warnedAt=max;
+      log.unshift({c:'dg',t:`⚠ MaxListenersExceededWarning: ${total()} 'data' listeners added. Use emitter.setMaxListeners() to increase limit`});
+    }
+    if(total()<=max) warnedAt=-1;
+  }
+  function render(){
+    const t=total(), over=t>max;
+    let h='';
+    // meter
+    h+=`<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:6px">
+      <span style="font-family:var(--mono);font-size:13px;color:var(--ink)">'data' listeners: <strong style="color:${over?'var(--danger)':'var(--emit)'};font-size:18px">${t}</strong></span>
+      <span style="font-family:var(--mono);font-size:11px;color:var(--ink3)">threshold: ${max} (default ${'10'})</span></div>`;
+    // chip grid
+    h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0;min-height:30px">';
+    for(let i=0;i<normal;i++) h+=dot('var(--listen)', i>=max);
+    for(let i=0;i<signalled;i++) h+=dot('var(--emit)', (normal+i)>=max, true);
+    if(t===0) h+='<span style="font-family:var(--mono);font-size:12px;color:var(--ink3)">no listeners — click on(\'data\', fn) to start the leak</span>';
+    h+='</div>';
+    // threshold bar
+    const pct=Math.min(100, t/Math.max(max,1)*100);
+    h+=`<div style="height:8px;border-radius:5px;background:var(--bg2);border:1px solid var(--line2);overflow:hidden;margin:4px 0 2px">
+      <div style="height:100%;width:${pct}%;background:${over?'var(--danger)':'var(--listen)'};transition:width .3s"></div></div>`;
+    // warning banner
+    if(over){
+      h+=`<div style="margin:14px 0;font-family:var(--mono);font-size:12px;padding:11px 14px;border-radius:9px;background:var(--danger-soft);color:var(--danger);font-weight:700;border:1px solid var(--danger)">
+        (node:14021) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. ${t} 'data' listeners added.</div>`;
+    }
+    // console
+    h+='<div style="font-family:var(--mono);font-size:11px;color:var(--ink3);letter-spacing:.06em;margin:14px 0 6px">CONSOLE</div><div class="term-out" style="max-height:140px">';
+    if(!log.length) h+='<span class="ln mut">…</span>';
+    log.slice(0,7).forEach(l=>h+=`<span class="ln ${l.c}">${l.t}</span>`);
+    h+='</div>';
+    ui.innerHTML=h;
+  }
+  function dot(color,over,sig){
+    return `<div title="${sig?'signal-bound':'plain'} listener" style="width:22px;height:22px;border-radius:6px;border:1px solid ${over?'var(--danger)':color};background:${over?'var(--danger-soft)':'var(--bg2)'};display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;color:${over?'var(--danger)':color}">${sig?'⛓':'fn'}</div>`;
+  }
+  document.getElementById('leakAdd').onclick=add;
+  document.getElementById('leakSignal').onclick=addSignal;
+  document.getElementById('leakAbort').onclick=abort;
+  document.getElementById('leakMax').onclick=setMax;
+  document.getElementById('leakReset').onclick=reset;
+  render();
+})();
+</script>
+<script>
+"use strict";
+/* ============================================================
+   07 — THE SEAM: one I/O completion, stepped.
+   Blue = the asynchronous machine (kernel + libuv). Amber = the emitter.
+   Violet = the call stack. Teal = your listeners. Identical to every other
+   figure in the document — which the previous version was not.
+   ============================================================ */
+(function(){
+  const vp=document.getElementById('seamVP');
+  if(!vp) return;
+  const MONOw=0.6, twS=(t,fs,ls)=>String(t).length*(fs*MONOw)+(ls||0)*Math.max(String(t).length-1,0);
+  const escS=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  function TS(x,y,t,{fill='var(--ink)',fs=12,w=400,anchor='start',ls=0,op=1}={}){
+    return `<text x="${x}" y="${y}" fill="${fill}" font-size="${fs}" font-weight="${w}" text-anchor="${anchor}"`+
+      (ls?` letter-spacing="${ls}"`:'')+(op!==1?` opacity="${op}"`:'')+` font-family="var(--mono)">${escS(t)}</text>`;
+  }
+  /* a box whose label is measured and shrunk before it can ever touch the wall */
+  function BOX(x,y,w,h,{stroke='var(--line2)',fill='var(--panel2)',lit=false,title='',sub='',tcol='var(--ink)',scol='var(--ink3)',fs=12.5}={}){
+    let o=`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="${lit?fill:'var(--panel2)'}" stroke="${lit?stroke:'var(--line2)'}" stroke-width="${lit?2.4:1.3}"/>`;
+    /* state is carried by COLOUR, never by opacity — faded text was the single
+       largest source of sub-AA contrast in this document */
+    const tc=lit?tcol:'var(--ink3)', sc=lit?scol:'var(--ink3)';
+    let f=fs; while(twS(title,f)>w-28 && f>8.5) f-=0.25;
+    if(sub){
+      o+=TS(x+15,y+h/2-3,title,{fill:tc,fs:f,w:700});
+      let g=10.5; while(twS(sub,g)>w-28 && g>7.5) g-=0.25;
+      o+=TS(x+15,y+h/2+15,sub,{fill:sc,fs:g});
+    } else {
+      o+=TS(x+15,y+h/2+5,title,{fill:tc,fs:f,w:700});
+    }
+    return o;
+  }
+  const A={x:24,y:58,w:452,h:340};        // the asynchronous machine
+  const B={x:704,y:58,w:452,h:340};       // one tick of your JavaScript
+  const SEAM=590;                          // the seam line, centred in a 228px gutter
+  const RING={cx:250,cy:272,r:74};
+
+  const STEPS=[
+   {lane:"blocked",title:"The loop is parked in the kernel",
+    body:"Nothing is happening in JavaScript. When it has no work to run, the event-loop thread spends most of its time blocked in the OS event-polling mechanism — epoll_wait on Linux, kqueue on the BSDs and macOS, an IOCP completion port on Windows — waiting to be woken.",
+    kernel:0,poll:0,ring:1,cb:0,emit:0,lis:-1,ret:0,seam:0},
+   {lane:"kernel",title:"Bytes arrive · the kernel marks the socket readable",
+    body:"A packet lands. The kernel does not call your code — it simply records that this file descriptor is now readable, and wakes the thread that was blocked waiting on it.",
+    kernel:1,poll:0,ring:1,cb:0,emit:0,lis:-1,ret:0,seam:0},
+   {lane:"poll",title:"The poll phase collects what became ready",
+    body:"libuv returns from the polling call with a set of ready descriptors and, for each, looks up the C callback registered against it. Still no JavaScript.",
+    kernel:1,poll:1,ring:1,cb:0,emit:0,lis:-1,ret:0,seam:0},
+   {lane:"the seam",title:"→ THE SEAM · libuv calls into JavaScript",
+    body:"This crossing is the entire relationship between the two machines. libuv invokes the JS callback registered for this handle. From this instant the thread is running your language, not the loop's.",
+    kernel:1,poll:1,ring:.5,cb:1,emit:0,lis:-1,ret:0,seam:1},
+   {lane:"emit",title:"The callback calls emit — an ordinary call",
+    body:"The callback does what any function does: it calls another function. emit('data', chunk) is pushed onto the stack. Nothing here is scheduled and nothing is queued.",
+    kernel:1,poll:1,ring:.5,cb:1,emit:1,lis:-1,ret:0,seam:1},
+   {lane:"dispatch",title:"Listeners run, in order, on this same stack",
+    body:"emit walks its copy of the array and calls each listener. Every one of them runs to completion inside this single tick. A slow listener here does not yield to the loop — it holds the only thread.",
+    kernel:1,poll:1,ring:.5,cb:1,emit:1,lis:3,ret:0,seam:1},
+   {lane:"return",title:"emit returns · the tick ends · the loop moves on",
+    body:"The stack unwinds back through the callback and control returns to libuv, which advances to its next phase. The asynchrony was in WHEN the callback fired — never in anything emit did once it had.",
+    kernel:1,poll:1,ring:1,cb:0,emit:0,lis:-1,ret:1,seam:0}
+  ];
+
+  function render(i){
+    const f=STEPS[i];
+    let h='<defs>'+
+      '<marker id="sArrL" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0 0L7.5 3L0 6z" fill="var(--loop)"/></marker>'+
+      '<marker id="sArrE" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0 0L7.5 3L0 6z" fill="var(--emit)"/></marker>'+
+      '<marker id="sArrT" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0 0L7.5 3L0 6z" fill="var(--listen)"/></marker>'+
+      '<marker id="sArrS" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0 0L7.5 3L0 6z" fill="var(--stack)"/></marker>'+
+    '</defs>';
+
+    /* ---- the two zones ---- */
+    h+=`<rect x="${A.x}" y="${A.y}" width="${A.w}" height="${A.h}" rx="14" fill="var(--loop-soft)" stroke="var(--loop)" stroke-width="1.4" opacity=".9"/>`;
+    h+=TS(A.x,44,"ASYNCHRONOUS · the kernel and libuv",{fill:'var(--loop)',fs:12.5,w:800,ls:1});
+    h+=`<rect x="${B.x}" y="${B.y}" width="${B.w}" height="${B.h}" rx="14" fill="var(--stack-soft)" stroke="var(--stack)" stroke-width="1.4" opacity=".9"/>`;
+    h+=TS(B.x,44,"SYNCHRONOUS · one tick of your JavaScript",{fill:'var(--stack)',fs:12.5,w:800,ls:1});
+
+    /* ---- left: kernel → poll → ring ---- */
+    h+=BOX(A.x+22,A.y+30,190,58,{stroke:'var(--loop)',lit:!!f.kernel,title:'kernel: fd readable',sub:'epoll · kqueue · IOCP',tcol:'var(--loop)'});
+    h+=BOX(A.x+262,A.y+30,190,58,{stroke:'var(--loop)',lit:!!f.poll,title:'libuv poll phase',sub:'collects ready handles',tcol:'var(--loop)'});
+    h+=`<path d="M${A.x+216} ${A.y+59} L${A.x+256} ${A.y+59}" stroke="var(--loop)" stroke-width="2" marker-end="url(#sArrL)" opacity="${f.poll?1:.4}"/>`;
+    h+=`<circle cx="${RING.cx}" cy="${RING.cy}" r="${RING.r}" fill="none" stroke="var(--loop)" stroke-width="2.2" stroke-dasharray="7 8" opacity="${f.ring}"/>`;
+    h+=TS(RING.cx,RING.cy-4,"event loop",{fill:f.ring===1?'var(--loop)':'var(--ink3)',fs:12.5,w:800,anchor:'middle'});
+    h+=TS(RING.cx,RING.cy+16,f.ring===1?"free to advance":"cannot advance",{fill:f.ring===1?'var(--loop)':'var(--ink3)',fs:10.5,w:700,anchor:'middle'});
+    h+=`<path d="M${A.x+330} ${A.y+96} C ${A.x+318} ${A.y+150}, ${RING.cx+96} ${RING.cy-70}, ${RING.cx+58} ${RING.cy-48}" fill="none" stroke="var(--loop)" stroke-width="1.8" marker-end="url(#sArrL)" opacity="${f.poll?.9:.3}"/>`;
+    /* the note that used to be drawn over the panel edge now sits inside the zone */
+    h+=TS(A.x+22,A.y+312,f.ring===1?"the thread belongs to the loop":"the thread is inside JavaScript",
+          {fill:f.ring===1?'var(--loop)':'var(--ink3)',fs:11.5,w:700});
+
+    /* ---- the seam, in a 228px gutter that belongs to nothing else ---- */
+    h+=`<line x1="${SEAM}" y1="34" x2="${SEAM}" y2="416" stroke="var(--emit)" stroke-width="2" stroke-dasharray="4 6" opacity="${f.seam?1:.45}"/>`;
+    h+=TS(SEAM,26,"THE SEAM",{fill:'var(--emit)',fs:11,w:800,anchor:'middle',ls:1.2});
+    if(f.cb){
+      h+=`<path d="M${RING.cx+RING.r+6} ${RING.cy-26} C ${SEAM-70} ${RING.cy-70}, ${SEAM+70} ${B.y+120}, ${B.x-10} ${B.y+58}" fill="none" stroke="var(--emit)" stroke-width="2.4" marker-end="url(#sArrE)"/>`;
+    }
+    /* label lives in cleared gutter space, below the crossing arc */
+    const lab=["libuv invokes","the JS callback"];
+    const lw=Math.max(twS(lab[0],11.5),twS(lab[1],11.5))+24;
+    h+=`<rect x="${SEAM-lw/2}" y="${A.y+236}" width="${lw}" height="46" rx="8" fill="var(--panel2)" stroke="var(--emit)" stroke-width="${f.seam?1.8:1}" opacity="${f.seam?1:.55}"/>`;
+    lab.forEach((l,k)=>h+=TS(SEAM,A.y+256+k*18,l,{fill:'var(--emit)',fs:11.5,w:700,anchor:'middle'}));
+
+    /* ---- right: callback → emit → listeners → return ---- */
+    h+=BOX(B.x+22,B.y+30,408,46,{stroke:'var(--loop)',lit:!!f.cb,title:"onStreamRead(chunk)   ← libuv's callback, now on your stack",tcol:'var(--loop)',fs:12});
+    h+=BOX(B.x+22,B.y+92,408,46,{stroke:'var(--emit)',lit:!!f.emit,title:"emitter.emit('data', chunk)",tcol:'var(--emit)',fs:13});
+    h+=`<path d="M${B.x+50} ${B.y+78} L${B.x+50} ${B.y+88}" stroke="var(--emit)" stroke-width="1.8" marker-end="url(#sArrE)" opacity="${f.emit?1:.3}"/>`;
+    for(let k=0;k<3;k++){
+      const y=B.y+154+k*40, on=f.lis>k;
+      h+=BOX(B.x+52,y,378,32,{stroke:'var(--listen)',lit:on,title:`listeners[${k}](chunk)`,tcol:'var(--listen)',fs:11.5});
+      h+=`<path d="M${B.x+80} ${y-10} L${B.x+80} ${y-2}" stroke="var(--listen)" stroke-width="1.6" marker-end="url(#sArrT)" opacity="${on?1:.25}"/>`;
+    }
+    h+=BOX(B.x+22,B.y+286,408,42,{stroke:'var(--stack)',lit:!!f.ret,title:'emit returns → the stack unwinds → the loop resumes',tcol:'var(--stack)',fs:11.5});
+    h+=`<path d="M${B.x+50} ${B.y+276} L${B.x+50} ${B.y+282}" stroke="var(--stack)" stroke-width="1.6" marker-end="url(#sArrS)" opacity="${f.ret?1:.25}"/>`;
+    if(f.ret){
+      h+=`<path d="M${B.x-10} ${B.y+307} C ${SEAM+40} ${B.y+352}, ${SEAM-90} ${B.y+352}, ${RING.cx+RING.r+4} ${RING.cy+42}" fill="none" stroke="var(--stack)" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#sArrS)"/>`;
+    }
+
+    /* ---- footer: OUTSIDE both panels, which is where it should always have been ---- */
+    const note="the asynchrony is in WHEN the callback fires — never in anything emit does once it has";
+    let nfs=12; while(twS(note,nfs)>1120 && nfs>9) nfs-=0.25;
+    h+=TS(590,444,note,{fill:'var(--ink2)',fs:nfs,w:700,anchor:'middle'});
+    vp.innerHTML=h;
+  }
+
+  let si=0,sPlaying=false,sT=null;
+  const $=id=>document.getElementById(id);
+  function set(i){
+    si=Math.max(0,Math.min(STEPS.length-1,i));
+    render(si);
+    const f=STEPS[si];
+    $('sCapN').textContent='STEP '+si;
+    $('sCapLane').textContent=f.lane.toUpperCase();
+    $('sCapH').textContent=f.title;
+    $('sCapB').textContent=f.body;
+    $('sStepNo').textContent=si+' / '+(STEPS.length-1);
+    $('sFill').style.width=(si/(STEPS.length-1)*100)+'%';
+    $('sReset').classList.toggle('dim',si===0);
+  }
+  function icon(){$('sPlayIcon').innerHTML=sPlaying?'<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>':'<path d="M7 5v14l12-7z"/>';}
+  function play(){sPlaying=true;icon();if(si>=STEPS.length-1)set(0);
+    sT=setInterval(()=>{if(si>=STEPS.length-1){pause();return;}set(si+1);},2100);}
+  function pause(){sPlaying=false;clearInterval(sT);icon();}
+  $('sPlay').onclick=()=>{sPlaying?pause():play();};
+  $('sNext').onclick=()=>{pause();set(si+1);};
+  $('sPrev').onclick=()=>{pause();set(si-1);};
+  $('sReset').onclick=()=>{pause();set(0);};
+  $('sScrub').onclick=e=>{pause();const r=e.currentTarget.getBoundingClientRect();
+    set(Math.round((e.clientX-r.left)/r.width*(STEPS.length-1)));};
+  set(0);
+})();
+
+/* ============================================================
+   08 — UNBOUNDED BUFFER: events.on() has no backpressure
+   ============================================================ */
+(function(){
+  const ui=document.getElementById('bufUI');
+  const btn=document.getElementById('bufToggle');
+  let queue=0, produced=0, consumed=0, peak=0, running=true;
+  const PROD_MS=520, CONS_MS=1500;   // producer outruns the for-await body
+  let pT=0, cT=0;
+  function produce(){ queue++; produced++; peak=Math.max(peak,queue); render(); }
+  function consume(){ if(queue>0){queue--; consumed++;} render(); }
+  function loop(){
+    clearInterval(pT);clearInterval(cT);
+    if(running){ pT=setInterval(produce,PROD_MS); cT=setInterval(consume,CONS_MS); }
+  }
+  function render(){
+    let h='';
+    h+='<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:stretch">';
+    // producer
+    h+=panel('PRODUCER','socket emits \'data\'','var(--emit)',`every ${PROD_MS}ms`,`${produced} emitted`);
+    // queue (center, grows)
+    h+='<div style="flex:1;min-width:220px;border:1px solid var(--danger);border-radius:12px;background:var(--danger-soft);padding:14px">';
+    h+='<div style="font-family:var(--mono);font-size:11px;color:var(--danger);font-weight:700;letter-spacing:.04em">INTERNAL QUEUE · no ceiling on a plain emitter</div>';
+    h+=`<div style="font-family:var(--mono);font-size:30px;font-weight:700;color:var(--danger);margin:8px 0 2px">${queue}</div>`;
+    h+=`<div style="font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-bottom:8px">peak ${peak} · grows while the body awaits</div>`;
+    // visual stack of queued items
+    h+='<div style="display:flex;flex-wrap:wrap;gap:3px;align-content:flex-start;max-height:84px;overflow:hidden">';
+    const show=Math.min(queue,60);
+    for(let i=0;i<show;i++) h+='<div style="width:10px;height:10px;border-radius:2px;background:var(--danger);opacity:'+(0.45+0.55*(i/Math.max(show,1)))+'"></div>';
+    if(queue>60) h+=`<span style="font-family:var(--mono);font-size:10px;color:var(--danger);align-self:center">+${queue-60}</span>`;
+    h+='</div></div>';
+    // consumer
+    h+=panel('for await BODY','await slowProcess(chunk)','var(--listen)',`every ${CONS_MS}ms`,`${consumed} handled`);
+    h+='</div>';
+    // verdict
+    h+=`<div style="margin-top:16px;font-family:var(--serif);font-size:14px;color:var(--ink2)">The producer fires roughly <strong style="color:var(--emit)">3×</strong> faster than the loop body drains it. <code>events.on()</code> faithfully buffers every event it can't hand over yet — so the queue climbs without limit. No <code>false</code> return, no <code>'drain'</code>, no signal to slow down — because a plain emitter has no pause() for the bridge to call. <strong style="color:var(--danger)">That missing flow control is exactly what streams add.</strong></div>`;
+    ui.innerHTML=h;
+  }
+  function panel(tag,sub,color,rate,count){
+    return `<div style="flex:1;min-width:150px;border:1px solid ${color};border-radius:12px;background:var(--bg2);padding:14px;display:flex;flex-direction:column;justify-content:space-between">
+      <div><div style="font-family:var(--mono);font-size:11px;color:${color};font-weight:700;letter-spacing:.04em">${tag}</div>
+      <div style="font-family:var(--mono);font-size:11.5px;color:var(--ink2);margin-top:6px">${sub}</div></div>
+      <div style="margin-top:10px"><div style="font-family:var(--mono);font-size:10.5px;color:var(--ink3)">${rate}</div>
+      <div style="font-family:var(--mono);font-size:13px;color:${color};font-weight:700">${count}</div></div></div>`;
+  }
+  btn.onclick=()=>{ running=!running; btn.textContent=running?'⏸ running':'▶ paused'; btn.classList.toggle('on',running); loop(); };
+  btn.classList.add('on');
+  render(); loop();
+})();
+</script>
+<script>
+"use strict";
+/* ============================================================
+   INSPECT MODE — zoom / pan / fullscreen (shared)
+   ============================================================ */
+let fsFig=null, fsApi=null;
+function enterFs(fig,api){ if(fsFig) exitFs(); fsFig=fig; fsApi=api; fig.classList.add('fs'); document.body.classList.add('fs-lock');
+  const b=fig.querySelector('[data-inspect]'); if(b) b.lastChild.textContent=' Exit'; }
+function exitFs(){ if(!fsFig) return; if(fsApi) fsApi.reset();
+  const b=fsFig.querySelector('[data-inspect]'); if(b) b.lastChild.textContent=' Inspect';
+  fsFig.classList.remove('fs'); document.body.classList.remove('fs-lock'); fsFig=null; fsApi=null; }
+function makeInspectable(svgId){
+  const svg=document.getElementById(svgId); if(!svg) return;
+  const vp=svg.querySelector('.viewport')||svg.firstElementChild;
+  const canvas=svg.closest('.canvas');
+  const fig=svg.closest('.figure');
+  const hintTag=document.createElement('div'); hintTag.className='inspect-hint'; hintTag.textContent='⤢ tap to inspect'; canvas.appendChild(hintTag);
+  const ctl=document.createElement('div'); ctl.className='zoomctl';
+  ctl.innerHTML='<button data-z="in" title="zoom in">+</button><button data-z="out" title="zoom out">−</button><button data-z="reset" title="reset view">⟲</button>';
+  canvas.appendChild(ctl);
+  const lvl=document.createElement('div'); lvl.className='zlevel'; lvl.textContent='100%'; canvas.appendChild(lvl);
+  const zh=document.createElement('div'); zh.className='zhint'; zh.textContent='scroll / pinch to zoom · drag to pan · Esc to exit'; canvas.appendChild(zh);
+  let s=1,tx=0,ty=0,drag=false,sx=0,sy=0;
+  const pts=new Map(); let pinchD=0,pinchS=1;
+  const isFs=()=>fig.classList.contains('fs');
+  const clamp=v=>Math.max(0.5,Math.min(6,v));
+  const apply=()=>{vp.setAttribute('transform',`translate(${tx},${ty}) scale(${s})`);lvl.textContent=Math.round(s*100)+'%';};
+  const reset=()=>{s=1;tx=0;ty=0;vp.removeAttribute('transform');lvl.textContent='100%';};
+  function toVB(cx,cy){const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;return[(cx-r.left)/r.width*vb.width,(cy-r.top)/r.height*vb.height];}
+  function zoomAt(cx,cy,f){const ns=clamp(s*f);const[px,py]=toVB(cx,cy);tx=px-(px-tx)*(ns/s);ty=py-(py-ty)*(ns/s);s=ns;apply();}
+  canvas.addEventListener('click',e=>{ if(isFs())return; if(e.target.closest('.node'))return; enterFs(fig,{reset}); });
+  canvas.addEventListener('wheel',e=>{ if(!isFs())return; e.preventDefault(); zoomAt(e.clientX,e.clientY,e.deltaY<0?1.12:0.89); },{passive:false});
+  canvas.addEventListener('dblclick',e=>{ if(!isFs()||e.target.closest('.node'))return; zoomAt(e.clientX,e.clientY,1.5); });
+  canvas.addEventListener('pointerdown',e=>{ if(!isFs())return;
+    pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){const a=[...pts.values()];pinchD=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);pinchS=s;drag=false;return;}
+    if(e.target.closest('.node'))return; drag=true;sx=e.clientX;sy=e.clientY;canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove',e=>{ if(!isFs())return;
+    if(pts.has(e.pointerId))pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){const a=[...pts.values()];const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);if(pinchD>0){const ns=clamp(pinchS*(d/pinchD));const cx=(a[0].x+a[1].x)/2,cy=(a[0].y+a[1].y)/2;const[px,py]=toVB(cx,cy);tx=px-(px-tx)*(ns/s);ty=py-(py-ty)*(ns/s);s=ns;apply();}return;}
+    if(!drag)return;const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;
+    tx+=(e.clientX-sx)/r.width*vb.width;ty+=(e.clientY-sy)/r.height*vb.height;sx=e.clientX;sy=e.clientY;apply(); });
+  function up(e){pts.delete(e.pointerId);if(pts.size<2)pinchD=0;drag=false;}
+  canvas.addEventListener('pointerup',up); canvas.addEventListener('pointercancel',up);
+  ctl.querySelectorAll('button').forEach(b=>{ b.onclick=ev=>{ ev.stopPropagation(); const r=svg.getBoundingClientRect();
+    if(b.dataset.z==='in')zoomAt(r.left+r.width/2,r.top+r.height/2,1.25);
+    else if(b.dataset.z==='out')zoomAt(r.left+r.width/2,r.top+r.height/2,0.8);
+    else reset(); };});
+  const tog=fig.querySelector('[data-inspect="'+svgId+'"]');
+  if(tog) tog.addEventListener('click',()=>{ isFs()?exitFs():enterFs(fig,{reset}); });
+}
+makeInspectable('dispatchSvg');
+makeInspectable('seamSvg');
+makeInspectable('mutSvg');
+
+/* ============================================================
+   THEME TOGGLE
+   ============================================================ */
+const root=document.documentElement;
+const sunIcon='<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5L19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/>';
+const moonIcon='<path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/>';
+function setTheme(t){root.setAttribute('data-theme',t);document.getElementById('themeTxt').textContent=t.toUpperCase();document.getElementById('themeIcon').innerHTML=t==='dark'?sunIcon:moonIcon;}
+if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)setTheme('light');
+document.getElementById('themeBtn').onclick=()=>setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+
+/* ============================================================
+   TOC ACTIVE-SECTION OBSERVER
+   ============================================================ */
+const tocLinks=[...document.querySelectorAll('nav.toc a')];
+const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)tocLinks.forEach(l=>l.classList.toggle('active',l.getAttribute('href')==='#'+e.target.id));});},{rootMargin:'-30% 0px -60% 0px'});
+document.querySelectorAll('section.block').forEach(s=>io.observe(s));
+
+/* ============================================================
+   REQUIRED — retractable TOP NAV on scroll + progress bar
+   ============================================================ */
+const topNav=document.getElementById('topNav'), scrollProg=document.getElementById('scrollProg');
+let lastY=window.scrollY, navHidden=false;
+function onScroll(){
+  const y=window.scrollY;
+  const docH=document.documentElement.scrollHeight-window.innerHeight;
+  scrollProg.style.width=(docH>0?(y/docH*100):0)+'%';
+  if(y>lastY && y>140 && !navHidden){ topNav.classList.add('hidden'); navHidden=true; }
+  else if(y<lastY && navHidden){ topNav.classList.remove('hidden'); navHidden=false; }
+  lastY=y;
+}
+window.addEventListener('scroll',onScroll,{passive:true}); onScroll();
+
+/* ============================================================
+   REQUIRED — retractable SIDE NAV on click
+   ============================================================ */
+const toc=document.getElementById('toc'), tocShow=document.getElementById('tocShow');
+document.getElementById('tocRetract').onclick=()=>{ toc.classList.add('collapsed'); tocShow.classList.add('show'); };
+tocShow.onclick=()=>{ toc.classList.remove('collapsed'); tocShow.classList.remove('show'); };
+
+/* activate tooltip glossary + code annotations across all prose */
+tagTerms(document.querySelector('main'));
+paintCode(document.querySelector('main'));
+paintCode(document.querySelector('footer'));
+paintObserved(document.querySelector('main'));
+</script>
+</body>
+</html>
