@@ -5,13 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>JIT-Atlas</title>
 <meta name="description" content="Interactive maps of how the JavaScript stack works, from the kernel up: 81 quests across Node.js, React, Next.js and the layers beneath them.">
-<meta name="theme-color" content="#fafaf6">
+<meta name="theme-color" content="#fafaf6" id="theme-color">
 <meta property="og:title" content="JIT-Atlas">
 <meta property="og:description" content="Interactive maps of how the JavaScript stack works, from the kernel up.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23fafaf6'/%3E%3Crect y='2' width='32' height='5' fill='%23e3d39b'/%3E%3Crect y='8' width='32' height='7' fill='%23d4bb8b'/%3E%3Crect y='16' width='32' height='9' fill='%2399b59f'/%3E%3Crect y='26' width='32' height='2' fill='%23899bb9'/%3E%3Crect y='29' width='32' height='3' fill='%23bd7860'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
+<script>
+// Apply the saved theme before first paint, and fetch only that theme's fonts.
+(() => {
+  const FONTS = {
+    neon86: 'family=Kanit:ital,wght@0,300;0,400;0,500;0,600;1,300;1,500;1,600&family=Dancing+Script:wght@600',
+    westside92: 'family=Anton&family=Barlow+Condensed:wght@500;600&family=Barlow:wght@400;500;600',
+    sunshine13: 'family=Saira:ital,wdth,wght@0,75..100,400..700;1,75..100,600..700'
+  };
+  const loaded = new Set();
+  window.jitThemeFonts = t => {
+    if (!FONTS[t] || loaded.has(t)) return;
+    loaded.add(t);
+    const l = document.createElement('link');
+    l.rel = 'stylesheet'; l.href = `https://fonts.googleapis.com/css2?${FONTS[t]}&display=swap`;
+    document.head.appendChild(l);
+  };
+  let t = null;
+  try { t = localStorage.getItem('jit-atlas:theme'); } catch {}
+  if (FONTS[t]) { document.documentElement.dataset.theme = t; window.jitThemeFonts(t); }
+})();
+</script>
 <style>
 :root{
   --paper:#fafaf6; --paper-2:#f1f1ea; --ink:#1c1e1a; --ink-2:#4a4e46; --rule:#d3d4ca;
@@ -24,13 +45,15 @@
   --sans:"Archivo","Helvetica Neue",Arial,sans-serif;
   --serif:"Source Serif 4",Georgia,serif;
   --col:400px;
+  --field:#fff; --ph:#6b6f66; --veil:rgba(250,250,246,.72); --meter-inv:#5b5f56; --num:#4f6b57;
+  --mark:var(--fw-build); --mark-ink:var(--ink);
   color-scheme:light;
 }
 *,*::before,*::after{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;scroll-padding-top:16px}
 body{margin:0;background:var(--paper);color:var(--ink);font:400 17px/1.55 var(--serif);
   font-feature-settings:"kern";caret-color:var(--red);scrollbar-color:var(--ink-2) var(--paper-2)}
-::selection{background:var(--fw-build);color:var(--ink)}
+::selection{background:var(--mark);color:var(--mark-ink)}
 a{color:inherit;text-underline-offset:.2em;text-decoration-thickness:1px}
 :focus-visible{outline:2px solid var(--red);outline-offset:2px}
 h1,h2,h3,p,ol,ul,figure{margin:0}
@@ -42,27 +65,28 @@ ol,ul{padding:0;list-style:none}
 .sheet{display:grid;grid-template-columns:var(--col) minmax(0,1fr);min-height:100vh}
 
 /* ---------- stratigraphic column ---------- */
-.col{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;border-right:2px solid var(--ink);background:var(--paper)}
+.col{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;border-right:1px solid var(--ink);background:var(--paper)}
 .brand{padding:36px 32px 24px}
 .mark{font:800 46px/1 var(--sans);letter-spacing:-.025em;font-stretch:88%}
 .lede{margin-top:14px;font-size:17px;line-height:1.5;color:var(--ink-2);text-wrap:pretty}
 .by{display:inline-block;margin-top:16px;font:600 15px var(--sans);color:var(--ink)}
 a.by{text-decoration:underline}
 a.by:hover{color:var(--red)}
-.section{flex:1;display:flex;flex-direction:column;min-height:0;border-top:2px solid var(--ink)}
+.section{flex:1;display:flex;flex-direction:column;min-height:0;border-top:1px solid var(--ink)}
 .cap{display:flex;justify-content:space-between;align-items:baseline;padding:12px 32px;font:600 13px var(--sans);letter-spacing:.02em;color:var(--ink-2);border-bottom:1px solid var(--ink);font-variant-numeric:tabular-nums}
 .strata{flex:1;display:flex;flex-direction:column-reverse;min-height:0}
 .band{position:relative;flex:var(--n) 1 0;min-height:58px;border-top:1px solid var(--ink)}
 .band:first-child{border-top:0}
 .band-btn{all:unset;box-sizing:border-box;position:absolute;inset:0;cursor:pointer;display:block;padding:10px 32px 10px 32px}
-.band-btn:focus-visible{outline:2px solid var(--red);outline-offset:-4px}
+.band-btn:focus-visible{outline:3px solid var(--ink);outline-offset:-4px}
+.core:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .band-hw-os .band-btn{background:repeating-linear-gradient(0deg,var(--hw-os-d) 0 1px,transparent 1px 9px),repeating-linear-gradient(90deg,var(--hw-os-d) 0 1px,transparent 1px 18px) var(--hw-os)}
 .band-engine .band-btn{background:repeating-linear-gradient(45deg,var(--engine-d) 0 1px,transparent 1px 7px),repeating-linear-gradient(-45deg,var(--engine-d) 0 1px,transparent 1px 7px) var(--engine)}
 .band-runtime .band-btn{background:repeating-linear-gradient(-45deg,var(--runtime-d) 0 1px,transparent 1px 9px) var(--runtime)}
 .band-fw-runtime .band-btn{background:radial-gradient(var(--fw-runtime-d) 1px,transparent 1.6px) 0 0/8px 8px var(--fw-runtime)}
 .band-fw-build .band-btn{background:repeating-linear-gradient(0deg,var(--fw-build-d) 0 1px,transparent 1px 5px) var(--fw-build)}
-.plate{display:inline-grid;grid-template-columns:auto auto;align-items:baseline;column-gap:14px;row-gap:6px;background:var(--paper);border:1px solid var(--ink);padding:7px 12px 8px;width:252px;position:relative}
-.word{font:700 15px/1.2 var(--sans)}
+.plate{z-index:2;display:inline-grid;grid-template-columns:auto auto;align-items:baseline;column-gap:14px;row-gap:6px;background:var(--paper);border:1px solid var(--ink);padding:7px 12px 8px;width:252px;position:relative}
+.word{font:600 15px/1.2 var(--sans)}
 .n{justify-self:end;font:500 13px var(--sans);color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
 .n b{color:var(--ink);font-weight:700}
 .meter{grid-column:1/-1;height:3px;background:var(--rule);display:none}
@@ -71,15 +95,17 @@ a.by:hover{color:var(--red)}
 .band-btn:hover .plate{border-color:var(--red)}
 .band-btn[aria-pressed="true"] .plate{background:var(--ink);color:var(--paper);border-color:var(--ink)}
 .band-btn[aria-pressed="true"] .n,.band-btn[aria-pressed="true"] .n b{color:var(--paper)}
-.band-btn[aria-pressed="true"] .meter{background:#5b5f56}
+.band-btn[aria-pressed="true"] .meter{background:var(--meter-inv)}
 .band-btn[aria-pressed="true"] .meter span{background:var(--paper)}
-.band.is-empty .band-btn::before{content:"";position:absolute;inset:0;background:rgba(250,250,246,.72)}
+/* A soft-focus layer between the hatch and the plate: the pattern reads as texture, the label stays crisp. */
+.band-btn::after{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;-webkit-backdrop-filter:blur(1px);backdrop-filter:blur(1px)}
+.band.is-empty .band-btn::before{content:"";position:absolute;inset:0;background:var(--veil)}
 .band.is-empty .word{text-decoration:line-through;text-decoration-thickness:1px}
 .core{position:absolute;right:24px;top:10px;bottom:10px;display:flex;gap:6px;text-decoration:none;color:var(--ink)}
-.core-lab{writing-mode:vertical-rl;transform:rotate(180deg);background:var(--paper);border:1px solid var(--ink);padding:8px 3px;font:700 12px var(--sans);letter-spacing:.02em;text-align:center}
+.core-lab{writing-mode:vertical-rl;transform:rotate(180deg);background:var(--paper);border:1px solid var(--ink);padding:8px 3px;font:600 12px var(--sans);letter-spacing:.02em;text-align:center}
 .core-bar{display:flex;flex-direction:column;align-items:center;gap:3px}
-.end{font:700 11px var(--sans);font-variant-numeric:tabular-nums;background:var(--paper);padding:1px 3px;border:1px solid var(--ink)}
-.segs{flex:1;width:22px;display:flex;flex-direction:column;background:var(--paper);border:2px solid var(--ink)}
+.end{font:600 11px var(--sans);font-variant-numeric:tabular-nums;background:var(--paper);padding:1px 3px;border:0}
+.segs{flex:1;width:22px;display:flex;flex-direction:column;background:var(--paper);border:1px solid var(--ink)}
 .segs i{flex:1;border-top:1px solid var(--ink)}
 .segs i:first-child{border-top:0}
 .segs i.is-here{background:var(--red)}
@@ -88,32 +114,32 @@ a.by:hover{color:var(--red)}
 
 /* ---------- main ---------- */
 main{min-width:0;padding:0 56px 0}
-.ways{display:grid;grid-template-columns:1fr 1fr;border-bottom:2px solid var(--ink)}
+.ways{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--ink)}
 .way{padding:36px 40px 36px 0}
 .way+.way{padding:36px 0 36px 40px;border-left:1px solid var(--rule)}
-.way h2{font:800 30px/1.1 var(--sans);letter-spacing:-.015em;font-stretch:92%}
+.way h2{font:700 30px/1.1 var(--sans);letter-spacing:-.015em;font-stretch:92%}
 .way-lede{margin-top:10px;color:var(--ink-2);max-width:46ch;text-wrap:pretty}
 .way-lede strong{color:var(--ink);font-weight:600}
 .route{margin-top:20px;border-top:1px solid var(--ink)}
 .route li{break-inside:avoid}
 
 .route a{display:grid;grid-template-columns:36px 1fr auto;align-items:baseline;gap:10px;padding:7px 0;border-bottom:1px solid var(--rule);text-decoration:none;font:500 16px/1.35 var(--sans)}
-.route .num{font:700 14px var(--sans);font-variant-numeric:tabular-nums;color:#4f6b57}
+.route .num{font:600 14px var(--sans);font-variant-numeric:tabular-nums;color:var(--num)}
 .route a:hover .mt{text-decoration:underline}
 .route .here-mark{display:none;font:600 12px var(--sans);color:var(--red)}
 .route li.is-here a{border-bottom-color:var(--red)}
 .route li.is-here .here-mark{display:inline}
 .go{margin-top:20px}
-.btn{display:inline-flex;align-items:center;gap:10px;background:var(--ink);color:var(--paper);font:700 15px var(--sans);padding:12px 18px;text-decoration:none;border:2px solid var(--ink)}
+.btn{display:inline-flex;align-items:center;gap:10px;background:var(--ink);color:var(--paper);font:600 14px var(--sans);padding:10px 16px;text-decoration:none;border:1px solid var(--ink)}
 .btn:hover{background:var(--paper);color:var(--ink)}
 .btn svg{width:16px;height:16px}
 .finder{margin-top:22px}
 .lbl{display:block;font:600 14px var(--sans);margin-bottom:8px}
-.field{display:flex;align-items:center;gap:12px;border:2px solid var(--ink);background:#fff;height:58px;padding:0 14px}
+.field{display:flex;align-items:center;gap:12px;border:1px solid var(--ink-2);background:var(--field);height:50px;padding:0 14px}
 .field:focus-within{outline:2px solid var(--red);outline-offset:2px}
 .field svg{width:20px;height:20px;flex:none;color:var(--ink-2)}
-.field input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:400 19px var(--serif);color:var(--ink)}
-.field input::placeholder{color:#6b6f66}
+.field input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:400 17px var(--serif);color:var(--ink)}
+.field input::placeholder{color:var(--ph)}
 .field input::-webkit-search-cancel-button{display:none}
 .field kbd{font:600 13px var(--sans);border:1px solid var(--rule);padding:2px 8px;color:var(--ink-2)}
 .clear{all:unset;cursor:pointer;font:600 14px var(--sans);text-decoration:underline;text-underline-offset:.2em;color:var(--ink)}
@@ -127,23 +153,23 @@ main{min-width:0;padding:0 56px 0}
 .domains a.is-none{color:var(--ink-2);cursor:default}
 .domains a.is-none span:first-child{text-decoration:line-through}
 .legend{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 28px;padding:16px 0;border-bottom:1px solid var(--rule)}
-.legend h2{font:700 13px var(--sans);color:var(--ink-2)}
+.legend h2{font:600 13px var(--sans);color:var(--ink-2)}
 .legend ul{display:flex;flex-wrap:wrap;gap:8px 20px}
 .legend li{display:flex;align-items:center;gap:8px;font:600 13px var(--sans)}
 .kinds{flex-basis:100%;font-size:15px;color:var(--ink-2)}
-.kinds b{font:700 13px var(--sans);color:var(--ink)}
+.kinds b{font:600 13px var(--sans);color:var(--ink)}
 .jump{display:none}
 
 /* ---------- catalogue ---------- */
 .empty{padding:48px 0;border-bottom:1px solid var(--rule)}
-.empty h2{font:800 24px var(--sans)}
+.empty h2{font:700 24px var(--sans)}
 .empty p{margin-top:8px;color:var(--ink-2)}
 .domain{padding:56px 0 8px}
-.dh{display:flex;justify-content:space-between;align-items:baseline;gap:16px;border-bottom:2px solid var(--ink);padding-bottom:10px}
-.dh h2{font:800 34px/1.1 var(--sans);letter-spacing:-.02em;font-stretch:90%}
+.dh{display:flex;justify-content:space-between;align-items:baseline;gap:16px;border-bottom:1px solid var(--ink);padding-bottom:10px}
+.dh h2{font:700 34px/1.1 var(--sans);letter-spacing:-.02em;font-stretch:90%}
 .dn{font:500 14px var(--sans);color:var(--ink-2);font-variant-numeric:tabular-nums}
 .sub{margin-top:28px}
-.sub h3{font:700 14px var(--sans);letter-spacing:.01em;color:var(--ink-2);padding-bottom:8px;border-bottom:1px solid var(--ink)}
+.sub h3{font:600 14px var(--sans);letter-spacing:.01em;color:var(--ink-2);padding-bottom:8px;border-bottom:1px solid var(--ink)}
 .entries .entry{display:grid;grid-template-columns:168px minmax(0,1fr) 140px;gap:24px;padding:14px 0;border-bottom:1px solid var(--rule);align-items:baseline}
 .domain>.sub:first-of-type:not(:has(h3)) .entries{border-top:0}
 .alt{display:flex;align-items:center;gap:8px;font:600 13px var(--sans);color:var(--ink)}
@@ -153,15 +179,15 @@ main{min-width:0;padding:0 56px 0}
 .sw-runtime{background:repeating-linear-gradient(-45deg,var(--runtime-d) 0 1px,transparent 1px 4px) var(--runtime)}
 .sw-fw-runtime{background:radial-gradient(var(--fw-runtime-d) .8px,transparent 1.2px) 0 0/4px 4px var(--fw-runtime)}
 .sw-fw-build{background:repeating-linear-gradient(0deg,var(--fw-build-d) 0 1px,transparent 1px 3px) var(--fw-build)}
-.t{font:700 18px/1.3 var(--sans);text-decoration:none;text-wrap:balance}
+.t{font:600 18px/1.3 var(--sans);text-decoration:none;text-wrap:balance}
 .t:hover{text-decoration:underline;text-decoration-color:var(--red)}
 .tag{margin-top:4px;color:var(--ink-2);max-width:68ch;text-wrap:pretty}
 .also{margin-top:6px;font:500 13px var(--sans);color:var(--ink-2)}
 .kind{justify-self:end;text-align:right;font:600 13px var(--sans);color:var(--ink)}
-mark{background:var(--fw-build);color:inherit;padding:0 1px}
+mark{background:var(--mark);color:var(--mark-ink);padding:0 1px}
 [hidden]{display:none!important}
 
-.foot{padding:56px 0 64px;margin-top:48px;border-top:2px solid var(--ink);display:grid;grid-template-columns:1fr auto;gap:24px;align-items:end}
+.foot{padding:56px 0 64px;margin-top:48px;border-top:1px solid var(--ink);display:grid;grid-template-columns:1fr auto;gap:24px;align-items:end}
 .foot p{max-width:58ch;color:var(--ink-2)}
 .foot .by{margin:0}
 
@@ -183,16 +209,16 @@ mark{background:var(--fw-build);color:inherit;padding:0 1px}
   .way,.way+.way{padding:32px 0;border-left:0}
   .way+.way{border-top:1px solid var(--rule)}
   .route{columns:2;column-gap:24px}
-  .jump{display:grid;grid-template-columns:1fr 1fr;margin-top:20px;border:2px solid var(--ink)}
+  .jump{display:grid;grid-template-columns:1fr 1fr;margin-top:20px;border:1px solid var(--ink)}
   .jump a{display:block;padding:12px 14px;text-decoration:none}
   .jump a+a{border-left:1px solid var(--ink)}
-  .jump b{display:block;font:700 15px/1.25 var(--sans)}
+  .jump b{display:block;font:600 15px/1.25 var(--sans)}
   .jump span{display:block;margin-top:4px;font:500 13px/1.35 var(--sans);color:var(--ink-2)}
   .jump a:hover b{text-decoration:underline}
 }
 @media (max-width:980px){
   .sheet{grid-template-columns:1fr}
-  .col{position:static;height:auto;border-right:0;border-bottom:2px solid var(--ink)}
+  .col{position:static;height:auto;border-right:0;border-bottom:1px solid var(--ink)}
   .brand{padding:28px 16px 20px}
   .mark{font-size:40px}
   .cap{padding:10px 16px}
@@ -225,30 +251,468 @@ mark{background:var(--fw-build);color:inherit;padding:0 1px}
   .way h2{font-size:26px}
   .field kbd{display:none}
 }
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important}}
+[data-theme="sunshine13"] #campaign .here-mark{color:#1857a6}
+</style>
+<style>
+/* =====================================================================
+   GAME THEMES (ADR-0004)
+   Global invariants, every theme: an altitude is tint + hatch + word;
+   text crossing a hatch sits on a plate; focus is always visible;
+   WCAG 2.2 AA contrast; reduced motion stills all motion and texture.
+   Everything else is per theme.
+   ===================================================================== */
+.vh{position:absolute!important;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+/* ---------- console: game picker + sound ---------- */
+.console{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 32px;border-bottom:1px solid var(--ink)}
+.pick,.snd{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;align-items:center;gap:8px;min-height:34px;padding:6px 10px;border:1px solid transparent;font:600 13px/1 var(--sans);letter-spacing:.02em;color:var(--ink)}
+.pick small{font-weight:500;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.pick:hover,.snd:hover{background:var(--paper-2)}
+.pick:focus-visible,.snd:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+.pick svg,.snd svg{width:16px;height:16px;flex:none}
+.snd .i-on{display:none}
+.snd[aria-pressed="true"] .i-on{display:block}
+.snd[aria-pressed="true"] .i-off{display:none}
+.snd[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+
+/* ---------- scene: per-theme hero art (CSS + inline SVG only) ---------- */
+.scene{display:none;height:116px;border-bottom:1px solid var(--ink);overflow:hidden}
+.scene svg{display:block;width:100%;height:100%}
+.sc{display:none}
+[data-theme="neon86"] .scene,[data-theme="westside92"] .scene,[data-theme="sunshine13"] .scene{display:block}
+[data-theme="neon86"] .sc-neon,[data-theme="westside92"] .sc-west,[data-theme="sunshine13"] .sc-sun{display:inline}
+/* Short desktop screens: the column scrolls on its own rather than crushing the strata and the campaign core. */
+@media (min-width:981px){.col{overflow-y:auto;scrollbar-width:thin}.col>.section{flex:1 0 auto}.col>:not(.section){flex:none}.strata{min-height:400px}.band-runtime{min-height:172px}}
+
+/* ---------- the pause menu ---------- */
+.menu{padding:0;border:1px solid var(--ink);background:var(--paper);color:var(--ink);width:min(580px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto}
+.menu::backdrop{background:rgba(14,15,13,.6)}
+.menu-head{padding:22px 24px 16px;border-bottom:1px solid var(--ink)}
+.menu-head h2{font:700 32px/1.05 var(--sans);letter-spacing:-.015em;font-stretch:92%}
+.games{border:0;margin:0;padding:0;min-width:0}
+.game{position:relative;display:grid;grid-template-columns:96px minmax(0,1fr);gap:16px;align-items:center;padding:12px 24px;border-bottom:1px solid var(--rule);cursor:pointer}
+.game input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
+.game:has(input:focus-visible){outline:2px solid var(--red);outline-offset:-5px}
+.game:has(input:checked:focus-visible){outline-color:currentColor}
+.game:hover .g-txt b{text-decoration:underline;text-decoration-color:var(--red);text-underline-offset:.2em}
+.game:has(input:checked){background:var(--ink);color:var(--paper)}
+.game:has(input:checked) .g-txt span{color:var(--paper)}
+.g-txt b{display:block;font:600 19px/1.2 var(--sans)}
+.g-txt span{display:block;margin-top:2px;font-size:15px;line-height:1.4;color:var(--ink-2)}
+.g-txt em{font:600 12px var(--sans);font-style:normal;letter-spacing:.04em}
+.g-art{height:56px;border:1px solid var(--ink)}
+.g-survey26{background:linear-gradient(#e3d39b 0 14%,#d4bb8b 14% 40%,#99b59f 40% 78%,#899bb9 78% 88%,#bd7860 88%)}
+.g-neon86{background:repeating-linear-gradient(0deg,#140a2b 0 2px,transparent 2px 6px) 0 100%/100% 45% no-repeat,radial-gradient(circle at 50% 78%,#ffe36e 0 20%,#ff3d8b 21% 22%,transparent 23%),linear-gradient(#1a0b3a,#7a1e7a 50%,#ff4f8b 72%,#140a2b 72%)}
+.g-westside92{background:linear-gradient(transparent 62%,#15140f 62%),radial-gradient(circle at 74% 56%,#f6d27a 0 12%,transparent 13%),linear-gradient(#2a1c10,#8a4b1f 55%,#e09a3a)}
+.g-sunshine13{background:linear-gradient(105deg,#6ec6ff 0 32%,#f6f7f7 32% 35%,#ff9a5c 35% 64%,#f6f7f7 64% 67%,#78c27a 67%)}
+.menu-foot{display:flex;justify-content:flex-end;align-items:center;gap:16px;padding:16px 24px}
+.menu-foot p{font:500 13px var(--sans);color:var(--ink-2)}
+.menu .btn{cursor:pointer}
+.menu .btn:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+
+/* ---------- the stinger: the theme-switch moment ---------- */
+.stinger{position:fixed;inset:0;z-index:60;display:grid;place-items:center;pointer-events:none;visibility:hidden}
+.stinger.is-on{visibility:visible;animation:st-fade 1.7s cubic-bezier(.16,1,.3,1) forwards}
+.st-in{display:grid;justify-items:center;gap:6px;text-align:center}
+.st-name{font:700 64px/1 var(--sans);letter-spacing:-.02em}
+@keyframes st-fade{0%{opacity:0}10%{opacity:1}72%{opacity:1}100%{opacity:0}}
+@keyframes st-wipe{from{clip-path:inset(0 50% 0 50%)}to{clip-path:inset(0 0 0 0)}}
+@keyframes st-rise{from{transform:translateY(18px) scale(.96)}to{transform:none}}
+@keyframes st-spin{to{transform:rotate(360deg)}}
+@keyframes st-flash{0%{opacity:.9}100%{opacity:0}}
+/* Survey: a plate laid on the sheet */
+[data-theme="survey26"] .st-in,:root:not([data-theme]) .st-in{background:var(--paper);border:1px solid var(--ink);padding:18px 28px 16px;animation:st-rise .5s cubic-bezier(.16,1,.3,1)}
+
+/* =====================================================================
+   NEON '86: sunset coast, neon tube, synth nights
+   ===================================================================== */
+[data-theme="neon86"]{
+  --paper:#140a2b; --paper-2:#1e0f3d; --ink:#fdeefe; --ink-2:#cdb6e6; --rule:#3d2766;
+  --red:#ff4fa3; --teal:#36f1dc; --glow:rgba(255,79,163,.55);
+  --hw-os:#ff6f7d; --hw-os-d:#9e2c55;
+  --engine:#7d8cff; --engine-d:#3a3fa8;
+  --runtime:#36e0c0; --runtime-d:#0f7f70;
+  --fw-runtime:#ffa24c; --fw-runtime-d:#b0561a;
+  --fw-build:#ffe066; --fw-build-d:#b08f22;
+  --field:#0d0620; --ph:#a991c9; --veil:rgba(20,10,43,.8); --meter-inv:#7a5aa8; --num:#36f1dc;
+  --mark:#ff4fa3; --mark-ink:#140a2b;
+  --sans:"Kanit","Archivo",sans-serif; --serif:"Kanit","Archivo",sans-serif;
+  color-scheme:dark;
+}
+[data-theme="neon86"] body{font-weight:400;font-size:16.5px}
+[data-theme="neon86"] body::after{content:"";position:fixed;inset:0;z-index:40;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.08) 0 1px,transparent 1px 3px)}
+/* Neon tube lettering: a white-hot core with the pink glow around it, so the name stays legible. */
+[data-theme="neon86"] .mark{font:600 58px/1.1 "Dancing Script",cursive;letter-spacing:.01em;color:#fff1fa;transform:rotate(-3deg);transform-origin:left center;
+  text-shadow:0 0 1px #fff,0 0 6px #ff4fa3,0 0 14px rgba(255,79,163,.4)}
+[data-theme="neon86"] .way h2,[data-theme="neon86"] .dh h2,[data-theme="neon86"] .menu-head h2{font-style:italic;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--teal)}
+[data-theme="neon86"] .way h2{font-size:26px}
+[data-theme="neon86"] .dh h2,[data-theme="neon86"] .menu-head h2{font-size:28px}
+[data-theme="neon86"] .word{font-weight:500}
+[data-theme="neon86"] .route .num{font-weight:500}
+[data-theme="neon86"] .dh{border-bottom-color:var(--red)}
+[data-theme="neon86"] .col{border-right-color:var(--red)}
+[data-theme="neon86"] .btn{background:var(--red);border-color:var(--red);color:#140a2b;text-transform:uppercase;font-style:italic;letter-spacing:.08em}
+[data-theme="neon86"] .btn:hover{background:transparent;color:var(--red)}
+[data-theme="neon86"] .menu{border-color:var(--red)}
+[data-theme="neon86"] .menu::backdrop{background:rgba(10,4,24,.72)}
+[data-theme="neon86"] .game:has(input:checked){background:var(--red);color:#140a2b}
+[data-theme="neon86"] .game:has(input:checked) .g-txt span{color:#140a2b}
+[data-theme="neon86"] .stinger{background:linear-gradient(transparent 32%,rgba(20,10,43,.92) 32% 68%,transparent 68%)}
+[data-theme="neon86"] .st-in{animation:st-wipe .55s cubic-bezier(.16,1,.3,1)}
+[data-theme="neon86"] .st-name{font:600 96px/1.1 "Dancing Script",cursive;letter-spacing:.01em;transform:rotate(-3deg);color:#fff1fa;text-shadow:0 0 1px #fff,0 0 6px #ff4fa3,0 0 14px rgba(255,79,163,.4)}
+
+/* =====================================================================
+   WESTSIDE '92: dusty streets, gold, grain, funk
+   ===================================================================== */
+[data-theme="westside92"]{
+  --paper:#15140f; --paper-2:#1f1d16; --ink:#f1e7cc; --ink-2:#bfb391; --rule:#3e3a2b;
+  --red:#f2b33d; --gold:#f2b33d;
+  --hw-os:#c0603e; --hw-os-d:#6e2e18;
+  --engine:#8796a0; --engine-d:#3e4c52;
+  --runtime:#77a34a; --runtime-d:#3a5a1e;
+  --fw-runtime:#cf9f52; --fw-runtime-d:#7a5520;
+  --fw-build:#e2cf86; --fw-build-d:#8f7a36;
+  --field:#0e0d09; --ph:#a39874; --veil:rgba(21,20,15,.8); --meter-inv:#6b6450; --num:#9ccc6e;
+  --mark:#f2b33d; --mark-ink:#15140f;
+  --sans:"Barlow Condensed","Archivo",sans-serif; --serif:"Barlow","Archivo",sans-serif;
+  --notch:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+  color-scheme:dark;
+}
+[data-theme="westside92"] body::after{content:"";position:fixed;inset:0;z-index:40;pointer-events:none;opacity:.09;mix-blend-mode:screen;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+[data-theme="westside92"] .mark{font:400 52px/.95 "Anton",sans-serif;text-transform:uppercase;letter-spacing:.02em;color:var(--ink);text-shadow:1px 1px 0 #000}
+[data-theme="westside92"] .dh h2,[data-theme="westside92"] .menu-head h2{font:400 32px/1.05 "Anton",sans-serif;text-transform:uppercase;letter-spacing:.02em}
+[data-theme="westside92"] .way h2{font:600 26px/1.1 "Barlow Condensed",sans-serif;text-transform:uppercase;letter-spacing:.06em;color:var(--gold)}
+[data-theme="westside92"] .word{font:500 13px/1.2 "Barlow",sans-serif;text-transform:uppercase;letter-spacing:.08em}
+[data-theme="westside92"] .t{font-size:19px}
+[data-theme="westside92"] .g-txt b{text-transform:uppercase;letter-spacing:.06em}
+[data-theme="westside92"] .sub h3{font:500 12px "Barlow",sans-serif;text-transform:uppercase;letter-spacing:.1em}
+[data-theme="westside92"] .plate,[data-theme="westside92"] .core-lab,[data-theme="westside92"] .menu,[data-theme="westside92"] .g-art{clip-path:var(--notch)}
+[data-theme="westside92"] .btn{background:var(--gold);border-color:var(--gold);color:#15140f;text-transform:uppercase;letter-spacing:.08em}
+[data-theme="westside92"] .btn:hover{background:transparent;color:var(--gold)}
+[data-theme="westside92"] .menu{background:#0b0a07;border:0}
+[data-theme="westside92"] .menu-head{border-bottom:2px solid var(--gold)}
+[data-theme="westside92"] .menu-head h2{color:var(--gold)}
+[data-theme="westside92"] .game:has(input:checked){background:#26231a;color:var(--gold)}
+[data-theme="westside92"] .game:has(input:checked) .g-txt span{color:var(--ink)}
+[data-theme="westside92"] .stinger{background:linear-gradient(transparent 34%,rgba(0,0,0,.62) 34% 66%,transparent 66%)}
+[data-theme="westside92"] .st-in{animation:st-rise .45s cubic-bezier(.16,1,.3,1)}
+[data-theme="westside92"] .st-name{font:400 76px/1 "Anton",sans-serif;text-transform:uppercase;color:var(--gold);letter-spacing:.02em;text-shadow:1px 1px 0 #000}
+
+/* =====================================================================
+   SUNSHINE '13: high-noon HUD, black panels on white, cinematic
+   ===================================================================== */
+[data-theme="sunshine13"]{
+  --paper:#f6f7f7; --paper-2:#e9ecec; --ink:#0e1012; --ink-2:#4b545b; --rule:#d5dadd;
+  --red:#1f6fd1; --hud:#0e1012;
+  --hw-os:#e0714a; --hw-os-d:#9a3d1f;
+  --engine:#6f9ee0; --engine-d:#2f5c9c;
+  --runtime:#78c27a; --runtime-d:#2f7a36;
+  --fw-runtime:#f2b346; --fw-runtime-d:#a8701a;
+  --fw-build:#f6dc5a; --fw-build-d:#a89420;
+  --field:#fff; --ph:#5f686e; --veil:rgba(246,247,247,.8); --meter-inv:#5b6268; --num:#2f7a36;
+  --mark:#f6dc5a; --mark-ink:#0e1012;
+  --sans:"Saira","Archivo",sans-serif; --serif:"Saira","Archivo",sans-serif; --cond:75%;
+  color-scheme:light;
+}
+/* The column and the menu are HUD panels: dark tokens scoped to them. */
+[data-theme="sunshine13"] .col,[data-theme="sunshine13"] .menu{
+  --paper:#0e1012; --paper-2:#1a1d20; --ink:#f6f7f7; --ink-2:#b7c0c6; --rule:#30363b;
+  --red:#5aa9ff; --veil:rgba(14,16,18,.8); --field:#0e1012; --ph:#9aa3a9;
+  color:var(--ink);color-scheme:dark}
+[data-theme="sunshine13"] body{font-size:16.5px}
+/* Saira is one variable family: labels and names run condensed (Chalet Comprimé's role), sentences at normal width. */
+[data-theme="sunshine13"] :is(.mark,.word,.n,.cap,.t,.way h2,.dh h2,.dn,.route a,.status,.key-note,.lbl,.domains a,.legend h2,.legend li,.kinds b,.alt,.kind,.also,.sub h3,.btn,.pick,.snd,.menu-head h2,.g-txt b,.st-name,.core-lab,.end,.jump b,.by,.menu-foot p){font-stretch:var(--cond)}
+[data-theme="sunshine13"] .mark{font:italic 700 48px/.95 "Saira",sans-serif;text-transform:uppercase;letter-spacing:.01em}
+[data-theme="sunshine13"] .way h2,[data-theme="sunshine13"] .dh h2,[data-theme="sunshine13"] .g-txt b{text-transform:uppercase;letter-spacing:.04em}
+[data-theme="sunshine13"] .way h2{font-weight:600;font-size:26px}
+[data-theme="sunshine13"] .word{font-weight:500;font-size:14px}
+[data-theme="sunshine13"] .t{font-weight:500}
+[data-theme="sunshine13"] .dh{background:var(--hud);color:#f6f7f7;padding:10px 16px;border-bottom:2px solid var(--red)}
+[data-theme="sunshine13"] .dh h2{font-weight:600;font-size:26px}
+[data-theme="sunshine13"] .dh .dn{color:#b7c0c6}
+[data-theme="sunshine13"] .sub h3{font-size:12px;text-transform:uppercase;letter-spacing:.1em}
+[data-theme="sunshine13"] .btn{text-transform:uppercase;letter-spacing:.08em}
+[data-theme="sunshine13"] .btn:hover{background:var(--red);border-color:var(--red);color:#fff}
+[data-theme="sunshine13"] .menu{border:0;background:rgba(14,16,18,.96)}
+[data-theme="sunshine13"] .menu::backdrop{background:rgba(246,247,247,.55);backdrop-filter:blur(6px) saturate(.6)}
+[data-theme="sunshine13"] .menu-head{background:#0e1012;border-bottom:2px solid #5aa9ff}
+[data-theme="sunshine13"] .menu-head h2{font-style:italic;font-weight:600;text-transform:uppercase;letter-spacing:.04em;font-size:28px}
+[data-theme="sunshine13"] .game{border-bottom:1px solid #23282c}
+[data-theme="sunshine13"] .game:has(input:checked){background:#f6f7f7;color:#0e1012}
+[data-theme="sunshine13"] .game:has(input:checked) .g-txt span{color:#3a4147}
+[data-theme="sunshine13"] .menu .btn{background:#f6f7f7;color:#0e1012;border-color:#f6f7f7}
+[data-theme="sunshine13"] .menu .btn:hover{background:#1f6fd1;border-color:#1f6fd1;color:#fff}
+[data-theme="sunshine13"] .stinger{place-items:end;padding:0 28px 28px 0}
+[data-theme="sunshine13"] .stinger::before{content:"";position:fixed;inset:0;background:#fff;animation:st-flash .7s ease-out forwards}
+[data-theme="sunshine13"] .st-in{position:relative;grid-auto-flow:column;align-items:center;gap:12px;background:#0e1012;color:#f6f7f7;padding:12px 18px 12px 14px;animation:st-rise .45s cubic-bezier(.16,1,.3,1)}
+[data-theme="sunshine13"] .st-in::before{content:"";width:20px;height:20px;border:3px solid #5aa9ff;border-right-color:transparent;border-radius:50%;animation:st-spin .8s linear infinite}
+[data-theme="sunshine13"] .st-name{font:700 26px/1 "Saira",sans-serif;font-style:italic;text-transform:uppercase;letter-spacing:.01em}
+[data-theme="sunshine13"] .st-in{justify-items:start}
+
+/* =====================================================================
+   THE STRATA AS DEPTH: sky, grass, soil, rock, core
+   The hatch stays underneath (the altitude invariant). Over it, each altitude
+   carries one blurred, drifting layer: the deeper it sits, the denser and
+   slower its layer. Colours come from each theme's own tokens.
+   ===================================================================== */
+:root{--cloud:#ffffff;--blade:#56774a;--grain:#5b3a22;--vein:#2f3b57;--ember:#f4b46c}
+[data-theme="neon86"]{--cloud:#ffb3dc;--blade:#36f1dc;--grain:#ffe066;--vein:#a7b1ff;--ember:#ffb26b}
+[data-theme="westside92"]{--cloud:#f1e7cc;--blade:#9ccc6e;--grain:#e2cf86;--vein:#b3bec4;--ember:#f2b33d}
+[data-theme="sunshine13"]{--cloud:#ffffff;--blade:#9ee09f;--grain:#f6dc5a;--vein:#a9c8f2;--ember:#ff9a6a}
+.band-hw-os{--t:var(--hw-os)}.band-engine{--t:var(--engine)}.band-runtime{--t:var(--runtime)}.band-fw-runtime{--t:var(--fw-runtime)}.band-fw-build{--t:var(--fw-build)}
+.band-btn{overflow:hidden}
+.drift{position:absolute;inset:0;z-index:1;overflow:hidden;pointer-events:none}
+.drift::before,.drift::after{content:"";position:absolute;will-change:transform}
+.band.is-empty .drift{opacity:.25}
+
+/* Each layer is an SVG tile painted by script from the live theme tokens (see paintStrata). */
+.drift::before,.drift::after{background-repeat:repeat}
+/* Framework (build): sky. Cumulus in front, cirrus behind; the fastest drift. */
+.band-fw-build .drift::before{inset:0 -600px 0 0;background:var(--art-cirrus) 0 22%/600px 60px repeat-x;opacity:.6;filter:blur(1.2px);animation:pan600 80s linear infinite}
+.band-fw-build .drift::after{inset:0 -420px 0 0;background:var(--art-cloud) 0 55%/420px 46px repeat-x;animation:pan420 36s linear infinite}
+/* Framework (runtime): the surface. Two rows of grass swaying out of step. */
+.band-fw-runtime .drift::before,.band-fw-runtime .drift::after{left:-30px;right:-30px;bottom:0;transform-origin:bottom center}
+.band-fw-runtime .drift::before{height:50px;background:var(--art-grass-back) 0 100%/120px 50px repeat-x;filter:blur(.5px);animation:sway 6.2s ease-in-out infinite alternate-reverse}
+.band-fw-runtime .drift::after{height:42px;background:var(--art-grass) 37px 100%/120px 42px repeat-x;animation:sway 4.4s ease-in-out infinite alternate}
+/* Runtime: soil. Pebbles and roots held still; fine grains sifting through. */
+.band-runtime .drift::before{inset:0;background:var(--art-soil) 0 0/220px 140px}
+.core{z-index:3}
+.band-runtime .drift::after{top:-64px;right:-96px;bottom:0;left:0;background:var(--art-grain) 0 0/96px 64px;animation:sift 42s linear infinite}
+/* Engine: rock. Bedding, cracks and crystals creeping; glints catching light. */
+.band-engine .drift::before{inset:0 -160px 0 0;background:var(--art-rock) 0 50%/160px 70px;animation:pan160 140s linear infinite}
+.band-engine .drift::after{inset:0;background:var(--art-glint) 0 0/60px 50px;animation:twinkle 3.6s ease-in-out infinite alternate}
+/* Hardware & OS: the core. Glowing magma seams; embers rising slowly. */
+.band-hw-os .drift::before{inset:0 -120px 0 0;background:var(--art-magma) 0 50%/120px 80px;animation:pan120 100s linear infinite,smoulder 5s ease-in-out infinite alternate}
+.band-hw-os .drift::after{top:0;right:0;bottom:-80px;left:0;background:var(--art-ember) 0 0/90px 80px;animation:rise 20s linear infinite}
+@keyframes pan600{to{transform:translateX(-600px)}}
+@keyframes pan420{to{transform:translateX(-420px)}}
+@keyframes pan160{to{transform:translateX(-160px)}}
+@keyframes pan120{to{transform:translateX(-120px)}}
+@keyframes sway{from{transform:skewX(4deg)}to{transform:skewX(-4deg)}}
+@keyframes sift{to{transform:translate(-96px,64px)}}
+@keyframes twinkle{from{opacity:.25}to{opacity:.9}}
+@keyframes rise{to{transform:translateY(-80px)}}
+@keyframes smoulder{from{opacity:.7}to{opacity:1}}
+
+/* ---------- tagline ---------- */
+.tagline{margin-top:10px;font:italic 400 19px/1.3 var(--serif);color:var(--ink)}
+[data-theme="neon86"] .tagline{font:italic 300 18px/1.3 "Kanit",sans-serif;letter-spacing:.04em;color:var(--teal)}
+[data-theme="westside92"] .tagline{font:500 13px/1.4 "Barlow",sans-serif;text-transform:uppercase;letter-spacing:.14em;color:var(--gold)}
+[data-theme="sunshine13"] .tagline{font:italic 600 18px/1.2 "Saira",sans-serif;font-stretch:75%;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-2)}
+
+/* ---------- footer: where JIT-Atlas sits on Diátaxis ---------- */
+.foot{grid-template-columns:minmax(0,1fr) 300px;gap:48px;align-items:start}
+.dia-h{font:700 22px/1.2 var(--sans);letter-spacing:-.01em;margin-bottom:10px;color:var(--ink)}
+.dia p+p{margin-top:16px}
+.more{display:inline-flex;align-items:center;gap:8px;font:600 15px var(--sans);color:var(--ink);text-decoration:underline;text-decoration-color:var(--ink-2)}
+.more:hover{text-decoration-color:var(--red)}
+.more svg{width:14px;height:14px;flex:none}
+.compass{margin:6px 0 0}
+.cq{position:relative;display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--ink)}
+.c{padding:12px 12px 14px;min-height:74px}
+.c:nth-child(-n+2){border-bottom:1px solid var(--ink)}
+.c:nth-child(odd){border-right:1px solid var(--ink)}
+.c:nth-child(n+3){padding-bottom:24px}
+.c b{display:block;font:600 14px/1.2 var(--sans);color:var(--ink)}
+.c span{display:block;margin-top:3px;font-size:13px;line-height:1.35;color:var(--ink-2)}
+.c:nth-child(-n+2) b{font-weight:500;color:var(--ink-2)}
+.here{position:absolute;left:50%;bottom:0;transform:translate(-50%,50%);background:var(--paper);border:1px solid var(--red);padding:4px 10px;font:600 13px var(--sans);color:var(--ink);white-space:nowrap}
+.compass figcaption{margin-top:16px;font-size:14px;line-height:1.45;color:var(--ink-2)}
+@media (max-width:1080px){.foot{grid-template-columns:1fr;gap:32px}.compass{max-width:340px}}
+.pick small{display:none}
+.pick{white-space:nowrap}
+/* Diátaxis map as a spectrum: two labelled axes around four quadrants. */
+.cmap{display:grid;grid-template-columns:20px minmax(0,1fr);grid-template-rows:auto auto;gap:8px 8px}
+.ax{display:flex;align-items:center;gap:8px;font:600 11px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+.ax i{position:relative;flex:1;background:var(--ink-2)}
+.ax-h{grid-column:2;grid-row:1}
+.ax-h i{height:1px}
+.ax-h i::before,.ax-h i::after{content:"";position:absolute;top:-3.5px;border:4px solid transparent}
+.ax-h i::before{left:-2px;border-right:6px solid var(--ink-2);border-left:0}
+.ax-h i::after{right:-2px;border-left:6px solid var(--ink-2);border-right:0}
+.ax-v{grid-column:1;grid-row:2;flex-direction:column;justify-content:stretch}
+.ax-v span{writing-mode:vertical-rl;transform:rotate(180deg)}
+.ax-v i{width:1px;align-self:center}
+.ax-v i::before,.ax-v i::after{content:"";position:absolute;left:-3.5px;border:4px solid transparent}
+.ax-v i::before{top:-2px;border-bottom:6px solid var(--ink-2);border-top:0}
+.ax-v i::after{bottom:-2px;border-top:6px solid var(--ink-2);border-bottom:0}
+.cmap .cq{grid-column:2;grid-row:2}
+.cmap .c:nth-child(n+3){padding-bottom:48px}
+.cmap .here{left:22%;right:22%;bottom:10px;transform:none;text-align:center;padding:5px 8px}
+.cmap .here::before,.cmap .here::after{content:"";position:absolute;top:50%;width:6px;height:6px;margin-top:-3px;background:var(--red)}
+.cmap .here::before{left:-3px}.cmap .here::after{right:-3px}
+
+
+/* ---------- footers ---------- */
+/* The column ends on its own footer: the ground beneath the core. */
+.col-foot{flex:none;display:flex;justify-content:space-between;align-items:baseline;gap:12px;min-height:76px;padding:18px 32px 22px;border-top:1px solid var(--ink);background:var(--paper-2);font:500 13px var(--sans);color:var(--ink-2)}
+.col-foot-mark{font-weight:600;color:var(--ink)}
+.col-foot a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--ink-2)}
+.col-foot a:hover{text-decoration-color:var(--red)}
+.col-links{display:flex;gap:16px}
+@media (max-width:1240px){.col-foot{padding-left:24px;padding-right:24px}}
+@media (max-width:980px){.col-foot{min-height:0;padding:14px 16px}}
+
+/* The main footer is its own band, a step off the sheet in every theme. */
+:root{--foot:#ebe9dd}
+[data-theme="neon86"]{--foot:#21103f}
+[data-theme="westside92"]{--foot:#221f16}
+.foot{--paper:var(--foot);background:var(--foot);margin:64px -56px 0;padding:56px 56px 72px}
+[data-theme="sunshine13"] .foot{--paper:#0e1012;--ink:#f6f7f7;--ink-2:#b7c0c6;--rule:#30363b;--red:#5aa9ff;--foot:#0e1012;color:var(--ink);border-top:0}
+@media (max-width:1240px){.foot{margin:56px -40px 0;padding:48px 40px 64px}}
+@media (max-width:980px){.foot{margin:48px -16px 0;padding:40px 16px 56px}}
+
+/* ---------- the two ways in, told apart ----------
+   The campaign is a route: it sits on a wash of its own altitude (Runtime),
+   matching the campaign core in the strata. The finder stays on the bare sheet. */
+#campaign.way{--wash:color-mix(in srgb,var(--runtime) 13%,var(--paper));background:var(--wash);margin-left:-28px;padding:36px 32px 36px 28px}
+#campaign .route a{border-bottom-color:color-mix(in srgb,var(--runtime) 30%,var(--rule))}
+[data-theme="neon86"] #find h2,[data-theme="westside92"] #find h2{color:var(--ink)}
+@media (max-width:1240px){#campaign.way{padding-right:24px}}
+@media (max-width:1080px){#campaign.way{margin:0 -40px;padding:32px 40px}}
+@media (max-width:980px){#campaign.way{margin:0 -16px;padding:28px 16px}}
+
+/* ---------- soft hover grounds ----------
+   Every row you can open takes a faint ground on hover and keyboard focus.
+   The ground is its own layer, bleeding a few pixels past the text, so the
+   row rules and the text alignment stay exactly where they were. */
+:root{--hover:color-mix(in srgb,var(--ink) 6%,transparent)}
+#campaign{--hover:color-mix(in srgb,var(--runtime) 22%,transparent)}
+.route a,.domains a,.entries .entry,.jump a,.col-foot a{position:relative;isolation:isolate}
+.route a::before,.domains a::before,.entries .entry::before,.jump a::before,.col-foot a::before{content:"";position:absolute;inset:3px 0;border-radius:6px;z-index:-1;background:transparent;pointer-events:none;transition:background-color .18s cubic-bezier(.16,1,.3,1)}
+.jump a::before{inset:3px}
+.col-foot a::before{inset:-3px -6px}
+.route a:hover::before,.route a:focus-visible::before,.domains a:not(.is-none):hover::before,.domains a:focus-visible::before,.jump a:hover::before,.jump a:focus-visible::before,.entries .entry:hover::before,.entries .entry:focus-within::before,.col-foot a:hover::before{background:var(--hover)}
+/* Rows sit inside their rules: the ground shares the rules' edges, the text is inset within it. */
+.route a{padding-left:10px}
+.domains a{padding-left:10px;padding-right:10px}
+.entries .entry{padding-left:12px;padding-right:12px}
+@media (max-width:980px){.entries .entry{padding-left:10px;padding-right:10px}}
+/* Cues on top of the ground: a corner arrow that wakes and nudges, and an
+   underline that fades in rather than snapping on. A whole entry row opens its quest. */
+:root{--arrow:url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27 fill=%27none%27 stroke=%27black%27 stroke-width=%271.8%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3E%3Cpath d=%27M4 12L12 4M6 4h6v6%27/%3E%3C/svg%3E")}
+.entries .entry .kind::after,.route a::after{content:"";display:inline-block;width:11px;height:11px;background:currentColor;-webkit-mask:var(--arrow) center/contain no-repeat;mask:var(--arrow) center/contain no-repeat;opacity:.4;transition:transform .22s cubic-bezier(.16,1,.3,1),opacity .22s}
+.entries .entry .kind::after{margin-left:8px;vertical-align:-1px}
+.route a{padding-right:30px}
+.route a::after{position:absolute;right:10px;top:50%;margin-top:-5.5px}
+.entries .entry:hover .kind::after,.entries .entry:focus-within .kind::after,.route a:hover::after,.route a:focus-visible::after{opacity:1;transform:translate(2px,-2px)}
+.t,.route .mt{text-decoration:underline;text-decoration-thickness:.5px;text-underline-offset:.24em;text-decoration-color:transparent;transition:text-decoration-color .22s}
+.entries .entry:hover .t,.entries .entry:focus-within .t,.route a:hover .mt,.route a:focus-visible .mt{text-decoration-color:color-mix(in srgb,var(--red) 75%,transparent)}
+.t::after{content:"";position:absolute;inset:0;z-index:1}
+.domains a .n{transition:color .22s}
+.domains a:not(.is-none):hover .n{color:var(--ink)}
+
+@media (max-width:1240px){.console{padding:10px 24px}}
+@media (max-width:980px){.console{padding:10px 16px}[data-theme="neon86"] .mark{font-size:50px}}
+
+/* ---------- strata in the game themes ----------
+   Same five hatches (the altitude invariant), redrawn for a dark ground:
+   the band is the theme's paper lightly tinted by its altitude, the hatch
+   lines carry the altitude colour, and the plate is edged in it. */
+:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .band{
+  --g:color-mix(in srgb,var(--t) var(--g-mix),var(--paper));
+  --h:color-mix(in srgb,var(--t) var(--h-mix),var(--paper))}
+[data-theme="neon86"]{--g-mix:13%;--h-mix:42%}
+[data-theme="westside92"]{--g-mix:20%;--h-mix:48%}
+[data-theme="sunshine13"]{--g-mix:16%;--h-mix:44%}
+:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .band-hw-os{--t:var(--hw-os)}
+:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .band-engine{--t:var(--engine)}
+:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .band-runtime{--t:var(--runtime)}
+:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .band-fw-runtime{--t:var(--fw-runtime)}
+:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .band-fw-build{--t:var(--fw-build)}
+:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .band-hw-os .band-btn{background:repeating-linear-gradient(0deg,var(--h) 0 1px,transparent 1px 12px),repeating-linear-gradient(90deg,var(--h) 0 1px,transparent 1px 24px) var(--g)}
+:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .band-engine .band-btn{background:repeating-linear-gradient(45deg,var(--h) 0 1px,transparent 1px 11px),repeating-linear-gradient(-45deg,var(--h) 0 1px,transparent 1px 11px) var(--g)}
+:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .band-runtime .band-btn{background:repeating-linear-gradient(-45deg,var(--h) 0 1px,transparent 1px 13px) var(--g)}
+:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .band-fw-runtime .band-btn{background:radial-gradient(var(--h) .9px,transparent 1.4px) 0 0/12px 12px var(--g)}
+:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .band-fw-build .band-btn{background:repeating-linear-gradient(0deg,var(--h) 0 1px,transparent 1px 8px) var(--g)}
+:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .band{border-top-color:var(--h)}
+:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .plate{border-color:var(--h)}
+:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .band-btn:hover .plate{border-color:var(--red)}
+:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .core-lab,
+:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .segs,
+:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .end{border-color:var(--runtime)}
+:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .segs i{border-color:color-mix(in srgb,var(--runtime) 45%,var(--paper))}
+@media (max-width:980px){:is([data-theme="neon86"],[data-theme="westside92"],[data-theme="sunshine13"]) .band-runtime{background:var(--g)}}
+@media (max-width:520px){.pick small{display:none}.st-name{font-size:44px!important}.game{grid-template-columns:64px minmax(0,1fr);padding:12px 16px}.g-art{height:44px}}
+@media (prefers-reduced-motion:reduce){
+  .stinger{display:none!important}
+  body::after{display:none!important}
+  *,*::before,*::after{animation:none!important}
+}
 </style>
 </head>
 <body>
 <a class="skip" href="#find">Skip to the quest finder</a>
 <div class="sheet">
 <aside class="col" aria-label="The stack, by altitude">
+  <div class="console">
+    <button type="button" class="pick" aria-haspopup="dialog" aria-controls="menu" data-pick><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h7"/></svg>Select game <small data-now>Alice in Agentland</small></button>
+    <button type="button" class="snd" aria-pressed="false" data-sound><svg class="i-off" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 6h3l4-3v10l-4-3h-3z" fill="currentColor"/><path d="M11 6l4 4M15 6l-4 4" stroke="currentColor" stroke-width="1.6" fill="none"/></svg><svg class="i-on" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 6h3l4-3v10l-4-3h-3z" fill="currentColor"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.5a6.2 6.2 0 0 1 0 9" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>Sound</button>
+  </div>
+  <div class="scene" aria-hidden="true">
+    <svg viewBox="0 0 400 116" preserveAspectRatio="xMidYMax slice">
+      <defs>
+        <symbol id="palm" viewBox="0 0 60 100"><path d="M31 100C30 70 27 45 30 22h3c-2 23 1 48 2 78z"/><path d="M31 22C20 12 8 14 0 22c10-6 20-5 31 2zM31 22c11-12 23-10 29-2-10-5-19-3-29 4zM31 22C26 8 16 2 8 2c10 4 17 10 22 21zM31 22c5-14 15-20 23-18-10 3-17 9-22 19zM31 22c-9 4-17 14-19 24 6-10 12-16 20-22zM31 22c9 4 17 12 19 22-6-9-12-14-20-20z"/></symbol>
+        <linearGradient id="nsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a0b3a"/><stop offset=".55" stop-color="#6d1a74"/><stop offset=".86" stop-color="#ff4f8b"/><stop offset="1" stop-color="#ffb26b"/></linearGradient>
+        <linearGradient id="nsun" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe36e"/><stop offset="1" stop-color="#ff3d8b"/></linearGradient>
+        <mask id="nstripes"><rect width="400" height="116" fill="#fff"/><rect y="56" width="400" height="2"/><rect y="62" width="400" height="3"/><rect y="69" width="400" height="4"/><rect y="77" width="400" height="5"/></mask>
+        <linearGradient id="wsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a1c10"/><stop offset=".55" stop-color="#8a4b1f"/><stop offset="1" stop-color="#e09a3a"/></linearGradient>
+        <linearGradient id="ssky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff7a59"/><stop offset="1" stop-color="#ffc06b"/></linearGradient>
+        <linearGradient id="csky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff8a5c"/><stop offset="1" stop-color="#ffd27a"/></linearGradient>
+        <clipPath id="cpA"><polygon points="0,0 150,0 126,116 0,116"/></clipPath>
+        <clipPath id="cpB"><polygon points="150,0 282,0 258,116 126,116"/></clipPath>
+        <clipPath id="cpC"><polygon points="282,0 400,0 400,116 258,116"/></clipPath>
+      </defs>
+      <g class="sc sc-neon">
+        <rect width="400" height="82" fill="url(#nsky)"/>
+        <circle cx="200" cy="82" r="44" fill="url(#nsun)" mask="url(#nstripes)"/>
+        <path fill="#2a0f4f" d="M96 82V70h8v-6h6v18h6V60h10v22h4V72h8v10zM270 82V66h10v16h4V58h8v-6h4v30h6V70h10v12z"/>
+        <rect y="82" width="400" height="34" fill="#140a2b"/>
+        <g stroke="#ff4fa3" stroke-width="1" opacity=".85" fill="none"><path d="M0 84.5h400M0 87.5h400M0 91.5h400M0 97.5h400M0 105.5h400"/><path d="M116 82L-220 116M130 82L-150 116M144 82L-80 116M158 82L-10 116M172 82L60 116M186 82L130 116M200 82v34M214 82L270 116M228 82L340 116M242 82L410 116M256 82L480 116M270 82L550 116M284 82L620 116"/></g>
+        <path d="M0 82h400" stroke="#36f1dc" stroke-width="1.5"/>
+        <g fill="#0b0418"><use href="#palm" x="6" y="8" width="70" height="112"/><use href="#palm" x="320" y="2" width="78" height="120"/><use href="#palm" x="356" y="34" width="44" height="84"/></g>
+      </g>
+      <g class="sc sc-west">
+        <rect width="400" height="116" fill="url(#wsky)"/>
+        <circle cx="300" cy="70" r="20" fill="#f6d27a" opacity=".9"/>
+        <rect y="58" width="400" height="34" fill="#f2b33d" opacity=".12"/>
+        <path fill="#5a3418" d="M0 84C60 70 110 78 160 72s100-6 160 4 60-6 80-2v42H0z"/>
+        <path fill="#15140f" d="M0 96h20l12-8 12 8h14v-6h22v6h18l14-10 14 10h30v-4h40v4h26l12-8 12 8h20v-8h30v8h24l14-9 14 9h28v20H0z"/>
+        <g stroke="#15140f" fill="none"><path stroke-width="2.5" d="M60 50v50M190 46v52M330 50v48M50 56h20M180 52h20M320 56h20"/><path stroke-width=".8" d="M50 56q75 16 130-4M70 56q65 18 130-4M180 52q75 16 140 4M200 52q65 18 140 4M320 56q40 10 80 2M0 60q25 4 50-4"/></g>
+        <use href="#palm" x="226" y="6" width="58" height="100" fill="#15140f"/>
+      </g>
+      <g class="sc sc-sun">
+        <rect width="400" height="116" fill="#f6f7f7"/>
+        <g clip-path="url(#cpA)"><rect width="160" height="116" fill="#6ec6ff"/><circle cx="40" cy="32" r="15" fill="#ffd23f"/><path fill="#3f8f4f" d="M0 76c30-18 60-16 90-4s50-2 70 8v36H0z"/><path fill="#2b6b3a" d="M0 96c40-12 80-6 160 2v18H0z"/><path d="M0 108h160" stroke="#0e1012" stroke-width="2"/></g>
+        <g clip-path="url(#cpB)"><rect x="120" width="170" height="116" fill="url(#ssky)"/><circle cx="214" cy="70" r="18" fill="#ffe08a"/><rect x="120" y="72" width="170" height="44" fill="#1f6fb5"/><path d="M196 80h36M202 88h24M208 96h12" stroke="#ffd27a" stroke-width="2"/><path d="M136 66h104M146 66v12M170 66v12M194 66v12M218 66v12" stroke="#0e1012" stroke-width="3"/><circle cx="232" cy="46" r="16" fill="none" stroke="#0e1012" stroke-width="2"/><path d="M232 30v32M216 46h32M221 35l22 22M243 35l-22 22M232 46l-6 20M232 46l6 20" stroke="#0e1012" stroke-width="1.2"/></g>
+        <g clip-path="url(#cpC)"><rect x="250" width="150" height="116" fill="url(#csky)"/><path fill="#1b2330" d="M262 116V78h12V60h10v18h8V44h14v34h6V66h12v-8h8v20h10V52h12v26h8V70h12v-6h8v52z"/><use href="#palm" x="338" y="30" width="50" height="90" fill="#0e1012"/></g>
+        <g fill="none" stroke="#f6f7f7" stroke-width="6"><path d="M150 -2L126 118M282 -2L258 118"/></g>
+      </g>
+    </svg>
+  </div>
   <header class="brand">
     <h1 class="mark">JIT-Atlas</h1>
+    <p class="tagline">A journey to the center of the stack</p>
     <p class="lede">Interactive maps of how the JavaScript stack works, from the kernel up. Made ahead of time and checked, so they are ready the moment you're stuck.</p>
-    <span class="by">Aryscène</span>
+    <span class="by">by Aryscène</span>
     <nav class="jump" aria-label="Two ways in"><a href="#campaign"><b>Follow a campaign</b><span>Node.js Internals, 12 missions in order</span></a><a href="#find" data-jump-find><b>Look up a side quest</b><span>Filter 69 standalone quests</span></a></nav>
   </header>
   <figure class="section" aria-labelledby="strata-cap">
     <figcaption id="strata-cap" class="cap"><span>The stack, by altitude</span><span data-total>81 quests</span></figcaption>
     <ol class="strata">
-<li class="band band-hw-os" style="--n:6"><button type="button" class="band-btn" data-alt="hw-os" aria-pressed="false"><span class="plate"><span class="word">Hardware &amp; OS</span><span class="n"><b data-count>6</b><span class="of" data-of> quests</span></span><span class="meter" aria-hidden="true"><span data-fill></span></span></span></button></li>
-<li class="band band-engine" style="--n:5"><button type="button" class="band-btn" data-alt="engine" aria-pressed="false"><span class="plate"><span class="word">Engine</span><span class="n"><b data-count>5</b><span class="of" data-of> quests</span></span><span class="meter" aria-hidden="true"><span data-fill></span></span></span></button></li>
-<li class="band band-runtime" style="--n:38"><button type="button" class="band-btn" data-alt="runtime" aria-pressed="false"><span class="plate"><span class="word">Runtime</span><span class="n"><b data-count>38</b><span class="of" data-of> quests</span></span><span class="meter" aria-hidden="true"><span data-fill></span></span></span></button><a class="core" href="#campaign" aria-label="Node.js Internals campaign: 12 missions, all at Runtime"><span class="core-lab" aria-hidden="true">Node.js Internals</span><span class="core-bar" aria-hidden="true"><span class="end">00</span><span class="segs"><i data-seg="00"></i><i data-seg="01"></i><i data-seg="02"></i><i data-seg="03"></i><i data-seg="04"></i><i data-seg="05"></i><i data-seg="06"></i><i data-seg="07"></i><i data-seg="08"></i><i data-seg="09"></i><i data-seg="10"></i><i data-seg="11"></i></span><span class="end">11</span></span></a></li>
-<li class="band band-fw-runtime" style="--n:27"><button type="button" class="band-btn" data-alt="fw-runtime" aria-pressed="false"><span class="plate"><span class="word">Framework (runtime)</span><span class="n"><b data-count>27</b><span class="of" data-of> quests</span></span><span class="meter" aria-hidden="true"><span data-fill></span></span></span></button></li>
-<li class="band band-fw-build" style="--n:5"><button type="button" class="band-btn" data-alt="fw-build" aria-pressed="false"><span class="plate"><span class="word">Framework (build)</span><span class="n"><b data-count>5</b><span class="of" data-of> quests</span></span><span class="meter" aria-hidden="true"><span data-fill></span></span></span></button></li>
+<li class="band band-hw-os" style="--n:6"><button type="button" class="band-btn" data-alt="hw-os" aria-pressed="false"><span class="drift" aria-hidden="true"></span><span class="plate"><span class="word">Hardware &amp; OS</span><span class="n"><b data-count>6</b><span class="of" data-of> quests</span></span><span class="meter" aria-hidden="true"><span data-fill></span></span></span></button></li>
+<li class="band band-engine" style="--n:5"><button type="button" class="band-btn" data-alt="engine" aria-pressed="false"><span class="drift" aria-hidden="true"></span><span class="plate"><span class="word">Engine</span><span class="n"><b data-count>5</b><span class="of" data-of> quests</span></span><span class="meter" aria-hidden="true"><span data-fill></span></span></span></button></li>
+<li class="band band-runtime" style="--n:38"><button type="button" class="band-btn" data-alt="runtime" aria-pressed="false"><span class="drift" aria-hidden="true"></span><span class="plate"><span class="word">Runtime</span><span class="n"><b data-count>38</b><span class="of" data-of> quests</span></span><span class="meter" aria-hidden="true"><span data-fill></span></span></span></button><a class="core" href="#campaign" aria-label="Node.js Internals campaign: 12 missions, all at Runtime"><span class="core-lab" aria-hidden="true">Node.js Internals</span><span class="core-bar" aria-hidden="true"><span class="end">00</span><span class="segs"><i data-seg="00"></i><i data-seg="01"></i><i data-seg="02"></i><i data-seg="03"></i><i data-seg="04"></i><i data-seg="05"></i><i data-seg="06"></i><i data-seg="07"></i><i data-seg="08"></i><i data-seg="09"></i><i data-seg="10"></i><i data-seg="11"></i></span><span class="end">11</span></span></a></li>
+<li class="band band-fw-runtime" style="--n:27"><button type="button" class="band-btn" data-alt="fw-runtime" aria-pressed="false"><span class="drift" aria-hidden="true"></span><span class="plate"><span class="word">Framework (runtime)</span><span class="n"><b data-count>27</b><span class="of" data-of> quests</span></span><span class="meter" aria-hidden="true"><span data-fill></span></span></span></button></li>
+<li class="band band-fw-build" style="--n:5"><button type="button" class="band-btn" data-alt="fw-build" aria-pressed="false"><span class="drift" aria-hidden="true"></span><span class="plate"><span class="word">Framework (build)</span><span class="n"><b data-count>5</b><span class="of" data-of> quests</span></span><span class="meter" aria-hidden="true"><span data-fill></span></span></span></button></li>
     </ol>
-    <p class="key-note">Each band is one altitude of the stack, from the hardware up. Select a band to show only its quests.</p>
   </figure>
+  <footer class="col-foot">
+    <a href="https://www.linkedin.com/in/arysc%C3%A8ne-violabian-7a9aa6128" rel="me">LinkedIn</a>
+    <a href="https://github.com/1-618" rel="me">GitHub</a>
+  </footer>
 </aside>
 
 <main>
@@ -285,21 +749,57 @@ mark{background:var(--fw-build);color:inherit;padding:0 1px}
     <p>Try another word for the same thing, pick a domain above, or <button type="button" class="clear" data-clear>clear the filter</button>.</p>
   </div>
 
-<!-- Taglines marked data-draft are drafts awaiting the author's review; remove the attribute once each is approved. -->
-<section class="domain" id="d-os-hardware" data-domain aria-labelledby="d-os-hardware-h"><header class="dh"><h2 id="d-os-hardware-h">OS &amp; hardware</h2><p class="dn">5 entries</p></header><section class="sub" data-sub><h3>Linux</h3><ul class="entries"><li class="entry" data-alt="hw-os" data-keys="OS &amp; hardware Linux linux architecture map"><span class="alt"><i class="sw sw-hw-os" aria-hidden="true"></i>Hardware &amp; OS</span><div class="body"><a class="t" href="quests/linux-architecture-map.html">Linux OS architecture</a><p class="tag" data-draft>User space, the kernel, and the two narrow strips between them: syscalls and hardware abstraction.</p></div><span class="kind">Map</span></li><li class="entry" data-alt="hw-os" data-keys="OS &amp; hardware Linux linux architecture walkthrough"><span class="alt"><i class="sw sw-hw-os" aria-hidden="true"></i>Hardware &amp; OS</span><div class="body"><a class="t" href="quests/linux-architecture-walkthrough.html">Linux OS architecture: watch data travel the stack</a><p class="tag" data-draft>Follow data from a user program through the syscall gate, the kernel and down to the hardware.</p></div><span class="kind">Walkthrough</span></li><li class="entry" data-alt="hw-os" data-keys="OS &amp; hardware Linux node and the kernel network stack"><span class="alt"><i class="sw sw-hw-os" aria-hidden="true"></i>Hardware &amp; OS</span><div class="body"><a class="t" href="quests/node-and-the-kernel-network-stack.html">Where Node ends and the kernel begins</a><p class="tag" data-draft>Node does not implement TCP. Which parts of the network stack belong to Node, the kernel and the hardware.</p><p class="also">Also in Node.js › Sockets &amp; networking</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Hardware &amp; storage</h3><ul class="entries"><li class="entry" data-alt="hw-os" data-keys="OS &amp; hardware Hardware &amp; storage mechanical sympathy c"><span class="alt"><i class="sw sw-hw-os" aria-hidden="true"></i>Hardware &amp; OS</span><div class="body"><a class="t" href="quests/mechanical-sympathy-c.html">Mechanical sympathy in C</a><p class="tag" data-draft>Memory is not flat and operations do not cost the same: writing code shaped by the real machine.</p></div><span class="kind"></span></li><li class="entry" data-alt="hw-os" data-keys="OS &amp; hardware Hardware &amp; storage sqlite stack"><span class="alt"><i class="sw sw-hw-os" aria-hidden="true"></i>Hardware &amp; OS</span><div class="body"><a class="t" href="quests/sqlite-stack.html">The SQLite stack: from db.prepare() to NAND flash</a><p class="tag" data-draft>Six layers of indirection between one TypeScript call and the bytes on silicon.</p></div><span class="kind"></span></li></ul></section></section>
-<section class="domain" id="d-javascript-the-web-platform" data-domain aria-labelledby="d-javascript-the-web-platform-h"><header class="dh"><h2 id="d-javascript-the-web-platform-h">JavaScript &amp; the Web platform</h2><p class="dn">11 entries</p></header><section class="sub" data-sub><h3>Engine &amp; execution</h3><ul class="entries"><li class="entry" data-alt="engine" data-keys="JavaScript &amp; the Web platform Engine &amp; execution js engine pipeline"><span class="alt"><i class="sw sw-engine" aria-hidden="true"></i>Engine</span><div class="body"><a class="t" href="quests/js-engine-pipeline.html">The JavaScript engine pipeline</a><p class="tag" data-draft>How console.log(&quot;Hello&quot;) becomes bytes the CPU can execute, at the moment the program runs.</p></div><span class="kind"></span></li><li class="entry" data-alt="engine" data-keys="JavaScript &amp; the Web platform Engine &amp; execution js async await traced"><span class="alt"><i class="sw sw-engine" aria-hidden="true"></i>Engine</span><div class="body"><a class="t" href="quests/js-async-await-traced.html">One await, traced through the runtime</a><p class="tag" data-draft>Closure, iterator, generator, promise, microtask: what a single await is made of.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Binary data</h3><ul class="entries"><li class="entry" data-alt="engine" data-keys="JavaScript &amp; the Web platform Binary data binary data same bytes"><span class="alt"><i class="sw sw-engine" aria-hidden="true"></i>Engine</span><div class="body"><a class="t" href="quests/binary-data-same-bytes.html">The same bytes: binary data from first principles</a><p class="tag" data-draft>Storage versus view, endianness, the Buffer pool and the seam where chunks split characters.</p></div><span class="kind"></span></li><li class="entry" data-alt="engine" data-keys="JavaScript &amp; the Web platform Binary data js bytes own view move"><span class="alt"><i class="sw sw-engine" aria-hidden="true"></i>Engine</span><div class="body"><a class="t" href="quests/js-bytes-own-view-move.html">Own, view, move: how JavaScript holds bytes</a><p class="tag" data-draft>Owning bytes is separate from interpreting them. Switch views; the values change, the bytes never do.</p></div><span class="kind"></span></li><li class="entry" data-alt="engine" data-keys="JavaScript &amp; the Web platform Binary data arraybuffer typedarray dataview"><span class="alt"><i class="sw sw-engine" aria-hidden="true"></i>Engine</span><div class="body"><a class="t" href="quests/arraybuffer-typedarray-dataview.html">ArrayBuffer, TypedArrays and DataView</a><p class="tag" data-draft>Every constructor, method and option of the binary primitives that Buffer, Blob and streams build on.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Modules</h3><ul class="entries"><li class="entry" data-alt="fw-build" data-keys="JavaScript &amp; the Web platform Modules esm vs commonjs bundling"><span class="alt"><i class="sw sw-fw-build" aria-hidden="true"></i>Framework (build)</span><div class="body"><a class="t" href="quests/esm-vs-commonjs-bundling.html">ESM vs CommonJS</a><p class="tag" data-draft>Why a bundler can prove an ESM graph before running it, but has to execute CommonJS to find out.</p><p class="also">Also in Node.js › Modules · Comparisons &amp; decisions</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Browser APIs</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="JavaScript &amp; the Web platform Browser APIs fetch end to end"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/fetch-end-to-end.html">fetch(), end to end</a><p class="tag" data-draft>From JavaScript through WebIDL and native C++ into Node.js streams, one block at a time.</p><p class="also">Also in Node.js › HTTP</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="JavaScript &amp; the Web platform Browser APIs fetch to the wire"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/fetch-to-the-wire.html">fetch() to the wire</a><p class="tag" data-draft>The round trip: process model, CORS preflight, the two-stage await and what JavaScript is allowed to read.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="JavaScript &amp; the Web platform Browser APIs events interrupt to react"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/events-interrupt-to-react.html">Events: from interrupt to React</a><p class="tag" data-draft>One word smeared across five layers, from a hardware interrupt to React&#x27;s batched handler.</p><p class="also">Also in React › Events</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="JavaScript &amp; the Web platform Browser APIs browser tab url state"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/browser-tab-url-state.html">Inside the browser tab: the URL is your state</a><p class="tag" data-draft>push versus replace, URLSearchParams and why the URL should be the source of truth.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="JavaScript &amp; the Web platform Browser APIs two stream object models"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/two-stream-object-models.html">Two stream object models</a><p class="tag" data-draft>WHATWG&#x27;s ReadableStream and Node&#x27;s stream.Readable are not two spellings of one abstraction.</p><p class="also">Also in Node.js › Streams</p></div><span class="kind"></span></li></ul></section></section>
-<section class="domain" id="d-node-js" data-domain aria-labelledby="d-node-js-h"><header class="dh"><h2 id="d-node-js-h">Node.js</h2><p class="dn">39 entries</p></header><section class="sub" data-sub><h3>Architecture</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="Node.js Architecture node architecture map"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-architecture-map.html">The anatomy of Node.js</a><p class="tag" data-draft>Seven layers between your JavaScript and the kernel; every fs.readFile hops through all of them.</p></div><span class="kind">Map</span></li><li class="entry" data-alt="runtime" data-keys="Node.js Architecture node architecture walkthrough"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-architecture-walkthrough.html">Node.js architecture: watch a request travel the stack</a><p class="tag" data-draft>Core modules, the event loop, the thread pool and the two gates between JavaScript and the kernel.</p></div><span class="kind">Walkthrough</span></li></ul></section><section class="sub" data-sub><h3>Modules</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="Node.js Modules node modules"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-modules.html" data-mission="01">Modules: resolution, the cache and the cost of cold start</a><p class="tag" data-draft>Most of your cold start is spent asking the kernel whether files exist.</p></div><span class="kind">Mission 01 of 12</span></li><li class="entry" data-alt="fw-build" data-keys="Node.js Modules esm vs commonjs bundling"><span class="alt"><i class="sw sw-fw-build" aria-hidden="true"></i>Framework (build)</span><div class="body"><a class="t" href="quests/esm-vs-commonjs-bundling.html">ESM vs CommonJS</a><p class="tag" data-draft>Why a bundler can prove an ESM graph before running it, but has to execute CommonJS to find out.</p><p class="also">Also in JavaScript &amp; the Web platform › Modules · Comparisons &amp; decisions</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Event loop &amp; dispatch</h3><ul class="entries"><li class="entry" data-alt="hw-os" data-keys="Node.js Event loop &amp; dispatch node how node finds out"><span class="alt"><i class="sw sw-hw-os" aria-hidden="true"></i>Hardware &amp; OS</span><div class="body"><a class="t" href="quests/node-how-node-finds-out.html">How Node.js finds out: a wakeup, or a call</a><p class="tag" data-draft>Fifteen notification mechanisms, from a softirq to a promise reaction, asked the same five questions.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Event loop &amp; dispatch node who calls your callback"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-who-calls-your-callback.html">Who calls your callback</a><p class="tag" data-draft>libuv does not call your JavaScript. Six handoffs, two language boundaries and one copy.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Event loop &amp; dispatch node handle pointer"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-handle-pointer.html">Handle to pointer: the indirection</a><p class="tag" data-draft>How a JavaScript object safely stands in for a native pointer, and the [native code] tell.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Event loop &amp; dispatch node event loop timers"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-event-loop-timers.html" data-mission="04">The event loop: phases, timers and the two queues that jump them</a><p class="tag" data-draft>Six phases in a fixed order, a timer heap that shares one syscall with I/O, and two queues outside them.</p></div><span class="kind">Mission 04 of 12</span></li><li class="entry" data-alt="runtime" data-keys="Node.js Event loop &amp; dispatch node event loop internals"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-event-loop-internals.html">The Node.js event loop, deep internals</a><p class="tag" data-draft>Phase by phase, from the V8 heap to libuv&#x27;s epoll, with no hand-waving.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Event loop &amp; dispatch node thread pool"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-thread-pool.html" data-mission="06">The thread pool: four subsystems, one queue, four threads</a><p class="tag" data-draft>Filesystem, DNS, crypto and zlib all share the pool, which is why one slow call delays the others.</p></div><span class="kind">Mission 06 of 12</span></li></ul></section><section class="sub" data-sub><h3>Bytes &amp; Buffers</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="Node.js Bytes &amp; Buffers node bytes and the kernel"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-bytes-and-the-kernel.html">Bytes and the kernel</a><p class="tag" data-draft>Node&#x27;s binary layer from Buffer and the pool to fs syscalls, backpressure and the Node-API bridge.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Bytes &amp; Buffers node buffers"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-buffers.html" data-mission="03">Buffers: a window onto memory outside the V8 heap</a><p class="tag" data-draft>The kernel needs an address that does not move, and a garbage collector cannot promise one.</p></div><span class="kind">Mission 03 of 12</span></li><li class="entry" data-alt="runtime" data-keys="Node.js Bytes &amp; Buffers node bytes to text"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-bytes-to-text.html">Bytes to text</a><p class="tag" data-draft>Encodings, decoding and the seam where a character is split across two chunks.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Bytes &amp; Buffers node whose bytes"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-whose-bytes.html">Whose bytes are these?</a><p class="tag" data-draft>One byte from the socket to the response, in eleven stops.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Bytes &amp; Buffers node where are my bytes"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-where-are-my-bytes.html">Where are my bytes right now?</a><p class="tag" data-draft>Who is holding the data, at every layer, at every instant.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Events</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="Node.js Events node eventemitter"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-eventemitter.html" data-mission="02">EventEmitter: emit is a for loop</a><p class="tag" data-draft>A map from names to arrays of functions. emit() is synchronous and queues nothing.</p></div><span class="kind">Mission 02 of 12</span></li><li class="entry" data-alt="runtime" data-keys="Node.js Events node eventemitter listeners"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-eventemitter-listeners.html">EventEmitter from first principles</a><p class="tag" data-draft>Build it yourself: once, mutation mid-emit, the &#x27;error&#x27; case and listener leaks.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Streams</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="Node.js Streams node streams"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-streams.html" data-mission="07">Streams: an emitter, a queue of Buffers and one advisory rule</a><p class="tag" data-draft>write() returns false when the queue is full, and nothing forces you to listen.</p></div><span class="kind">Mission 07 of 12</span></li><li class="entry" data-alt="runtime" data-keys="Node.js Streams node streams backpressure"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-streams-backpressure.html">Backpressure: streams from first principles</a><p class="tag" data-draft>One signal, traced from the kernel floor through classic streams and Web Streams.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Streams node stream readable"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-stream-readable.html">stream.Readable and stream.Writable</a><p class="tag" data-draft>Two halves of one wire: the same buffer and mark, one signal running each way.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Streams node streams producer events"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-streams-producer-events.html">The producer names an event, not a consumer</a><p class="tag" data-draft>Why a Node stream emits into the void and how consumers attach to it.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Streams node streams both ends"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-streams-both-ends.html">Node streams, both ends</a><p class="tag" data-draft>The same four questions asked of the read side and the write side.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Streams node data flow producer consumer"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-data-flow-producer-consumer.html">Producer, buffer, consumer</a><p class="tag" data-draft>The machinery between a producer that cannot be told to wait and a consumer that runs when it can.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Streams two stream object models"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/two-stream-object-models.html">Two stream object models</a><p class="tag" data-draft>WHATWG&#x27;s ReadableStream and Node&#x27;s stream.Readable are not two spellings of one abstraction.</p><p class="also">Also in JavaScript &amp; the Web platform › Browser APIs</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Streams one socket two objects"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/one-socket-two-objects.html">One socket, two objects</a><p class="tag" data-draft>req and res are built the same way: a stream base, an HTTP layer and a framework layer, on one prototype chain.</p><p class="also">Also in Node.js › HTTP</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>File system</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="Node.js File system node fs readfile"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-fs-readfile.html" data-mission="05">fs.readFile(), from your JavaScript to the disk and back</a><p class="tag" data-draft>One line traced through CPU, OS, process, thread, syscall, libuv&#x27;s worker pool and your callback.</p></div><span class="kind">Mission 05 of 12</span></li><li class="entry" data-alt="runtime" data-keys="Node.js File system node fs module"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-fs-module.html">The fs module</a><p class="tag" data-draft>What happens between fs.readFile and your callback, and the whole module surface, measured on Node 22.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Sockets &amp; networking</h3><ul class="entries"><li class="entry" data-alt="hw-os" data-keys="Node.js Sockets &amp; networking node and the kernel network stack"><span class="alt"><i class="sw sw-hw-os" aria-hidden="true"></i>Hardware &amp; OS</span><div class="body"><a class="t" href="quests/node-and-the-kernel-network-stack.html">Where Node ends and the kernel begins</a><p class="tag" data-draft>Node does not implement TCP. Which parts of the network stack belong to Node, the kernel and the hardware.</p><p class="also">Also in OS &amp; hardware › Linux</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Sockets &amp; networking node primitives"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-primitives.html" data-mission="00">The primitives: descriptors, ports and sockets</a><p class="tag" data-draft>What a file descriptor indexes, why a port is not an object, and what a socket really is.</p></div><span class="kind">Mission 00 of 12</span></li><li class="entry" data-alt="runtime" data-keys="Node.js Sockets &amp; networking node which is the socket"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-which-is-the-socket.html">Which of these is the socket?</a><p class="tag" data-draft>Five nested layers, the process/kernel boundary, and the second chain that accept() creates.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Sockets &amp; networking node net create server"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-net-create-server.html" data-mission="08">net.createServer()</a><p class="tag" data-draft>Sockets do not use the worker pool. Kernel queues, readiness and epoll instead.</p></div><span class="kind">Mission 08 of 12</span></li></ul></section><section class="sub" data-sub><h3>HTTP</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="Node.js HTTP fetch end to end"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/fetch-end-to-end.html">fetch(), end to end</a><p class="tag" data-draft>From JavaScript through WebIDL and native C++ into Node.js streams, one block at a time.</p><p class="also">Also in JavaScript &amp; the Web platform › Browser APIs</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js HTTP node http create server"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-http-create-server.html" data-mission="09">http.createServer()</a><p class="tag" data-draft>The TCP skeleton plus llhttp: a request across two machines, two kernels and the poll phase.</p></div><span class="kind">Mission 09 of 12</span></li><li class="entry" data-alt="runtime" data-keys="Node.js HTTP node http request life"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-http-request-life.html">The life of one HTTP request</a><p class="tag" data-draft>From name resolution to socket reuse, ordered by what is already true at each moment.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js HTTP one socket two objects"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/one-socket-two-objects.html">One socket, two objects</a><p class="tag" data-draft>req and res are built the same way: a stream base, an HTTP layer and a framework layer, on one prototype chain.</p><p class="also">Also in Node.js › Streams</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js HTTP node http first principles"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-http-first-principles.html">Node.js HTTP from first principles</a><p class="tag" data-draft>Express, Next.js and Fastify all reduce to raw TCP bytes parsed by llhttp and handed over as req and res.</p><p class="also">Also in HTTP frameworks › Across frameworks</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Node.js HTTP req res bloodlines"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/req-res-bloodlines.html">Two bloodlines of req and res</a><p class="tag" data-draft>Node, Express and Next compared: who mutates the request, who returns a response, and why.</p><p class="also">Also in HTTP frameworks › Across frameworks · Next.js &amp; RSC › Request · Comparisons &amp; decisions</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Concurrency</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="Node.js Concurrency node worker threads"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-worker-threads.html" data-mission="10">worker_threads: a second Node inside your process</a><p class="tag" data-draft>Not a thread as you picture it: a whole second runtime, with its own loop and heap.</p></div><span class="kind">Mission 10 of 12</span></li><li class="entry" data-alt="runtime" data-keys="Node.js Concurrency node cluster"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-cluster.html" data-mission="11">cluster: four processes, one port</a><p class="tag" data-draft>Two processes cannot both bind port 3000. The answer involves passing a file descriptor.</p></div><span class="kind">Mission 11 of 12</span></li></ul></section></section>
-<section class="domain" id="d-http-frameworks" data-domain aria-labelledby="d-http-frameworks-h"><header class="dh"><h2 id="d-http-frameworks-h">HTTP frameworks</h2><p class="dn">11 entries</p></header><section class="sub" data-sub><h3>Express</h3><ul class="entries"><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Express express architecture map"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/express-architecture-map.html">The anatomy of Express</a><p class="tag" data-draft>A function handed to Node&#x27;s server, a stack of Layer objects, and augmented req/res prototypes.</p></div><span class="kind">Map</span></li><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Express express architecture walkthrough"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/express-architecture-walkthrough.html">Express architecture: watch a request travel the whole stack</a><p class="tag" data-draft>Express&#x27;s Layer stack and next(), on top of the whole Node.js runtime.</p></div><span class="kind">Walkthrough</span></li><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Express express library anatomy"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/express-library-anatomy.html">Express: the anatomy of the library</a><p class="tag" data-draft>The source, module by module: application, request, response and the router.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Express express req res powers"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/express-req-res-powers.html">Where req and res get their powers</a><p class="tag" data-draft>Express glues keys onto Node&#x27;s own objects; Next.js subclasses the Web&#x27;s Request instead.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Express express request pipeline"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/express-request-pipeline.html">When does req.body exist?</a><p class="tag" data-draft>Your file runs once and a request walks it every time. That one fact explains middleware order.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Express express router"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/express-router.html">Router, Layer, Route</a><p class="tag" data-draft>How Express 5 routing works and what each composition idiom actually builds.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Express express app get dispatch"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/express-app-get-dispatch.html">What happens under app.get</a><p class="tag" data-draft>Router, Route, Layer and middleware dispatch in Express 5, driven by a real routing engine.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Fastify</h3><ul class="entries"><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Fastify fastify compiled before request"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/fastify-compiled-before-request.html">Fastify: compiled before the first request</a><p class="tag" data-draft>Routes, schemas and hooks compiled at startup, so the request path does less work.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Across frameworks</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="HTTP frameworks Across frameworks node http first principles"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-http-first-principles.html">Node.js HTTP from first principles</a><p class="tag" data-draft>Express, Next.js and Fastify all reduce to raw TCP bytes parsed by llhttp and handed over as req and res.</p><p class="also">Also in Node.js › HTTP</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Across frameworks req res bloodlines"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/req-res-bloodlines.html">Two bloodlines of req and res</a><p class="tag" data-draft>Node, Express and Next compared: who mutates the request, who returns a response, and why.</p><p class="also">Also in Node.js › HTTP · Next.js &amp; RSC › Request · Comparisons &amp; decisions</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Across frameworks next vs express request lifecycle"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-vs-express-request-lifecycle.html">Express decorates Node, Next extends the Web</a><p class="tag" data-draft>Two ways to give a request object more power, and the lifecycle each one produces.</p><p class="also">Also in Next.js &amp; RSC › Request · Comparisons &amp; decisions</p></div><span class="kind"></span></li></ul></section></section>
-<section class="domain" id="d-react" data-domain aria-labelledby="d-react-h"><header class="dh"><h2 id="d-react-h">React</h2><p class="dn">2 entries</p></header><section class="sub" data-sub><h3>Foundations</h3><ul class="entries"><li class="entry" data-alt="fw-runtime" data-keys="React Foundations react first principles"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/react-first-principles.html">React from first principles</a><p class="tag" data-draft>A plain object and a loop that turns it into pixels, built from scratch.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Events</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="React Events events interrupt to react"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/events-interrupt-to-react.html">Events: from interrupt to React</a><p class="tag" data-draft>One word smeared across five layers, from a hardware interrupt to React&#x27;s batched handler.</p><p class="also">Also in JavaScript &amp; the Web platform › Browser APIs</p></div><span class="kind"></span></li></ul></section></section>
-<section class="domain" id="d-next-js-rsc" data-domain aria-labelledby="d-next-js-rsc-h"><header class="dh"><h2 id="d-next-js-rsc-h">Next.js &amp; RSC</h2><p class="dn">22 entries</p></header><section class="sub" data-sub><h3>Request</h3><ul class="entries"><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC Request req res bloodlines"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/req-res-bloodlines.html">Two bloodlines of req and res</a><p class="tag" data-draft>Node, Express and Next compared: who mutates the request, who returns a response, and why.</p><p class="also">Also in Node.js › HTTP · HTTP frameworks › Across frameworks · Comparisons &amp; decisions</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC Request next vs express request lifecycle"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-vs-express-request-lifecycle.html">Express decorates Node, Next extends the Web</a><p class="tag" data-draft>Two ways to give a request object more power, and the lifecycle each one produces.</p><p class="also">Also in HTTP frameworks › Across frameworks · Comparisons &amp; decisions</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC Request next request anatomy"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-request-anatomy.html">The anatomy of a Next.js request</a><p class="tag" data-draft>One program across a build pipeline, a server runtime and the browser, from socket to hydrated UI.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC Request next app router end to end"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-app-router-end-to-end.html">The App Router, end to end</a><p class="tag" data-draft>From a packet on the wire through routing and the two-pass RSC/SSR render, into the client router.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC Request next streaming two renderers"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-streaming-two-renderers.html">Two renderers, one request</a><p class="tag" data-draft>An App Router page is rendered twice, into two wire formats, over one streamed response.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC Request next app router vs pages router"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-app-router-vs-pages-router.html">App Router vs Pages Router</a><p class="tag" data-draft>Two complete routing systems in one framework, compared layer by layer.</p><p class="also">Also in Comparisons &amp; decisions</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC Request next16 vs tanstack start"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next16-vs-tanstack-start.html">Next.js 16 vs TanStack Start</a><p class="tag" data-draft>Two answers to the same question about where rendering and data loading should live.</p><p class="also">Also in Comparisons &amp; decisions</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>RSC &amp; Flight</h3><ul class="entries"><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC RSC &amp; Flight rsc data flow map"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/rsc-data-flow-map.html">RSC: the data flow</a><p class="tag" data-draft>The ordered pipeline from request to interactive, crossing the network once.</p></div><span class="kind">Map</span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC RSC &amp; Flight rsc data flow walkthrough"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/rsc-data-flow-walkthrough.html">RSC: the full data flow, explorable</a><p class="tag" data-draft>Every step from browser request to interactive app: payload, hydration and boundaries.</p></div><span class="kind">Walkthrough</span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC RSC &amp; Flight rsc request to interactive"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/rsc-request-to-interactive.html">RSC: between request and interactive</a><p class="tag" data-draft>What the server renders, what it serializes and what the browser does with the stream.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC RSC &amp; Flight rsc network boundary"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/rsc-network-boundary.html">Crossing the network boundary</a><p class="tag" data-draft>One program across two computers: bundling decides where code runs and what crosses the wire.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC RSC &amp; Flight rsc flight payload"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/rsc-flight-payload.html">The Flight payload from first principles</a><p class="tag" data-draft>self.__next_f.push, tagged tuples and the bootstrap line: one source, two outputs.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC RSC &amp; Flight rsc flight pipeline"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/rsc-flight-pipeline.html">RootLayout to HTML and Flight</a><p class="tag" data-draft>How your layout.js becomes two coordinated outputs in the initial page response.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC RSC &amp; Flight rsc exact order"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/rsc-exact-order.html">The exact order: RSC, Flight, HTML, paint, hydrate</a><p class="tag" data-draft>One render, two outputs, braided into one response: what happens first and why.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC RSC &amp; Flight rsc async server components"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/rsc-async-server-components.html">The renderer parks it: async Server Components</a><p class="tag" data-draft>How an async component suspends on await, becomes a Flight task and resumes.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC RSC &amp; Flight rsc client reference bridge"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/rsc-client-reference-bridge.html">The client-reference bridge</a><p class="tag" data-draft>From &lt;Counter/&gt; to proxy, manifest, Flight metadata, __webpack_require__ and hydration.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-build" data-keys="Next.js &amp; RSC RSC &amp; Flight next use client boundary"><span class="alt"><i class="sw sw-fw-build" aria-hidden="true"></i>Framework (build)</span><div class="body"><a class="t" href="quests/next-use-client-boundary.html">The &#x27;use client&#x27; doorway</a><p class="tag" data-draft>Past the metaphor: the wire format, manifest entries and encrypted closures in Next.js 16.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Data plumbing</h3><ul class="entries"><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC Data plumbing next data plumbing three doorways"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-data-plumbing-three-doorways.html">Three doorways into one server</a><p class="tag" data-draft>Route handlers, Server Actions and Server Components: contract, policy and what crosses the wire.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC Data plumbing next server primitives dal"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-server-primitives-dal.html">Next.js server primitives and the DAL</a><p class="tag" data-draft>One mutation&#x27;s round trip through Server Actions, a data access layer and revalidation.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Build</h3><ul class="entries"><li class="entry" data-alt="fw-build" data-keys="Next.js &amp; RSC Build next build anatomy"><span class="alt"><i class="sw sw-fw-build" aria-hidden="true"></i>Framework (build)</span><div class="body"><a class="t" href="quests/next-build-anatomy.html">The anatomy of a Next.js 16 build</a><p class="tag" data-draft>Thirteen phases between your app/ directory and the .next folder you deploy.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-build" data-keys="Next.js &amp; RSC Build next build command"><span class="alt"><i class="sw sw-fw-build" aria-hidden="true"></i>Framework (build)</span><div class="body"><a class="t" href="quests/next-build-command.html">What happens when you run next build</a><p class="tag" data-draft>Config, route discovery, Rust-based compilation, module tracing and pruning, in order.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-build" data-keys="Next.js &amp; RSC Build next build compiler field guide"><span class="alt"><i class="sw sw-fw-build" aria-hidden="true"></i>Framework (build)</span><div class="body"><a class="t" href="quests/next-build-compiler-field-guide.html">The Next.js 16 compiler pipeline</a><p class="tag" data-draft>What the build reads, what it transforms and the runtime maps it leaves behind.</p></div><span class="kind"></span></li></ul></section></section>
-<section class="domain" id="d-comparisons-decisions" data-domain aria-labelledby="d-comparisons-decisions-h"><header class="dh"><h2 id="d-comparisons-decisions-h">Comparisons &amp; decisions</h2><p class="dn">6 entries</p></header><section class="sub" data-sub><ul class="entries"><li class="entry" data-alt="runtime" data-keys="Comparisons &amp; decisions  runtime royal rumble"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/runtime-royal-rumble.html">The runtime royal rumble</a><p class="tag" data-draft>Ten languages, thirty runtimes: a language is a spec, a runtime is what actually runs.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Comparisons &amp; decisions  req res bloodlines"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/req-res-bloodlines.html">Two bloodlines of req and res</a><p class="tag" data-draft>Node, Express and Next compared: who mutates the request, who returns a response, and why.</p><p class="also">Also in Node.js › HTTP · HTTP frameworks › Across frameworks · Next.js &amp; RSC › Request</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Comparisons &amp; decisions  next vs express request lifecycle"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-vs-express-request-lifecycle.html">Express decorates Node, Next extends the Web</a><p class="tag" data-draft>Two ways to give a request object more power, and the lifecycle each one produces.</p><p class="also">Also in HTTP frameworks › Across frameworks · Next.js &amp; RSC › Request</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Comparisons &amp; decisions  next app router vs pages router"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-app-router-vs-pages-router.html">App Router vs Pages Router</a><p class="tag" data-draft>Two complete routing systems in one framework, compared layer by layer.</p><p class="also">Also in Next.js &amp; RSC › Request</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Comparisons &amp; decisions  next16 vs tanstack start"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next16-vs-tanstack-start.html">Next.js 16 vs TanStack Start</a><p class="tag" data-draft>Two answers to the same question about where rendering and data loading should live.</p><p class="also">Also in Next.js &amp; RSC › Request</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-build" data-keys="Comparisons &amp; decisions  esm vs commonjs bundling"><span class="alt"><i class="sw sw-fw-build" aria-hidden="true"></i>Framework (build)</span><div class="body"><a class="t" href="quests/esm-vs-commonjs-bundling.html">ESM vs CommonJS</a><p class="tag" data-draft>Why a bundler can prove an ESM graph before running it, but has to execute CommonJS to find out.</p><p class="also">Also in JavaScript &amp; the Web platform › Modules · Node.js › Modules</p></div><span class="kind"></span></li></ul></section></section>
+<section class="domain" id="d-os-hardware" data-domain aria-labelledby="d-os-hardware-h"><header class="dh"><h2 id="d-os-hardware-h">OS &amp; hardware</h2><p class="dn">5 entries</p></header><section class="sub" data-sub><h3>Linux</h3><ul class="entries"><li class="entry" data-alt="hw-os" data-keys="OS &amp; hardware Linux linux architecture map"><span class="alt"><i class="sw sw-hw-os" aria-hidden="true"></i>Hardware &amp; OS</span><div class="body"><a class="t" href="quests/linux-architecture-map.html">Linux OS architecture</a><p class="tag">User space, the kernel, and the two narrow strips between them: syscalls and hardware abstraction.</p></div><span class="kind">Map</span></li><li class="entry" data-alt="hw-os" data-keys="OS &amp; hardware Linux linux architecture walkthrough"><span class="alt"><i class="sw sw-hw-os" aria-hidden="true"></i>Hardware &amp; OS</span><div class="body"><a class="t" href="quests/linux-architecture-walkthrough.html">Linux OS architecture: watch data travel the stack</a><p class="tag">Follow data from a user program through the syscall gate, the kernel and down to the hardware.</p></div><span class="kind">Walkthrough</span></li><li class="entry" data-alt="hw-os" data-keys="OS &amp; hardware Linux node and the kernel network stack"><span class="alt"><i class="sw sw-hw-os" aria-hidden="true"></i>Hardware &amp; OS</span><div class="body"><a class="t" href="quests/node-and-the-kernel-network-stack.html">Where Node ends and the kernel begins</a><p class="tag">Node does not implement TCP. Which parts of the network stack belong to Node, the kernel and the hardware.</p><p class="also">Also in Node.js › Sockets &amp; networking</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Hardware &amp; storage</h3><ul class="entries"><li class="entry" data-alt="hw-os" data-keys="OS &amp; hardware Hardware &amp; storage mechanical sympathy c"><span class="alt"><i class="sw sw-hw-os" aria-hidden="true"></i>Hardware &amp; OS</span><div class="body"><a class="t" href="quests/mechanical-sympathy-c.html">Mechanical sympathy in C</a><p class="tag">Memory is not flat and operations do not cost the same: writing code shaped by the real machine.</p></div><span class="kind"></span></li><li class="entry" data-alt="hw-os" data-keys="OS &amp; hardware Hardware &amp; storage sqlite stack"><span class="alt"><i class="sw sw-hw-os" aria-hidden="true"></i>Hardware &amp; OS</span><div class="body"><a class="t" href="quests/sqlite-stack.html">The SQLite stack: from db.prepare() to NAND flash</a><p class="tag">Six layers of indirection between one TypeScript call and the bytes on silicon.</p></div><span class="kind"></span></li></ul></section></section>
+<section class="domain" id="d-javascript-the-web-platform" data-domain aria-labelledby="d-javascript-the-web-platform-h"><header class="dh"><h2 id="d-javascript-the-web-platform-h">JavaScript &amp; the Web platform</h2><p class="dn">11 entries</p></header><section class="sub" data-sub><h3>Engine &amp; execution</h3><ul class="entries"><li class="entry" data-alt="engine" data-keys="JavaScript &amp; the Web platform Engine &amp; execution js engine pipeline"><span class="alt"><i class="sw sw-engine" aria-hidden="true"></i>Engine</span><div class="body"><a class="t" href="quests/js-engine-pipeline.html">The JavaScript engine pipeline</a><p class="tag">How console.log(&quot;Hello&quot;) becomes bytes the CPU can execute, at the moment the program runs.</p></div><span class="kind"></span></li><li class="entry" data-alt="engine" data-keys="JavaScript &amp; the Web platform Engine &amp; execution js async await traced"><span class="alt"><i class="sw sw-engine" aria-hidden="true"></i>Engine</span><div class="body"><a class="t" href="quests/js-async-await-traced.html">One await, traced through the runtime</a><p class="tag">Closure, iterator, generator, promise, microtask: what a single await is made of.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Binary data</h3><ul class="entries"><li class="entry" data-alt="engine" data-keys="JavaScript &amp; the Web platform Binary data binary data same bytes"><span class="alt"><i class="sw sw-engine" aria-hidden="true"></i>Engine</span><div class="body"><a class="t" href="quests/binary-data-same-bytes.html">The same bytes: binary data from first principles</a><p class="tag">Storage versus view, endianness, the Buffer pool and the seam where chunks split characters.</p></div><span class="kind"></span></li><li class="entry" data-alt="engine" data-keys="JavaScript &amp; the Web platform Binary data js bytes own view move"><span class="alt"><i class="sw sw-engine" aria-hidden="true"></i>Engine</span><div class="body"><a class="t" href="quests/js-bytes-own-view-move.html">Own, view, move: how JavaScript holds bytes</a><p class="tag">Owning bytes is separate from interpreting them. Switch views; the values change, the bytes never do.</p></div><span class="kind"></span></li><li class="entry" data-alt="engine" data-keys="JavaScript &amp; the Web platform Binary data arraybuffer typedarray dataview"><span class="alt"><i class="sw sw-engine" aria-hidden="true"></i>Engine</span><div class="body"><a class="t" href="quests/arraybuffer-typedarray-dataview.html">ArrayBuffer, TypedArrays and DataView</a><p class="tag">Every constructor, method and option of the binary primitives that Buffer, Blob and streams build on.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Modules</h3><ul class="entries"><li class="entry" data-alt="fw-build" data-keys="JavaScript &amp; the Web platform Modules esm vs commonjs bundling"><span class="alt"><i class="sw sw-fw-build" aria-hidden="true"></i>Framework (build)</span><div class="body"><a class="t" href="quests/esm-vs-commonjs-bundling.html">ESM vs CommonJS</a><p class="tag">Why a bundler can prove an ESM graph before running it, but has to execute CommonJS to find out.</p><p class="also">Also in Node.js › Modules · Comparisons &amp; decisions</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Browser APIs</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="JavaScript &amp; the Web platform Browser APIs fetch end to end"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/fetch-end-to-end.html">fetch(), end to end</a><p class="tag">From JavaScript through WebIDL and native C++ into Node.js streams, one block at a time.</p><p class="also">Also in Node.js › HTTP</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="JavaScript &amp; the Web platform Browser APIs fetch to the wire"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/fetch-to-the-wire.html">fetch() to the wire</a><p class="tag">The round trip: process model, CORS preflight, the two-stage await and what JavaScript is allowed to read.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="JavaScript &amp; the Web platform Browser APIs events interrupt to react"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/events-interrupt-to-react.html">Events: from interrupt to React</a><p class="tag">One word smeared across five layers, from a hardware interrupt to React&#x27;s batched handler.</p><p class="also">Also in React › Events</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="JavaScript &amp; the Web platform Browser APIs browser tab url state"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/browser-tab-url-state.html">Inside the browser tab: the URL is your state</a><p class="tag">push versus replace, URLSearchParams and why the URL should be the source of truth.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="JavaScript &amp; the Web platform Browser APIs two stream object models"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/two-stream-object-models.html">Two stream object models</a><p class="tag">WHATWG&#x27;s ReadableStream and Node&#x27;s stream.Readable are not two spellings of one abstraction.</p><p class="also">Also in Node.js › Streams</p></div><span class="kind"></span></li></ul></section></section>
+<section class="domain" id="d-node-js" data-domain aria-labelledby="d-node-js-h"><header class="dh"><h2 id="d-node-js-h">Node.js</h2><p class="dn">39 entries</p></header><section class="sub" data-sub><h3>Architecture</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="Node.js Architecture node architecture map"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-architecture-map.html">The anatomy of Node.js</a><p class="tag">Seven layers between your JavaScript and the kernel; every fs.readFile hops through all of them.</p></div><span class="kind">Map</span></li><li class="entry" data-alt="runtime" data-keys="Node.js Architecture node architecture walkthrough"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-architecture-walkthrough.html">Node.js architecture: watch a request travel the stack</a><p class="tag">Core modules, the event loop, the thread pool and the two gates between JavaScript and the kernel.</p></div><span class="kind">Walkthrough</span></li></ul></section><section class="sub" data-sub><h3>Modules</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="Node.js Modules node modules"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-modules.html" data-mission="01">Modules: resolution, the cache and the cost of cold start</a><p class="tag">Most of your cold start is spent asking the kernel whether files exist.</p></div><span class="kind">Mission 01 of 12</span></li><li class="entry" data-alt="fw-build" data-keys="Node.js Modules esm vs commonjs bundling"><span class="alt"><i class="sw sw-fw-build" aria-hidden="true"></i>Framework (build)</span><div class="body"><a class="t" href="quests/esm-vs-commonjs-bundling.html">ESM vs CommonJS</a><p class="tag">Why a bundler can prove an ESM graph before running it, but has to execute CommonJS to find out.</p><p class="also">Also in JavaScript &amp; the Web platform › Modules · Comparisons &amp; decisions</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Event loop &amp; dispatch</h3><ul class="entries"><li class="entry" data-alt="hw-os" data-keys="Node.js Event loop &amp; dispatch node how node finds out"><span class="alt"><i class="sw sw-hw-os" aria-hidden="true"></i>Hardware &amp; OS</span><div class="body"><a class="t" href="quests/node-how-node-finds-out.html">How Node.js finds out: a wakeup, or a call</a><p class="tag">Fifteen notification mechanisms, from a softirq to a promise reaction, asked the same five questions.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Event loop &amp; dispatch node who calls your callback"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-who-calls-your-callback.html">Who calls your callback</a><p class="tag">libuv does not call your JavaScript. Six handoffs, two language boundaries and one copy.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Event loop &amp; dispatch node handle pointer"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-handle-pointer.html">Handle to pointer: the indirection</a><p class="tag">How a JavaScript object safely stands in for a native pointer, and the [native code] tell.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Event loop &amp; dispatch node event loop timers"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-event-loop-timers.html" data-mission="04">The event loop: phases, timers and the two queues that jump them</a><p class="tag">Six phases in a fixed order, a timer heap that shares one syscall with I/O, and two queues outside them.</p></div><span class="kind">Mission 04 of 12</span></li><li class="entry" data-alt="runtime" data-keys="Node.js Event loop &amp; dispatch node event loop internals"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-event-loop-internals.html">The Node.js event loop, deep internals</a><p class="tag">Phase by phase, from the V8 heap to libuv&#x27;s epoll, with no hand-waving.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Event loop &amp; dispatch node thread pool"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-thread-pool.html" data-mission="06">The thread pool: four subsystems, one queue, four threads</a><p class="tag">Filesystem, DNS, crypto and zlib all share the pool, which is why one slow call delays the others.</p></div><span class="kind">Mission 06 of 12</span></li></ul></section><section class="sub" data-sub><h3>Bytes &amp; Buffers</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="Node.js Bytes &amp; Buffers node bytes and the kernel"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-bytes-and-the-kernel.html">Bytes and the kernel</a><p class="tag">Node&#x27;s binary layer from Buffer and the pool to fs syscalls, backpressure and the Node-API bridge.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Bytes &amp; Buffers node buffers"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-buffers.html" data-mission="03">Buffers: a window onto memory outside the V8 heap</a><p class="tag">The kernel needs an address that does not move, and a garbage collector cannot promise one.</p></div><span class="kind">Mission 03 of 12</span></li><li class="entry" data-alt="runtime" data-keys="Node.js Bytes &amp; Buffers node bytes to text"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-bytes-to-text.html">Bytes to text</a><p class="tag">Encodings, decoding and the seam where a character is split across two chunks.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Bytes &amp; Buffers node whose bytes"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-whose-bytes.html">Whose bytes are these?</a><p class="tag">One byte from the socket to the response, in eleven stops.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Bytes &amp; Buffers node where are my bytes"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-where-are-my-bytes.html">Where are my bytes right now?</a><p class="tag">Who is holding the data, at every layer, at every instant.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Events</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="Node.js Events node eventemitter"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-eventemitter.html" data-mission="02">EventEmitter: emit is a for loop</a><p class="tag">A map from names to arrays of functions. emit() is synchronous and queues nothing.</p></div><span class="kind">Mission 02 of 12</span></li><li class="entry" data-alt="runtime" data-keys="Node.js Events node eventemitter listeners"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-eventemitter-listeners.html">EventEmitter from first principles</a><p class="tag">Build it yourself: once, mutation mid-emit, the &#x27;error&#x27; case and listener leaks.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Streams</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="Node.js Streams node streams"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-streams.html" data-mission="07">Streams: an emitter, a queue of Buffers and one advisory rule</a><p class="tag">write() returns false when the queue is full, and nothing forces you to listen.</p></div><span class="kind">Mission 07 of 12</span></li><li class="entry" data-alt="runtime" data-keys="Node.js Streams node streams backpressure"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-streams-backpressure.html">Backpressure: streams from first principles</a><p class="tag">One signal, traced from the kernel floor through classic streams and Web Streams.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Streams node stream readable"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-stream-readable.html">stream.Readable and stream.Writable</a><p class="tag">Two halves of one wire: the same buffer and mark, one signal running each way.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Streams node streams producer events"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-streams-producer-events.html">The producer names an event, not a consumer</a><p class="tag">Why a Node stream emits into the void and how consumers attach to it.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Streams node streams both ends"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-streams-both-ends.html">Node streams, both ends</a><p class="tag">The same four questions asked of the read side and the write side.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Streams node data flow producer consumer"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-data-flow-producer-consumer.html">Producer, buffer, consumer</a><p class="tag">The machinery between a producer that cannot be told to wait and a consumer that runs when it can.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Streams two stream object models"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/two-stream-object-models.html">Two stream object models</a><p class="tag">WHATWG&#x27;s ReadableStream and Node&#x27;s stream.Readable are not two spellings of one abstraction.</p><p class="also">Also in JavaScript &amp; the Web platform › Browser APIs</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Streams one socket two objects"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/one-socket-two-objects.html">One socket, two objects</a><p class="tag">req and res are built the same way: a stream base, an HTTP layer and a framework layer, on one prototype chain.</p><p class="also">Also in Node.js › HTTP</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>File system</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="Node.js File system node fs readfile"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-fs-readfile.html" data-mission="05">fs.readFile(), from your JavaScript to the disk and back</a><p class="tag">One line traced through CPU, OS, process, thread, syscall, libuv&#x27;s worker pool and your callback.</p></div><span class="kind">Mission 05 of 12</span></li><li class="entry" data-alt="runtime" data-keys="Node.js File system node fs module"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-fs-module.html">The fs module</a><p class="tag">What happens between fs.readFile and your callback, and the whole module surface, measured on Node 22.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Sockets &amp; networking</h3><ul class="entries"><li class="entry" data-alt="hw-os" data-keys="Node.js Sockets &amp; networking node and the kernel network stack"><span class="alt"><i class="sw sw-hw-os" aria-hidden="true"></i>Hardware &amp; OS</span><div class="body"><a class="t" href="quests/node-and-the-kernel-network-stack.html">Where Node ends and the kernel begins</a><p class="tag">Node does not implement TCP. Which parts of the network stack belong to Node, the kernel and the hardware.</p><p class="also">Also in OS &amp; hardware › Linux</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Sockets &amp; networking node primitives"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-primitives.html" data-mission="00">The primitives: descriptors, ports and sockets</a><p class="tag">What a file descriptor indexes, why a port is not an object, and what a socket really is.</p></div><span class="kind">Mission 00 of 12</span></li><li class="entry" data-alt="runtime" data-keys="Node.js Sockets &amp; networking node which is the socket"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-which-is-the-socket.html">Which of these is the socket?</a><p class="tag">Five nested layers, the process/kernel boundary, and the second chain that accept() creates.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js Sockets &amp; networking node net create server"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-net-create-server.html" data-mission="08">net.createServer()</a><p class="tag">Sockets do not use the worker pool. Kernel queues, readiness and epoll instead.</p></div><span class="kind">Mission 08 of 12</span></li></ul></section><section class="sub" data-sub><h3>HTTP</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="Node.js HTTP fetch end to end"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/fetch-end-to-end.html">fetch(), end to end</a><p class="tag">From JavaScript through WebIDL and native C++ into Node.js streams, one block at a time.</p><p class="also">Also in JavaScript &amp; the Web platform › Browser APIs</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js HTTP node http create server"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-http-create-server.html" data-mission="09">http.createServer()</a><p class="tag">The TCP skeleton plus llhttp: a request across two machines, two kernels and the poll phase.</p></div><span class="kind">Mission 09 of 12</span></li><li class="entry" data-alt="runtime" data-keys="Node.js HTTP node http request life"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-http-request-life.html">The life of one HTTP request</a><p class="tag">From name resolution to socket reuse, ordered by what is already true at each moment.</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js HTTP one socket two objects"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/one-socket-two-objects.html">One socket, two objects</a><p class="tag">req and res are built the same way: a stream base, an HTTP layer and a framework layer, on one prototype chain.</p><p class="also">Also in Node.js › Streams</p></div><span class="kind"></span></li><li class="entry" data-alt="runtime" data-keys="Node.js HTTP node http first principles"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-http-first-principles.html">Node.js HTTP from first principles</a><p class="tag">Express, Next.js and Fastify all reduce to raw TCP bytes parsed by llhttp and handed over as req and res.</p><p class="also">Also in HTTP frameworks › Across frameworks</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Node.js HTTP req res bloodlines"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/req-res-bloodlines.html">Two bloodlines of req and res</a><p class="tag">Node, Express and Next compared: who mutates the request, who returns a response, and why.</p><p class="also">Also in HTTP frameworks › Across frameworks · Next.js &amp; RSC › Request · Comparisons &amp; decisions</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Concurrency</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="Node.js Concurrency node worker threads"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-worker-threads.html" data-mission="10">worker_threads: a second Node inside your process</a><p class="tag">Not a thread as you picture it: a whole second runtime, with its own loop and heap.</p></div><span class="kind">Mission 10 of 12</span></li><li class="entry" data-alt="runtime" data-keys="Node.js Concurrency node cluster"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-cluster.html" data-mission="11">cluster: four processes, one port</a><p class="tag">Two processes cannot both bind port 3000. The answer involves passing a file descriptor.</p></div><span class="kind">Mission 11 of 12</span></li></ul></section></section>
+<section class="domain" id="d-http-frameworks" data-domain aria-labelledby="d-http-frameworks-h"><header class="dh"><h2 id="d-http-frameworks-h">HTTP frameworks</h2><p class="dn">11 entries</p></header><section class="sub" data-sub><h3>Express</h3><ul class="entries"><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Express express architecture map"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/express-architecture-map.html">The anatomy of Express</a><p class="tag">A function handed to Node&#x27;s server, a stack of Layer objects, and augmented req/res prototypes.</p></div><span class="kind">Map</span></li><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Express express architecture walkthrough"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/express-architecture-walkthrough.html">Express architecture: watch a request travel the whole stack</a><p class="tag">Express&#x27;s Layer stack and next(), on top of the whole Node.js runtime.</p></div><span class="kind">Walkthrough</span></li><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Express express library anatomy"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/express-library-anatomy.html">Express: the anatomy of the library</a><p class="tag">The source, module by module: application, request, response and the router.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Express express req res powers"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/express-req-res-powers.html">Where req and res get their powers</a><p class="tag">Express glues keys onto Node&#x27;s own objects; Next.js subclasses the Web&#x27;s Request instead.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Express express request pipeline"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/express-request-pipeline.html">When does req.body exist?</a><p class="tag">Your file runs once and a request walks it every time. That one fact explains middleware order.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Express express router"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/express-router.html">Router, Layer, Route</a><p class="tag">How Express 5 routing works and what each composition idiom actually builds.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Express express app get dispatch"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/express-app-get-dispatch.html">What happens under app.get</a><p class="tag">Router, Route, Layer and middleware dispatch in Express 5, driven by a real routing engine.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Fastify</h3><ul class="entries"><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Fastify fastify compiled before request"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/fastify-compiled-before-request.html">Fastify: compiled before the first request</a><p class="tag">Routes, schemas and hooks compiled at startup, so the request path does less work.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Across frameworks</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="HTTP frameworks Across frameworks node http first principles"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/node-http-first-principles.html">Node.js HTTP from first principles</a><p class="tag">Express, Next.js and Fastify all reduce to raw TCP bytes parsed by llhttp and handed over as req and res.</p><p class="also">Also in Node.js › HTTP</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Across frameworks req res bloodlines"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/req-res-bloodlines.html">Two bloodlines of req and res</a><p class="tag">Node, Express and Next compared: who mutates the request, who returns a response, and why.</p><p class="also">Also in Node.js › HTTP · Next.js &amp; RSC › Request · Comparisons &amp; decisions</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="HTTP frameworks Across frameworks next vs express request lifecycle"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-vs-express-request-lifecycle.html">Express decorates Node, Next extends the Web</a><p class="tag">Two ways to give a request object more power, and the lifecycle each one produces.</p><p class="also">Also in Next.js &amp; RSC › Request · Comparisons &amp; decisions</p></div><span class="kind"></span></li></ul></section></section>
+<section class="domain" id="d-react" data-domain aria-labelledby="d-react-h"><header class="dh"><h2 id="d-react-h">React</h2><p class="dn">2 entries</p></header><section class="sub" data-sub><h3>Foundations</h3><ul class="entries"><li class="entry" data-alt="fw-runtime" data-keys="React Foundations react first principles"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/react-first-principles.html">React from first principles</a><p class="tag">A plain object and a loop that turns it into pixels, built from scratch.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Events</h3><ul class="entries"><li class="entry" data-alt="runtime" data-keys="React Events events interrupt to react"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/events-interrupt-to-react.html">Events: from interrupt to React</a><p class="tag">One word smeared across five layers, from a hardware interrupt to React&#x27;s batched handler.</p><p class="also">Also in JavaScript &amp; the Web platform › Browser APIs</p></div><span class="kind"></span></li></ul></section></section>
+<section class="domain" id="d-next-js-rsc" data-domain aria-labelledby="d-next-js-rsc-h"><header class="dh"><h2 id="d-next-js-rsc-h">Next.js &amp; RSC</h2><p class="dn">22 entries</p></header><section class="sub" data-sub><h3>Request</h3><ul class="entries"><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC Request req res bloodlines"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/req-res-bloodlines.html">Two bloodlines of req and res</a><p class="tag">Node, Express and Next compared: who mutates the request, who returns a response, and why.</p><p class="also">Also in Node.js › HTTP · HTTP frameworks › Across frameworks · Comparisons &amp; decisions</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC Request next vs express request lifecycle"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-vs-express-request-lifecycle.html">Express decorates Node, Next extends the Web</a><p class="tag">Two ways to give a request object more power, and the lifecycle each one produces.</p><p class="also">Also in HTTP frameworks › Across frameworks · Comparisons &amp; decisions</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC Request next request anatomy"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-request-anatomy.html">The anatomy of a Next.js request</a><p class="tag">One program across a build pipeline, a server runtime and the browser, from socket to hydrated UI.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC Request next app router end to end"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-app-router-end-to-end.html">The App Router, end to end</a><p class="tag">From a packet on the wire through routing and the two-pass RSC/SSR render, into the client router.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC Request next streaming two renderers"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-streaming-two-renderers.html">Two renderers, one request</a><p class="tag">An App Router page is rendered twice, into two wire formats, over one streamed response.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC Request next app router vs pages router"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-app-router-vs-pages-router.html">App Router vs Pages Router</a><p class="tag">Two complete routing systems in one framework, compared layer by layer.</p><p class="also">Also in Comparisons &amp; decisions</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC Request next16 vs tanstack start"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next16-vs-tanstack-start.html">Next.js 16 vs TanStack Start</a><p class="tag">Two answers to the same question about where rendering and data loading should live.</p><p class="also">Also in Comparisons &amp; decisions</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>RSC &amp; Flight</h3><ul class="entries"><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC RSC &amp; Flight rsc data flow map"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/rsc-data-flow-map.html">RSC: the data flow</a><p class="tag">The ordered pipeline from request to interactive, crossing the network once.</p></div><span class="kind">Map</span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC RSC &amp; Flight rsc data flow walkthrough"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/rsc-data-flow-walkthrough.html">RSC: the full data flow, explorable</a><p class="tag">Every step from browser request to interactive app: payload, hydration and boundaries.</p></div><span class="kind">Walkthrough</span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC RSC &amp; Flight rsc request to interactive"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/rsc-request-to-interactive.html">RSC: between request and interactive</a><p class="tag">What the server renders, what it serializes and what the browser does with the stream.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC RSC &amp; Flight rsc network boundary"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/rsc-network-boundary.html">Crossing the network boundary</a><p class="tag">One program across two computers: bundling decides where code runs and what crosses the wire.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC RSC &amp; Flight rsc flight payload"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/rsc-flight-payload.html">The Flight payload from first principles</a><p class="tag">self.__next_f.push, tagged tuples and the bootstrap line: one source, two outputs.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC RSC &amp; Flight rsc flight pipeline"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/rsc-flight-pipeline.html">RootLayout to HTML and Flight</a><p class="tag">How your layout.js becomes two coordinated outputs in the initial page response.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC RSC &amp; Flight rsc exact order"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/rsc-exact-order.html">The exact order: RSC, Flight, HTML, paint, hydrate</a><p class="tag">One render, two outputs, braided into one response: what happens first and why.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC RSC &amp; Flight rsc async server components"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/rsc-async-server-components.html">The renderer parks it: async Server Components</a><p class="tag">How an async component suspends on await, becomes a Flight task and resumes.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC RSC &amp; Flight rsc client reference bridge"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/rsc-client-reference-bridge.html">The client-reference bridge</a><p class="tag">From &lt;Counter/&gt; to proxy, manifest, Flight metadata, __webpack_require__ and hydration.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-build" data-keys="Next.js &amp; RSC RSC &amp; Flight next use client boundary"><span class="alt"><i class="sw sw-fw-build" aria-hidden="true"></i>Framework (build)</span><div class="body"><a class="t" href="quests/next-use-client-boundary.html">The &#x27;use client&#x27; doorway</a><p class="tag">Past the metaphor: the wire format, manifest entries and encrypted closures in Next.js 16.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Data plumbing</h3><ul class="entries"><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC Data plumbing next data plumbing three doorways"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-data-plumbing-three-doorways.html">Three doorways into one server</a><p class="tag">Route handlers, Server Actions and Server Components: contract, policy and what crosses the wire.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Next.js &amp; RSC Data plumbing next server primitives dal"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-server-primitives-dal.html">Next.js server primitives and the DAL</a><p class="tag">One mutation&#x27;s round trip through Server Actions, a data access layer and revalidation.</p></div><span class="kind"></span></li></ul></section><section class="sub" data-sub><h3>Build</h3><ul class="entries"><li class="entry" data-alt="fw-build" data-keys="Next.js &amp; RSC Build next build anatomy"><span class="alt"><i class="sw sw-fw-build" aria-hidden="true"></i>Framework (build)</span><div class="body"><a class="t" href="quests/next-build-anatomy.html">The anatomy of a Next.js 16 build</a><p class="tag">Thirteen phases between your app/ directory and the .next folder you deploy.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-build" data-keys="Next.js &amp; RSC Build next build command"><span class="alt"><i class="sw sw-fw-build" aria-hidden="true"></i>Framework (build)</span><div class="body"><a class="t" href="quests/next-build-command.html">What happens when you run next build</a><p class="tag">Config, route discovery, Rust-based compilation, module tracing and pruning, in order.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-build" data-keys="Next.js &amp; RSC Build next build compiler field guide"><span class="alt"><i class="sw sw-fw-build" aria-hidden="true"></i>Framework (build)</span><div class="body"><a class="t" href="quests/next-build-compiler-field-guide.html">The Next.js 16 compiler pipeline</a><p class="tag">What the build reads, what it transforms and the runtime maps it leaves behind.</p></div><span class="kind"></span></li></ul></section></section>
+<section class="domain" id="d-comparisons-decisions" data-domain aria-labelledby="d-comparisons-decisions-h"><header class="dh"><h2 id="d-comparisons-decisions-h">Comparisons &amp; decisions</h2><p class="dn">6 entries</p></header><section class="sub" data-sub><ul class="entries"><li class="entry" data-alt="runtime" data-keys="Comparisons &amp; decisions  runtime royal rumble"><span class="alt"><i class="sw sw-runtime" aria-hidden="true"></i>Runtime</span><div class="body"><a class="t" href="quests/runtime-royal-rumble.html">The runtime royal rumble</a><p class="tag">Ten languages, thirty runtimes: a language is a spec, a runtime is what actually runs.</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Comparisons &amp; decisions  req res bloodlines"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/req-res-bloodlines.html">Two bloodlines of req and res</a><p class="tag">Node, Express and Next compared: who mutates the request, who returns a response, and why.</p><p class="also">Also in Node.js › HTTP · HTTP frameworks › Across frameworks · Next.js &amp; RSC › Request</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Comparisons &amp; decisions  next vs express request lifecycle"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-vs-express-request-lifecycle.html">Express decorates Node, Next extends the Web</a><p class="tag">Two ways to give a request object more power, and the lifecycle each one produces.</p><p class="also">Also in HTTP frameworks › Across frameworks · Next.js &amp; RSC › Request</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Comparisons &amp; decisions  next app router vs pages router"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next-app-router-vs-pages-router.html">App Router vs Pages Router</a><p class="tag">Two complete routing systems in one framework, compared layer by layer.</p><p class="also">Also in Next.js &amp; RSC › Request</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-runtime" data-keys="Comparisons &amp; decisions  next16 vs tanstack start"><span class="alt"><i class="sw sw-fw-runtime" aria-hidden="true"></i>Framework (runtime)</span><div class="body"><a class="t" href="quests/next16-vs-tanstack-start.html">Next.js 16 vs TanStack Start</a><p class="tag">Two answers to the same question about where rendering and data loading should live.</p><p class="also">Also in Next.js &amp; RSC › Request</p></div><span class="kind"></span></li><li class="entry" data-alt="fw-build" data-keys="Comparisons &amp; decisions  esm vs commonjs bundling"><span class="alt"><i class="sw sw-fw-build" aria-hidden="true"></i>Framework (build)</span><div class="body"><a class="t" href="quests/esm-vs-commonjs-bundling.html">ESM vs CommonJS</a><p class="tag">Why a bundler can prove an ESM graph before running it, but has to execute CommonJS to find out.</p><p class="also">Also in JavaScript &amp; the Web platform › Modules · Node.js › Modules</p></div><span class="kind"></span></li></ul></section></section>
 
   <footer class="foot">
-    <p>Every quest keeps its address for good, so a link you share today still opens the same quest, at the same stage.</p>
-    <span class="by">Aryscène</span>
+    <div class="dia">
+      <h2 class="dia-h">Where JIT-Atlas sits</h2>
+      <p>Diátaxis sorts documentation by two questions: does it help you do or know, and are you studying or working? JIT-Atlas sits on the knowing side, between explanation and reference. Each quest explains how a system works, laid out so you can land on the one stage you need, mid-build.</p>
+      <p><a class="more" href="about.html">How JIT-Atlas works<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 8h11M9 4l4 4-4 4"/></svg></a></p>
+    </div>
+    <figure class="compass">
+      <div class="cmap">
+        <div class="ax ax-h" aria-hidden="true"><span>Study</span><i></i><span>Work</span></div>
+        <div class="ax ax-v" aria-hidden="true"><span>Doing</span><i></i><span>Knowing</span></div>
+        <div class="cq">
+          <div class="c"><b>Tutorials</b><span>learn by doing</span></div>
+          <div class="c"><b>How-to guides</b><span>get a task done</span></div>
+          <div class="c"><b>Explanation</b><span>understand why</span></div>
+          <div class="c"><b>Reference</b><span>look it up</span></div>
+          <span class="here">JIT-Atlas</span>
+        </div>
+      </div>
+      <figcaption>Diátaxis, after Daniele Procida.</figcaption>
+    </figure>
   </footer>
 </main>
 </div>
+
+<dialog class="menu" id="menu" aria-labelledby="menu-h">
+  <form method="dialog">
+    <header class="menu-head">
+      <h2 id="menu-h">Select game</h2>
+    </header>
+    <fieldset class="games">
+      <legend class="vh">Theme</legend>
+      <label class="game"><input type="radio" name="theme" value="survey26"><span class="g-art g-survey26" aria-hidden="true"></span><span class="g-txt"><b>Alice in Agentland</b><span>“Curiouser and curiouser,” said Alice, three frames deep in the call stack.</span></span></label>
+      <label class="game"><input type="radio" name="theme" value="neon86"><span class="g-art g-neon86" aria-hidden="true"></span><span class="g-txt"><b>Token-Spend City 1986</b><span>“Say hello to my little context window.”</span></span></label>
+      <label class="game"><input type="radio" name="theme" value="westside92"><span class="g-art g-westside92" aria-hidden="true"></span><span class="g-txt"><b>Loop to Perdition</b><span>“This is the loop we chose. And there is only one guarantee: none of us will see it go idle.”</span></span></label>
+      <label class="game"><input type="radio" name="theme" value="sunshine13"><span class="g-art g-sunshine13" aria-hidden="true"></span><span class="g-txt"><b>Around the Runtime in 80 Ways</b><span>“I will wager twenty thousand pounds I can trace one request around the runtime in eighty stages or less.”</span></span></label>
+    </fieldset>
+    <footer class="menu-foot">
+      <button class="btn" value="done">Resume</button>
+    </footer>
+  </form>
+</dialog>
+<div class="stinger" aria-hidden="true"><div class="st-in"><b class="st-name" data-st-name></b></div></div>
+<p class="vh" role="status" aria-live="polite" data-theme-status></p>
 
 <script>
 (() => {
@@ -416,6 +916,259 @@ mark{background:var(--fw-build);color:inherit;padding:0 1px}
     btn.setAttribute('href', routeLink.getAttribute('href'));
     btn.firstChild.textContent = `Resume at mission ${last}: ${$('.mt', routeLink).textContent} `;
   }
+})();
+</script>
+<script>
+// Game themes: the picker, the switch stinger, and synthesised UI sound.
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const root = document.documentElement;
+  const THEMES = {
+    survey26:   { name: "Alice in Agentland",   color: '#fafaf6' },
+    neon86:     { name: "Token-Spend City 1986",        color: '#140a2b' },
+    westside92: { name: "Loop to Perdition",    color: '#15140f' },
+    sunshine13: { name: "Around the Runtime in 80 Ways",        color: '#0e1012' }
+  };
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} }
+  };
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const current = () => THEMES[root.dataset.theme] ? root.dataset.theme : 'survey26';
+
+  // ---------- strata art: SVG tiles painted from the live theme tokens ----------
+  const strata = $('.strata'), col = $('.col');
+  const rgb = h => { h = h.trim().replace('#', ''); if (h.length === 3) h = [...h].map(c => c + c).join(''); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); };
+  const mix = (a, b, t) => { const A = rgb(a), B = rgb(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join(''); };
+  const lum = h => rgb(h).reduce((s, v, i) => s + v * [.2126, .7152, .0722][i], 0);
+  const tile = (w, h, body) => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}' viewBox='0 0 ${w} ${h}'>${body}</svg>`)}")`;
+  const seeded = n => () => (n = (n * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  const f1 = v => v.toFixed(1);
+  const CLOUD = 'M4 22h52a8 8 0 0 0 0-16a12 12 0 0 0-22-4a10 10 0 0 0-18 4a9 9 0 0 0-12 16z';
+  const cloud = (x, y, k, fill, shade) => `<g transform='translate(${x} ${y}) scale(${k})'><path d='${CLOUD}' fill='${shade}' transform='translate(0 3)'/><path d='${CLOUD}' fill='${fill}'/></g>`;
+  function blades(w, h, n, fill, minH, maxH, rand) {
+    let d = '';
+    for (let i = 0; i < n; i++) {
+      const wd = 2 + rand() * 1.8, x = Math.min((i + rand() * .7) * w / n, w - wd - 1), bh = minH + rand() * (maxH - minH);
+      const lean = Math.max(-x, Math.min(w - x - wd, (rand() - .5) * 12));
+      d += `M${f1(x)} ${h}Q${f1(x + lean * .3)} ${f1(h - bh * .55)} ${f1(x + lean)} ${f1(h - bh)}Q${f1(x + lean * .3 + wd * .7)} ${f1(h - bh * .5)} ${f1(x + wd)} ${h}Z`;
+    }
+    return `<path d='${d}' fill='${fill}'/>`;
+  }
+  function paintStrata() {
+    const cs = getComputedStyle(col), v = k => cs.getPropertyValue(k).trim();
+    const ink = v('--ink'), paper = v('--paper');
+    const dark = lum(ink) < lum(paper) ? ink : paper, light = dark === ink ? paper : ink;
+    const deep = (c, t = .35) => mix(c, dark, t), lift = (c, t = .45) => mix(c, light, t);
+    const cloudC = v('--cloud'), blade = v('--blade'), grain = v('--grain'), vein = v('--vein'), ember = v('--ember');
+    const sky = v('--fw-build'), surf = v('--fw-runtime'), soil = v('--runtime'), rock = v('--engine');
+    const r = seeded(7), set = (k, val) => strata.style.setProperty(k, val);
+    const shade = mix(cloudC, sky, .5);
+    set('--art-cloud', tile(420, 46, cloud(18, 14, 1, cloudC, shade) + cloud(178, 20, .62, cloudC, shade) + cloud(292, 10, .82, cloudC, shade)));
+    set('--art-cirrus', tile(600, 60, [[90, 18, 70], [260, 34, 50], [430, 14, 90], [540, 40, 40]].map(([x, y, rx]) => `<ellipse cx='${x}' cy='${y}' rx='${rx}' ry='2.4' fill='${cloudC}'/><ellipse cx='${x + rx * .4}' cy='${y + 5}' rx='${rx * .55}' ry='1.6' fill='${cloudC}'/>`).join('')));
+    set('--art-grass-back', tile(120, 50, blades(120, 50, 26, deep(blade, .45), 16, 40, r)));
+    set('--art-grass', tile(120, 42, blades(120, 42, 22, blade, 12, 32, r) + blades(120, 42, 10, lift(blade, .35), 8, 22, r) + `<rect y='39.5' width='120' height='2.5' fill='${deep(surf, .55)}'/>`));
+    const pebble = (x, y, rx, ry) => `<ellipse cx='${x}' cy='${y}' rx='${rx}' ry='${ry}' fill='${mix(grain, soil, .35)}' stroke='${deep(grain, .5)}' stroke-width='.8'/><ellipse cx='${f1(x - rx * .3)}' cy='${f1(y - ry * .35)}' rx='${f1(rx * .38)}' ry='${f1(ry * .26)}' fill='${lift(grain, .6)}' opacity='.7'/>`;
+    const roots = `<path d='M58 0C60 12 52 20 57 34S66 50 61 62M57 24C64 29 69 30 75 39M60 46C54 51 49 51 44 58M162 0C160 9 166 16 162 26M162 16C156 20 152 20 148 26' fill='none' stroke='${deep(soil, .5)}' stroke-width='1' stroke-linecap='round' opacity='.65'/>`;
+    const pr = seeded(31);
+    const stones = [[24, 22], [108, 16], [190, 48], [140, 74], [34, 98], [92, 118], [200, 112]].map(([x, y]) => { const rx = 2.4 + pr() * 4.8, ry = rx * (.55 + pr() * .2); return `<g transform='rotate(${f1(pr() * 40 - 20)} ${x} ${y})'>${pebble(x, y, f1(rx), f1(ry))}</g>`; }).join('');
+    set('--art-soil', tile(220, 140, roots + stones));
+    set('--art-grain', tile(96, 64, Array.from({ length: 16 }, () => `<circle cx='${f1(r() * 96)}' cy='${f1(r() * 64)}' r='${f1(.5 + r() * .8)}' fill='${grain}'/>`).join('')));
+    const crystal = (x, y, k) => `<g transform='translate(${x} ${y}) scale(${k})'><path d='M0 0L4-7L8 0L4 3Z' fill='${lift(vein, .55)}'/><path d='M4-7L8 0L4 3Z' fill='${vein}'/><path d='M7 1L10-4L13 1L10 3Z' fill='${lift(vein, .4)}'/></g>`;
+    set('--art-rock', tile(160, 70, `<g fill='none' stroke='${vein}' stroke-linecap='round'><path d='M0 18C40 12 80 24 120 16S160 18 160 18' stroke-width='1.2' opacity='.75'/><path d='M0 40C30 46 70 34 110 42S160 40 160 40' stroke-width='.8' opacity='.6'/><path d='M0 58C50 54 90 62 130 56S160 58 160 58' stroke-width='1' opacity='.5'/></g><path d='M24 6L30 16L26 24L33 34M30 16L38 19' fill='none' stroke='${deep(rock, .55)}' stroke-width='.9'/>` + crystal(104, 34, 1.2) + crystal(54, 62, .9)));
+    set('--art-glint', tile(60, 50, [[12, 12], [44, 34]].map(([x, y]) => `<path d='M${x} ${y - 3}L${x + .7} ${y - .7}L${x + 3} ${y}L${x + .7} ${y + .7}L${x} ${y + 3}L${x - .7} ${y + .7}L${x - 3} ${y}L${x - .7} ${y - .7}Z' fill='${lift(vein, .7)}'/>`).join('')));
+    const hot = mix(ember, '#ffffff', .45);
+    const seams = 'M0 30L18 26L30 34L46 28L60 40L78 36L94 44L120 30M46 28L50 12L58 0M58 80L60 72M78 36L84 58L80 80M80 0L82 6M30 34L26 52L34 66L30 80M30 0L32 6';
+    set('--art-magma', tile(120, 80, `<defs><filter id='b' x='-20%' y='-20%' width='140%' height='140%'><feGaussianBlur stdDeviation='2'/></filter></defs><path d='${seams}' fill='none' stroke='${ember}' stroke-width='5' opacity='.55' filter='url(#b)'/><path d='${seams}' fill='none' stroke='${hot}' stroke-width='1.1' stroke-linejoin='round'/>`));
+    set('--art-ember', tile(90, 80, `<defs><filter id='b'><feGaussianBlur stdDeviation='1.4'/></filter></defs>` + Array.from({ length: 7 }, () => { const x = f1(4 + r() * 82), y = f1(4 + r() * 72), k = f1(.8 + r() * .9); return `<circle cx='${x}' cy='${y}' r='${f1(k * 2.6)}' fill='${ember}' opacity='.6' filter='url(#b)'/><circle cx='${x}' cy='${y}' r='${k}' fill='${hot}'/>`; }).join('')));
+  }
+
+  function setTheme(t) {
+    if (!THEMES[t]) t = 'survey26';
+    window.jitThemeFonts(t);
+    t === 'survey26' ? delete root.dataset.theme : root.dataset.theme = t;
+    $('#theme-color').setAttribute('content', THEMES[t].color);
+    $('[data-now]').textContent = THEMES[t].name;
+    store.set('jit-atlas:theme', t);
+    paintStrata();
+  }
+
+  // ---------- sound: Web Audio synthesis, no audio files ----------
+  const Sound = (() => {
+    let ctx = null, master = null;
+    const on = () => store.get('jit-atlas:sound') === 'on';
+    function ensure() {
+      if (!ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        ctx = new AC();
+        master = ctx.createGain(); master.gain.value = .55;
+        const comp = ctx.createDynamicsCompressor();
+        master.connect(comp).connect(ctx.destination);
+      }
+      if (ctx.state === 'suspended') ctx.resume();
+      return ctx;
+    }
+    const at = t => ctx.currentTime + .01 + t;
+    function env(g, t, a, peak, d) {
+      g.gain.setValueAtTime(.0001, t);
+      g.gain.exponentialRampToValueAtTime(peak, t + a);
+      g.gain.exponentialRampToValueAtTime(.0001, t + a + d);
+    }
+    function verb(sec = 1.6, decay = 2.4, wet = .4, gateAt = 0) {
+      const n = Math.floor(ctx.sampleRate * sec), b = ctx.createBuffer(2, n, ctx.sampleRate);
+      for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, decay); }
+      const cv = ctx.createConvolver(), g = ctx.createGain();
+      cv.buffer = b; g.gain.value = wet;
+      // A gated reverb: the tail is cut dead, the sound of 1986.
+      if (gateAt) g.gain.setValueAtTime(0, at(gateAt));
+      cv.connect(g).connect(master);
+      return cv;
+    }
+    function tone({ type = 'sine', f, f2, t = 0, a = .004, d = .15, peak = .3, lp, lp2, q = 1, detune = 0, send }) {
+      const s = at(t), o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type; o.detune.value = detune;
+      o.frequency.setValueAtTime(f, s);
+      if (f2) o.frequency.exponentialRampToValueAtTime(f2, s + a + d);
+      let node = o;
+      if (lp) {
+        const fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.Q.value = q;
+        fl.frequency.setValueAtTime(lp, s); fl.frequency.exponentialRampToValueAtTime(lp2 || lp, s + a + d);
+        o.connect(fl); node = fl;
+      }
+      env(g, s, a, peak, d);
+      node.connect(g).connect(master);
+      if (send) g.connect(send);
+      o.start(s); o.stop(s + a + d + .05);
+    }
+    function fm({ f, ratio = 3.5, index = 500, t = 0, d = .14, peak = .22, send }) {
+      const s = at(t), c = ctx.createOscillator(), m = ctx.createOscillator(), mg = ctx.createGain(), g = ctx.createGain();
+      c.frequency.value = f; m.frequency.value = f * ratio;
+      mg.gain.setValueAtTime(index, s); mg.gain.exponentialRampToValueAtTime(1, s + d);
+      m.connect(mg).connect(c.frequency);
+      env(g, s, .003, peak, d);
+      c.connect(g).connect(master);
+      if (send) g.connect(send);
+      c.start(s); m.start(s); c.stop(s + d + .05); m.stop(s + d + .05);
+    }
+    function hiss({ t = 0, a = .004, d = .2, peak = .2, type = 'bandpass', f = 2000, f2, q = 1, send, wobble }) {
+      const s = at(t), n = Math.floor(ctx.sampleRate * (a + d + .1)), b = ctx.createBuffer(1, n, ctx.sampleRate), ch = b.getChannelData(0);
+      for (let i = 0; i < n; i++) ch[i] = Math.random() * 2 - 1;
+      const src = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), g = ctx.createGain();
+      src.buffer = b; fl.type = type; fl.Q.value = q;
+      fl.frequency.setValueAtTime(f, s);
+      if (f2) fl.frequency.exponentialRampToValueAtTime(f2, s + a + d);
+      if (wobble) { // the record pushed back and forth under the needle
+        const lfo = ctx.createOscillator(), lg = ctx.createGain();
+        lfo.frequency.value = wobble; lg.gain.value = f * .6;
+        lfo.connect(lg).connect(fl.frequency); lfo.start(s); lfo.stop(s + a + d + .05);
+      }
+      env(g, s, a, peak, d);
+      src.connect(fl).connect(g).connect(master);
+      if (send) g.connect(send);
+      src.start(s);
+    }
+    const pluck = (f, t, peak = .32) => { tone({ type: 'sawtooth', f, t, d: .24, peak, lp: 1400, lp2: 110, q: 7 }); tone({ f: f / 2, t, d: .22, peak: peak * .7 }); };
+
+    const VOICES = {
+      survey26: {
+        press: () => hiss({ f: 3800, q: 3, d: .035, peak: .14 }),
+        open:  () => hiss({ f: 700, f2: 2600, q: .8, a: .03, d: .16, peak: .1 }),
+        close: () => hiss({ f: 2600, f2: 700, q: .8, a: .03, d: .14, peak: .09 }),
+        switch: () => { hiss({ f: 500, f2: 3400, q: .7, a: .08, d: .32, peak: .16 }); hiss({ t: .22, f: 2800, f2: 900, q: .9, a: .02, d: .2, peak: .1 }); }
+      },
+      neon86: {
+        press: () => fm({ f: 880, ratio: 3.5, index: 700, d: .12 }),
+        open:  () => { const v = verb(1.2, 2.5, .3); [440, 554, 659, 880].forEach((f, i) => tone({ type: 'sawtooth', f, t: i * .045, d: .14, peak: .12, lp: 3600, lp2: 900, send: v })); },
+        close: () => { const v = verb(1.2, 2.5, .3); [880, 659, 554, 440].forEach((f, i) => tone({ type: 'sawtooth', f, t: i * .04, d: .12, peak: .1, lp: 3000, lp2: 700, send: v })); },
+        switch: () => {
+          const v = verb(1.8, 1.6, .6, .42);
+          hiss({ type: 'lowpass', f: 180, f2: 7000, a: .3, d: .12, peak: .16 });
+          hiss({ t: .32, type: 'highpass', f: 900, d: .18, peak: .5, send: v });
+          [220, 277.2, 329.6, 440].forEach(f => { tone({ type: 'sawtooth', f, t: .32, d: .7, peak: .09, lp: 5000, lp2: 600, detune: -9, send: v }); tone({ type: 'sawtooth', f, t: .32, d: .7, peak: .09, lp: 5000, lp2: 600, detune: 9 }); });
+          fm({ f: 55, ratio: 1, index: 120, t: .32, d: .5, peak: .4 });
+        }
+      },
+      westside92: {
+        press: () => pluck(82.4, 0),
+        open:  () => [196, 246.9, 293.7].forEach(f => tone({ type: 'square', f, d: .2, peak: .05, lp: 380, lp2: 2600, q: 9 })),
+        close: () => [196, 246.9, 293.7].forEach(f => tone({ type: 'square', f, d: .16, peak: .05, lp: 2600, lp2: 380, q: 9 })),
+        switch: () => {
+          hiss({ f: 900, f2: 2600, q: 4, a: .01, d: .26, peak: .32, wobble: 9 });
+          hiss({ t: .28, f: 2400, f2: 700, q: 4, a: .01, d: .14, peak: .26, wobble: 13 });
+          [[82.4, .46], [98, .62], [110, .72], [82.4, .9], [123.5, 1.04]].forEach(([f, t]) => pluck(f, t, .3));
+        }
+      },
+      sunshine13: {
+        press: () => { tone({ f: 1320, d: .05, peak: .14 }); tone({ f: 1980, t: .03, d: .05, peak: .08 }); },
+        open:  () => { tone({ f: 880, d: .06, peak: .14 }); tone({ f: 1320, t: .07, d: .08, peak: .14 }); },
+        close: () => { tone({ f: 1320, d: .06, peak: .13 }); tone({ f: 880, t: .07, d: .08, peak: .13 }); },
+        switch: () => {
+          const v = verb(2.6, 2, .5);
+          hiss({ type: 'highpass', f: 1200, f2: 7000, a: .36, d: .04, peak: .14 });
+          tone({ f: 120, f2: 32, t: .4, a: .006, d: 1.4, peak: .7, send: v });
+          hiss({ t: .4, type: 'lowpass', f: 500, f2: 80, d: .9, peak: .35, send: v });
+        }
+      }
+    };
+    return {
+      on,
+      set(v) { store.set('jit-atlas:sound', v ? 'on' : 'off'); },
+      play(ev, theme = current()) {
+        if (!on() || !ensure()) return;
+        try { VOICES[theme][ev](); } catch {}
+      }
+    };
+  })();
+
+  // ---------- the stinger ----------
+  const stinger = $('.stinger');
+  function sting(t) {
+    if (reduced.matches) return;
+    $('[data-st-name]').textContent = THEMES[t].name;
+    stinger.classList.remove('is-on');
+    void stinger.offsetWidth;
+    stinger.classList.add('is-on');
+  }
+  stinger.addEventListener('animationend', e => { if (e.animationName === 'st-fade') stinger.classList.remove('is-on'); });
+
+  // ---------- the pause menu ----------
+  const menu = $('#menu'), pick = $('[data-pick]'), radios = [...menu.querySelectorAll('input[name="theme"]')];
+  const status = $('[data-theme-status]');
+  let openedWith = null;
+  pick.addEventListener('click', () => {
+    openedWith = current();
+    radios.forEach(r => r.checked = r.value === openedWith);
+    menu.showModal();
+    (radios.find(r => r.checked) || radios[0]).focus();
+    Sound.play('open');
+  });
+  radios.forEach(r => r.addEventListener('change', () => { setTheme(r.value); Sound.play('press'); }));
+  menu.addEventListener('click', e => { if (e.target === menu) menu.close(); });
+  menu.addEventListener('close', () => {
+    const t = current();
+    if (t !== openedWith) {
+      Sound.play('switch', t);
+      sting(t);
+      status.textContent = `Theme changed to ${THEMES[t].name}.`;
+    } else Sound.play('close');
+    pick.focus();
+  });
+
+  // ---------- sound toggle and press sounds ----------
+  const snd = $('[data-sound]');
+  snd.setAttribute('aria-pressed', String(Sound.on()));
+  snd.addEventListener('click', () => {
+    const v = !Sound.on();
+    Sound.set(v);
+    snd.setAttribute('aria-pressed', String(v));
+    Sound.play('press');
+  });
+  document.addEventListener('click', e => {
+    if (e.target.closest('.band-btn, [data-clear]')) Sound.play('press');
+  });
+
+  setTheme(current());
 })();
 </script>
 </body>
