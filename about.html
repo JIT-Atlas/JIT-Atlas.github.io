@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>How JIT-Atlas works</title>
+<title>JIT-Atlas: what it is and how it works</title>
 <meta name="description" content="What a quest is, how one is put together, where JIT-Atlas is heading, and why every quest is made ahead of time and checked.">
 <meta name="theme-color" content="#fafaf6" id="theme-color">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23fafaf6'/%3E%3Crect y='2' width='32' height='5' fill='%23e3d39b'/%3E%3Crect y='8' width='32' height='7' fill='%23d4bb8b'/%3E%3Crect y='16' width='32' height='9' fill='%2399b59f'/%3E%3Crect y='26' width='32' height='2' fill='%23899bb9'/%3E%3Crect y='29' width='32' height='3' fill='%23bd7860'/%3E%3C/svg%3E">
@@ -79,6 +79,17 @@ code{font:500 .86em ui-monospace,SFMono-Regular,Menlo,monospace;background:color
 .open h1{font:700 clamp(40px,5.2vw,68px)/1.02 var(--sans);letter-spacing:-.03em;font-stretch:88%;text-wrap:balance;max-width:16ch}
 .open .stand{margin-top:28px;max-width:46ch;font-size:23px;line-height:1.5;color:var(--ink-2);text-wrap:pretty}
 .open .by{margin-top:28px;font:600 15px var(--sans)}
+/* Moments a quest is for: the symptom, then the quest that explains it. */
+.scen{margin-top:40px;border-top:1px solid var(--ink);max-width:var(--wide)}
+.scen li{position:relative;isolation:isolate;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:28px;align-items:baseline;padding:16px 12px;border-bottom:1px solid color-mix(in srgb,var(--ink) 18%,transparent)}
+.scen li::before{content:"";position:absolute;inset:3px 0;border-radius:6px;z-index:-1;transition:background-color .18s cubic-bezier(.16,1,.3,1)}
+.scen li:hover::before,.scen li:focus-within::before{background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.scen .sym{font:italic 400 19px/1.45 var(--serif);text-wrap:pretty}
+.scen a{font:600 16px/1.35 var(--sans);text-decoration:none}
+.scen a::after{content:"\00a0\2192";display:inline-block;transition:transform .2s cubic-bezier(.16,1,.3,1)}
+.scen li:hover a::after,.scen a:focus-visible::after{transform:translateX(3px)}
+.scen a::before{content:"";position:absolute;inset:0}
+@media (max-width:720px){.scen li{grid-template-columns:1fr;gap:6px}}
 
 /* ---------- sheet: rail + article ---------- */
 .sheet{display:grid;grid-template-columns:220px minmax(0,1fr);gap:72px;padding:0 56px}
@@ -327,8 +338,15 @@ figcaption{margin-top:14px;font-size:15px;line-height:1.5;color:var(--ink-2);max
 
 <div class="open">
   <div class="open-in">
-    <h1>How JIT-Atlas works, and why it is built ahead of time</h1>
-    <p class="stand">A catalogue of interactive quests that model software systems as navigable flows, and the platform being built around them. Quests are made ahead of time and checked, then delivered at the moment you need them.</p>
+    <h1>JIT-Atlas: what is it? How does it work?</h1>
+    <p class="stand">A catalogue of interactive maps of how software systems work, each made ahead of time and checked. You open one when something in front of you stops making sense.</p>
+    <ul class="scen" aria-label="Moments a quest is for">
+      <li><p class="sym">Your stream stalls and memory keeps climbing.</p><a href="quests/node-streams-backpressure.html">Backpressure: streams from first principles</a></li>
+      <li><p class="sym"><code>req.body</code> is <code>undefined</code> in one route and fine in another.</p><a href="quests/express-request-pipeline.html">When does req.body exist?</a></li>
+      <li><p class="sym">A slow <code>crypto</code> call holds up unrelated file reads.</p><a href="quests/node-thread-pool.html">The thread pool</a></li>
+      <li><p class="sym">A component marked <code>'use client'</code> rejects the props the server passes it.</p><a href="quests/next-use-client-boundary.html">The 'use client' doorway</a></li>
+      <li><p class="sym">You are about to hand a feature to an AI agent and want its spec to name the edge cases.</p><a href="#use">Find the boundaries first</a></li>
+    </ul>
   </div>
 </div>
 

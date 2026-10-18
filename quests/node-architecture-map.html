@@ -20736,5 +20736,28 @@ document.querySelectorAll('.nav-link, .nav-brand').forEach(a => {
 @media (prefers-reduced-motion:reduce){#jit-atlas-home{transition:none}}
 </style>
 <a id="jit-atlas-home" href="../index.html"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 8H3M7 4L3 8l4 4"/></svg>Back to JIT-Atlas</a>
+
+<!-- jit-atlas-narrow: added by tools/add-home-link.mjs -->
+<style>
+#jit-atlas-narrow{display:none}
+@media (max-width:760px){
+#jit-atlas-narrow:not([hidden]){all:initial;position:fixed;left:12px;right:12px;bottom:64px;z-index:2147483646;display:grid;grid-template-columns:minmax(0,1fr) 32px;gap:10px;align-items:start;padding:12px 10px 12px 14px;border-radius:10px;background:#1c1e1a;color:#fafaf6;border:1px solid rgba(250,250,246,.22);box-shadow:0 4px 18px rgba(0,0,0,.25);font:500 13.5px/1.45 "Helvetica Neue",Arial,sans-serif}
+#jit-atlas-narrow p{all:initial;font:inherit;color:inherit}
+#jit-atlas-narrow button{all:initial;box-sizing:border-box;display:grid;place-items:center;width:32px;height:32px;margin:-6px 0;border-radius:6px;color:#fafaf6;cursor:pointer}
+#jit-atlas-narrow button:hover{background:rgba(250,250,246,.12)}
+#jit-atlas-narrow button:focus-visible{outline:2px solid #b3261e;outline-offset:2px}
+#jit-atlas-narrow svg{width:14px;height:14px}
+}
+@media print{#jit-atlas-narrow{display:none!important}}
+</style>
+<aside id="jit-atlas-narrow" hidden aria-label="Screen size"><p>This quest is designed for a wider screen: it draws a whole system at once. On a phone some diagrams will feel cramped, so a laptop or a tablet in landscape works best.</p><button type="button" aria-label="Dismiss this note"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></aside>
+<script>
+(() => {
+  const KEY = 'jit-atlas:narrow-note', n = document.getElementById('jit-atlas-narrow');
+  let gone = false; try { gone = localStorage.getItem(KEY) === 'dismissed'; } catch {}
+  if (!gone) n.hidden = false;
+  n.querySelector('button').addEventListener('click', () => { n.hidden = true; try { localStorage.setItem(KEY, 'dismissed'); } catch {} });
+})();
+</script>
 </body>
 </html>

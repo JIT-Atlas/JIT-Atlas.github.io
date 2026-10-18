@@ -658,6 +658,17 @@ mark{background:var(--mark);color:var(--mark-ink);padding:0 1px}
   .sheet:has(.status [data-clear]:not([hidden])) .domain.is-collapsed .sub{display:block}
 }
 
+/* ---------- narrow-screen note ---------- */
+.narrow-note{display:none}
+@media (max-width:760px){
+  .narrow-note:not([hidden]){display:grid;grid-template-columns:20px minmax(0,1fr) 36px;gap:12px;align-items:start;padding:14px 12px 14px 16px;background:var(--paper-2);border-bottom:1px solid var(--ink);font:500 14px/1.45 var(--sans);color:var(--ink)}
+  .narrow-note svg{width:20px;height:20px;margin-top:1px;color:var(--ink-2)}
+  .narrow-note button{all:unset;box-sizing:border-box;display:grid;place-items:center;width:36px;height:36px;margin:-8px 0 -8px;border-radius:6px;cursor:pointer;color:var(--ink-2)}
+  .narrow-note button:hover{background:var(--hover);color:var(--ink)}
+  .narrow-note button:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+  .narrow-note button svg{width:16px;height:16px;margin:0;color:currentColor}
+}
+
 @media (max-width:1240px){.console{padding:10px 24px}}
 @media (max-width:980px){.console{padding:10px 16px}[data-theme="neon86"] .mark{font-size:50px}}
 
@@ -699,6 +710,11 @@ mark{background:var(--mark);color:var(--mark-ink);padding:0 1px}
 </head>
 <body>
 <a class="skip" href="#find">Skip to the quest finder</a>
+<aside class="narrow-note" data-narrow-note hidden aria-label="Screen size">
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2" y="4" width="16" height="11" rx="1.5"/><path d="M7 18h6M10 15v3"/></svg>
+  <p>Quests and campaigns are designed for wider screens: each one draws a whole system at once. On a phone some diagrams will feel cramped, so a laptop or a tablet in landscape works best.</p>
+  <button type="button" data-narrow-close aria-label="Dismiss this note"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+</aside>
 <div class="sheet">
 <aside class="col" aria-label="The stack, by altitude">
   <div class="console">
@@ -1261,6 +1277,17 @@ mark{background:var(--mark);color:var(--mark-ink);padding:0 1px}
   addEventListener('hashchange', openTarget);
   document.addEventListener('click', e => { const j = e.target.closest('[data-jump]'); if (j) { const d = document.getElementById(j.dataset.jump); if (d) set(d, true); } });
   layout();
+})();
+</script>
+<script>
+// The narrow-screen note shows until dismissed; dismissal is shared with every quest page.
+(() => {
+  const KEY = 'jit-atlas:narrow-note', note = document.querySelector('[data-narrow-note]');
+  let gone = false; try { gone = localStorage.getItem(KEY) === 'dismissed'; } catch {}
+  if (!gone) note.hidden = false;
+  note.querySelector('[data-narrow-close]').addEventListener('click', () => {
+    note.hidden = true; try { localStorage.setItem(KEY, 'dismissed'); } catch {}
+  });
 })();
 </script>
 </body>
