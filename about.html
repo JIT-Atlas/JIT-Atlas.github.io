@@ -99,6 +99,7 @@ section>h2{font:700 40px/1.08 var(--sans);letter-spacing:-.025em;font-stretch:90
 .lead{margin-top:20px;max-width:52ch;font-size:22px;line-height:1.55;color:var(--ink-2);text-wrap:pretty}
 .prose>*{max-width:var(--measure)}
 .prose p{margin-top:20px;text-wrap:pretty}
+.prose-p{margin-top:20px;max-width:var(--measure);text-wrap:pretty}
 section h3{margin-top:56px;font:600 21px/1.3 var(--sans);letter-spacing:-.01em}
 section h3+*{margin-top:16px}
 figure{margin-top:40px}
@@ -328,7 +329,6 @@ figcaption{margin-top:14px;font-size:15px;line-height:1.5;color:var(--ink-2);max
   <div class="open-in">
     <h1>How JIT-Atlas works, and why it is built ahead of time</h1>
     <p class="stand">A catalogue of interactive quests that model software systems as navigable flows, and the platform being built around them. Quests are made ahead of time and checked, then delivered at the moment you need them.</p>
-    <p class="by">by Aryscène</p>
   </div>
 </div>
 
@@ -380,12 +380,23 @@ figcaption{margin-top:14px;font-size:15px;line-height:1.5;color:var(--ink-2);max
           <span class="here">JIT-Atlas</span>
         </div>
       </div>
-      <figcaption>Diátaxis, after Daniele Procida. JIT-Atlas sits on the knowing side, between explanation and reference.</figcaption>
+      <figcaption>JIT-Atlas sits on the knowing side, between explanation and reference.</figcaption>
     </figure>
     <dl class="defs">
       <div><dt>Its substance is explanation</dt><dd>Each quest builds a model of how a system works and why it fails the way it does.</dd></div>
       <div><dt>Its shape borrows from reference</dt><dd>Each quest has a flat glossary for lookup, a permanent address and deep links straight to a stage. That shape is what lets explanation be used at work.</dd></div>
     </dl>
+
+    <h3>Alongside what you already use</h3>
+    <p class="prose-p">JIT-Atlas sits between the resources developers already reach for, and each of them stays the right tool for its own job. A quest is the one you open when you need the mechanism behind one failure, right now.</p>
+    <dl class="defs">
+      <div><dt>Official documentation</dt><dd>Complete and authoritative, organised by feature. Keep it for exact APIs, options and edge cases. A quest shows which part of the system your failure lives in, and why, then sends you back to the docs knowing what to look up.</dd></div>
+      <div><dt>Tutorials and courses</dt><dd>Build skill from the beginning, in order. A quest assumes you are already building, and drops you at the stage you are stuck on.</dd></div>
+      <div><dt>Books and long explainers</dt><dd>Depth, read from start to finish. A quest carries the same kind of model in a form you can land in the middle of.</dd></div>
+      <div><dt>Q&amp;A threads</dt><dd>A fix for one symptom, often without its cause. A quest shows the mechanism, so the next symptom makes sense too.</dd></div>
+      <div><dt>An LLM</dt><dd>An answer made on demand, unchecked, and gone when the task ends. A quest was checked before you opened it, and it is still there next time.</dd></div>
+    </dl>
+    <p class="prose-p">What a quest adds is reach at the moment of need: a small, checked piece of the whole model, deep-linked to the exact stage, ready when you hit the wall.</p>
   </section>
 
   <section id="inside" aria-labelledby="inside-h">
