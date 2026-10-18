@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>worker_threads — a second Node inside your process</title>
+<title>Modules — resolution, the cache, and the cost of cold start</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&amp;family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
 <style>@layer base {
 
@@ -4196,76 +4196,6 @@ code,.ic,.card p code,.card li code,.hf-node-title code,.hf-node-detail code,
 .el.is-checked .el-say{border-left-color:var(--node)}
 @media (max-width:880px){ .el-row{grid-template-columns:minmax(0,1fr) auto} .el-mark{display:none} }
 
-/* ─────────── P5-1. crossing the boundary (§5) ─────────── */
-.xb{display:flex;flex-direction:column;gap:var(--s3)}
-.xb-pick{display:flex;flex-wrap:wrap;gap:var(--s2);align-items:center}
-.xb-pick-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
-  text-transform:uppercase;color:var(--text-dim);margin-right:var(--s2)}
-.xb-btn{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.06em;
-  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
-  background:var(--surface2);border:1px solid var(--border);color:var(--text-2);
-  transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
-.xb-btn:hover{background:var(--surface3);color:var(--text-hi)}
-.xb-btn.on{background:var(--node);border-color:var(--node);color:var(--on-accent)}
-.xb-head{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr 1fr;gap:var(--s3);
-  padding:0 var(--s3);order:-1;
-  font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
-  text-transform:uppercase;color:var(--text-dim)}
-.xb-rows{display:flex;flex-direction:column;gap:var(--s2)}
-.xb-row{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr 1fr;gap:var(--s3);
-  align-items:center;padding:var(--s2) var(--s3);cursor:pointer;
-  background:var(--surface2);border:1px solid var(--border);
-  border-left:3px solid var(--border);border-radius:var(--r-md);
-  transition:background var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
-.xb-row:hover{background:var(--surface3)}
-.xb-row.act{background:var(--raise);border-left-color:var(--node)}
-.xb-name{font-family:var(--mono);font-size:var(--f-xs);color:var(--text-hi)}
-.xb-cell{font-family:var(--mono);font-size:var(--f-xs);color:var(--text-2)}
-.xb-cell.yes{color:var(--node)}
-.xb-cell.no{color:var(--worker)}
-.xb-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
-  color:var(--text);border-left:2px solid var(--border-hi);
-  padding:var(--s2) 0 var(--s2) var(--s4);min-height:4em;max-width:var(--measure)}
-@media (max-width:880px){ .xb-head{display:none}
-  .xb-row{grid-template-columns:1fr 1fr} }
-
-/* ─────────── P5-2. does a worker help (§7) ─────────── */
-.wh{display:flex;flex-direction:column;gap:var(--s4)}
-.wh-pick{display:flex;flex-wrap:wrap;gap:var(--s2)}
-.wh-btn{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.06em;
-  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
-  background:var(--surface2);border:1px solid var(--border);color:var(--text-2);
-  display:inline-flex;align-items:center;gap:var(--s2);
-  transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
-.wh-btn:hover{background:var(--surface3);color:var(--text-hi)}
-.wh-btn.on{background:var(--node);border-color:var(--node);color:var(--on-accent)}
-.wh-ctrlmark{font-size:var(--f-micro);letter-spacing:.14em;padding:0 var(--s1);
-  border:1px solid currentColor;border-radius:2px;color:var(--text-2)}
-.wh-btn.on .wh-ctrlmark{color:var(--on-accent)}
-.wh-lanes{display:flex;flex-direction:column;gap:var(--s3)}
-.wh-lane{display:grid;grid-template-columns:160px minmax(0,1fr) 76px;gap:var(--s3);align-items:center}
-.wh-lane-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
-  text-transform:uppercase;color:var(--text-2);text-align:right}
-.wh-bar{display:flex;height:22px;border:1px solid var(--border);
-  border-radius:var(--r-sm);background:var(--surface2);overflow:hidden}
-.wh-bar span{display:block;height:100%;background:var(--main-thread);
-  transition:width var(--dur-2) var(--ease)}
-.wh-clone{background:var(--worker)}
-.wh-val{font-family:var(--mono);font-size:var(--f-xs);color:var(--text-hi)}
-.wh-meters{display:flex;flex-wrap:wrap;gap:var(--s2)}
-.wh-meter{display:flex;flex-direction:column;gap:2px;flex:1 1 170px;
-  padding:var(--s2) var(--s3);background:var(--surface2);
-  border:1px solid var(--border);border-radius:var(--r-sm)}
-.wh-m-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
-  text-transform:uppercase;color:var(--text-dim)}
-.wh-m-v{font-family:var(--mono);font-size:var(--f-sm);color:var(--text-hi)}
-.wh-m-v.yes{color:var(--node)}
-.wh-m-v.no{color:var(--worker)}
-.wh-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
-  color:var(--text);border-left:2px solid var(--border-hi);
-  padding:var(--s2) 0 var(--s2) var(--s4);min-height:4em;max-width:var(--measure)}
-.wh.is-control .wh-say{border-left-color:var(--worker)}
-@media (max-width:880px){ .wh-lane{grid-template-columns:1fr} .wh-lane-k{text-align:left} }
 
 /* ─────────── NODE TITLES CARRY THEIR OWNER'S HUE ───────────
    A flow node's title is the load-bearing technical name in the figure —
@@ -4281,168 +4211,119 @@ code,.ic,.card p code,.card li code,.hf-node-title code,.hf-node-detail code,
 .hf-node[data-owner="hw"]     .hf-node-title{color:var(--hardware)}
 .hf-node[data-owner="node"]   .hf-node-title{color:var(--node)}
 
-/* ─────────── CONTAINMENT DIAGRAM (parts 9 and 11, §0) ───────────
-   Every other figure in the series is an ordered list with owner tags — the
-   right shape for a sequence, the wrong shape for "what lives inside what".
-   A process containing threads is a NESTING, so it is drawn as one. Rule 4
-   still holds: borders and flat planes, no glow and no gradient. */
-.cv{display:flex;flex-direction:column;gap:var(--s3)}
-.cv-outer{position:relative;padding:var(--s6) var(--s4) var(--s4);
-  border:1px solid var(--hardware);border-radius:var(--r-md);background:var(--surface2)}
-.cv-outer-k{position:absolute;top:var(--s2);left:var(--s4);
-  font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.16em;
-  text-transform:uppercase;color:var(--hardware)}
-.cv-outer-s{position:absolute;top:var(--s2);right:var(--s4);
-  font-family:var(--mono);font-size:var(--f-micro);color:var(--text-2)}
-
-/* cores as ONE STRIP grouped in eights, not a 4x8 block — the grouping is what
-   makes 32 countable at a glance instead of just "a lot of squares" */
-.cv-cores{display:flex;flex-wrap:wrap;gap:var(--s4);margin-bottom:var(--s3)}
-.cv-socket{display:flex;flex-direction:column;gap:var(--s1)}
-.cv-socket-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.12em;
-  text-transform:uppercase;color:var(--text-2);display:flex;gap:var(--s2);align-items:baseline}
-.cv-socket-n{color:var(--hardware)}
-.cv-socket-alt{color:var(--text-2);letter-spacing:.06em}
-.cv-chips{display:flex;gap:var(--s3);flex-wrap:wrap}
-.cv-group{display:flex;gap:3px}
-.cv-core,.cv-swatch{width:9px;height:14px;border-radius:2px;
-  border:1px solid var(--hardware);background:var(--hardware-soft)}
-.cv-swatch{display:inline-block;vertical-align:-2px;margin-right:var(--s2)}
-
-/* the scheduler band is a CONTROL, not a caption — it is the one part of the
-   picture that is an action rather than a thing, so it can be asked about */
-.cv-schedwrap{margin-bottom:var(--s3)}
-.cv-sched{width:100%;display:flex;gap:var(--s3);align-items:center;justify-content:center;
-  font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.1em;
-  text-transform:uppercase;color:var(--kernel);cursor:pointer;
-  padding:var(--s2) var(--s3);background:transparent;
-  border:1px dashed var(--kernel);border-radius:var(--r-sm);
-  transition:background var(--dur-1) var(--ease)}
-.cv-sched:hover{background:var(--kernel-soft)}
-.cv-sched:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
-.cv-sched-more{color:var(--text-2);letter-spacing:.06em;text-transform:none}
-.cv-sched[aria-expanded="true"]{background:var(--kernel-soft)}
-.cv-sched-detail{margin-top:var(--s2);padding:var(--s3) var(--s4);
-  font-family:var(--sans);font-size:var(--f-xs);line-height:var(--lh-prose);
-  color:var(--text);background:var(--raise);
-  border:1px solid var(--border);border-left:3px solid var(--kernel);border-radius:var(--r-sm)}
-
-.cv-inner{display:flex;flex-wrap:wrap;gap:var(--s3);align-items:stretch}
-.cv-box{flex:1 1 200px;display:flex;flex-direction:column;
-  padding:var(--s3);border-radius:var(--r-sm);
-  border:1px solid var(--border);border-top:3px solid var(--border);background:var(--raise)}
-.cv-box[data-owner="main"]{border-top-color:var(--main-thread)}
-.cv-box[data-owner="worker"]{border-top-color:var(--worker)}
-.cv-box[data-owner="kernel"]{border-top-color:var(--kernel)}
-.cv-box[data-owner="node"]{border-top-color:var(--node)}
-.cv-box[data-owner="hw"]{border-top-color:var(--hardware)}
-.cv-box-head{display:flex;align-items:baseline;gap:var(--s2);justify-content:space-between}
-.cv-box-k{font-family:var(--mono);font-size:var(--f-xs);letter-spacing:.06em}
-.cv-box[data-owner="main"] .cv-box-k{color:var(--main-thread)}
-.cv-box[data-owner="worker"] .cv-box-k{color:var(--worker)}
-.cv-box[data-owner="kernel"] .cv-box-k{color:var(--kernel)}
-.cv-box[data-owner="node"] .cv-box-k{color:var(--node)}
-.cv-box-n{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.1em;
-  padding:0 var(--s2);border-radius:2px;
-  border:1px solid var(--border-hi);color:var(--text-2);white-space:nowrap}
-.cv-box-s{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.1em;
-  text-transform:uppercase;color:var(--text-2);margin-top:2px}
-
-/* the verdict is the one fact worth having without reading the box */
-.cv-verdict{margin:var(--s3) 0 var(--s2);padding:var(--s1) var(--s2);
-  font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.1em;
-  text-transform:uppercase;text-align:center;border-radius:var(--r-sm)}
-.cv-verdict[data-v="yes"]{color:var(--node);border:1px solid var(--node);background:var(--node-soft)}
-.cv-verdict[data-v="no"]{color:var(--worker);border:1px dashed var(--worker);background:var(--worker-soft)}
-.cv-verdict[data-v="na"]{color:var(--text-2);border:1px dashed var(--border-hi)}
-
-.cv-lines{display:flex;flex-direction:column;gap:3px;margin-top:var(--s1)}
-.cv-line{font-family:var(--sans);font-size:var(--f-xs);line-height:var(--lh-ui);
-  color:var(--text-2);padding-left:var(--s3);border-left:2px solid var(--border)}
-.cv-line[data-owner="main"]{border-left-color:var(--main-thread)}
-.cv-line[data-owner="worker"]{border-left-color:var(--worker)}
-.cv-line[data-owner="kernel"]{border-left-color:var(--kernel)}
-.cv-line[data-owner="node"]{border-left-color:var(--node)}
-.cv-line[data-owner="hw"]{border-left-color:var(--hardware)}
-.cv-line[data-owner="none"]{border-left-style:dashed;color:var(--text-2)}
-.cv-foot{margin-top:auto;padding-top:var(--s2);border-top:1px solid var(--border);
-  font-family:var(--sans);font-size:var(--f-micro);line-height:var(--lh-ui);color:var(--text-2)}
-
-/* the legend sits OUTSIDE the frame. Inside, it broke the machine -> scheduler
-   -> process reading order and made the frame look like it had a paragraph
-   wedged into it. */
-.cv-legend{font-family:var(--sans);font-size:var(--f-xs);line-height:var(--lh-ui);
-  color:var(--text-2)}
-.cv-legend em{color:var(--text-hi);font-style:normal}
-.cv-cap{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
-  color:var(--text);border-left:2px solid var(--border-hi);
-  padding:var(--s2) 0 var(--s2) var(--s4);max-width:var(--measure)}
-.cv-mid{position:relative;padding:var(--s6) var(--s3) var(--s3);
-  border:1px dashed var(--kernel);border-radius:var(--r-sm);background:var(--surface2)}
-.cv-mid-k{position:absolute;top:var(--s2);left:var(--s3);
-  font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.16em;
-  text-transform:uppercase;color:var(--kernel)}
-.cv-mid-s{position:absolute;top:var(--s2);right:var(--s3);
-  font-family:var(--mono);font-size:var(--f-micro);color:var(--text-2)}
-@media (max-width:880px){ .cv-inner{flex-direction:column} }
-
-/* ─────────── P5-3. pool vs worker_threads (§2) ─────────── */
-.pw{display:flex;flex-direction:column;gap:var(--s3)}
-.pw-table{display:flex;flex-direction:column;gap:var(--s1)}
-.pw-head,.pw-row{display:grid;grid-template-columns:minmax(120px,1fr) minmax(0,1.2fr) minmax(0,1.2fr);
-  gap:var(--s3);align-items:baseline;text-align:left}
-.pw-head{padding:0 var(--s3) var(--s1)}
-.pw-h{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
-  text-transform:uppercase}
-.pw-h[data-owner="node"]{color:var(--node)}
-.pw-h[data-owner="worker"]{color:var(--worker)}
-.pw-row{padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
-  background:var(--surface2);border:1px solid var(--border);
-  border-left:3px solid var(--border);color:inherit;font:inherit;
-  transition:background var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
-.pw-row:hover{background:var(--surface3)}
-.pw-row.on{background:var(--raise);border-left-color:var(--text-2)}
-.pw-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.1em;
-  text-transform:uppercase;color:var(--text-2)}
-.pw-row.on .pw-k{color:var(--text-hi)}
-.pw-v{font-family:var(--sans);font-size:var(--f-xs);line-height:var(--lh-ui);color:var(--text)}
-.pw-v.yes{color:var(--worker)}
-.pw-v.no{color:var(--node);font-weight:600}
-.pw-why{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
-  color:var(--text);padding:var(--s3) var(--s4);max-width:var(--measure);
-  background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-md)}
-.pw-split{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
-  text-transform:uppercase;color:var(--text-2);
-  padding-top:var(--s3);border-top:1px solid var(--border)}
-.pw-jobs{display:flex;flex-wrap:wrap;gap:var(--s2)}
-.pw-job{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.06em;
+/* ─────────── P7-1. resolution cost (§3) ─────────── */
+.rs{display:flex;flex-direction:column;gap:var(--s3)}
+.rs-pick{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.rs-btn{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.06em;
   padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
   background:var(--surface2);border:1px solid var(--border);color:var(--text-2);
   display:inline-flex;align-items:center;gap:var(--s2);
   transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
-.pw-job:hover{background:var(--surface3);color:var(--text-hi)}
-.pw-job.on{background:var(--node);border-color:var(--node);color:var(--on-accent)}
-.pw-ctrlmark{font-size:var(--f-micro);letter-spacing:.14em;padding:0 var(--s1);
+.rs-btn:hover{background:var(--surface3);color:var(--text-hi)}
+.rs-btn.on{background:var(--node);border-color:var(--node);color:var(--on-accent)}
+.rs-ctrlmark{font-size:var(--f-micro);letter-spacing:.14em;padding:0 var(--s1);
   border:1px solid currentColor;border-radius:2px;color:var(--text-2)}
-.pw-job.on .pw-ctrlmark{color:var(--on-accent)}
-.pw-answer{display:flex;flex-wrap:wrap;gap:var(--s2);align-items:center;
-  padding:var(--s3) var(--s4);background:var(--surface2);
+.rs-btn.on .rs-ctrlmark{color:var(--on-accent)}
+.rs-from{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text-2)}
+.rs-steps{display:flex;flex-direction:column;gap:2px;max-height:290px;overflow-y:auto;
+  padding:var(--s3);background:var(--surface2);
   border:1px solid var(--border);border-radius:var(--r-md)}
-.pw-lane{font-family:var(--mono);font-size:var(--f-xs);
-  padding:var(--s1) var(--s3);border-radius:var(--r-sm);
-  border:1px dashed var(--border);color:var(--text-2)}
-.pw-lane.on{border-style:solid}
-.pw-lane.on[data-owner="main"]{border-color:var(--main-thread);color:var(--main-thread);background:var(--main-thread-soft)}
-.pw-lane.on[data-owner="node"]{border-color:var(--node);color:var(--node);background:var(--node-soft)}
-.pw-lane.on[data-owner="kernel"]{border-color:var(--kernel);color:var(--kernel);background:var(--kernel-soft)}
-.pw-lane.on[data-owner="worker"]{border-color:var(--worker);color:var(--worker);background:var(--worker-soft)}
-.pw-auto{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.12em;
-  text-transform:uppercase;color:var(--text-2);margin-left:auto}
-.pw-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
+.rs-step{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--s3);
+  align-items:baseline;padding:2px var(--s2);border-radius:var(--r-sm);
+  border-left:2px solid transparent}
+.rs-step.hit{background:var(--raise);border-left-color:var(--node)}
+.rs-step code{font-size:var(--f-xs);color:var(--text-2)}
+.rs-step.hit code{color:var(--text-hi)}
+.rs-note{font-family:var(--mono);font-size:var(--f-micro);color:var(--text-dim);white-space:nowrap}
+.rs-step.hit .rs-note{color:var(--node)}
+.rs-meters{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.rs-meter{display:flex;flex-direction:column;gap:2px;flex:1 1 180px;
+  padding:var(--s2) var(--s3);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-sm)}
+.rs-m-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-dim)}
+.rs-m-v{font-family:var(--mono);font-size:var(--f-sm);color:var(--text-hi)}
+.rs-m-v.yes{color:var(--node)}
+.rs-m-v.no{color:var(--worker)}
+.rs-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
+  color:var(--text);border-left:2px solid var(--border-hi);
+  padding:var(--s2) 0 var(--s2) var(--s4);min-height:4em;max-width:var(--measure)}
+.rs.is-control .rs-say{border-left-color:var(--worker)}
+
+/* ─────────── P7-2. the cache (§5) ─────────── */
+.ca{display:flex;flex-direction:column;gap:var(--s3)}
+.ca-pick{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.ca-btn{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.06em;
+  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text-2);
+  display:inline-flex;align-items:center;gap:var(--s2);
+  transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
+.ca-btn:hover{background:var(--surface3);color:var(--text-hi)}
+.ca-btn.on{background:var(--node);border-color:var(--node);color:var(--on-accent)}
+.ca-ctrlmark{font-size:var(--f-micro);letter-spacing:.14em;padding:0 var(--s1);
+  border:1px solid currentColor;border-radius:2px;color:var(--text-2)}
+.ca-btn.on .ca-ctrlmark{color:var(--on-accent)}
+.ca-rows{display:flex;flex-direction:column;gap:var(--s2)}
+.ca-row{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;gap:var(--s3);
+  align-items:baseline;padding:var(--s2) var(--s3);
+  background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-md)}
+.ca-arrow{color:var(--text-dim);font-family:var(--mono);font-size:var(--f-micro)}
+.ca-path{font-size:var(--f-xs)}
+.ca-path[data-key="0"]{color:var(--node)}
+.ca-path[data-key="1"]{color:var(--worker)}
+.ca-state{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.1em;
+  text-transform:uppercase;color:var(--text-2);white-space:nowrap}
+.ca-meters{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.ca-meter{display:flex;flex-direction:column;gap:2px;flex:1 1 170px;
+  padding:var(--s2) var(--s3);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-sm)}
+.ca-m-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-dim)}
+.ca-m-v{font-family:var(--mono);font-size:var(--f-sm);color:var(--text-hi)}
+.ca-m-v.yes{color:var(--node)}
+.ca-m-v.no{color:var(--worker)}
+.ca-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
+  color:var(--text);border-left:2px solid var(--border-hi);
+  padding:var(--s2) 0 var(--s2) var(--s4);min-height:4em;max-width:var(--measure)}
+.ca.is-control .ca-say{border-left-color:var(--worker)}
+@media (max-width:880px){ .ca-row{grid-template-columns:1fr} .ca-arrow{display:none} }
+
+/* ─────────── P7-3. a cycle (§7) ─────────── */
+.cy{display:flex;flex-direction:column;gap:var(--s3)}
+.cy-lines{display:flex;flex-direction:column;gap:var(--s1)}
+.cy-line{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--s3);
+  align-items:center;padding:var(--s2) var(--s3);border-radius:var(--r-sm);
+  background:var(--surface2);border:1px solid var(--border);
+  border-left:3px solid var(--border);opacity:.5;
+  transition:opacity var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
+.cy-line.on{opacity:1;background:var(--raise)}
+.cy-line.act{border-color:var(--text-2)}
+.cy-line.hit.on{border-left-color:var(--node)}
+.cy-line.undef.on{border-left-color:var(--worker)}
+.cy-line code{font-size:var(--f-xs)}
+.cy-file{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.1em;
+  color:var(--text-2);white-space:nowrap}
+.cy-state{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.cy-cell{display:flex;flex-direction:column;gap:2px;flex:1 1 200px;
+  padding:var(--s2) var(--s3);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-sm)}
+.cy-cell-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-dim)}
+.cy-cell-v{font-family:var(--mono);font-size:var(--f-sm);color:var(--text-hi)}
+.cy-cell-v.warn{color:var(--worker)}
+.cy-ctl{display:flex;flex-wrap:wrap;gap:var(--s2);align-items:center}
+.cy-b{font-family:var(--mono);font-size:var(--f-xs);letter-spacing:.06em;
+  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  transition:background var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
+.cy-b:hover{background:var(--surface3);border-color:var(--border-hi)}
+.cy-b-primary{background:var(--node);border-color:var(--node);color:var(--on-accent)}
+.cy-count{font-family:var(--mono);font-size:var(--f-xs);color:var(--text-dim);margin-left:auto}
+.cy-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
   color:var(--text);border-left:2px solid var(--border-hi);
   padding:var(--s2) 0 var(--s2) var(--s4);min-height:4.4em;max-width:var(--measure)}
-.pw.is-control .pw-say{border-left-color:var(--worker)}
-@media (max-width:880px){ .pw-head{display:none} .pw-row{grid-template-columns:1fr} }
+.cy.is-hit .cy-say{border-left-color:var(--node)}
 
 /* ─────────── ANNOTATED TERMS NEED A RESTING AFFORDANCE ───────────
    The rule above saves the underline for hover, which was defensible while
@@ -4605,47 +4486,46 @@ html.light .gpop-stacked{box-shadow:0 18px 48px rgba(0,0,0,.22)}
 <div class="grain"></div>
 <div class="progress" id="progress"></div>
 <header>
-<div class="eyebrow">Part 10 · Node.js Internals Series</div>
-<h1><span class="code">worker_threads</span> — a second <span class="accent">V8 isolate</span>, a second <span class="accent2">event loop</span>, and the boundary between them</h1>
-<p class="subtitle">The fifth lesson. Part 4 ended on the constraint the whole series keeps arriving at: <strong style="color:var(--text-hi)">one thread runs your JavaScript</strong>. The obvious answer is to ask for another one — and what you get is not a thread in the sense you are picturing. It is a whole second Node runtime inside the same process, sharing the file descriptors and sharing no variables at all.</p>
-<div class="meta-row"><span>13 sections</span><span>12 figures</span><span>two isolates</span><span>clone · transfer · share</span></div>
+<div class="eyebrow">Mission 01 · Node.js Internals Campaign</div>
+<h1><span class="code">require()</span> and <span class="code">import</span> — a <span class="accent">filesystem search</span>, a <span class="accent2">cache keyed by path</span>, and what runs before your code</h1>
+<p class="subtitle">Every part so far began after your program was running. This one is about what happened before that — and the honest summary is that <strong style="color:var(--text-hi)">most of your cold start is spent asking the kernel whether files exist</strong>. A bare specifier is a search of the directory tree, its result is cached under an absolute path, and almost everything surprising about module identity follows from those two facts.</p>
+<div class="meta-row"><span>14 sections</span><span>9 figures</span><span>five steps</span><span>resolve · cache · wrap · execute</span></div>
 </header>
-<nav class="section-nav" id="snav"><div class="section-nav-inner"><button class="section-btn active" data-section="foundations"><span class="num">01</span>Foundations</button><button class="section-btn" data-section="crossing"><span class="num">02</span>Crossing the Boundary</button><button class="section-btn" data-section="when"><span class="num">03</span>When It Helps</button><button class="section-btn" data-section="talking"><span class="num">04</span>Talking to a Worker</button><button class="section-btn" data-section="synthesis"><span class="num">05</span>Synthesis</button>
+<nav class="section-nav" id="snav"><div class="section-nav-inner"><button class="section-btn active" data-section="foundations"><span class="num">01</span>Foundations</button><button class="section-btn" data-section="resolve"><span class="num">02</span>Resolution</button><button class="section-btn" data-section="cache"><span class="num">03</span>The Cache</button><button class="section-btn" data-section="wrapper"><span class="num">04</span>The Wrapper</button><button class="section-btn" data-section="esm"><span class="num">05</span>ESM</button><button class="section-btn" data-section="synthesis"><span class="num">06</span>Synthesis</button>
 <div class="theme-toggle" id="themeToggle"><span class="knob"></span><span>Light</span></div>
 </div></nav>
-<main><div class="major-section active" id="sec-foundations"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-f-short">0 · The Short Answer</button><button class="sub-tab" data-sub="sub-f-anatomy">1 · What You Actually Get</button><button class="sub-tab" data-sub="sub-f-not">2 · What It Is Not</button></div><div class="sub-panel active" id="sub-f-short"><div class="card main-edge"><div class="secnum">§ 0 · THE SHORT ANSWER FIRST</div><h2>Not a thread. A second Node.</h2><p>Part 4 ended on the constraint the whole series keeps arriving at: one thread runs your JavaScript, and whatever holds it stops everything. The obvious response is to ask for another thread. <code>worker_threads</code> gives you one — but not the one most people are picturing.</p><p>A worker is <strong>a whole second Node runtime inside the same process</strong>: its own V8 isolate, its own heap, its own event loop, its own module registry. It shares the process, the file descriptors and the address space. It shares no variables with you at all.</p><p>Before any of that means anything, it is worth being precise about what sits inside what. Your machine has cores; the operating system runs processes on them; a process contains threads; and Node puts a particular set of runtime pieces on some of those threads and not others.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Where a worker actually sits</span></div><span class="badge">§0 · one process on a real machine</span></div><div class="hfdiag-body"><div class="cv"><div class="cv-outer" data-owner="hw"><span class="cv-outer-k">the machine</span><span class="cv-outer-s">1 CPU &middot; 32 cores</span><div class="cv-cores"><div class="cv-socket"><span class="cv-socket-k">the CPU <span class="cv-socket-n">32 cores</span></span><div class="cv-chips"><span class="cv-group"><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span></span><span class="cv-group"><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span></span><span class="cv-group"><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span></span><span class="cv-group"><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span><span class="cv-core"></span></span></div></div></div><div class="cv-schedwrap"><button class="cv-sched" data-cv="sched" aria-expanded="false"><span class="cv-sched-t">the OS scheduler places every one of these threads onto those cores</span><span class="cv-sched-more">what that means &#9662;</span></button><div class="cv-sched-detail" hidden>Threads do not choose a core. The kernel scheduler assigns them, moves them between cores, and preempts them — which is why "one worker per core" is a heuristic about contention rather than an assignment you can make. It also means a thread that is merely <em>waiting</em> costs no core at all: the main thread asleep in <code>epoll_wait</code> is not occupying anything, which is the whole reason one thread can serve ten thousand connections.</div></div><div class="cv-mid" data-owner="kernel"><span class="cv-mid-k">one node process</span><span class="cv-mid-s">one address space · one fd table · one pid</span><div class="cv-inner"><div class="cv-box" data-owner="main"><div class="cv-box-head"><span class="cv-box-k">the main thread</span><span class="cv-box-n">× 1</span></div><span class="cv-box-s">one OS thread</span><span class="cv-verdict" data-v="yes">runs your JavaScript</span><div class="cv-lines"><span class="cv-line" data-owner="main">a V8 isolate — your heap, your GC</span><span class="cv-line" data-owner="main">libuv's event loop — Part 4</span><span class="cv-line" data-owner="main">~40 MB resident before your code</span></div><span class="cv-foot">Uses ONE core no matter how many the machine has. Blocking it is what Parts 4, 5, 8 and 9 were about.</span></div><div class="cv-box" data-owner="node"><div class="cv-box-head"><span class="cv-box-k">the libuv thread pool</span><span class="cv-box-n">× 4</span></div><span class="cv-box-s">OS threads</span><span class="cv-verdict" data-v="no">cannot run your JavaScript</span><div class="cv-lines"><span class="cv-line" data-owner="none">no V8, no isolate, no heap</span><span class="cv-line" data-owner="node">C only — fs, dns, zlib, crypto</span><span class="cv-line" data-owner="none">you never create or address one</span></div><span class="cv-foot">FOUR BY DEFAULT — <code>UV_THREADPOOL_SIZE</code>, not the core count. It does not grow to 32 because the machine has 32.</span></div><div class="cv-box" data-owner="worker"><div class="cv-box-head"><span class="cv-box-k">a worker_thread</span><span class="cv-box-n">× N</span></div><span class="cv-box-s">OS threads</span><span class="cv-verdict" data-v="yes">runs your JavaScript</span><div class="cv-lines"><span class="cv-line" data-owner="worker">another V8 isolate — its own heap and GC</span><span class="cv-line" data-owner="worker">another event loop, all six phases</span><span class="cv-line" data-owner="worker">~40 MB each, and its own modules</span></div><span class="cv-foot">You create these and address them by handle. The only extra thread that can run your code.</span></div></div></div></div><div class="cv-legend"><span class="cv-swatch"></span>one core &mdash; and one core runs one thread at a time. This is one physical CPU package, the shape of almost every cloud instance and what <code>os.availableParallelism()</code> counts. A large bare-metal server may carry a second package, a second <em>socket</em> &mdash; a word unrelated to the network sockets of Parts 0, 5, 8 and 9.</div><div class="cv-cap">Thirty-two cores, one process, and by default only <strong>one</strong> of those cores is running your JavaScript. The pool does not change that — it is four threads of C, and it is four whether the machine has 4 cores or 64. A <code>worker_thread</code> is the only box here that adds a second place your code can run, and it costs a whole V8 isolate to provide it.</div></div></div><div class="hfdiag-foot"><span class="hint">everything inside the frame is one process · nothing here is a second program</span></div></div><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Cores, processes, threads, and what Node puts on them</span></div><span class="badge">§0 · the same thing as a list</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="hw"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the machine · N cores</div><div class="hf-node-sub">hardware</div></div><div class="hf-node-tag t-hw">hw</div></div><div class="hf-node-detail">True parallelism lives here and nowhere else. Two things run at the same instant only if they are on two cores. Everything below is about who gets to use them.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">one OS process</div><div class="hf-node-sub">one address space · one fd table</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Your <code>node</code> command is one process. It owns a memory space and a file descriptor table, and every thread inside it shares both. Part 0 §2 is about that table.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the main thread</div><div class="hf-node-sub">V8 isolate + event loop + your code</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">One OS thread carrying a JavaScript runtime: a V8 isolate with your heap, and libuv's event loop from Part 4. This is the thread the whole series has been talking about.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the libuv pool · 4 threads</div><div class="hf-node-sub">NO isolate · no JavaScript</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Part 5's worker pool. These threads run C code for blocking work — file reads, DNS, crypto, zlib. They have no V8, cannot run JavaScript, and you never see them. They are threads, but they are not workers.</div></div><div class="hf-node" data-owner="worker"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">a worker_thread</div><div class="hf-node-sub">ANOTHER V8 isolate + ANOTHER event loop</div></div><div class="hf-node-tag t-worker">worker</div></div><div class="hf-node-detail">What this part is about. A full second runtime on a second thread: its own heap, its own loop, its own module registry — inside the same process, sharing the same fd table, sharing no objects.</div></div></div></div><div class="hfdiag-foot"><span class="hint">three kinds of thread in one process, and only one of them is a worker</span></div></div><p>That is the distinction the name hides. Node has had extra threads since Part 5 — the libuv pool — but those cannot run your code. A <code>worker_thread</code> is the one kind that can, and it can only do so because it brings an entire second JavaScript runtime with it.</p><div class="code-block"><div class="code-header"><span class="code-lang">JAVASCRIPT</span><span class="code-meta">THE SMALLEST WORKER THAT DOES ANYTHING</span></div><div class="code-body"><pre>const { Worker, isMainThread, parentPort } = require(&quot;worker_threads&quot;);
+<main><div class="major-section active" id="sec-foundations"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-f-short">0 · The Short Answer</button><button class="sub-tab" data-sub="sub-f-five">1 · The Five Steps</button></div><div class="sub-panel active" id="sub-f-short"><div class="card main-edge"><div class="secnum">§ 0 · THE SHORT ANSWER FIRST</div><h2>require() is a filesystem search, not a lookup</h2><p>Every part so far has started after your program was running. This one is about what happened before that — and the honest summary is that most of your cold start is spent asking the kernel whether files exist.</p><p><code>require("lodash")</code> does not look anything up in a table. It performs a <strong>search</strong>: it walks up the directory tree from the file doing the requiring, and at every level it asks the filesystem whether a <code>node_modules</code> directory is there and whether it contains what you asked for. Each of those questions is a syscall.</p><div class="code-block"><div class="code-header"><span class="code-lang">JAVASCRIPT</span><span class="code-meta">FOUR LINES, HUNDREDS OF SYSCALLS</span></div><div class="code-body"><pre>const express = require(&quot;express&quot;);     // a search, then ~50 more searches
+const lodash  = require(&quot;lodash&quot;);      // its dependencies, and theirs
+const app     = express();
 
-if (isMainThread) {
-  // we are the main thread: start a second runtime running THIS SAME FILE
-  const worker = new Worker(__filename);
-  worker.on(&quot;message&quot;, (msg) =&gt; console.log(&quot;main received:&quot;, msg));
-} else {
-  // we are inside the worker: a different isolate, running the same source
-  parentPort.postMessage(&quot;hello from thread &quot; + require(&quot;worker_threads&quot;).threadId);
-}
+// none of your code has run yet</pre></div></div><p>The second fact is the one that catches people: the result is cached, and <strong>the cache key is the resolved absolute path</strong>. Not the string you typed. Two different strings that resolve to one file give you one module; one string that resolves to two files gives you two, and they do not share state.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>A module is not a namespace and not a file. It is a cache entry keyed by an absolute path, holding an object that was produced exactly once by running that file inside a function.</p></div></div></div><div class="sub-panel" id="sub-f-five"><div class="card main-edge"><div class="secnum">§ 1 · WHAT REQUIRE ACTUALLY DOES</div><h2>Resolve, check, load, wrap, execute</h2><p>Every <code>require</code> call runs the same five steps in the same order, and only one of them involves your code.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>The five steps, in order</span></div><span class="badge">§1 · one require call</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">1 · resolve the specifier to a path</div><div class="hf-node-sub">the search — the expensive step</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Turns <code>"lodash"</code> into <code>/app/node_modules/lodash/lodash.js</code> by walking directories and stat-ing candidates. This is where the syscalls are, and §3 is entirely about it.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">2 · check the cache</div><div class="hf-node-sub">keyed by that resolved path</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail"><code>require.cache</code> is an object keyed by absolute filename. A hit returns the existing <code>module.exports</code> immediately and steps 3 to 5 never happen — which is why the second require of anything is effectively free.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">3 · read the file</div><div class="hf-node-sub">one open + read + close</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Part 5's <code>fs.readFile</code>, synchronously, on the main thread. The loop is not running yet at startup, so nothing is being blocked that would otherwise progress.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">4 · wrap the source in a function</div><div class="hf-node-sub">the module wrapper</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">The file's text is placed inside a function taking <code>exports</code>, <code>require</code>, <code>module</code>, <code>__filename</code> and <code>__dirname</code>. §8 is about why, and why those five are not globals.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">5 · call it</div><div class="hf-node-sub">your code finally runs</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">The wrapper is invoked with a fresh <code>module</code> object. Whatever it leaves on <code>module.exports</code> is what the cache stores and every later require receives.</div></div></div></div><div class="hfdiag-foot"><span class="hint">steps 3-5 happen exactly once per resolved path, ever</span></div></div><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>The cache check sits at step 2, BEFORE the file is read. That single ordering is what makes modules singletons — and it is also what makes a circular require return a half-finished object instead of hanging forever.</p></div></div></div></div><div class="major-section" id="sec-resolve"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-r-kinds">2 · Three Kinds of Specifier</button><button class="sub-tab" data-sub="sub-r-walk">3 · The node_modules Walk</button><button class="sub-tab" data-sub="sub-r-ext">4 · Extensions and Directories</button></div><div class="sub-panel active" id="sub-r-kinds"><div class="card main-edge"><div class="secnum">§ 2 · THE STRING DECIDES THE ALGORITHM</div><h2>Relative, absolute, and bare</h2><p>What Node does with your string depends entirely on its first characters, and the three cases have very different costs.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What each kind of specifier triggers</span></div><span class="badge">§2 · the three cases</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">"./util" or "../lib/util"</div><div class="hf-node-sub">RELATIVE — resolved against __dirname</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">Joined to the requiring file's directory and then tried with extensions. Cheap and predictable: a handful of stats, no searching.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">"/opt/app/util"</div><div class="hf-node-sub">ABSOLUTE — used as given</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">Same extension probing, no directory walk at all. Rare in application code.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">"lodash" or "express/lib/router"</div><div class="hf-node-sub">BARE — triggers the node_modules walk</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">The expensive one. Node walks UP from the requiring directory, checking every <code>node_modules</code> on the way to the filesystem root. §3 counts what that costs.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">"node:fs" or "fs"</div><div class="hf-node-sub">BUILTIN — short-circuits everything</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Matched against the list of built-in modules before anything touches the filesystem. Zero syscalls. The <code>node:</code> prefix makes it explicit and unshadowable.</div></div></div></div><div class="hfdiag-foot"><span class="hint">only the third one searches</span></div></div><p>The <code>node:</code> prefix is worth adopting for exactly the reason the last row gives. Without it, a directory called <code>node_modules/fs</code> can shadow the built-in; with it, resolution is decided before the filesystem is consulted at all.</p></div></div><div class="sub-panel" id="sub-r-walk"><div class="card main-edge"><div class="secnum">§ 3 · WHY COLD START IS SLOW</div><h2>Every level, every time</h2><p>A bare specifier makes Node walk up the tree. From <code>/app/src/api/v2</code> it will try <code>/app/src/api/v2/node_modules</code>, then <code>/app/src/api/node_modules</code>, then <code>/app/src/node_modules</code>, then <code>/app/node_modules</code>, then <code>/node_modules</code> — and at each level it probes several filenames.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What one require costs, by specifier</span></div><span class="badge">§3 · the stat storm</span></div><div class="hfdiag-body"><div data-instrument="resolve"></div></div><div class="hfdiag-foot"><span class="hint">the control is the one that fails — and it is the most expensive of all</span></div></div><p>Multiply the bare case by the number of packages in your dependency tree, and by the fact that each of those packages requires its own dependencies from its own depth, and the arithmetic explains the startup time of a typical service better than anything in your code does.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>A failed resolution is more expensive than a successful one, because success stops at the first hit and failure only stops at the filesystem root. The error you see is the cheapest part of it.</p></div></div></div><div class="sub-panel" id="sub-r-ext"><div class="card main-edge"><div class="secnum">§ 4 · WHAT &QUOT;./UTIL&QUOT; IS ACTUALLY ASKING FOR</div><h2>Five candidates for one specifier</h2><p>A specifier without an extension is not a filename — it is a prefix. Node tries a fixed sequence of candidates and takes the first that exists.</p><div class="code-block"><div class="code-header"><span class="code-lang">BASH</span><span class="code-meta">require("./util") — THE PROBE ORDER</span></div><div class="code-body"><pre>./util          # 1. exact, as a file
+./util.js       # 2. + .js
+./util.json     # 3. + .json
+./util.node     # 4. + .node   (a compiled addon)
+./util/         # 5. as a directory:
+                #    a) package.json &quot;main&quot;
+                #    b) ./util/index.js</pre></div></div><p>Each of those is a <code>stat()</code>, and each miss is wasted. Writing the extension — <code>require("./util.js")</code> — skips the probing entirely, and in ESM it is mandatory for exactly this reason: the specification chose to make resolution cheap and unambiguous rather than convenient.</p></div></div></div><div class="major-section" id="sec-cache"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-c-key">5 · Keyed by Resolved Path</button><button class="sub-tab" data-sub="sub-c-state">6 · A Module Is a Singleton</button><button class="sub-tab" data-sub="sub-c-cycle">7 · Circular Requires</button></div><div class="sub-panel active" id="sub-c-key"><div class="card main-edge"><div class="secnum">§ 5 · ONE FILE, ONE MODULE, FOREVER</div><h2>The string you typed is not the key</h2><p><code>require.cache</code> is an ordinary object whose keys are absolute filenames. Everything surprising about module identity follows from that one design choice.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Four requires, and how many modules result</span></div><span class="badge">§5 · what the cache does</span></div><div class="hfdiag-body"><div data-instrument="cache"></div></div><div class="hfdiag-foot"><span class="hint">the control is the case where one package name gives you two modules</span></div></div><p>The happy version is the singleton property everyone relies on: a config module required from forty files is read once, executed once, and hands the same object to all forty. The unhappy version is the control, and it is the cause of the <code>instanceof</code> failures and duplicated-state bugs that make people distrust their dependency tree.</p></div></div><div class="sub-panel" id="sub-c-state"><div class="card main-edge"><div class="secnum">§ 6 · TOP-LEVEL CODE RUNS ONCE</div><h2>Which makes module scope a global you did not declare</h2><p>Because steps 3 to 5 happen exactly once per resolved path, anything at the top level of a module runs once for the lifetime of the process — and any variable there is shared by every consumer.</p><div class="code-block"><div class="code-header"><span class="code-lang">JAVASCRIPT</span><span class="code-meta">THE ACCIDENTAL GLOBAL</span></div><div class="code-body"><pre>// counter.js
+let count = 0;                       // runs ONCE, ever
+module.exports = () =&gt; ++count;
 
-// main received: hello from thread 1</pre></div></div><p>Read the branch carefully, because it is the shape almost every worker example takes. The file runs <strong>twice</strong> — once as the main thread and once inside the worker — and <code>isMainThread</code> is how each copy finds out which it is. The two runs share no variables; the only thing crossing between them is the message.</p><div class="code-block"><div class="code-header"><span class="code-lang">JAVASCRIPT</span><span class="code-meta">AND THE LINE THAT SURPRISES PEOPLE</span></div><div class="code-body"><pre>// worker.js
-const { workerData } = require(&quot;worker_threads&quot;);
-workerData.n++;                 // mutates a COPY
+// a.js
+require(&quot;./counter&quot;)();              // 1
 
-// main.js
-const counter = { n: 0 };
-new Worker(&quot;./worker.js&quot;, { workerData: counter });
+// b.js — a completely different file
+require(&quot;./counter&quot;)();              // 2, not 1</pre></div></div><p>That is a feature when it is a connection pool and a bug when it is request state. It is also why Part 11 matters here: with <code>cluster</code>, that counter is per worker process, so four workers give you four independent counters and none of them is wrong from where it sits.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>Module scope is process-wide state with no declaration and no obvious owner. If a module holds something mutable, decide deliberately whether it should be shared by the whole process — because it will be.</p></div></div></div><div class="sub-panel" id="sub-c-cycle"><div class="card main-edge"><div class="secnum">§ 7 · WHY IT RETURNS HALF AN OBJECT INSTEAD OF HANGING</div><h2>The cache entry is created before the file runs</h2><p>If A requires B and B requires A, nothing deadlocks and nothing recurses forever. Node puts the module in the cache <em>before</em> executing it, so the second require gets a cache hit — on an object that is not finished yet.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What each side actually receives</span></div><span class="badge">§7 · a cycle, stepped</span></div><div class="hfdiag-body"><div data-instrument="cycle"></div></div><div class="hfdiag-foot"><span class="hint">nothing errors — the object is simply incomplete at the moment it is read</span></div></div><p>The practical rule that falls out: in a cycle, <strong>reading at call time works and reading at load time does not</strong>. <code>const { helper } = require("./a")</code> at the top of a cyclic module captures whatever exists at that instant, which may be nothing; <code>require("./a").helper()</code> inside a function reads the finished object later.</p></div></div></div><div class="major-section" id="sec-wrapper"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-w-fn">8 · Your File Is a Function Body</button></div><div class="sub-panel active" id="sub-w-fn"><div class="card main-edge"><div class="secnum">§ 8 · WHERE MODULE, EXPORTS AND __DIRNAME COME FROM</div><h2>Not globals — parameters</h2><p>Node does not evaluate your file as a script. It concatenates it into a function and calls that function, which is why five identifiers exist in every module and in no browser.</p><div class="code-block"><div class="code-header"><span class="code-lang">JAVASCRIPT</span><span class="code-meta">WHAT NODE ACTUALLY EVALUATES</span></div><div class="code-body"><pre>(function (exports, require, module, __filename, __dirname) {
+  // ─── your file&#x27;s entire source goes here ───
+  const fs = require(&quot;fs&quot;);
+  module.exports = { readIt };
+});</pre></div></div><p>Three consequences follow immediately. Top-level <code>var</code> is function-scoped to the wrapper rather than global, so modules cannot collide by accident. <code>this</code> at the top level is <code>module.exports</code>, not the global object. And <code>__dirname</code> is a per-module value, which is what makes relative resolution work at all.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p><code>exports</code> is a parameter holding a reference to <code>module.exports</code>. Assigning <code>exports = {...}</code> rebinds the parameter and exports nothing; assigning <code>module.exports = {...}</code> replaces the real thing. That is the whole of a bug people hit once and never forget.</p></div></div></div></div><div class="major-section" id="sec-esm"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-e-phases">9 · Three Phases, Not Five Steps</button><button class="sub-tab" data-sub="sub-e-bindings">10 · Live Bindings</button><button class="sub-tab" data-sub="sub-e-interop">11 · When They Meet</button></div><div class="sub-panel active" id="sub-e-phases"><div class="card main-edge"><div class="secnum">§ 9 · IMPORT IS NOT REQUIRE</div><h2>The graph is built before anything executes</h2><p>ESM does not resolve as it goes. It builds the entire dependency graph first, links the bindings, and only then evaluates — which is why <code>import</code> statements are hoisted, static, and cannot take a computed specifier.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>How a module graph is loaded</span></div><span class="badge">§9 · the three phases</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">1 · construction</div><div class="hf-node-sub">parse, find every import, fetch recursively</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">The whole graph is discovered before any of it runs. Every import specifier must be statically analysable, which is exactly why you cannot <code>import(variable)</code> with the statement form.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">2 · instantiation</div><div class="hf-node-sub">allocate the bindings, link them up</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Every exported name gets a slot, and every importer is pointed AT THAT SLOT — not given a copy of its value. This is what makes an ESM import a live binding.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">3 · evaluation</div><div class="hf-node-sub">run the bodies, deepest first</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">Only now does any code execute. By this point every name already exists, which is why a cycle in ESM behaves better than one in CommonJS.</div></div></div></div><div class="hfdiag-foot"><span class="hint">CJS interleaves resolution and execution; ESM separates them completely</span></div></div><p>The separation is also why ESM can be asynchronous end to end, and why <code>await</code> works at the top level of a module: evaluation is already a distinct, schedulable phase rather than something happening inside a synchronous <code>require</code> call.</p></div></div><div class="sub-panel" id="sub-e-bindings"><div class="card main-edge"><div class="secnum">§ 10 · THE DIFFERENCE THAT ACTUALLY BITES</div><h2>CJS copies a value; ESM points at a slot</h2><p>This is the semantic difference between the two systems, and it is not stylistic.</p><div class="code-block"><div class="code-header"><span class="code-lang">JAVASCRIPT</span><span class="code-meta">THE SAME MUTATION, TWO OUTCOMES</span></div><div class="code-body"><pre>// counter.mjs                      // counter.cjs
+export let n = 0;                   let n = 0;
+export const bump = () =&gt; ++n;      module.exports = { n, bump: () =&gt; ++n };
 
-// counter.n is still 0. It was structured-cloned on the way in.</pre></div></div><p>That is not a limitation someone forgot to lift. Two isolates cannot share a heap, because each one has its own garbage collector and neither can be allowed to move or free an object the other is reading. Everything you send is copied, unless you say otherwise in one of exactly two ways.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>A Java or Go thread shares memory by default and you opt into isolation. A Node worker is isolated by default and you opt into sharing — through transfer, which moves ownership, or SharedArrayBuffer, which is the only genuinely shared memory in the system.</p></div></div></div><div class="sub-panel" id="sub-f-anatomy"><div class="card main-edge"><div class="secnum">§ 1 · INSIDE ONE PROCESS</div><h2>Two isolates, two loops, one address space</h2><p>Part 5 established what a thread is: its own instruction pointer, stack and registers, sharing the process's heap and file descriptors. A worker is that, plus an entire JavaScript runtime layered on top of it.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What a Worker actually contains</span></div><span class="badge">§1 · one process, two runtimes</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">an OS thread</div><div class="hf-node-sub">pthread_create</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">The same primitive Part 5 described. The kernel schedules it exactly like the main thread — no priority, no special treatment.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">a V8 isolate</div><div class="hf-node-sub">its own heap and GC</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">The reason nothing is shared by default. Two isolates each have their own garbage collector, and an object in one heap cannot be safely referenced from the other because either GC may move or free it at any moment.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">an event loop</div><div class="hf-node-sub">its own six phases</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Everything from Part 4 again, per worker. A worker can block ITS loop with a tight loop and that is fine — it is not the loop serving your requests.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">a module registry</div><div class="hf-node-sub">its own require cache</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Modules are loaded again per worker. That is real startup cost, and the reason you pool workers rather than spawning one per task.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">shared: fds, address space, cwd</div><div class="hf-node-sub">the process-level things</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">Part 5's per-thread/shared split still holds. What is new is that the JS HEAP is no longer in the shared column.</div></div></div></div><div class="hfdiag-foot"><span class="hint">the heap is the one thing that moved from shared to private</span></div></div><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>Everything Part 5 said about threads is still true here. The worker is a real OS thread in your process. What makes it feel unfamiliar is the isolate sitting on top of it, which un-shares the one thing threads normally share.</p></div></div></div><div class="sub-panel" id="sub-f-not"><div class="card main-edge"><div class="secnum">§ 2 · THE THREE ASSUMPTIONS THAT BREAK</div><h2>No closures, no shared state, no free lunch</h2><p>Almost every surprise with <code>worker_threads</code> comes from one of three assumptions carried over from threads in other languages.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Three assumptions that break</span></div><span class="badge">§2 · what does not survive the boundary</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="worker"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">a closure over your variables</div><div class="hf-node-sub">the worker cannot see your scope</div></div><div class="hf-node-tag t-worker">worker</div></div><div class="hf-node-detail">You pass a FILE or a source string, not a function. A function is not serialisable — it closes over a scope that does not exist in the other isolate. Libraries that appear to pass functions are stringifying them, and the closure is silently lost.</div></div><div class="hf-node" data-owner="worker"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">shared mutable state</div><div class="hf-node-sub">workerData is a copy</div></div><div class="hf-node-tag t-worker">worker</div></div><div class="hf-node-detail">Structured clone on the way in and on every message. Mutating what you received changes nothing on the other side.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">a thread that speeds up I/O</div><div class="hf-node-sub">it will not</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Parts 5, 8 and 9 already showed that I/O does not block your thread. Moving an async read onto a worker adds a clone and a thread and removes nothing, because there was nothing to remove.</div></div></div></div><div class="hfdiag-foot"><span class="hint">the third one is the expensive mistake</span></div></div><p>There is a fourth confusion that deserves more than a row, because the two things genuinely do sound identical: Part 5 spent a whole document on <em>the worker pool</em>, and this one is about <em>worker threads</em>. Both are extra OS threads inside your process. In every other respect they are unrelated.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Two kinds of extra thread, compared</span></div><span class="badge">§2 · the pool is not a worker</span></div><div class="hfdiag-body"><div data-instrument="poolvsworker"></div></div><div class="hfdiag-foot"><span class="hint">click a row for the mechanism · then pick a workload and see which one runs it</span></div></div><p>The second half of that figure is the question that actually comes up in practice. Three of those six workloads are handed to the pool without you asking, one never needs a thread at all, and two are your JavaScript on your thread — where the pool sits idle and cannot help, because it runs C.</p><p>The first is the one that produces confusing bugs; the third is the one that produces slower servers. A worker is for <strong>CPU</strong> — work that occupies the thread rather than waiting on something else.</p></div></div></div><div class="major-section" id="sec-crossing"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-c-clone">3 · Structured Clone</button><button class="sub-tab" data-sub="sub-c-transfer">4 · Transfer</button><button class="sub-tab" data-sub="sub-c-shared">5 · SharedArrayBuffer</button><button class="sub-tab" data-sub="sub-c-atomics">6 · Atomics</button></div><div class="sub-panel active" id="sub-c-clone"><div class="card main-edge"><div class="secnum">§ 3 · THE DEFAULT: EVERYTHING IS COPIED</div><h2>A deep copy, with rules of its own</h2><p>Every <code>postMessage</code>, and <code>workerData</code> at startup, goes through the structured clone algorithm. It is a deep copy that understands more than <code>JSON.stringify</code> does — and refuses things JSON quietly mangles.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Structured clone, in one table</span></div><span class="badge">§3 · what survives a clone</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">objects, arrays, Map, Set, Date, RegExp</div><div class="hf-node-sub">cloned faithfully</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Including cyclic references, which JSON cannot represent at all.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">ArrayBuffer and typed arrays</div><div class="hf-node-sub">cloned — the bytes are COPIED</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">A 100MB buffer sent to four workers is 400MB of copying. This is the cost the next two panels exist to avoid.</div></div><div class="hf-node" data-owner="worker"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">functions, DOM-ish objects, class identity</div><div class="hf-node-sub">throws DataCloneError</div></div><div class="hf-node-tag t-worker">worker</div></div><div class="hf-node-detail">A function cannot cross. A class instance crosses as a plain object: its prototype is gone and its methods with it.</div></div><div class="hf-node" data-owner="worker"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the prototype chain</div><div class="hf-node-sub">discarded, silently</div></div><div class="hf-node-tag t-worker">worker</div></div><div class="hf-node-detail">This is the one that bites. <code>new Point(1,2)</code> arrives as <code>{x:1, y:2}</code> — same data, no methods, and no error to tell you.</div></div></div></div><div class="hfdiag-foot"><span class="hint">JSON loses more; clone loses less, but it still loses the prototype</span></div></div><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>Structured clone is a copy, and the cost is proportional to the size of what you send. If you are sending megabytes on every message, the boundary is your bottleneck and the next two panels are the fix.</p></div></div></div><div class="sub-panel" id="sub-c-transfer"><div class="card main-edge"><div class="secnum">§ 4 · MOVE IT INSTEAD OF COPYING IT</div><h2>Ownership changes hands; the bytes never move</h2><p>A transfer hands the underlying memory to the other isolate rather than copying it. The operation is O(1) regardless of size — no bytes are touched, only a pointer and a bookkeeping flag.</p><div class="code-block"><div class="code-header"><span class="code-lang">JAVASCRIPT</span><span class="code-meta">THE SECOND ARGUMENT IS THE POINT</span></div><div class="code-body"><pre>const buf = new ArrayBuffer(100 * 1024 * 1024);   // 100MB
-
-worker.postMessage({ buf }, [buf]);   // &lt;- the transfer list
-
-// on this side, buf.byteLength is now 0.
-// the buffer is DETACHED: reading it throws.</pre></div></div><p>The price is that you no longer have it. Transfer is a move, not a share — after the call your <code>ArrayBuffer</code> is detached and any typed array viewing it is empty. That is exactly the right semantics for a pipeline where each stage hands work onward, and exactly the wrong one if you still need the data.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>Transfer is free in the sense that matters: the cost does not grow with the size of the buffer. It is the difference between mailing a house and mailing its deed.</p></div></div></div><div class="sub-panel" id="sub-c-shared"><div class="card main-edge"><div class="secnum">§ 5 · THE ONLY GENUINELY SHARED MEMORY</div><h2>Both isolates, one region, all the usual dangers</h2><p>A <code>SharedArrayBuffer</code> is not cloned and not transferred. Both isolates hold a reference to the same physical bytes, and both may read and write them at the same instant.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Clone, transfer, share — the whole choice</span></div><span class="badge">§5 · the three ways across</span></div><div class="hfdiag-body"><div data-instrument="cross"></div></div><div class="hfdiag-foot"><span class="hint">the cost column is the reason this panel exists</span></div></div><p>This is real shared-memory concurrency, with every hazard Part 5 said threads have and JavaScript has historically been spared. Two workers incrementing the same slot will lose updates, because <code>arr[0]++</code> is a read, an add and a write with no guarantee that another thread has not run in between.</p><p>Which is what <code>Atomics</code> is for, and why it is not optional.</p></div></div><div class="sub-panel" id="sub-c-atomics"><div class="card main-edge"><div class="secnum">§ 6 · THE ONLY SAFE WAY TO TOUCH SHARED MEMORY</div><h2>Read-modify-write, indivisibly</h2><p><code>Atomics</code> provides operations the CPU guarantees cannot be interleaved. <code>Atomics.add(arr, 0, 1)</code> is a single indivisible read-modify-write; <code>arr[0] += 1</code> is three separate steps and a race.</p><div class="code-block"><div class="code-header"><span class="code-lang">JAVASCRIPT</span><span class="code-meta">THE SAME LOOP, TWICE</span></div><div class="code-body"><pre>// four workers, 100_000 increments each, shared Int32Array
-
-arr[0] += 1;                 // final value: somewhere under 400_000
-Atomics.add(arr, 0, 1);      // final value: exactly 400_000</pre></div></div><p>The lost updates are not a bug in Node or in V8. They are the CPU doing exactly what Part 5 described — one instruction at a time per core, with no coordination between cores unless you ask for it.</p><p><code>Atomics.wait</code> and <code>Atomics.notify</code> go further and let a worker sleep on a memory location without burning CPU, which is how you build a queue between workers without polling. <code>Atomics.wait</code> is forbidden on the main thread for the reason Part 4 spent a whole section on: it would block the loop.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>If two threads can reach the same memory, every read-modify-write needs <code>Atomics</code>. This is the first place in the series where JavaScript stops protecting you from the machine.</p></div></div></div></div><div class="major-section" id="sec-when"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-w-does">7 · Does a Worker Help?</button><button class="sub-tab" data-sub="sub-w-cost">8 · What a Worker Costs</button></div><div class="sub-panel active" id="sub-w-does"><div class="card main-edge"><div class="secnum">§ 7 · THREE WORKLOADS, ONE QUESTION</div><h2>It depends entirely on what is holding the thread</h2><p>Part 5 asked whether libuv's pool helps, and the answer turned on whether the work was I/O or CPU. This is the same question one layer up, and the answer turns on the same distinction.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Same request, three workloads</span></div><span class="badge">§7 · the experiment</span></div><div class="hfdiag-body"><div data-instrument="help"></div></div><div class="hfdiag-foot"><span class="hint">the control is the one where a worker makes things measurably worse</span></div></div><p>The middle case is the one worth internalising. Moving an already-async read onto a worker does not make it faster — the read was never on your thread — and now you have paid for a clone and a message round trip to learn that.</p></div></div><div class="sub-panel" id="sub-w-cost"><div class="card main-edge"><div class="secnum">§ 8 · BEFORE YOU SPAWN ONE PER REQUEST</div><h2>Startup is a new runtime, not a new thread</h2><p>Creating an OS thread costs microseconds. Creating a worker costs milliseconds, because you are creating a V8 isolate, a context, a module registry and an event loop, and then loading your code into all of it.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What you pay per worker</span></div><span class="badge">§8 · the bill</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the thread itself</div><div class="hf-node-sub">microseconds</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Genuinely cheap, as Part 5 said. This is never the part that hurts.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">a V8 isolate and context</div><div class="hf-node-sub">milliseconds</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">A fresh heap, a fresh set of built-ins, a fresh compilation cache. Nothing is shared with the parent isolate, so nothing can be reused from it.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">your modules, loaded again</div><div class="hf-node-sub">milliseconds to seconds</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Every require in the worker entry point runs again in the new registry. A worker that pulls in a large framework pays for it every time you spawn one.</div></div><div class="hf-node" data-owner="hw"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">a baseline heap per worker</div><div class="hf-node-sub">several MB, resident</div></div><div class="hf-node-tag t-hw">hw</div></div><div class="hf-node-detail">Multiply by the number of workers. This is why a worker-per-request server runs out of memory long before it runs out of CPU.</div></div></div></div><div class="hfdiag-foot"><span class="hint">spawn a pool once; do not spawn per task</span></div></div><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>The rule that follows is the same one Part 5 gave for the libuv pool, for the same reason: a fixed pool sized to your cores, fed by a queue. The difference is that here you build the pool yourself, or use one off the shelf.</p></div></div></div></div><div class="major-section" id="sec-talking"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-t-ports">9 · MessagePort</button><button class="sub-tab" data-sub="sub-t-errors">10 · When a Worker Dies</button></div><div class="sub-panel active" id="sub-t-ports"><div class="card main-edge"><div class="secnum">§ 9 · HOW THE TWO SIDES TALK</div><h2>A port on each side, and a queue between them</h2><p>Every worker comes with one channel already wired: <code>worker.postMessage</code> on your side, <code>parentPort</code> on theirs. You can create more with <code>MessageChannel</code>, and — usefully — you can send a port <em>through</em> a port, which is how two workers end up talking to each other directly without routing through the main thread.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What happens to a postMessage</span></div><span class="badge">§9 · where a message lands</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">postMessage(value)</div><div class="hf-node-sub">on the sending side</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">The value is structured-cloned immediately, synchronously, before the call returns. A large object costs you time right here, on the sending thread.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the clone is queued on the port</div><div class="hf-node-sub">sitting in memory</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">It waits whether or not the receiver is listening. A worker that never reads its port is a memory leak with no error message.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the receiver's loop delivers it</div><div class="hf-node-sub">as a message event</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Part 4 all over again: it is a callback, so it runs when THAT isolate's loop gets to it. A worker busy in a tight loop will not see your message until it returns.</div></div></div></div><div class="hfdiag-foot"><span class="hint">the clone happens on the sender; the delivery happens on the receiver</span></div></div></div></div><div class="sub-panel" id="sub-t-errors"><div class="card main-edge"><div class="secnum">§ 10 · ERRORS DO NOT PROPAGATE THE WAY YOU EXPECT</div><h2>A throw over there is an event over here</h2><p>An uncaught exception in a worker does not crash your process and does not throw anywhere you can catch it. It surfaces as an <code>'error'</code> event on the worker object, and then the worker exits.</p><div class="code-block"><div class="code-header"><span class="code-lang">JAVASCRIPT</span><span class="code-meta">THE FOUR EVENTS WORTH HANDLING</span></div><div class="code-body"><pre>worker.on(&quot;online&quot;,  () =&gt; {});          // the isolate is up
-worker.on(&quot;message&quot;, (m) =&gt; {});         // it sent something back
-worker.on(&quot;error&quot;,   (err) =&gt; {});       // uncaught throw INSIDE the worker
-worker.on(&quot;exit&quot;,    (code) =&gt; {});      // always fires, even after error</pre></div></div><p>If you do not listen for <code>'error'</code>, the failure is silent: the worker is gone, your pending task never resolves, and the promise you handed the caller hangs forever. That is the single most common bug in home-grown worker pools.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>Always pair a task with the <code>'exit'</code> event, not just with <code>'message'</code>. A worker that dies mid-task will never send the message you are waiting for, and only <code>'exit'</code> is guaranteed to fire.</p></div></div></div></div><div class="major-section" id="sec-synthesis"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-y-models">11 · Wrong vs Correct</button><button class="sub-tab" data-sub="sub-y-lock">12 · Lock It In</button></div><div class="sub-panel active" id="sub-y-models"><div class="card main-edge"><div class="secnum">§ 11 · THE MODELS WORTH CORRECTING</div><h2>Nine claims, three of them true</h2><p>These are the beliefs that produce the bugs, and most of them are correct statements about threads in some other language.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Which of these are true?</span></div><span class="badge">§11 · mental models</span></div><div class="hfdiag-body"><div data-instrument="models"></div></div><div class="hfdiag-foot"><span class="hint">sort before you check — a guess you have committed to is worth more than a correction you read</span></div></div><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>Nearly every wrong take here assumes the heap is shared. It is not, and that single fact generates the clone cost, the missing closures, the vanished prototypes and the need for Atomics.</p></div></div></div><div class="sub-panel" id="sub-y-lock"><div class="card main-edge"><div class="secnum">§ 12 · THE FOUR SENTENCES WORTH KEEPING</div><h2>If you remember nothing else</h2><p>A worker is a second Node inside your process. Everything else follows from that.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What to carry away</span></div><span class="badge">§12 · the four sentences</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">isolated by default, shared by exception</div><div class="hf-node-sub">§0</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">The opposite of threads elsewhere. You opt into sharing with a transfer list or a SharedArrayBuffer, and with nothing else.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">clone costs bytes; transfer costs nothing</div><div class="hf-node-sub">§3 · §4</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">A copy scales with size; a move does not. If the boundary is your bottleneck, you are cloning something you could have transferred.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">workers are for CPU, never for I/O</div><div class="hf-node-sub">§7</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">I/O never blocked your thread in the first place. Parts 5, 8 and 9 spent three documents establishing that.</div></div><div class="hf-node" data-owner="worker"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">shared memory needs Atomics</div><div class="hf-node-sub">§6</div></div><div class="hf-node-tag t-worker">worker</div></div><div class="hf-node-detail">The moment two threads can reach one address, every read-modify-write is a race unless the CPU is told to make it indivisible.</div></div></div></div><div class="hfdiag-foot"><span class="hint">four sentences, one boundary</span></div></div><p>Part 11 asks the same question at the next scale up. If a worker is a second runtime sharing one process, what does a second <em>process</em> share — and how do four of them end up serving one socket?</p></div></div></div></main>
-<footer><div>Part 10 of the Node.js Internals series &nbsp;·&nbsp; <code>worker_threads</code> · structured clone · <code>SharedArrayBuffer</code> · <code>Atomics</code></div>
-<div>Isolated by default, shared by exception</div></footer>
+// ESM consumer                     // CJS consumer
+import { n, bump } from &quot;./counter.mjs&quot;;   const { n, bump } = require(&quot;./counter.cjs&quot;);
+bump();                                    bump();
+console.log(n);   // 1  &lt;- live            console.log(n);   // 0  &lt;- a copy</pre></div></div><p>The CJS destructure took the value of <code>n</code> at require time and kept it. The ESM import refers to the exporting module's binding, so it sees the update. Neither is wrong; they are different contracts, and mixing them is where interop confusion comes from.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>A CommonJS import is a snapshot of an object. An ESM import is a reference to a name in another module. If you have ever "fixed" a stale value by requiring inside the function instead of at the top, this is the mechanism you were working around.</p></div></div></div><div class="sub-panel" id="sub-e-interop"><div class="card main-edge"><div class="secnum">§ 11 · THE RULES FOR MIXING THEM</div><h2>One direction is easy; the other is not</h2><p>The two systems coexist in one process, and the asymmetry between them follows directly from §9: ESM can wait, and CommonJS cannot.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What works, and why</span></div><span class="badge">§11 · the four combinations</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">ESM importing CommonJS</div><div class="hf-node-sub">works — the whole exports becomes the default</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Node evaluates the CJS module and hands you <code>module.exports</code> as the default export. Named imports work when Node can statically detect them, which it does with a source scan and cannot always manage.</div></div><div class="hf-node" data-owner="worker"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">CommonJS requiring ESM</div><div class="hf-node-sub">THROWS — ERR_REQUIRE_ESM</div></div><div class="hf-node-tag t-worker">worker</div></div><div class="hf-node-detail"><code>require</code> is synchronous by contract and ESM evaluation is asynchronous. There is nowhere to put the wait. (Newer Node can require a fully synchronous ESM graph, but the general case remains unavailable.)</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">CommonJS importing ESM dynamically</div><div class="hf-node-sub">works — await import()</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail"><code>import()</code> returns a promise, which gives the asynchronous phase somewhere to live. This is the escape hatch for the row above.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">what decides which one a file is</div><div class="hf-node-sub">.mjs / .cjs / package.json "type"</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">Extension wins; otherwise the nearest <code>package.json</code> decides, and the default is CommonJS. A file is one or the other before it is parsed.</div></div></div></div><div class="hfdiag-foot"><span class="hint">the asymmetry is synchronous vs asynchronous, nothing more</span></div></div></div></div></div><div class="major-section" id="sec-synthesis"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-y-models">12 · Wrong vs Correct</button><button class="sub-tab" data-sub="sub-y-lock">13 · Lock It In</button></div><div class="sub-panel active" id="sub-y-models"><div class="card main-edge"><div class="secnum">§ 12 · THE MODELS WORTH CORRECTING</div><h2>Ten claims about loading</h2><p>These are the beliefs that produce the slow starts and the duplicate-instance bugs.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Which of these are true?</span></div><span class="badge">§12 · mental models</span></div><div class="hfdiag-body"><div data-instrument="models"></div></div><div class="hfdiag-foot"><span class="hint">sort before you check — a guess you have committed to is worth more than a correction you read</span></div></div><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>Nearly every wrong take here assumes resolution is a lookup. It is a search of the filesystem, its result is cached under an absolute path, and both of those facts generate everything else on the list.</p></div></div></div><div class="sub-panel" id="sub-y-lock"><div class="card main-edge"><div class="secnum">§ 13 · THE FOUR SENTENCES WORTH KEEPING</div><h2>If you remember nothing else</h2><p>Loading is filesystem work, and it happens before the event loop (Part 4) has taken a single step.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What to carry away</span></div><span class="badge">§13 · the four sentences</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">require is a search, not a lookup</div><div class="hf-node-sub">§0 · §3</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">A bare specifier walks up every directory to the filesystem root, probing candidates at each level. Failures cost more than successes.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the cache key is the resolved absolute path</div><div class="hf-node-sub">§5</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Two strings that resolve to one file give one module; one name resolving to two files gives two, with separate state and failing <code>instanceof</code>.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">a module body runs exactly once</div><div class="hf-node-sub">§6</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">Module scope is process-wide state you did not declare. With cluster it is per-worker, which is §6 of Part 11 arriving from the other side.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">CJS copies values, ESM links bindings</div><div class="hf-node-sub">§10</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">And CJS interleaves resolution with execution while ESM separates them, which is why one can be synchronous and the other cannot.</div></div></div></div><div class="hfdiag-foot"><span class="hint">four sentences, one search</span></div></div><p>That closes the loading story, and with it the ground the rest of the series stands on: Part 0 named the primitives; Parts 5, 8 and 9 will follow one call each through them, Part 4 opens the loop, Parts 10 and 11 buy second runtimes — and this part is everything that has to happen before any of it can start.</p></div></div></div></main>
+<footer><div>Mission 01 of the Node.js Internals campaign &nbsp;·&nbsp; <code>require()</code> · <code>import</code> · resolution · the module cache</div>
+<div>A search, not a lookup</div></footer>
 <div class="glossary-pop" id="gpop"></div>
 <script>
 (function () {
@@ -4657,12 +4537,6 @@ worker.on(&quot;exit&quot;,    (code) =&gt; {});      // always fires, even afte
      `categoryOf` exported into the closure the shared behaviour layer
      runs inside. */
   const glossary = {
-    "worker_thread": { cat:"worker", title:"a worker_thread", body:"A second Node runtime on a second OS thread inside the same process: its own V8 isolate, heap, event loop and module registry. The only extra thread that can run your JavaScript." },
-    "UV_THREADPOOL_SIZE": { cat:"node", title:"UV_THREADPOOL_SIZE", body:"The size of libuv's thread pool. Defaults to 4, is read once at first use, and does NOT track the core count — a 32-core machine still gets 4 unless you set it." },
-    "os.availableParallelism": { cat:"hw", kind:"js", title:"os.availableParallelism()", body:"How many threads the machine can genuinely run at once. On a cloud instance this is the vCPU count, and it is the number 'one worker per core' means." },
-    "V8 isolate": { cat:"node", title:"a V8 isolate", body:"One independent JavaScript runtime: its own heap, its own garbage collector, its own set of built-ins. Two isolates cannot share objects, because either GC may move or free something the other is reading." },
-    "epoll_wait": { cat:"kernel", kind:"syscall", title:"epoll_wait()", body:"The syscall the event loop sleeps in. A thread waiting here occupies no core at all, which is why one thread can hold ten thousand idle connections." },
-    "OS scheduler": { cat:"kernel", title:"the OS scheduler", body:"The kernel decides which thread runs on which core, moves them around and preempts them. You never assign a thread to a core yourself." },
     "event-loop":   { cat:"node",   title:"event loop", body:"libuv's loop. One iteration runs a fixed sequence of phases, each draining its own queue, then blocks in the poll phase waiting for the kernel." },
     "phase":        { cat:"node",   title:"phase", body:"One stage of a loop iteration with its own callback queue: timers, pending, idle/prepare, poll, check, close. A phase runs its queue to exhaustion before the next begins." },
     "timers":       { cat:"node",   title:"timers phase", body:"Runs callbacks whose <code>setTimeout</code> or <code>setInterval</code> threshold has elapsed. It does not run them AT the threshold — it runs them the next time the loop reaches this phase after the threshold has passed." },
@@ -4838,14 +4712,6 @@ worker.on(&quot;exit&quot;,    (code) =&gt; {});      // always fires, even afte
   "jit":"JIT", "gc":"GC", "garbage collector":"GC", "garbage collection":"GC",
 });
   Object.assign(aliases, {
-    "worker_thread":"worker_thread", "worker_threads":"worker_thread",
-    "a worker_thread":"worker_thread",
-    "uv_threadpool_size":"UV_THREADPOOL_SIZE",
-    "os.availableparallelism()":"os.availableParallelism",
-    "os.availableparallelism":"os.availableParallelism",
-    "a v8 isolate":"V8 isolate", "v8 isolate":"V8 isolate", "isolate":"V8 isolate",
-    "epoll_wait()":"epoll_wait", "epoll_wait":"epoll_wait",
-    "os scheduler":"OS scheduler", "the os scheduler":"OS scheduler",
     "settimeout":"setTimeout", "settimeout()":"setTimeout",
     "setimmediate":"setImmediate", "setimmediate()":"setImmediate",
     "process.nexttick":"nextTick", "process.nexttick()":"nextTick", "nexttick":"nextTick",
@@ -4989,6 +4855,9 @@ worker.on(&quot;exit&quot;,    (code) =&gt; {});      // always fires, even afte
      captures the RESULT (undefined) and made the re-run a silent no-op */
   function markTerms() {
     const keys = Object.keys(aliases).sort(function (a, b) { return b.length - a.length; });
+    /* Figures are where the unfamiliar identifiers actually live, and this list
+       excluded them outright — so these documents marked nothing inside a
+       diagram. The extension had gone into parts 10 and 11 only. */
     document.querySelectorAll(".card p, .card li, .cv-line, .cv-foot, .cv-legend, " +
                              ".cv-sched-detail, .cv-cap, .hf-node-detail, " +
                              ".hf-node-title, .hf-node-sub")
@@ -5048,22 +4917,10 @@ worker.on(&quot;exit&quot;,    (code) =&gt; {});      // always fires, even afte
     if (!open) n.classList.add("open");
   }, true);
 
-  /* ── the scheduler band is a control ─────────────────────────────
-     It is the only part of the containment diagram that is an ACTION
-     rather than a thing, so it is the one part worth being able to ask
-     about without leaving the figure. */
-  document.addEventListener("click", function (e) {
-    const b = e.target.closest('[data-cv="sched"]');
-    if (!b) return;
-    const open = b.getAttribute("aria-expanded") === "true";
-    b.setAttribute("aria-expanded", open ? "false" : "true");
-    const d = b.parentElement.querySelector(".cv-sched-detail");
-    if (d) d.hidden = open;
-  });
-
-  /* ── glossary marks respond to CLICK, not only hover ─────────────
-     Hover is not an affordance on a touch screen and not discoverable
-     anywhere. A click pins the popover open until the next click. */
+  /* Annotations respond to CLICK, pinned until the next click. Hover is not an
+     affordance on a touch screen, and the marks now carry a resting underline
+     saying they can be opened — so they have to actually open on click, and on
+     Enter for anyone arriving by keyboard. */
   /* Click to open, click again to close. The shared layer blocks HOVER
      outside flow-node rows; opening and closing the popover stays here,
      with the engine that owns it. */
@@ -6474,238 +6331,365 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
   else setTimeout(highlightAll, 0);
 
   /* ══════════════════════════════════════════════════════════════════
-     INSTRUMENT · "the three ways across"  (§5)
-     Clone, transfer and share are usually presented as a table of
-     capabilities. The thing that decides which one you reach for is
-     none of those columns — it is the COST, and the cost is the one
-     number a table never carries. Change the payload size and watch
-     which of the three moves.
+     INSTRUMENT · "what does one require cost?"  (§3)
+     "require walks up node_modules" is easy to say and impossible to
+     feel from a sentence. Pick a specifier, watch the walk, and count
+     the stats. The control is the resolution that FAILS — which is the
+     most expensive of all, because success stops at the first hit and
+     failure only stops at the filesystem root.
      ══════════════════════════════════════════════════════════════════ */
-  const XB_SIZES = [1, 10, 100];              // MB
-  const XB_WAYS = [
-    { id:"clone", label:"structured clone", note:
-      "The default. Every byte is copied on the sending thread, synchronously, before " +
-      "<code>postMessage</code> returns. The sender still has its copy and the receiver " +
-      "has an independent one — which is exactly what you want for small messages and " +
-      "exactly what you cannot afford for large ones.",
-      cost:function (mb) { return mb; }, keeps:true, shared:false, atomics:false },
-    { id:"transfer", label:"transfer", note:
-      "The buffer is MOVED. No bytes are touched — only a pointer and a detach flag — so " +
-      "the cost is the same whether you send one megabyte or a hundred. The price is that " +
-      "you no longer have it: your ArrayBuffer is detached and reading it throws.",
-      cost:function () { return 0; }, keeps:false, shared:false, atomics:false },
-    { id:"share", label:"SharedArrayBuffer", note:
-      "Neither copied nor moved. Both isolates reference the same physical bytes and both " +
-      "may write them at the same instant — real shared-memory concurrency, with every " +
-      "hazard that implies. Every read-modify-write needs <code>Atomics</code>.",
-      cost:function () { return 0; }, keeps:true, shared:true, atomics:true },
+  const RS_FROM = "/app/src/api/v2";
+  const RS_EXTS = ["", ".js", ".json", ".node"];
+
+  const RS_CASES = [
+    { id:"builtin", label:'require("node:fs")', kind:"builtin",
+      note:"Matched against the built-in list before anything touches the filesystem. " +
+           "Zero syscalls, zero directories walked — which is why the <code>node:</code> " +
+           "prefix is worth adopting: resolution is decided before the disk is consulted, " +
+           "and no <code>node_modules/fs</code> can shadow it." },
+    { id:"relative", label:'require("./util")', kind:"relative",
+      note:"Joined to the requiring file's directory, then probed with each extension in " +
+           "order. No walking at all — the directory is already known. Writing " +
+           "<code>\"./util.js\"</code> would cut even this to a single stat." },
+    { id:"bare", label:'require("lodash")', kind:"bare", name:"lodash", found:3,
+      note:"The walk. Node tries <code>node_modules</code> at every level from the " +
+           "requiring directory up to the filesystem root, and probes candidates at each. " +
+           "Here it hits at <code>/app/node_modules</code> — the fourth level — and stops." },
+    { id:"missing", label:'require("lodahs")   ← a typo', kind:"bare", name:"lodahs", control:true,
+      note:"<strong>The control.</strong> A typo costs more than a hit. Success stops at " +
+           "the first match; failure has no early exit and must reach the filesystem root " +
+           "before it can be sure. Every level, every candidate, all of it wasted — and " +
+           "then <code>MODULE_NOT_FOUND</code>, which is the cheapest part of the whole " +
+           "operation." },
   ];
 
-  function xbModel(way, mb) {
-    const copied = way.cost(mb);
-    /* ~1GB/s is a fair order of magnitude for a large in-process memcpy; the
-       figure says "order of magnitude, not a benchmark" for the same reason
-       Part 5's time budget did */
-    const ms = copied ? Math.round(copied * 1.0 * 10) / 10 : 0;
-    return { copied: copied, ms: ms, peak: way.shared ? mb : mb + copied,
-             keeps: way.keeps, shared: way.shared, atomics: way.atomics };
-  }
-
-  function mountCross() {
-    const host = document.querySelector('[data-instrument="cross"]');
-    if (!host) return false;
-    const wrap = document.createElement("div");
-    wrap.className = "xb";
-    wrap.innerHTML =
-      '<div class="xb-pick"><span class="xb-pick-k">payload</span>' +
-        XB_SIZES.map(function (s, i) {
-          return '<button class="xb-btn' + (i === 1 ? " on" : "") + '" data-size="' + s + '">' +
-            s + " MB</button>"; }).join("") +
-      "</div>" +
-      '<div class="xb-rows">' + XB_WAYS.map(function (w, i) {
-        return '<div class="xb-row' + (i === 0 ? " act" : "") + '" data-way="' + w.id + '">' +
-          '<span class="xb-name">' + w.label + "</span>" +
-          '<span class="xb-cell" data-c="copied"></span>' +
-          '<span class="xb-cell" data-c="ms"></span>' +
-          '<span class="xb-cell" data-c="keeps"></span>' +
-          '<span class="xb-cell" data-c="atomics"></span></div>"'; }).join("").replace(/"$/g, '') +
-      "</div>" +
-      '<div class="xb-head"><span>way</span><span>bytes copied</span><span>time to cross</span>' +
-      '<span>sender keeps it</span><span>needs Atomics</span></div>' +
-      '<div class="xb-say"></div>';
-    host.appendChild(wrap);
-
-    let mb = 10, way = XB_WAYS[0];
-    function render() {
-      XB_WAYS.forEach(function (w) {
-        const row = wrap.querySelector('[data-way="' + w.id + '"]');
-        const m = xbModel(w, mb);
-        row.classList.toggle("act", w.id === way.id);
-        const set = function (k, v, good) {
-          const c = row.querySelector('[data-c="' + k + '"]');
-          c.textContent = v;
-          c.className = "xb-cell" + (good === true ? " yes" : good === false ? " no" : "");
-        };
-        set("copied", m.copied ? m.copied + " MB" : "0", m.copied === 0);
-        set("ms", m.ms ? "~" + m.ms + " ms" : "~0 ms", m.ms === 0);
-        set("keeps", m.keeps ? "yes" : "no · detached", m.keeps);
-        set("atomics", m.atomics ? "yes" : "no", !m.atomics);
+  function rsSimulate(c) {
+    const steps = [];
+    let stats = 0;
+    if (c.kind === "builtin") {
+      steps.push({ path:"(the built-in module list)", hit:true, stats:0,
+                   note:"matched in memory" });
+      return { steps: steps, stats: 0, found: true };
+    }
+    if (c.kind === "relative") {
+      RS_EXTS.forEach(function (e) {
+        stats++;
+        const hit = e === ".js";
+        steps.push({ path: RS_FROM + "/util" + e, hit: hit, stats: stats,
+                     note: hit ? "found" : "no such file" });
       });
-      wrap.querySelector(".xb-say").innerHTML = way.note;
+      return { steps: steps, stats: stats, found: true };
     }
-    wrap.addEventListener("click", function (e) {
-      const s = e.target.closest("[data-size]"), r = e.target.closest("[data-way]");
-      if (s) {
-        wrap.querySelectorAll("[data-size]").forEach(function (x) { x.classList.remove("on"); });
-        s.classList.add("on"); mb = +s.dataset.size;
-      } else if (r) {
-        way = XB_WAYS.find(function (w) { return w.id === r.dataset.way; });
-      } else return;
-      render();
-    });
-    render();
-    window.__xbModel = xbModel;
-    window.__xbWays = XB_WAYS;
-    return true;
+    /* Bare: walk up, and at each level stat `node_modules` first. Candidates are
+       probed only where that directory actually EXISTS — which in a normal tree
+       is one or two levels, not all of them.
+       The first version of this modelled the failure case as cheaper than the
+       success case (5 probes vs 9), which inverted the entire point of the
+       figure. A miss must walk further than a hit, by construction: success
+       stops at the first match, failure has no early exit. */
+    const parts = RS_FROM.split("/").filter(Boolean);
+    const levels = [];
+    for (let i = parts.length; i >= 0; i--) levels.push("/" + parts.slice(0, i).join("/"));
+    /* only /app has a node_modules in this tree — index 3 counting from deepest */
+    const HAS_NM = 3;
+    for (let i = 0; i < levels.length; i++) {
+      const dir = levels[i];
+      const base = (dir === "/" ? "" : dir) + "/node_modules";
+      const exists = i === HAS_NM;
+      stats++;
+      steps.push({ path: base + "/", hit: false, stats: stats, level: true,
+                   note: exists ? "directory exists — probe inside"
+                                : "no such directory — go up" });
+      if (!exists) continue;
+      let stop = false;
+      for (let k = 0; k < RS_EXTS.length && !stop; k++) {
+        stats++;
+        const isHit = c.found !== undefined && k === 1;
+        steps.push({ path: base + "/" + c.name + (RS_EXTS[k] || "/package.json"),
+                     hit: isHit, stats: stats,
+                     note: isHit ? "found — stop here" : "no such file" });
+        if (isHit) stop = true;
+      }
+      if (stop) return { steps: steps, stats: stats, found: true };
+    }
+    return { steps: steps, stats: stats, found: false };
   }
 
-  /* ══════════════════════════════════════════════════════════════════
-     INSTRUMENT · "does a worker help?"  (§7)
-     The same question Part 5 asked of the libuv pool, one layer up. The
-     middle case is the control: work that was never on your thread to
-     begin with, where a worker adds cost and removes nothing.
-     ══════════════════════════════════════════════════════════════════ */
-  const WH_JOBS = [
-    { id:"cpu", label:"CPU-bound · hash a 10MB buffer", control:false,
-      mainMs:800, workerMs:800, cloneMs:10, blocksMain:true,
-      note:"The case workers exist for. 800ms of pure computation occupies whichever " +
-           "thread runs it. On the main thread that is 800ms during which nothing else in " +
-           "your process runs at all; on a worker it is 800ms during which your server " +
-           "keeps answering. The work does not get faster — it gets <em>elsewhere</em>." },
-    { id:"io", label:"I/O-bound · read a file from disk", control:true,
-      mainMs:5, workerMs:5, cloneMs:10, blocksMain:false,
-      note:"<strong>The control.</strong> Parts 5, 8 and 9 spent three documents establishing " +
-           "that this never blocked your thread: libuv's pool does the blocking read and " +
-           "your loop sleeps in epoll_wait. Moving it to a worker adds a clone and a " +
-           "message round trip and removes nothing, because there was nothing to remove. " +
-           "It is measurably slower and no more concurrent." },
-    { id:"mixed", label:"parse 50MB of JSON, then respond", control:false,
-      mainMs:1200, workerMs:1200, cloneMs:50, blocksMain:true,
-      note:"The honest middle. The parse is real CPU and belongs on a worker, but the " +
-           "50MB has to cross the boundary to get there and cross back. Clone it and you " +
-           "pay twice; read the file INSIDE the worker and transfer the result, and you " +
-           "pay once — which is the design the boundary is pushing you toward." },
-  ];
-
-  function whModel(job, useWorker) {
-    const total = useWorker ? job.cloneMs + job.workerMs : job.mainMs;
-    const blocked = useWorker ? job.cloneMs : (job.blocksMain ? job.mainMs : 0);
-    /* "worse" is not "took longer on the wall clock". Adding 10ms of clone to an
-       800ms hash costs 1% and takes the main thread from blocked to free — that
-       is the trade the feature exists to make. A worker is worse only when it
-       costs time and buys nothing: when the main thread was never blocked. */
-    return { total: total, blocked: blocked,
-             served: blocked === 0 ? "everything" : "nothing for " + blocked + "ms",
-             worse: useWorker && total > job.mainMs && !job.blocksMain };
-  }
-
-  function mountHelp() {
-    const host = document.querySelector('[data-instrument="help"]');
+  function mountResolve() {
+    const host = document.querySelector('[data-instrument="resolve"]');
     if (!host) return false;
     const wrap = document.createElement("div");
-    wrap.className = "wh";
+    wrap.className = "rs";
     wrap.innerHTML =
-      '<div class="wh-pick">' + WH_JOBS.map(function (j, i) {
-        return '<button class="wh-btn' + (i === 0 ? " on" : "") + '" data-job="' + j.id + '">' +
-          j.label + (j.control ? '<span class="wh-ctrlmark">control</span>' : "") + "</button>"; }).join("") +
+      '<div class="rs-pick">' + RS_CASES.map(function (c, i) {
+        return '<button class="rs-btn' + (i === 0 ? " on" : "") + '" data-case="' + c.id + '">' +
+          c.label + (c.control ? '<span class="rs-ctrlmark">control</span>' : "") + "</button>"; }).join("") +
       "</div>" +
-      '<div class="wh-lanes">' +
-        '<div class="wh-lane"><span class="wh-lane-k">on the main thread</span>' +
-          '<div class="wh-bar" data-lane="main"><span></span></div>' +
-          '<span class="wh-val" data-v="main"></span></div>' +
-        '<div class="wh-lane"><span class="wh-lane-k">on a worker</span>' +
-          '<div class="wh-bar" data-lane="worker"><span></span><span class="wh-clone"></span></div>' +
-          '<span class="wh-val" data-v="worker"></span></div>' +
-      "</div>" +
-      '<div class="wh-meters"></div>' +
-      '<div class="wh-say"></div>';
+      '<div class="rs-from">requiring from <code>' + RS_FROM + '/handler.js</code></div>' +
+      '<div class="rs-steps"></div>' +
+      '<div class="rs-meters"></div>' +
+      '<div class="rs-say"></div>';
     host.appendChild(wrap);
 
-    let job = WH_JOBS[0];
+    let c = RS_CASES[0];
     function render() {
-      const onMain = whModel(job, false), onWorker = whModel(job, true);
-      const scale = Math.max(onMain.total, onWorker.total);
-      wrap.querySelector('[data-lane="main"] span').style.width = (onMain.total / scale * 100) + "%";
-      wrap.querySelector('[data-lane="worker"] span').style.width = (job.workerMs / scale * 100) + "%";
-      wrap.querySelector(".wh-clone").style.width = (job.cloneMs / scale * 100) + "%";
-      wrap.querySelector('[data-v="main"]').textContent = onMain.total + " ms";
-      wrap.querySelector('[data-v="worker"]').textContent = onWorker.total + " ms";
-
+      const sim = rsSimulate(c);
+      wrap.querySelector(".rs-steps").innerHTML = sim.steps.map(function (s) {
+        return '<div class="rs-step' + (s.hit ? " hit" : "") + '">' +
+          '<code>' + s.path + "</code>" +
+          '<span class="rs-note">' + s.note + "</span></div>"; }).join("");
       const m = function (l, v, good) {
-        return '<div class="wh-meter"><span class="wh-m-k">' + l + '</span><span class="wh-m-v' +
+        return '<div class="rs-meter"><span class="rs-m-k">' + l + '</span><span class="rs-m-v' +
           (good === true ? " yes" : good === false ? " no" : "") + '">' + v + "</span></div>"; };
-      wrap.querySelector(".wh-meters").innerHTML =
-        m("main thread blocked · no worker", onMain.blocked + " ms", onMain.blocked === 0) +
-        m("main thread blocked · with worker", onWorker.blocked + " ms", onWorker.blocked <= 10) +
-        m("wall clock · with worker", onWorker.total + " ms", !onWorker.worse) +
-        m("a worker is", onWorker.worse ? "slower here" : "worth it", !onWorker.worse);
-
-      wrap.querySelector(".wh-say").innerHTML = job.note;
-      wrap.classList.toggle("is-control", !!job.control);
+      const dirs = sim.steps.filter(function (s) { return /node_modules\/$/.test(s.path); }).length;
+      wrap.querySelector(".rs-meters").innerHTML =
+        m("filesystem probes", String(sim.stats), sim.stats === 0) +
+        m("node_modules levels walked", String(dirs), dirs === 0) +
+        m("result", sim.found ? "resolved" : "MODULE_NOT_FOUND", sim.found);
+      wrap.querySelector(".rs-say").innerHTML = c.note;
+      wrap.classList.toggle("is-control", !!c.control);
     }
     wrap.addEventListener("click", function (e) {
-      const b = e.target.closest("[data-job]"); if (!b) return;
-      wrap.querySelectorAll("[data-job]").forEach(function (x) { x.classList.remove("on"); });
+      const b = e.target.closest("[data-case]"); if (!b) return;
+      wrap.querySelectorAll("[data-case]").forEach(function (x) { x.classList.remove("on"); });
       b.classList.add("on");
-      job = WH_JOBS.find(function (j) { return j.id === b.dataset.job; });
+      c = RS_CASES.find(function (x) { return x.id === b.dataset.case; });
       render();
     });
     render();
-    window.__whModel = whModel;
-    window.__whJobs = WH_JOBS;
+    window.__rsSimulate = rsSimulate; window.__rsCases = RS_CASES;
     return true;
   }
 
   /* ══════════════════════════════════════════════════════════════════
-     INSTRUMENT · "which of these are true?"  (§11)
+     INSTRUMENT · "how many modules did you get?"  (§5)
+     The cache key is the RESOLVED ABSOLUTE PATH. Four requires, and the
+     count of distinct modules is the whole lesson.
      ══════════════════════════════════════════════════════════════════ */
-  const WM_ITEMS = [
-    { id:"own-loop", t:"A worker has its own event loop, so blocking it does not block yours.", ans:true,
-      why:"<strong>True.</strong> Everything in Part 4 exists once per worker. A tight " +
-          "loop inside a worker freezes that worker's six phases and nothing else — which " +
-          "is the entire point of moving CPU work there." },
-    { id:"shared-heap", t:"A worker shares your variables, like a thread in Java or Go.", ans:false,
-      why:"It has its own V8 isolate and its own heap. Two isolates cannot share objects " +
-          "because each has its own garbage collector, and neither may move or free " +
-          "something the other is reading." },
-    { id:"isolated", t:"A worker is isolated by default and you opt into sharing.", ans:true,
-      why:"<strong>True</strong>, and it is the same fact as the statement above stated " +
-          "the right way round. The two opt-ins are a transfer list and a SharedArrayBuffer." },
-    { id:"closure", t:"You can pass a callback to a worker and it will close over your scope.", ans:false,
-      why:"A function is not serialisable — it closes over a scope that does not exist in " +
-          "the other isolate. You pass a file path or a source string. Libraries that " +
-          "appear to pass functions stringify them, and the closure is silently lost." },
-    { id:"proto", t:"A class instance sent through postMessage arrives with its methods.", ans:false,
-      why:"Structured clone discards the prototype chain. <code>new Point(1,2)</code> " +
-          "arrives as <code>{x:1, y:2}</code> — same data, no methods, and no error to " +
-          "tell you." },
-    { id:"io-help", t:"Moving an async file read onto a worker makes it faster.", ans:false,
-      why:"It never blocked your thread: libuv's pool did the blocking read while your " +
-          "loop slept in epoll_wait. A worker adds a clone and a message round trip and " +
-          "removes nothing — it is measurably slower." },
-    { id:"cpu-help", t:"A worker does not make CPU work faster; it makes it happen elsewhere.", ans:true,
-      why:"<strong>True.</strong> 800ms of hashing is 800ms either way. What changes is " +
-          "whether your loop is free during those 800ms." },
-    { id:"transfer-cost", t:"Transferring a 100MB buffer costs about ten times a 10MB one.", ans:false,
-      why:"Transfer is O(1). No bytes are touched — only a pointer and a detach flag — so " +
-          "the cost does not grow with size at all. That is the entire reason to use it." },
-    { id:"sab-safe", t:"Two workers incrementing the same SharedArrayBuffer slot is safe.", ans:false,
-      why:"<code>arr[0]++</code> is a read, an add and a write, with nothing stopping the " +
-          "other thread running in between. Updates are lost. Every read-modify-write on " +
-          "shared memory needs <code>Atomics</code>." },
-    { id:"spawn", t:"Spawning a worker is roughly as cheap as creating an OS thread.", ans:false,
-      why:"The thread is microseconds; the isolate, context, module registry and heap are " +
-          "milliseconds, and several MB resident. Pool them — do not spawn per task." },
+  const CA_CASES = [
+    { id:"same", label:"./config, four times", control:false,
+      requires:[
+        { text:'require("./config")',        path:"/app/src/config.js" },
+        { text:'require("./config.js")',     path:"/app/src/config.js" },
+        { text:'require("../src/config")',   path:"/app/src/config.js" },
+        { text:'require("/app/src/config")', path:"/app/src/config.js" },
+      ],
+      note:"Four different strings, one resolved path, one module. The file is read once " +
+           "and executed once, and all four callers hold the same object — which is the " +
+           "singleton property everything from config to connection pools relies on." },
+    { id:"index", label:"a directory and its index", control:false,
+      requires:[
+        { text:'require("./lib")',          path:"/app/src/lib/index.js" },
+        { text:'require("./lib/index")',    path:"/app/src/lib/index.js" },
+        { text:'require("./lib/index.js")', path:"/app/src/lib/index.js" },
+      ],
+      note:"Same again through the directory rules of §4. The specifier is a prefix; what " +
+           "matters is where the probing lands, and all three land in the same place." },
+    { id:"dupe", label:"one package, two copies installed", control:true,
+      requires:[
+        { text:'require("uuid")  from /app',              path:"/app/node_modules/uuid/index.js" },
+        { text:'require("uuid")  from /app/node_modules/a', path:"/app/node_modules/a/node_modules/uuid/index.js" },
+      ],
+      note:"<strong>The control.</strong> The same package NAME, resolved from two depths, " +
+           "finds two different files — so you get two modules, two copies of the top-level " +
+           "state, and two different class identities. This is why <code>instanceof</code> " +
+           "fails against an object your dependency created, and why a \"singleton\" in a " +
+           "library sometimes is not one. Nothing errors; you simply have two." },
+  ];
+
+  function caSimulate(c) {
+    const paths = c.requires.map(function (r) { return r.path; });
+    const distinct = [...new Set(paths)];
+    return { distinct: distinct.length, calls: c.requires.length,
+             reads: distinct.length, executions: distinct.length,
+             shared: distinct.length === 1 };
+  }
+
+  function mountCache() {
+    const host = document.querySelector('[data-instrument="cache"]');
+    if (!host) return false;
+    const wrap = document.createElement("div");
+    wrap.className = "ca";
+    wrap.innerHTML =
+      '<div class="ca-pick">' + CA_CASES.map(function (c, i) {
+        return '<button class="ca-btn' + (i === 0 ? " on" : "") + '" data-case="' + c.id + '">' +
+          c.label + (c.control ? '<span class="ca-ctrlmark">control</span>' : "") + "</button>"; }).join("") +
+      "</div>" +
+      '<div class="ca-rows"></div>' +
+      '<div class="ca-meters"></div>' +
+      '<div class="ca-say"></div>';
+    host.appendChild(wrap);
+
+    let c = CA_CASES[0];
+    function render() {
+      const sim = caSimulate(c);
+      const keys = [...new Set(c.requires.map(function (r) { return r.path; }))];
+      wrap.querySelector(".ca-rows").innerHTML = c.requires.map(function (r, i) {
+        const n = keys.indexOf(r.path);
+        return '<div class="ca-row"><code>' + r.text + "</code>" +
+          '<span class="ca-arrow">→</span>' +
+          '<code class="ca-path" data-key="' + n + '">' + r.path + "</code>" +
+          '<span class="ca-state">' + (i === c.requires.findIndex(function (x) { return x.path === r.path; })
+            ? "read + executed" : "cache hit") + "</span></div>"; }).join("");
+      const m = function (l, v, good) {
+        return '<div class="ca-meter"><span class="ca-m-k">' + l + '</span><span class="ca-m-v' +
+          (good === true ? " yes" : good === false ? " no" : "") + '">' + v + "</span></div>"; };
+      wrap.querySelector(".ca-meters").innerHTML =
+        m("require calls", String(sim.calls)) +
+        m("distinct cache keys", String(sim.distinct), sim.distinct === 1) +
+        m("times the file executed", String(sim.executions), sim.executions === 1) +
+        m("do they share state", sim.shared ? "yes" : "NO · two modules", sim.shared);
+      wrap.querySelector(".ca-say").innerHTML = c.note;
+      wrap.classList.toggle("is-control", !!c.control);
+    }
+    wrap.addEventListener("click", function (e) {
+      const b = e.target.closest("[data-case]"); if (!b) return;
+      wrap.querySelectorAll("[data-case]").forEach(function (x) { x.classList.remove("on"); });
+      b.classList.add("on");
+      c = CA_CASES.find(function (x) { return x.id === b.dataset.case; });
+      render();
+    });
+    render();
+    window.__caSimulate = caSimulate; window.__caCases = CA_CASES;
+    return true;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     INSTRUMENT · "a cycle, stepped"  (§7)
+     The cache entry is created BEFORE the file runs, so a circular
+     require gets a hit on an unfinished object. Step it and read what
+     each side actually holds at that instant.
+     ══════════════════════════════════════════════════════════════════ */
+  const CY_STEPS = [
+    { code:'node a.js', file:"a.js", cached:["a.js"], exportsA:"{}", exportsB:"—",
+      note:"Node caches <code>a.js</code> and starts executing it. The cache entry exists " +
+           "already, holding an empty <code>module.exports</code> — that ordering is the " +
+           "whole mechanism." },
+    { code:'a.js:  exports.name = "A"', file:"a.js", cached:["a.js"],
+      exportsA:'{ name: "A" }', exportsB:"—",
+      note:"A's first line runs. Its exports object now has one property, and anyone " +
+           "reading the cache right now would see exactly that much." },
+    { code:'a.js:  const b = require("./b")', file:"b.js", cached:["a.js", "b.js"],
+      exportsA:'{ name: "A" }', exportsB:"{}",
+      note:"A pauses. B is not cached, so Node caches it and begins executing it. Two " +
+           "entries now exist, neither finished." },
+    { code:'b.js:  const a = require("./a")', file:"b.js", cached:["a.js", "b.js"],
+      exportsA:'{ name: "A" }', exportsB:"{}", hit:true,
+      note:"<strong>The moment that matters.</strong> B requires A, and A IS in the cache " +
+           "— so this returns immediately with a CACHE HIT on a half-finished object. No " +
+           "deadlock, no infinite recursion, and no error: B receives " +
+           "<code>{ name: \"A\" }</code> and nothing more." },
+    { code:'b.js:  console.log(a.helper)', file:"b.js", cached:["a.js", "b.js"],
+      exportsA:'{ name: "A" }', exportsB:"{}", undef:true,
+      note:"<code>undefined</code>. A's <code>helper</code> is assigned on a line that has " +
+           "not run yet. Read at LOAD time, it is missing; read later from inside a " +
+           "function, it would be there." },
+    { code:'b.js:  exports.ready = true', file:"b.js", cached:["a.js", "b.js"],
+      exportsA:'{ name: "A" }', exportsB:"{ ready: true }",
+      note:"B finishes. Its exports are complete and its cache entry is now final — but the damage, if there is any, is already done: B captured what it read from A one line earlier, and finishing does not go back and fix that." },
+    { code:'a.js:  exports.helper = () => {}', file:"a.js", cached:["a.js", "b.js"],
+      exportsA:'{ name: "A", helper: fn }', exportsB:"{ ready: true }",
+      note:"Control returns to A, which finishes its own body. A is complete now — but B " +
+           "already read it, and B captured what existed at that earlier instant." },
+  ];
+
+  function mountCycle() {
+    const host = document.querySelector('[data-instrument="cycle"]');
+    if (!host) return false;
+    const wrap = document.createElement("div");
+    wrap.className = "cy";
+    wrap.innerHTML =
+      '<div class="cy-lines"></div>' +
+      '<div class="cy-state"></div>' +
+      '<div class="cy-ctl">' +
+        '<button class="cy-b cy-b-primary" data-act="next">Step ▸</button>' +
+        '<button class="cy-b" data-act="prev">◂ Back</button>' +
+        '<button class="cy-b" data-act="end">Run it</button>' +
+        '<button class="cy-b" data-act="reset">↺ Reset</button>' +
+        '<span class="cy-count" data-m="step">1 / ' + CY_STEPS.length + "</span>" +
+      "</div>" +
+      '<div class="cy-say"></div>';
+    host.appendChild(wrap);
+
+    let i = 0;
+    function render() {
+      const s = CY_STEPS[i];
+      wrap.querySelector(".cy-lines").innerHTML = CY_STEPS.map(function (st, n) {
+        return '<div class="cy-line' + (n <= i ? " on" : "") + (n === i ? " act" : "") +
+          (n <= i && st.hit ? " hit" : "") + (n <= i && st.undef ? " undef" : "") +
+          '"><code>' + st.code + "</code>" +
+          '<span class="cy-file">' + st.file + "</span></div>"; }).join("");
+      const cell = function (k, v, warn) {
+        return '<div class="cy-cell"><span class="cy-cell-k">' + k + '</span>' +
+          '<span class="cy-cell-v' + (warn ? " warn" : "") + '">' + v + "</span></div>"; };
+      wrap.querySelector(".cy-state").innerHTML =
+        cell("in require.cache", s.cached.join(" · ")) +
+        cell("a.js exports", s.exportsA, s.hit) +
+        cell("b.js exports", s.exportsB) +
+        cell("b's view of a.helper", i >= 4 ? (i >= 6 ? "still undefined" : "undefined") : "—",
+             i >= 4);
+      wrap.querySelector('[data-m="step"]').textContent = (i + 1) + " / " + CY_STEPS.length;
+      wrap.querySelector(".cy-say").innerHTML = s.note;
+      wrap.classList.toggle("is-hit", !!s.hit);
+    }
+    wrap.addEventListener("click", function (e) {
+      const a = e.target.closest("[data-act]"); if (!a) return;
+      if (a.dataset.act === "next") i = Math.min(CY_STEPS.length - 1, i + 1);
+      else if (a.dataset.act === "prev") i = Math.max(0, i - 1);
+      else if (a.dataset.act === "end") i = CY_STEPS.length - 1;
+      else i = 0;
+      render();
+    });
+    render();
+    window.__cySteps = CY_STEPS;
+    return true;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     INSTRUMENT · "which of these are true?"  (§12)
+     ══════════════════════════════════════════════════════════════════ */
+  const MM_ITEMS = [
+    { id:"lookup", t:"require() looks a module up in a registry.", ans:false,
+      why:"It SEARCHES the filesystem. A bare specifier walks up every directory to the " +
+          "root, probing <code>node_modules</code> and several filenames at each level. " +
+          "Every probe is a syscall." },
+    { id:"search", t:"A failed require costs more than a successful one.", ans:true,
+      why:"<strong>True.</strong> Success stops at the first hit; failure has no early " +
+          "exit and must reach the filesystem root before it can be certain. The " +
+          "<code>MODULE_NOT_FOUND</code> is the cheapest part of it." },
+    { id:"key", t:"The module cache is keyed by the string you passed to require.", ans:false,
+      why:"By the RESOLVED ABSOLUTE PATH. <code>\"./config\"</code>, " +
+          "<code>\"./config.js\"</code> and <code>\"/app/src/config\"</code> are one cache " +
+          "entry because they resolve to one file." },
+    { id:"dupe", t:"The same package name always gives you the same module object.", ans:false,
+      why:"Only if it resolves to the same file. Two copies installed at different depths " +
+          "resolve to two paths, so you get two modules with separate state and different " +
+          "class identities — which is why <code>instanceof</code> can fail against an " +
+          "object your dependency made." },
+    { id:"once", t:"A module's top-level code runs once per process, not once per require.", ans:true,
+      why:"<strong>True</strong>, and it makes module scope process-wide state you never " +
+          "declared. Under <code>cluster</code> it is per worker process, so four workers " +
+          "hold four independent copies." },
+    { id:"cycle", t:"A circular require deadlocks or throws.", ans:false,
+      why:"Neither. The cache entry is created BEFORE the file executes, so the second " +
+          "require gets a hit on a half-finished exports object. Nothing errors; you " +
+          "simply read something incomplete." },
+    { id:"globals", t:"__dirname and module are global variables.", ans:false,
+      why:"They are PARAMETERS. Node wraps your file in a function taking " +
+          "<code>exports, require, module, __filename, __dirname</code> and calls it — " +
+          "which is also why top-level <code>var</code> does not leak between modules." },
+    { id:"exports", t:"Assigning exports = {...} replaces what the module exports.", ans:false,
+      why:"It rebinds the parameter and exports nothing. <code>exports</code> merely holds " +
+          "a reference to <code>module.exports</code>; only assigning " +
+          "<code>module.exports</code> replaces the real thing." },
+    { id:"live", t:"An ESM import is a live binding, while a CJS destructure is a copy.", ans:true,
+      why:"<strong>True</strong>, and it is the semantic difference between the systems. " +
+          "ESM instantiation points every importer at the exporter's binding slot; a CJS " +
+          "destructure takes the value that existed at require time." },
+    { id:"requireesm", t:"You can require() an ESM module from CommonJS.", ans:false,
+      why:"In the general case no: <code>require</code> is synchronous by contract and ESM " +
+          "evaluation is asynchronous, so there is nowhere to put the wait. " +
+          "<code>await import()</code> is the escape hatch." },
   ];
 
   function mountModels() {
@@ -6713,11 +6697,11 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
     if (!host) return false;
     const wrap = document.createElement("div");
     wrap.className = "el";
+    const trueCount = MM_ITEMS.filter(function (i) { return i.ans; }).length;
     wrap.innerHTML =
-      '<p class="el-lede">' + WM_ITEMS.length + ' statements about the model this part ' +
-      'has been building. ' + WM_ITEMS.filter(function (i) { return i.ans; }).length +
-      ' are true. Mark each one before you check.</p>' +
-      '<div class="el-rows">' + WM_ITEMS.map(function (it) {
+      '<p class="el-lede">' + MM_ITEMS.length + ' statements about the model this part has ' +
+      'been building. ' + trueCount + ' are true. Mark each one before you check.</p>' +
+      '<div class="el-rows">' + MM_ITEMS.map(function (it) {
         return '<div class="el-row" data-id="' + it.id + '">' +
           '<span class="el-claim">' + it.t + "</span>" +
           '<span class="el-choice">' +
@@ -6736,7 +6720,7 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
 
     const picks = {}; let checked = false;
     function render() {
-      WM_ITEMS.forEach(function (it) {
+      MM_ITEMS.forEach(function (it) {
         const row = wrap.querySelector('[data-id="' + it.id + '"]');
         row.querySelectorAll(".el-opt").forEach(function (o) {
           o.classList.toggle("on", picks[it.id] === o.dataset.pick); });
@@ -6749,35 +6733,33 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
         else { row.classList.add("wrong"); mark.textContent = "✗"; }
         why.innerHTML = '<span class="el-ans">' + (it.ans ? "true" : "false") + "</span>" + it.why;
       });
-      const answered = WM_ITEMS.filter(function (i) { return picks[i.id]; }).length;
-      const right = WM_ITEMS.filter(function (i) { return picks[i.id] && (picks[i.id] === "true") === i.ans; }).length;
+      const answered = MM_ITEMS.filter(function (i) { return picks[i.id]; }).length;
+      const right = MM_ITEMS.filter(function (i) { return picks[i.id] && (picks[i.id] === "true") === i.ans; }).length;
       const m = function (l, v, good) {
         return '<div class="el-meter"><span class="el-m-k">' + l + '</span><span class="el-m-v' +
           (good === true ? " yes" : good === false ? " no" : "") + '">' + v + "</span></div>"; };
       wrap.querySelector(".el-meters").innerHTML =
-        m("marked", answered + " / " + WM_ITEMS.length, answered === WM_ITEMS.length) +
-        m("correct", checked ? right + " / " + WM_ITEMS.length : "—",
-          checked ? right === WM_ITEMS.length : undefined) +
-        m("true statements", WM_ITEMS.filter(function (i) { return i.ans; }).length +
-            " of " + WM_ITEMS.length) +
-        m("wrong takes", WM_ITEMS.filter(function (i) { return !i.ans; }).length +
-            " of " + WM_ITEMS.length);
+        m("marked", answered + " / " + MM_ITEMS.length, answered === MM_ITEMS.length) +
+        m("correct", checked ? right + " / " + MM_ITEMS.length : "—",
+          checked ? right === MM_ITEMS.length : undefined) +
+        m("true statements", trueCount + " of " + MM_ITEMS.length) +
+        m("wrong takes", (MM_ITEMS.length - trueCount) + " of " + MM_ITEMS.length);
       const say = wrap.querySelector(".el-say");
       if (!checked) {
         say.innerHTML = answered === 0
           ? "Nothing marked yet. The corrections are printed either way — the only thing " +
             "you lose by reading them first is finding out what you believed."
-          : answered + " of " + WM_ITEMS.length + " marked.";
+          : answered + " of " + MM_ITEMS.length + " marked.";
       } else {
-        const pairMiss = (picks["shared-heap"] === "false") !== (picks["isolated"] === "true");
-        say.innerHTML = "<strong>" + right + " of " + WM_ITEMS.length + ".</strong> " +
+        const pairMiss = (picks["lookup"] === "false") !== (picks["search"] === "true");
+        say.innerHTML = "<strong>" + right + " of " + MM_ITEMS.length + ".</strong> " +
           (pairMiss
-            ? "You answered <em>\"shares your variables\"</em> and <em>\"isolated by " +
-              "default\"</em> inconsistently — they are the same fact stated two ways, " +
-              "and that is the most useful place to have been caught out."
-            : "Nearly every wrong take here assumes the heap is shared. It is not, and " +
-              "that single fact generates the clone cost, the missing closures, the " +
-              "vanished prototypes and the need for Atomics.");
+            ? "You answered <em>\"require is a lookup\"</em> and <em>\"a failed require " +
+              "costs more\"</em> inconsistently — the second is only true because the " +
+              "first is false, and that is the most useful place to have been caught out."
+            : "Nearly every wrong take here assumes resolution is a lookup. It is a search " +
+              "of the filesystem, cached under an absolute path, and those two facts " +
+              "generate everything else on the list.");
       }
       wrap.classList.toggle("is-checked", checked);
     }
@@ -6791,164 +6773,19 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
     wrap.querySelector(".el-ctl").addEventListener("click", function (e) {
       const a = e.target.closest("[data-act]"); if (!a) return;
       if (a.dataset.act === "check") checked = true;
-      else if (a.dataset.act === "reveal") { WM_ITEMS.forEach(function (i) { picks[i.id] = i.ans ? "true" : "false"; }); checked = true; }
+      else if (a.dataset.act === "reveal") { MM_ITEMS.forEach(function (i) { picks[i.id] = i.ans ? "true" : "false"; }); checked = true; }
       else { Object.keys(picks).forEach(function (k) { delete picks[k]; }); checked = false; }
       render();
     });
     render();
-    window.__wmItems = WM_ITEMS;
+    window.__mmItems = MM_ITEMS;
     return true;
   }
 
   if (document.readyState === "loading")
     document.addEventListener("DOMContentLoaded", function () {
-      setTimeout(function () { mountCross(); mountHelp(); mountModels(); }, 0); });
-  else setTimeout(function () { mountCross(); mountHelp(); mountModels(); }, 0);
-
-  /* ══════════════════════════════════════════════════════════════════
-     INSTRUMENT · "the pool is not a worker"  (§2)
-     The two get conflated constantly, and the conflation is reasonable:
-     both are "extra threads in your Node process". They are not the same
-     thing in any other respect. Two halves — a dimension-by-dimension
-     comparison, and then the question that actually comes up: given a
-     piece of work, WHICH of the three runs it?
-     ══════════════════════════════════════════════════════════════════ */
-  const PW_DIMS = [
-    { k:"how many",
-      pool:"4 by default", worker:"however many you create",
-      why:"The pool is <code>UV_THREADPOOL_SIZE</code>, which defaults to 4 and is fixed " +
-          "at first use — it does NOT track the core count. Workers are yours: you call " +
-          "<code>new Worker()</code> and you decide." },
-    { k:"can it run your JavaScript",
-      pool:"NO", worker:"yes", poolBad:true,
-      why:"This is the whole distinction. A pool thread has no V8 isolate at all, so " +
-          "there is nothing there that could execute JavaScript. A worker carries a " +
-          "complete second runtime precisely so that it can." },
-    { k:"what it costs to create",
-      pool:"nothing — it already exists", worker:"milliseconds + ~40 MB",
-      why:"The pool is spun up by libuv on first use and reused forever. A worker builds " +
-          "an isolate, a context, a module registry and an event loop, then loads your " +
-          "code into all of it." },
-    { k:"who decides what runs there",
-      pool:"Node does", worker:"you do",
-      why:"You never hand work to the pool directly: <code>fs.readFile</code>, " +
-          "<code>dns.lookup</code>, <code>zlib</code> and <code>crypto</code> route " +
-          "themselves. A worker runs the file you point it at and nothing else." },
-    { k:"how you talk to it",
-      pool:"you don't — a callback comes back", worker:"postMessage / MessagePort",
-      why:"The pool has no handle and no address. A worker is an object with events, and " +
-          "everything crossing to it is structured-cloned, transferred or shared." },
-    { k:"what happens if it blocks",
-      pool:"the other pool work queues behind it", worker:"only that worker stalls",
-      why:"Both are survivable, and neither touches the main loop — but a slow pool task " +
-          "delays every OTHER fs/dns/zlib callback, which is Part 5's saturation " +
-          "instrument. A stuck worker affects only itself." },
-    { k:"is it in Part 5",
-      pool:"yes — Part 5 is entirely about it", worker:"no — this part",
-      why:"Part 5's worker pool and this part's worker_threads share a word and almost " +
-          "nothing else. If you have read Part 5 and think you already know what a " +
-          "worker is, this row is why you do not." },
-  ];
-
-  const PW_JOBS = [
-    { id:"readfile", label:"fs.readFile(big.json)", runs:"pool", auto:true,
-      why:"Routed to the pool by Node, automatically. The main thread issues the request " +
-          "and carries on; a pool thread does the blocking read; your callback comes back " +
-          "on the loop. This is Part 5 end to end, and a worker_thread would only add a " +
-          "message round trip to it." },
-    { id:"pbkdf2", label:"crypto.pbkdf2(...)", runs:"pool", auto:true,
-      why:"Also the pool — and this one surprises people, because it is pure CPU. The " +
-          "async crypto functions are implemented in C and hand themselves to the pool, so " +
-          "they get a thread without you asking. Note the ASYNC form: " +
-          "<code>pbkdf2Sync</code> runs on the main thread and blocks everything." },
-    { id:"gzip", label:"zlib.gzip(buffer)", runs:"pool", auto:true,
-      why:"The pool again. Compression is CPU work written in C, so it qualifies for the " +
-          "same treatment as crypto — with the same trap: the <code>Sync</code> variants " +
-          "run on your thread." },
-    { id:"parse", label:"JSON.parse(50 MB)", runs:"main", control:true,
-      why:"<strong>The control.</strong> The main thread, blocking everything, and NEITHER " +
-          "mechanism saves you. The pool cannot take it — it runs C, and this is " +
-          "JavaScript. The pool exists and is idle, and it is no help at all. Moving this " +
-          "off the loop is exactly what a <code>worker_thread</code> is for, and it is the " +
-          "only thing here you have to do by hand." },
-    { id:"loop", label:"your own hashing loop", runs:"main", control:false,
-      why:"Same as above: your JavaScript, your thread. If it is long enough to matter, a " +
-          "worker is the answer — and you will pay the clone cost of getting the data " +
-          "there and back, which §5 measures." },
-    { id:"http", label:"an inbound HTTP request", runs:"loop", auto:true,
-      why:"No thread at all. The socket is watched by <code>epoll</code>, the loop wakes " +
-          "when bytes arrive, and your handler runs on the main thread — Parts 8 and 9. " +
-          "Nothing was ever blocked, which is why adding threads to an I/O-bound server " +
-          "buys so little." },
-  ];
-
-  const PW_LANES = {
-    main:  { label:"the main thread", tag:"main" },
-    pool:  { label:"the libuv pool",  tag:"node" },
-    loop:  { label:"the event loop, no thread", tag:"kernel" },
-    worker:{ label:"a worker_thread", tag:"worker" },
-  };
-
-  function mountPoolVsWorker() {
-    const host = document.querySelector('[data-instrument="poolvsworker"]');
-    if (!host) return false;
-    const wrap = document.createElement("div");
-    wrap.className = "pw";
-    wrap.innerHTML =
-      '<div class="pw-table">' +
-        '<div class="pw-head"><span></span>' +
-          '<span class="pw-h" data-owner="node">the libuv thread pool</span>' +
-          '<span class="pw-h" data-owner="worker">worker_threads</span></div>' +
-        PW_DIMS.map(function (d, i) {
-          return '<button class="pw-row' + (i === 0 ? " on" : "") + '" data-dim="' + i + '">' +
-            '<span class="pw-k">' + d.k + "</span>" +
-            '<span class="pw-v' + (d.poolBad ? " no" : "") + '">' + d.pool + "</span>" +
-            '<span class="pw-v yes">' + d.worker + "</span></button>"; }).join("") +
-      "</div>" +
-      '<div class="pw-why"></div>' +
-      '<div class="pw-split">so: which one runs a given piece of work?</div>' +
-      '<div class="pw-jobs">' + PW_JOBS.map(function (j, i) {
-        return '<button class="pw-job' + (i === 0 ? " on" : "") + '" data-job="' + j.id + '">' +
-          j.label + (j.control ? '<span class="pw-ctrlmark">control</span>' : "") + "</button>"; }).join("") +
-      "</div>" +
-      '<div class="pw-answer"></div>' +
-      '<div class="pw-say"></div>';
-    host.appendChild(wrap);
-
-    let dim = 0, job = PW_JOBS[0];
-    function render() {
-      wrap.querySelectorAll("[data-dim]").forEach(function (r) {
-        r.classList.toggle("on", +r.dataset.dim === dim); });
-      wrap.querySelector(".pw-why").innerHTML = PW_DIMS[dim].why;
-
-      wrap.querySelectorAll("[data-job]").forEach(function (b) {
-        b.classList.toggle("on", b.dataset.job === job.id); });
-      const lane = PW_LANES[job.runs];
-      wrap.querySelector(".pw-answer").innerHTML =
-        Object.keys(PW_LANES).map(function (k) {
-          const on = k === job.runs;
-          return '<span class="pw-lane' + (on ? " on" : "") + '" data-owner="' +
-            PW_LANES[k].tag + '">' + PW_LANES[k].label + "</span>"; }).join("") +
-        '<span class="pw-auto">' +
-          (job.auto ? "routed for you" : "only if YOU move it") + "</span>";
-      wrap.querySelector(".pw-say").innerHTML = job.why;
-      wrap.classList.toggle("is-control", !!job.control);
-      void lane;
-    }
-    wrap.addEventListener("click", function (e) {
-      const r = e.target.closest("[data-dim]"), b = e.target.closest("[data-job]");
-      if (r) dim = +r.dataset.dim;
-      else if (b) job = PW_JOBS.find(function (x) { return x.id === b.dataset.job; });
-      else return;
-      render();
-    });
-    render();
-    window.__pwDims = PW_DIMS; window.__pwJobs = PW_JOBS; window.__pwLanes = PW_LANES;
-    return true;
-  }
-  if (document.readyState === "loading")
-    document.addEventListener("DOMContentLoaded", function () { setTimeout(mountPoolVsWorker, 0); });
-  else setTimeout(mountPoolVsWorker, 0);
+      setTimeout(function () { mountResolve(); mountCache(); mountCycle(); mountModels(); }, 0); });
+  else setTimeout(function () { mountResolve(); mountCache(); mountCycle(); mountModels(); }, 0);
 
   /* ══════════════════════════════════════════════════════════════════
      SERIES NAVIGATION
@@ -6962,29 +6799,29 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
      omitting whichever does not exist.
      ══════════════════════════════════════════════════════════════════ */
   const SERIES = [
-    { n:0, file:"part-0-primitives.html",
+    { n:0, file:"node-primitives.html",
       title:"The primitives", sub:"descriptors, ports, sockets, and the objects behind the API" },
-    { n:1, file:"part-1-modules.html",
+    { n:1, file:"node-modules.html",
       title:"Modules", sub:"resolution, the cache, and the cost of cold start" },
-    { n:2, file:"part-2-event-emitter.html",
+    { n:2, file:"node-eventemitter.html",
       title:"EventEmitter", sub:"a map of arrays, a for loop, and no queue anywhere" },
-    { n:3, file:"part-3-buffers.html",
+    { n:3, file:"node-buffers.html",
       title:"Buffers", sub:"a window onto memory outside the V8 heap" },
-    { n:4, file:"part-4-event-loop-timers.html",
+    { n:4, file:"node-event-loop-timers.html",
       title:"The event loop", sub:"phases, the timer heap, and the two queues that jump them" },
-    { n:5, file:"part-5-fs-readFile.html",
+    { n:5, file:"node-fs-readfile.html",
       title:"fs.readFile()", sub:"CPU, OS, the libuv worker pool, and the callback return path" },
-    { n:6, file:"part-6-thread-pool.html",
+    { n:6, file:"node-thread-pool.html",
       title:"The thread pool", sub:"four subsystems, one queue, and four threads by default" },
-    { n:7, file:"part-7-streams.html",
+    { n:7, file:"node-streams.html",
       title:"Streams", sub:"an emitter, a queue of Buffers, and one advisory rule" },
-    { n:8, file:"part-8-tcp-net-create-server.html",
+    { n:8, file:"node-net-create-server.html",
       title:"net.createServer()", sub:"sockets, kernel queues, readiness, and the event loop" },
-    { n:9, file:"part-9-http-request-response.html",
+    { n:9, file:"node-http-create-server.html",
       title:"http.createServer()", sub:"a browser request, llhttp, and the path back to the wire" },
-    { n:10, file:"part-10-worker-threads.html",
+    { n:10, file:"node-worker-threads.html",
       title:"worker_threads", sub:"a second V8 isolate, a second event loop, and the boundary between them" },
-    { n:11, file:"part-11-cluster.html",
+    { n:11, file:"node-cluster.html",
       title:"cluster", sub:"four processes, one port, and a file descriptor in the post" },
   ];
 
@@ -6995,7 +6832,7 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
        0 is falsy. Test whether the MATCH exists, not whether the number is
        truthy. (This was fixed once in part 0's copy and then lost when the
        canonical file was propagated over it; it lives here now.) */
-    const m = kicker ? kicker.textContent.match(/Part\s*0*(\d+)/i) : null;
+    const m = kicker ? kicker.textContent.match(/(?:Mission|Part)\s*0*(\d+)/i) : null;
     if (!m) return false;
     const me = +m[1];
 
@@ -7006,16 +6843,16 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
     const card = function (s, dir) {
       return '<a class="series-card" href="' + s.file + '" data-dir="' + dir + '">' +
         '<span class="series-dir">' + (dir === "prev" ? "← Previous" : "Next →") + "</span>" +
-        '<span class="series-n">Part ' + String(s.n).padStart(2,'0') + "</span>" +
+        '<span class="series-n">Mission ' + String(s.n).padStart(2,'0') + "</span>" +
         '<span class="series-title">' + s.title + "</span>" +
         '<span class="series-sub">' + s.sub + "</span></a>";
     };
 
     const nav = document.createElement("nav");
     nav.className = "series-nav";
-    nav.setAttribute("aria-label", "Node.js internals series");
+    nav.setAttribute("aria-label", "Node.js Internals campaign");
     nav.innerHTML =
-      '<span class="series-k">Node.js internals series</span>' +
+      '<span class="series-k">Node.js Internals campaign</span>' +
       '<div class="series-row">' + (prev ? card(prev, "prev") : "") + (next ? card(next, "next") : "") + "</div>";
 
     const foot = document.querySelector("footer");
@@ -7337,7 +7174,7 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
     });
   };
 })();
-window.__NI_OFFLINE__={"l:const { Worker, isMainThread, parentPort } = require(\"worker_threads\");": "The three tools of the module: `Worker` starts a new JS runtime, `isMainThread` tells this file which side it woke up on, and `parentPort` is the worker's channel back — `null` on the main thread.", "b:const { Worker, isMainThread, parentPort } = require(\"worker_threads\");": "The three tools of the module: `Worker` starts a new JS runtime, `isMainThread` tells this file which side it woke up on, and `parentPort` is the worker's channel back — `null` on the main thread.", "l:if (isMainThread) {": "One file, two runtimes: this branch runs in the original thread. The same pattern as cluster's `isPrimary`, but the split here is threads in one process, not processes.", "b:if (isMainThread) { // we are the main thread: start a second runtime running THIS SAME FILE const worker = new Worker(__filename); worker.on(\"message\", (msg) => console.log(\"main received:\", msg)); } else {": "One file, two runtimes: this branch runs in the original thread. The same pattern as cluster's `isPrimary`, but the split here is threads in one process, not processes.", "l:// we are the main thread: start a second runtime running THIS SAME FILE": "The point people miss: `false` is not an error and not a rejection. The data is queued in the stream's own buffer; the return value only tells you that queue is now past its threshold.", "l:const worker = new Worker(__filename);": "Starts a second V8 isolate — own heap, own event loop, own microtask queue — running **this same file**, where `isMainThread` will be `false`. A thread, but not shared-memory JS: the isolates share nothing by default.", "l:worker.on(\"message\", (msg) => console.log(\"main received:\", msg));": "The channel back: whatever the worker posts arrives here as a structured-clone **copy**, delivered as an ordinary event on the main thread's loop.", "l:} else {": "Everything from here runs once per worker, each in its own process with its own event loop, its own V8 heap — and its own copy of every module-level variable.", "b:} else { // we are inside the worker: a different isolate, running the same source parentPort.postMessage(\"hello from thread \" + require(\"worker_threads\").threadId); }": "Everything from here runs once per worker, each in its own process with its own event loop, its own V8 heap — and its own copy of every module-level variable.", "l:// we are inside the worker: a different isolate, running the same source": "The point people miss: `false` is not an error and not a rejection. The data is queued in the stream's own buffer; the return value only tells you that queue is now past its threshold.", "l:parentPort.postMessage(\"hello from thread \" + require(\"worker_threads\").threadId);": "The worker's side of the channel: serialise a value, send it across, where it becomes a `message` event on the `Worker` handle. `threadId` proves which runtime produced it.", "l:}": "Closes the block above.", "l:// main received: hello from thread 1": "The point people miss: `false` is not an error and not a rejection. The data is queued in the stream's own buffer; the return value only tells you that queue is now past its threshold.", "b:// main received: hello from thread 1": "Proof the loop started normally: the first listener ran to completion before anything went wrong.", "l:// worker.js": "The point people miss: `false` is not an error and not a rejection. The data is queued in the stream's own buffer; the return value only tells you that queue is now past its threshold.", "b:// worker.js": "Proof the loop started normally: the first listener ran to completion before anything went wrong.", "l:const { workerData } = require(\"worker_threads\");": "How the worker receives its startup payload — the value passed as `workerData` when it was constructed, already **cloned** on the way in.", "b:const { workerData } = require(\"worker_threads\");": "How the worker receives its startup payload — the value passed as `workerData` when it was constructed, already **cloned** on the way in.", "l:workerData.n++; // mutates a COPY": "The mutation lands on the worker's private copy — structured clone ran at construction, so the main thread's `counter.n` is untouched. If you expected shared state, this line is the disappointment.", "b:workerData.n++; // mutates a COPY": "The mutation lands on the worker's private copy — structured clone ran at construction, so the main thread's `counter.n` is untouched. If you expected shared state, this line is the disappointment.", "l:// main.js": "The point people miss: `false` is not an error and not a rejection. The data is queued in the stream's own buffer; the return value only tells you that queue is now past its threshold.", "b:// main.js": "Proof the loop started normally: the first listener ran to completion before anything went wrong.", "l:const counter = { n: 0 };": "An ordinary object on the main thread — about to be handed to a worker, and about to demonstrate that \"handed\" means \"copied\".", "b:const counter = { n: 0 };": "An ordinary object on the main thread — about to be handed to a worker, and about to demonstrate that \"handed\" means \"copied\".", "l:new Worker(\"./worker.js\", { workerData: counter });": "Passes `counter` as startup data — via structured clone. Two independent `{ n: 0 }` objects now exist, one per isolate; no write on either side is visible to the other.", "b:new Worker(\"./worker.js\", { workerData: counter });": "Passes `counter` as startup data — via structured clone. Two independent `{ n: 0 }` objects now exist, one per isolate; no write on either side is visible to the other.", "l:// counter.n is still 0. It was structured-cloned on the way in.": "The point people miss: `false` is not an error and not a rejection. The data is queued in the stream's own buffer; the return value only tells you that queue is now past its threshold.", "b:// counter.n is still 0. It was structured-cloned on the way in.": "Proof the loop started normally: the first listener ran to completion before anything went wrong.", "l:const buf = new ArrayBuffer(100 * 1024 * 1024); // 100MB": "A large allocation about to cross threads — the case where copying would cost real time and double the memory.", "b:const buf = new ArrayBuffer(100 * 1024 * 1024); // 100MB": "A large allocation about to cross threads — the case where copying would cost real time and double the memory.", "l:worker.postMessage({ buf }, [buf]); // <- the transfer list": "The second argument changes the semantics: listed buffers are **transferred**, not cloned — the memory moves to the worker and this side's `buf` becomes unusable (detached, byteLength 0). Ownership moves; bytes do not copy.", "b:worker.postMessage({ buf }, [buf]); // <- the transfer list": "The second argument changes the semantics: listed buffers are **transferred**, not cloned — the memory moves to the worker and this side's `buf` becomes unusable (detached, byteLength 0). Ownership moves; bytes do not copy.", "l:// on this side, buf.byteLength is now 0.": "The point people miss: `false` is not an error and not a rejection. The data is queued in the stream's own buffer; the return value only tells you that queue is now past its threshold.", "b:// on this side, buf.byteLength is now 0.": "Proof the loop started normally: the first listener ran to completion before anything went wrong.", "l:// the buffer is DETACHED: reading it throws.": "The point people miss: `false` is not an error and not a rejection. The data is queued in the stream's own buffer; the return value only tells you that queue is now past its threshold.", "b:// the buffer is DETACHED: reading it throws.": "Proof the loop started normally: the first listener ran to completion before anything went wrong.", "l:// four workers, 100_000 increments each, shared Int32Array": "The point people miss: `false` is not an error and not a rejection. The data is queued in the stream's own buffer; the return value only tells you that queue is now past its threshold.", "b:// four workers, 100_000 increments each, shared Int32Array": "Proof the loop started normally: the first listener ran to completion before anything went wrong.", "l:arr[0] += 1; // final value: somewhere under 400_000": "A read-modify-write on `SharedArrayBuffer` memory from several threads at once: increments interleave and overwrite each other, so the total silently comes up short. Data races do not throw — they just lose updates.", "b:arr[0] += 1; // final value: somewhere under 400_000": "A read-modify-write on `SharedArrayBuffer` memory from several threads at once: increments interleave and overwrite each other, so the total silently comes up short. Data races do not throw — they just lose updates.", "l:Atomics.add(arr, 0, 1); // final value: exactly 400_000": "The same increment as one indivisible operation: `Atomics.add` makes the read-modify-write uninterruptible, so every update lands. Shared memory is opt-in twice — once for the buffer, once for the discipline.", "b:Atomics.add(arr, 0, 1); // final value: exactly 400_000": "The same increment as one indivisible operation: `Atomics.add` makes the read-modify-write uninterruptible, so every update lands. Shared memory is opt-in twice — once for the buffer, once for the discipline.", "l:worker.on(\"online\", () => {}); // the isolate is up": "Fires when the worker's runtime has actually started executing — construction returns before that, so this is the real \"it is alive\" signal.", "b:worker.on(\"online\", () => {}); // the isolate is up": "Fires when the worker's runtime has actually started executing — construction returns before that, so this is the real \"it is alive\" signal.", "l:worker.on(\"message\", (m) => {}); // it sent something back": "The workhorse event: one firing per `postMessage` from the worker, each carrying a fresh clone.", "b:worker.on(\"message\", (m) => {}); // it sent something back": "The workhorse event: one firing per `postMessage` from the worker, each carrying a fresh clone.", "l:worker.on(\"error\", (err) => {}); // uncaught throw INSIDE the worker": "An uncaught exception in the worker does not crash the main thread — it surfaces here, as an event on the handle, with the worker itself already dying.", "b:worker.on(\"error\", (err) => {}); // uncaught throw INSIDE the worker": "An uncaught exception in the worker does not crash the main thread — it surfaces here, as an event on the handle, with the worker itself already dying.", "l:worker.on(\"exit\", (code) => {}); // always fires, even after error": "The guaranteed last word: fires on every termination path — clean return, `process.exit`, error, `terminate()`. Cleanup and restart logic belongs here, exactly like cluster's `exit`.", "b:worker.on(\"exit\", (code) => {}); // always fires, even after error": "The guaranteed last word: fires on every termination path — clean return, `process.exit`, error, `terminate()`. Cleanup and restart logic belongs here, exactly like cluster's `exit`."};
+window.__NI_OFFLINE__={"l:const express = require(\"express\"); // a search, then ~50 more searches": "One `require` of a bare name triggers the full `node_modules` walk — and Express's own requires trigger the same for each of its dependencies, recursively. The comment's ~50 is the real shape of loading one framework.", "b:const express = require(\"express\"); // a search, then ~50 more searches": "One `require` of a bare name triggers the full `node_modules` walk — and Express's own requires trigger the same for each of its dependencies, recursively. The comment's ~50 is the real shape of loading one framework.", "l:const lodash = require(\"lodash\"); // its dependencies, and theirs": "Same story for every top-level dependency: resolution and loading are recursive, which is why cold start scales with the dependency tree rather than with your code.", "b:const lodash = require(\"lodash\"); // its dependencies, and theirs": "Same story for every top-level dependency: resolution and loading are recursive, which is why cold start scales with the dependency tree rather than with your code.", "l:const app = express();": "Ordinary code, no loading: `express` is whatever the module's `module.exports` was by the time its top-level code finished — here, a factory function.", "b:const app = express();": "Ordinary code, no loading: `express` is whatever the module's `module.exports` was by the time its top-level code finished — here, a factory function.", "l:// none of your code has run yet": "The point people miss: `false` is not an error and not a rejection. The data is queued in the stream's own buffer; the return value only tells you that queue is now past its threshold.", "b:// none of your code has run yet": "Proof the loop started normally: the first listener ran to completion before anything went wrong.", "l:./util # 1. exact, as a file": "A relative require starts literal: does `./util` exist exactly as written? Only if that fails does the extension guessing begin.", "b:./util # 1. exact, as a file": "A relative require starts literal: does `./util` exist exactly as written? Only if that fails does the extension guessing begin.", "l:./util.js # 2. + .js": "First guess: append `.js`. This is the step that lets everyone write `require(\"./util\")` without an extension.", "b:./util.js # 2. + .js": "First guess: append `.js`. This is the step that lets everyone write `require(\"./util\")` without an extension.", "l:./util.json # 3. + .json": "Second guess: a JSON file — which `require` will parse and return as an object, no code involved.", "b:./util.json # 3. + .json": "Second guess: a JSON file — which `require` will parse and return as an object, no code involved.", "l:./util.node # 4. + .node (a compiled addon)": "Third guess: a compiled native addon — a shared library the loader `dlopen`s. Rare to write, common to depend on.", "b:./util.node # 4. + .node (a compiled addon)": "Third guess: a compiled native addon — a shared library the loader `dlopen`s. Rare to write, common to depend on.", "l:./util/ # 5. as a directory:": "If no file matched, try the path as a **directory** — which opens its own two-step search inside.", "b:./util/ # 5. as a directory:": "If no file matched, try the path as a **directory** — which opens its own two-step search inside.", "l:# a) package.json \"main\"": "Inside a directory, a `package.json` with a `main` field wins: that file is what the directory \"is\".", "b:# a) package.json \"main\"": "Inside a directory, a `package.json` with a `main` field wins: that file is what the directory \"is\".", "l:# b) ./util/index.js": "No `main`? The fallback is `index.js` — the convention that makes bare directories requireable.", "b:# b) ./util/index.js": "No `main`? The fallback is `index.js` — the convention that makes bare directories requireable.", "l:// counter.js": "The point people miss: `false` is not an error and not a rejection. The data is queued in the stream's own buffer; the return value only tells you that queue is now past its threshold.", "b:// counter.js": "Proof the loop started normally: the first listener ran to completion before anything went wrong.", "l:let count = 0; // runs ONCE, ever": "Module top-level code executes exactly once, on **first** require — this line is initialisation, not a per-import event. The cache is why.", "b:let count = 0; // runs ONCE, ever": "Module top-level code executes exactly once, on **first** require — this line is initialisation, not a per-import event. The cache is why.", "l:module.exports = () => ++count;": "Exports a closure over `count`. Every consumer gets this same function object — and therefore the same `count` behind it.", "b:module.exports = () => ++count;": "Exports a closure over `count`. Every consumer gets this same function object — and therefore the same `count` behind it.", "l:// a.js": "The point people miss: `false` is not an error and not a rejection. The data is queued in the stream's own buffer; the return value only tells you that queue is now past its threshold.", "b:// a.js": "Proof the loop started normally: the first listener ran to completion before anything went wrong.", "l:require(\"./counter\")(); // 1": "First require: the file runs, the cache stores its `module.exports`, the call increments the shared counter to 1.", "b:require(\"./counter\")(); // 1": "First require: the file runs, the cache stores its `module.exports`, the call increments the shared counter to 1.", "l:// b.js — a completely different file": "The point people miss: `false` is not an error and not a rejection. The data is queued in the stream's own buffer; the return value only tells you that queue is now past its threshold.", "b:// b.js — a completely different file": "Proof the loop started normally: the first listener ran to completion before anything went wrong.", "l:require(\"./counter\")(); // 2, not 1": "Second require **does not run the file again** — it returns the cached exports. Same closure, same `count`, so 2. Modules are singletons by cache, and this is the mechanism people lean on for shared state.", "b:require(\"./counter\")(); // 2, not 1": "Second require **does not run the file again** — it returns the cached exports. Same closure, same `count`, so 2. Modules are singletons by cache, and this is the mechanism people lean on for shared state.", "l:(function (exports, require, module, __filename, __dirname) {": "The wrapper Node compiles every CJS file into. Your \"globals\" — `require`, `module`, `__dirname` — are nothing but these five parameters, which is also why top-level `var` never leaks: you are always inside a function.", "b:(function (exports, require, module, __filename, __dirname) { // ─── your file's entire source goes here ─── const fs = require(\"fs\"); module.exports = { readIt }; });": "The module wrapper in full: Node wraps your source in this five-parameter function and calls it. Scoping, `require`, and the exports object all fall out of ordinary function semantics — there is no module magic, only a function call.", "l:// ─── your file's entire source goes here ───": "The point people miss: `false` is not an error and not a rejection. The data is queued in the stream's own buffer; the return value only tells you that queue is now past its threshold.", "l:const fs = require(\"fs\");": "Loads the `fs` module. Nothing about the thread pool exists yet — the pool is created lazily, the first time something actually needs it.", "l:module.exports = { readIt };": "Assigning to `module.exports` decides what `require` hands back — the parameter `exports` is just a starting alias for the same object, which is why reassigning bare `exports` silently exports nothing.", "l:});": "Closes the handler registered above.", "l:// counter.mjs // counter.cjs": "The same module written twice — ESM on the left, CJS on the right — to expose the one behavioural difference that matters.", "b:// counter.mjs // counter.cjs": "The same module written twice — ESM on the left, CJS on the right — to expose the one behavioural difference that matters.", "l:export let n = 0; let n = 0;": "Both declare state. The difference is what \"export\" means for it: ESM exports the **binding** itself, CJS will export whatever value gets copied into the exports object.", "b:export let n = 0; let n = 0;": "Both declare state. The difference is what \"export\" means for it: ESM exports the **binding** itself, CJS will export whatever value gets copied into the exports object.", "l:export const bump = () => ++n; module.exports = { n, bump: () => ++n };": "The CJS side seals the difference on this line: `{ n, … }` copies the **current value** of `n` (zero) into the object. The ESM side exports a live view of the variable.", "b:export const bump = () => ++n; module.exports = { n, bump: () => ++n };": "The CJS side seals the difference on this line: `{ n, … }` copies the **current value** of `n` (zero) into the object. The ESM side exports a live view of the variable.", "l:// ESM consumer // CJS consumer": "Two consumers doing the visually identical thing — import, bump, read.", "b:// ESM consumer // CJS consumer": "Two consumers doing the visually identical thing — import, bump, read.", "l:import { n, bump } from \"./counter.mjs\"; const { n, bump } = require(\"./counter.cjs\");": "The imports look symmetric, but the ESM `n` is a live binding to the module's variable, while the CJS destructure copies a number out of an object — the copy happened once, at require time.", "b:import { n, bump } from \"./counter.mjs\"; const { n, bump } = require(\"./counter.cjs\");": "The imports look symmetric, but the ESM `n` is a live binding to the module's variable, while the CJS destructure copies a number out of an object — the copy happened once, at require time.", "l:bump(); bump();": "Both calls increment the module's internal `n` to 1. Nothing differs yet — the divergence is in what the consumer can **see**.", "b:bump(); bump();": "Both calls increment the module's internal `n` to 1. Nothing differs yet — the divergence is in what the consumer can **see**.", "l:console.log(n); // 1 <- live console.log(n); // 0 <- a copy": "The punchline: ESM's live binding shows the update; CJS's copied value stays at 0 forever. Same code, different module system, different answer — this is the sharpest observable difference between the two.", "b:console.log(n); // 1 <- live console.log(n); // 0 <- a copy": "The punchline: ESM's live binding shows the update; CJS's copied value stays at 0 forever. Same code, different module system, different answer — this is the sharpest observable difference between the two."};
 /* ══════════════════════════════════════════════════════════════════════
    SUBSECTION NAVIGATION — linear prev/next between panels, a header
    position control with a jump menu, and [ / ] keyboard stepping.

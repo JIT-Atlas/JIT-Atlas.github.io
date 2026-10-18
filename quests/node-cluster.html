@@ -4555,7 +4555,7 @@ html.light .gpop-stacked{box-shadow:0 18px 48px rgba(0,0,0,.22)}
 <div class="grain"></div>
 <div class="progress" id="progress"></div>
 <header>
-<div class="eyebrow">Part 11 · Node.js Internals Series</div>
+<div class="eyebrow">Mission 11 · Node.js Internals Campaign</div>
 <h1><span class="code">cluster</span> — four <span class="accent">processes</span>, one <span class="accent2">port</span>, and a file descriptor in the post</h1>
 <p class="subtitle">The sixth lesson, and the last of the arc. Part 10 gave you a second runtime inside one process. This part gives you a second <strong style="color:var(--text-hi)">process</strong> — which immediately hits a problem threads never have, because two processes cannot both bind port 3000. The answer involves posting a file descriptor through a unix socket, and everything else follows from it.</p>
 <div class="meta-row"><span>12 sections</span><span>12 figures</span><span>one port</span><span>SCM_RIGHTS · SO_REUSEPORT</span></div>
@@ -4585,7 +4585,7 @@ $ curl localhost:3000   -&gt;  served by 48215</pre></div></div><p>Three request
   console.error(`worker ${worker.process.pid} died (${signal || code})`);
   cluster.fork();                      // replace it
 });</pre></div></div><p>The naive version has a well-known failure: if the crash is deterministic — a bad deploy, a config error — this loop forks a fresh worker to die immediately, forever, at whatever rate the machine allows. Real supervisors add a backoff and a cap, which is a large part of what a process manager gives you over these three lines.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>Restarting is only a strategy if the failure is transient. A crash loop is the same shape as Part 4's starvation: a process at 100% CPU, achieving nothing, with nothing in the logs saying it is stuck.</p></div></div></div><div class="sub-panel" id="sub-l-reload"><div class="card main-edge"><div class="secnum">§ 8 · WHAT THE FD PASSING BUYS YOU</div><h2>Replace the workers while the socket stays open</h2><p>Because the listening socket belongs to the primary and not to any worker, workers can be replaced without ever closing it. Connections that arrive mid-reload queue in the accept queue — Part 8's backlog — rather than being refused.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>One worker at a time</span></div><span class="badge">§8 · the rolling restart</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">primary keeps the listening socket</div><div class="hf-node-sub">fd 17 never closes</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Nothing is refused during the reload, because nothing ever calls <code>close()</code> on the listener. Arrivals sit in the accept queue.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">worker.disconnect()</div><div class="hf-node-sub">stop accepting, finish in flight</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">The worker stops taking new connections and is left to finish the requests it already has — the graceful half of the operation.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">wait for 'exit', then fork a replacement</div><div class="hf-node-sub">one at a time</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">Capacity dips by one worker rather than all of them. Doing this to every worker in turn swaps the whole fleet with no dropped connection.</div></div><div class="hf-node" data-owner="worker"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">a timeout, because disconnect can hang</div><div class="hf-node-sub">the part people forget</div></div><div class="hf-node-tag t-worker">worker</div></div><div class="hf-node-detail">A worker with a long-lived connection — a WebSocket, a streaming response — will never exit on its own. Give it a deadline, then <code>kill()</code>.</div></div></div></div><div class="hfdiag-foot"><span class="hint">the accept queue absorbs the gap</span></div></div></div></div></div><div class="major-section" id="sec-synthesis"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-y-choose">9 · Which One Do You Want?</button><button class="sub-tab" data-sub="sub-y-models">10 · Wrong vs Correct</button><button class="sub-tab" data-sub="sub-y-lock">11 · Lock It In</button></div><div class="sub-panel active" id="sub-y-choose"><div class="card main-edge"><div class="secnum">§ 9 · THREADS, PROCESSES, OR NEITHER</div><h2>Three questions that decide it</h2><p>Parts 4, 10 and 11 have now given you three different answers to "my server is slow", and picking between them is not a matter of taste.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What is actually holding your thread?</span></div><span class="badge">§9 · the decision</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">nothing — it is waiting on I/O</div><div class="hf-node-sub">you already have concurrency</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Parts 5, 8 and 9. The loop sleeps in <code>epoll_wait</code> and one thread serves thousands of connections. Adding threads or processes here buys nothing and costs memory.</div></div><div class="hf-node" data-owner="worker"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">one expensive computation</div><div class="hf-node-sub">worker_threads</div></div><div class="hf-node-tag t-worker">worker</div></div><div class="hf-node-detail">Part 10. Hashing, parsing, compression, image work. Move the CPU off the loop and keep one process, one heap and cheap communication.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">all your cores, all the time</div><div class="hf-node-sub">cluster</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">This part. Your handler itself is CPU-heavy across every request, so you want every core running the whole stack — and you get crash isolation with it.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">you want to survive crashes</div><div class="hf-node-sub">cluster, regardless of CPU</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">The one thing threads cannot give you. Worth the memory on its own for anything that must stay up.</div></div></div></div><div class="hfdiag-foot"><span class="hint">measure what is holding the thread before you pick</span></div></div></div></div><div class="sub-panel" id="sub-y-models"><div class="card main-edge"><div class="secnum">§ 10 · THE MODELS WORTH CORRECTING</div><h2>Ten claims, three of them true</h2><p>These are the beliefs that produce the outages. Several are true of some other stack, which is exactly why they survive.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Which of these are true?</span></div><span class="badge">§10 · mental models</span></div><div class="hfdiag-body"><div data-instrument="models"></div></div><div class="hfdiag-foot"><span class="hint">sort before you check — a guess you have committed to is worth more than a correction you read</span></div></div><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>Nearly every wrong take here assumes the workers share something. They share the machine and whatever descriptors were explicitly passed, and nothing else.</p></div></div></div><div class="sub-panel" id="sub-y-lock"><div class="card main-edge"><div class="secnum">§ 11 · THE FOUR SENTENCES WORTH KEEPING</div><h2>If you remember nothing else</h2><p>Cluster does not make one server faster. It runs several servers behind one port and gives you a supervisor.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What to carry away</span></div><span class="badge">§11 · the four sentences</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">only one process binds the port</div><div class="hf-node-sub">§0 · §2</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">The listening fd is passed over a unix socket with <code>SCM_RIGHTS</code>. A worker's <code>listen()</code> is intercepted, not honoured.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the number of accept queues is the design</div><div class="hf-node-sub">§4</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">One queue means workers compete for one backlog; <code>SO_REUSEPORT</code> gives each its own and lets the kernel hash between them.</div></div><div class="hf-node" data-owner="worker"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">anything in memory is per worker</div><div class="hf-node-sub">§6</div></div><div class="hf-node-tag t-worker">worker</div></div><div class="hf-node-detail">Caches, sessions, rate limits and timers all multiply, and none of them fails loudly when they do.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">crash isolation is the thing you cannot get otherwise</div><div class="hf-node-sub">§7</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">A worker thread dies with its process. A cluster worker does not — which is the argument for cluster even when CPU is not the problem.</div></div></div></div><div class="hfdiag-foot"><span class="hint">four sentences, one port</span></div></div><p>That closes the arc the series set out to draw. Part 5 found the one thread; Parts 8 and 9 showed how far it goes on its own; Part 4 opened the loop that drives it; Parts 10 and 11 are the two honest ways to get a second one — and both of them are more expensive than not needing one.</p></div></div></div></main>
-<footer><div>Part 11 of the Node.js Internals series &nbsp;·&nbsp; <code>cluster</code> · <code>SCM_RIGHTS</code> · <code>SO_REUSEPORT</code> · crash isolation</div>
+<footer><div>Mission 11 of the Node.js Internals campaign &nbsp;·&nbsp; <code>cluster</code> · <code>SCM_RIGHTS</code> · <code>SO_REUSEPORT</code> · crash isolation</div>
 <div>Four processes, one port, nothing shared</div></footer>
 <div class="glossary-pop" id="gpop"></div>
 <script>
@@ -6762,29 +6762,29 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
      omitting whichever does not exist.
      ══════════════════════════════════════════════════════════════════ */
   const SERIES = [
-    { n:0, file:"part-0-primitives.html",
+    { n:0, file:"node-primitives.html",
       title:"The primitives", sub:"descriptors, ports, sockets, and the objects behind the API" },
-    { n:1, file:"part-1-modules.html",
+    { n:1, file:"node-modules.html",
       title:"Modules", sub:"resolution, the cache, and the cost of cold start" },
-    { n:2, file:"part-2-event-emitter.html",
+    { n:2, file:"node-eventemitter.html",
       title:"EventEmitter", sub:"a map of arrays, a for loop, and no queue anywhere" },
-    { n:3, file:"part-3-buffers.html",
+    { n:3, file:"node-buffers.html",
       title:"Buffers", sub:"a window onto memory outside the V8 heap" },
-    { n:4, file:"part-4-event-loop-timers.html",
+    { n:4, file:"node-event-loop-timers.html",
       title:"The event loop", sub:"phases, the timer heap, and the two queues that jump them" },
-    { n:5, file:"part-5-fs-readFile.html",
+    { n:5, file:"node-fs-readfile.html",
       title:"fs.readFile()", sub:"CPU, OS, the libuv worker pool, and the callback return path" },
-    { n:6, file:"part-6-thread-pool.html",
+    { n:6, file:"node-thread-pool.html",
       title:"The thread pool", sub:"four subsystems, one queue, and four threads by default" },
-    { n:7, file:"part-7-streams.html",
+    { n:7, file:"node-streams.html",
       title:"Streams", sub:"an emitter, a queue of Buffers, and one advisory rule" },
-    { n:8, file:"part-8-tcp-net-create-server.html",
+    { n:8, file:"node-net-create-server.html",
       title:"net.createServer()", sub:"sockets, kernel queues, readiness, and the event loop" },
-    { n:9, file:"part-9-http-request-response.html",
+    { n:9, file:"node-http-create-server.html",
       title:"http.createServer()", sub:"a browser request, llhttp, and the path back to the wire" },
-    { n:10, file:"part-10-worker-threads.html",
+    { n:10, file:"node-worker-threads.html",
       title:"worker_threads", sub:"a second V8 isolate, a second event loop, and the boundary between them" },
-    { n:11, file:"part-11-cluster.html",
+    { n:11, file:"node-cluster.html",
       title:"cluster", sub:"four processes, one port, and a file descriptor in the post" },
   ];
 
@@ -6795,7 +6795,7 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
        0 is falsy. Test whether the MATCH exists, not whether the number is
        truthy. (This was fixed once in part 0's copy and then lost when the
        canonical file was propagated over it; it lives here now.) */
-    const m = kicker ? kicker.textContent.match(/Part\s*0*(\d+)/i) : null;
+    const m = kicker ? kicker.textContent.match(/(?:Mission|Part)\s*0*(\d+)/i) : null;
     if (!m) return false;
     const me = +m[1];
 
@@ -6806,16 +6806,16 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
     const card = function (s, dir) {
       return '<a class="series-card" href="' + s.file + '" data-dir="' + dir + '">' +
         '<span class="series-dir">' + (dir === "prev" ? "← Previous" : "Next →") + "</span>" +
-        '<span class="series-n">Part ' + String(s.n).padStart(2,'0') + "</span>" +
+        '<span class="series-n">Mission ' + String(s.n).padStart(2,'0') + "</span>" +
         '<span class="series-title">' + s.title + "</span>" +
         '<span class="series-sub">' + s.sub + "</span></a>";
     };
 
     const nav = document.createElement("nav");
     nav.className = "series-nav";
-    nav.setAttribute("aria-label", "Node.js internals series");
+    nav.setAttribute("aria-label", "Node.js Internals campaign");
     nav.innerHTML =
-      '<span class="series-k">Node.js internals series</span>' +
+      '<span class="series-k">Node.js Internals campaign</span>' +
       '<div class="series-row">' + (prev ? card(prev, "prev") : "") + (next ? card(next, "next") : "") + "</div>";
 
     const foot = document.querySelector("footer");

@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>The thread pool — four subsystems, one queue, four threads</title>
+<title>Buffers — a window onto memory outside the V8 heap</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&amp;family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
 <style>@layer base {
 
@@ -4487,6 +4487,493 @@ code,.ic,.card p code,.card li code,.hf-node-title code,.hf-node-detail code,
 }
 html.light .gpop-stacked{box-shadow:0 18px 48px rgba(0,0,0,.22)}
 
+/* ─────────── P9-1. one emit, stepped (§2) ─────────── */
+.st{display:flex;flex-direction:column;gap:var(--s3)}
+.st-pick{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.st-btn{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.06em;
+  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text-2);
+  display:inline-flex;align-items:center;gap:var(--s2);
+  transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
+.st-btn:hover{background:var(--surface3);color:var(--text-hi)}
+.st-btn.on{background:var(--node);border-color:var(--node);color:var(--on-accent)}
+.st-ctrlmark{font-size:var(--f-micro);letter-spacing:.14em;padding:0 var(--s1);
+  border:1px solid currentColor;border-radius:2px;color:var(--text-2)}
+.st-btn.on .st-ctrlmark{color:var(--on-accent)}
+.st-ctl{display:flex;flex-wrap:wrap;gap:var(--s2);align-items:center}
+.st-b{font-family:var(--mono);font-size:var(--f-xs);letter-spacing:.06em;
+  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  transition:background var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
+.st-b:hover{background:var(--surface3);border-color:var(--border-hi)}
+.st-b-primary{background:var(--node);border-color:var(--node);color:var(--on-accent)}
+.st-count{font-family:var(--mono);font-size:var(--f-xs);color:var(--text-2);margin-left:auto}
+.st-frames{display:flex;flex-direction:column;gap:var(--s1)}
+.st-frame{display:grid;grid-template-columns:96px auto minmax(0,1fr);gap:var(--s3);
+  align-items:baseline;padding:var(--s2) var(--s3);border-radius:var(--r-sm);
+  background:var(--surface2);border:1px solid var(--border);
+  border-left:3px solid var(--border);opacity:.42;
+  transition:opacity var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
+.st-frame.on{opacity:1;background:var(--raise)}
+.st-frame.act{border-color:var(--text-2)}
+.st-frame.on.slow{border-left-color:var(--worker)}
+.st-frame.on.defer{border-left-color:var(--kernel)}
+.st-frame.on:not(.slow):not(.defer){border-left-color:var(--main-thread)}
+.st-fn{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.1em;
+  text-transform:uppercase;color:var(--text-2)}
+.st-src{font-size:var(--f-xs);color:var(--text-hi);white-space:nowrap}
+.st-note{font-family:var(--sans);font-size:var(--f-xs);line-height:var(--lh-ui);color:var(--text-2)}
+.st-meters{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.st-meter{display:flex;flex-direction:column;gap:2px;flex:1 1 170px;
+  padding:var(--s2) var(--s3);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-sm)}
+.st-m-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-dim)}
+.st-m-v{font-family:var(--mono);font-size:var(--f-sm);color:var(--text-hi)}
+.st-m-v.yes{color:var(--node)}
+.st-m-v.no{color:var(--worker)}
+.st-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
+  color:var(--text);border-left:2px solid var(--border-hi);
+  padding:var(--s2) 0 var(--s2) var(--s4);min-height:4.4em;max-width:var(--measure)}
+.st.is-control .st-say{border-left-color:var(--kernel)}
+@media (max-width:880px){ .st-frame{grid-template-columns:1fr} .st-src{white-space:normal} }
+
+/* ─────────── P9-2. mutation during emit (§3) ─────────── */
+.mu{display:flex;flex-direction:column;gap:var(--s3)}
+.mu-pick{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.mu-btn{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.06em;
+  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text-2);
+  display:inline-flex;align-items:center;gap:var(--s2);
+  transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
+.mu-btn:hover{background:var(--surface3);color:var(--text-hi)}
+.mu-btn.on{background:var(--node);border-color:var(--node);color:var(--on-accent)}
+.mu-ctrlmark{font-size:var(--f-micro);letter-spacing:.14em;padding:0 var(--s1);
+  border:1px solid currentColor;border-radius:2px;color:var(--text-2)}
+.mu-btn.on .mu-ctrlmark{color:var(--on-accent)}
+.mu-rows{display:flex;flex-direction:column;gap:var(--s2)}
+.mu-row{display:grid;grid-template-columns:186px minmax(0,1fr);gap:var(--s3);align-items:center;
+  padding:var(--s2) var(--s3);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-md)}
+.mu-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.12em;
+  text-transform:uppercase;color:var(--text-2)}
+.mu-list{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.mu-chip{font-family:var(--mono);font-size:var(--f-xs);
+  padding:var(--s1) var(--s3);border-radius:var(--r-sm);border:1px solid var(--border-hi)}
+.mu-chip[data-owner="main"]{color:var(--main-thread);border-color:var(--main-thread);background:var(--main-thread-soft)}
+.mu-chip[data-owner="node"]{color:var(--node);border-color:var(--node);background:var(--node-soft)}
+.mu-chip[data-owner="worker"]{color:var(--worker);border-color:var(--worker);background:var(--worker-soft)}
+.mu-act{font-family:var(--sans);font-size:var(--f-xs);color:var(--text-2);
+  padding:var(--s1) var(--s3);border-left:2px dashed var(--kernel)}
+.mu-act strong{color:var(--kernel)}
+.mu-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
+  color:var(--text);border-left:2px solid var(--border-hi);
+  padding:var(--s2) 0 var(--s2) var(--s4);min-height:4.4em;max-width:var(--measure)}
+.mu.is-control .mu-say{border-left-color:var(--worker)}
+@media (max-width:880px){ .mu-row{grid-template-columns:1fr} }
+
+/* ─────────── P9-3. emitting error (§5) ─────────── */
+.er{display:flex;flex-direction:column;gap:var(--s3)}
+.er-pick{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.er-btn{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.06em;
+  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text-2);
+  display:inline-flex;align-items:center;gap:var(--s2);
+  transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
+.er-btn:hover{background:var(--surface3);color:var(--text-hi)}
+.er-btn.on{background:var(--node);border-color:var(--node);color:var(--on-accent)}
+.er-ctrlmark{font-size:var(--f-micro);letter-spacing:.14em;padding:0 var(--s1);
+  border:1px solid currentColor;border-radius:2px;color:var(--text-2)}
+.er-btn.on .er-ctrlmark{color:var(--on-accent)}
+.er-cells{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.er-cell{display:flex;flex-direction:column;gap:2px;flex:1 1 200px;
+  padding:var(--s2) var(--s3);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-sm)}
+.er-cell-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-dim)}
+.er-cell-v{font-family:var(--sans);font-size:var(--f-xs);line-height:var(--lh-ui);color:var(--text-hi)}
+.er-cell-v.no{color:var(--worker)}
+.er-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
+  color:var(--text);border-left:2px solid var(--border-hi);
+  padding:var(--s2) 0 var(--s2) var(--s4);min-height:4.4em;max-width:var(--measure)}
+.er.is-control .er-say{border-left-color:var(--worker)}
+
+/* ─────────── P9-4. event sequences in an app (§7) ─────────── */
+.cy{display:flex;flex-direction:column;gap:var(--s3)}
+.cy-pick{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.cy-btn{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.06em;
+  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text-2);
+  display:inline-flex;align-items:center;gap:var(--s2);
+  transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
+.cy-btn:hover{background:var(--surface3);color:var(--text-hi)}
+.cy-btn.on{background:var(--node);border-color:var(--node);color:var(--on-accent)}
+.cy-ctrlmark{font-size:var(--f-micro);letter-spacing:.14em;padding:0 var(--s1);
+  border:1px solid currentColor;border-radius:2px;color:var(--text-2)}
+.cy-btn.on .cy-ctrlmark{color:var(--on-accent)}
+.cy-ctl{display:flex;flex-wrap:wrap;gap:var(--s2);align-items:center}
+.cy-b{font-family:var(--mono);font-size:var(--f-xs);letter-spacing:.06em;
+  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  transition:background var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
+.cy-b:hover{background:var(--surface3);border-color:var(--border-hi)}
+.cy-b-primary{background:var(--node);border-color:var(--node);color:var(--on-accent)}
+.cy-count{font-family:var(--mono);font-size:var(--f-xs);color:var(--text-2);margin-left:auto}
+.cy-steps{display:flex;flex-direction:column;gap:var(--s1)}
+.cy-step{display:grid;grid-template-columns:78px 108px 62px 180px minmax(0,1fr);
+  gap:var(--s3);align-items:baseline;padding:var(--s2) var(--s3);
+  border-radius:var(--r-sm);background:var(--surface2);
+  border:1px solid var(--border);border-left:3px solid var(--border);opacity:.42;
+  transition:opacity var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
+.cy-step.on{opacity:1;background:var(--raise)}
+.cy-step.act{border-color:var(--text-2)}
+.cy-step.on[data-owner="kernel"]{border-left-color:var(--kernel)}
+.cy-step.on[data-owner="node"]{border-left-color:var(--node)}
+.cy-step.on[data-owner="main"]{border-left-color:var(--main-thread)}
+.cy-step.on[data-owner="worker"]{border-left-color:var(--worker)}
+.cy-step.on[data-owner="none"]{border-left-style:dashed;border-left-color:var(--worker)}
+.cy-step.missing.on .cy-ev{text-decoration:line-through;color:var(--text-2)}
+.cy-obj{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.08em;color:var(--text-2)}
+/* the event name is the SUBJECT of each row, so it gets a chip rather than
+   restating the base `code` treatment — which changed nothing and read as
+   inert, the same fault as an earlier instrument's call column */
+.cy-ev{font-size:var(--f-xs);padding:1px 6px;border-radius:3px;
+  background:var(--surface3);border:1px solid var(--border)}
+.cy-rep{font-family:var(--mono);font-size:var(--f-micro);color:var(--text-2)}
+.cy-by{font-family:var(--mono);font-size:var(--f-micro);color:var(--text-2)}
+.cy-note{font-family:var(--sans);font-size:var(--f-xs);line-height:var(--lh-ui);color:var(--text-2)}
+.cy-must{display:flex;gap:var(--s3);align-items:baseline;padding:var(--s2) var(--s3);
+  background:var(--surface2);border:1px solid var(--border);
+  border-left:3px solid var(--worker);border-radius:var(--r-sm)}
+.cy-must-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--worker);white-space:nowrap}
+.cy-must-v{font-family:var(--sans);font-size:var(--f-xs);color:var(--text-hi)}
+.cy-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
+  color:var(--text);border-left:2px solid var(--border-hi);
+  padding:var(--s2) 0 var(--s2) var(--s4);min-height:4.4em;max-width:var(--measure)}
+.cy.is-control .cy-say{border-left-color:var(--worker)}
+@media (max-width:1100px){ .cy-step{grid-template-columns:78px 108px 62px minmax(0,1fr)} .cy-by{display:none} }
+@media (max-width:880px){ .cy-step{grid-template-columns:1fr} }
+
+/* ─────────── P10-1. where the bytes come from (§2) ─────────── */
+.al{display:flex;flex-direction:column;gap:var(--s3)}
+.al-pick,.en-pick,.sp-pick{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.al-btn,.en-btn,.sp-btn{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.06em;
+  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text-2);
+  display:inline-flex;align-items:center;gap:var(--s2);
+  transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
+.al-btn:hover,.en-btn:hover,.sp-btn:hover{background:var(--surface3);color:var(--text-hi)}
+.al-btn.on,.en-btn.on,.sp-btn.on{background:var(--node);border-color:var(--node);color:var(--on-accent)}
+.al-ctrlmark,.en-ctrlmark,.sp-ctrlmark{font-size:var(--f-micro);letter-spacing:.14em;
+  padding:0 var(--s1);border:1px solid currentColor;border-radius:2px;color:var(--text-2)}
+.al-btn.on .al-ctrlmark,.en-btn.on .en-ctrlmark,.sp-btn.on .sp-ctrlmark{color:var(--on-accent)}
+/* the slab container: it carries the label spacing the bar sits in, and the
+   build asserts every emitted class has a rule — a wrapper with no styling
+   is exactly the kind of thing that check exists to catch */
+.al-slab{display:flex;flex-direction:column;gap:var(--s1)}
+.al-bar{display:flex;height:34px;border:1px solid var(--border);border-radius:var(--r-sm);
+  overflow:hidden;background:var(--surface2)}
+.al-bar[data-pooled="1"]{border-style:dashed;border-color:var(--worker)}
+.al-prev{display:block;height:100%;background:var(--worker-soft);
+  border-right:1px solid var(--worker);transition:width var(--dur-2) var(--ease)}
+.al-yours{display:block;height:100%;background:var(--node);transition:width var(--dur-2) var(--ease)}
+.al-rest{display:block;height:100%;background:var(--surface3);transition:width var(--dur-2) var(--ease)}
+.al-legend{display:flex;flex-wrap:wrap;gap:var(--s3);margin-top:var(--s2)}
+.al-key{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.08em;color:var(--text-2);
+  display:inline-flex;align-items:center;gap:var(--s2)}
+.al-key::before{content:"";width:10px;height:10px;border-radius:2px;border:1px solid var(--border-hi)}
+.al-key-prev::before{background:var(--worker-soft);border-color:var(--worker)}
+.al-key-yours::before{background:var(--node);border-color:var(--node)}
+.al-key-rest::before{background:var(--surface3)}
+.al-meters{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.al-meter{display:flex;flex-direction:column;gap:2px;flex:1 1 190px;
+  padding:var(--s2) var(--s3);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-sm)}
+.al-m-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-dim)}
+.al-m-v{font-family:var(--mono);font-size:var(--f-sm);color:var(--text-hi)}
+.al-m-v.yes{color:var(--node)}
+.al-m-v.no{color:var(--worker)}
+.al-say,.en-say,.sp-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
+  color:var(--text);border-left:2px solid var(--border-hi);
+  padding:var(--s2) 0 var(--s2) var(--s4);min-height:4.4em;max-width:var(--measure)}
+.al.is-control .al-say,.en.is-control .en-say,.sp.is-control .sp-say{border-left-color:var(--worker)}
+
+/* ─────────── P10-2. one buffer, five readings (§4) ─────────── */
+.en{display:flex;flex-direction:column;gap:var(--s3)}
+.en-out{display:flex;flex-wrap:wrap;gap:var(--s2);align-items:center;
+  padding:var(--s3);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-md)}
+/* THE GRID: each decoded unit sits under the bytes it consumed, spanning them.
+   utf8 taking four bytes for one glyph while hex takes them one at a time is
+   the whole idea of "an encoding is a reading", and this makes it visible
+   rather than asserted. */
+.en-bytes{padding:var(--s3) var(--s4);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-md)}
+.en-grid{display:grid;grid-template-columns:repeat(var(--n),minmax(38px,1fr));
+  gap:var(--s2) 4px;margin:var(--s2) 0}
+.en-glyph{grid-row:2;display:flex;flex-direction:column;align-items:center;gap:1px;
+  padding:var(--s2) var(--s1);border-radius:var(--r-sm);
+  background:var(--raise);border:1px solid var(--border-hi)}
+.en-glyph.multi{border-color:var(--node);background:var(--node-soft)}
+.en-glyph.bad{border-color:var(--worker);background:var(--worker-soft)}
+.en-glyph em{font-style:normal;font-family:var(--sans);font-size:var(--f-sm);color:var(--text-hi)}
+.en-glyph.multi em{color:var(--node)}
+.en-glyph.bad em{color:var(--worker)}
+.en-glyph i{font-style:normal;font-family:var(--mono);font-size:var(--f-micro);
+  letter-spacing:.06em;color:var(--text-2)}
+.en-k2{margin-top:var(--s2)}
+.en-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-dim);margin-right:var(--s2)}
+.en-byte{grid-row:1;text-align:center;font-family:var(--mono);font-size:var(--f-xs);
+  padding:var(--s1) var(--s2);border-radius:3px;background:var(--raise);
+  border:1px solid var(--border-hi);color:var(--hardware)}
+.en-val{font-size:var(--f-sm);color:var(--node)}
+.en-val.lossy{color:var(--worker)}
+.en-tag{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.12em;
+  text-transform:uppercase;color:var(--node);margin-left:auto}
+.en-tag.lossy{color:var(--worker)}
+
+/* ─────────── P10-3. a character across a boundary (§5) ─────────── */
+.sp{display:flex;flex-direction:column;gap:var(--s3)}
+/* ONE TRACK, TWO CHUNKS, A CHARACTER SPANNING THE SEAM. Two separate rows of
+   bytes cannot show a crossing, so both chunks share one grid and the character
+   is a bracket that spans the seam the grid runs straight through. */
+.sp-wire{padding:var(--s3) var(--s4);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-md)}
+.sp-labels{display:flex;justify-content:space-between;
+  font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.12em;
+  text-transform:uppercase;color:var(--text-dim);margin-bottom:var(--s2)}
+.sp-grid{position:relative;display:grid;
+  grid-template-columns:repeat(var(--n),minmax(30px,1fr));gap:var(--s2) 4px}
+.sp-byte{grid-row:1;text-align:center;font-family:var(--mono);font-size:var(--f-xs);
+  padding:var(--s1) var(--s2);border-radius:3px;background:var(--raise);
+  border:1px solid var(--border-hi);color:var(--text-2)}
+.sp-byte.half{color:var(--worker);border-color:var(--worker);background:var(--worker-soft)}
+.sp-seam{grid-row:1 / span 2;justify-self:start;width:2px;
+  margin-left:-3px;background:var(--kernel)}
+.sp-span{grid-row:2;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--worker);border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm);
+  height:20px}
+.sp-span em{font-style:normal;font-family:var(--mono);font-size:var(--f-micro);
+  letter-spacing:.1em;text-transform:uppercase;color:var(--worker)}
+.sp-hint{margin-top:var(--s3);font-family:var(--sans);font-size:var(--f-micro);color:var(--text-2)}
+.sp-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-dim)}
+.sp-rows{display:flex;flex-direction:column;gap:var(--s2)}
+.sp-row{display:flex;flex-wrap:wrap;gap:var(--s3);align-items:baseline;
+  padding:var(--s2) var(--s3);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-sm)}
+.sp-row.result{border-left:3px solid var(--border-hi)}
+.sp-row code{font-size:var(--f-xs)}
+.sp-row code.ok{color:var(--node)}
+.sp-row code.bad{color:var(--worker)}
+.sp-verdict{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
+  text-transform:uppercase;margin-left:auto}
+.sp-verdict.ok{color:var(--node)}
+.sp-verdict.bad{color:var(--worker)}
+
+/* ─────────── SHARED DIAGRAM VOCABULARY (parts 6, 3 and 7) ───────────
+   A small set of shapes so every subsection can carry a drawn figure
+   without each one inventing its own language: labelled boxes with an
+   owner hue, arrows, nesting, proportional strips, and a caption. Rule
+   4 still holds — borders and flat planes, no glow, no gradient.
+
+   REVISED. Two things were wrong, one visible and one structural.
+
+   Structural: a frame whose only in-flow content was a .dg-strip
+   collapsed to its own padding — 28px wide, label spilling across its
+   neighbour (p11 §5). The strip is built from percentage-width segments,
+   which contribute no min-content width, and .dg-frame-k was
+   position:absolute, so it contributed none either. A flex item whose
+   content measures zero gets zero. The label is now IN FLOW and the
+   strip carries a floor, so the frame is held open by its own contents
+   rather than by luck.
+
+   Visible: three nesting levels all wore the same micro-uppercase label,
+   and the frame wore a DASHED border in the owner hue — the loudest
+   treatment in the figure applied to the element that matters least. So
+   a figure read as a pile of equal rectangles. Now the levels differ by
+   job. The frame is GROUND: transparent, one hairline, its owner hue
+   reduced to a 14px rule beside a dim label. The box is the OBJECT: it
+   keeps the surface and the owner edge. The value is the CONTENT and is
+   now the largest type in the figure, which is the whole point of it.
+
+   Transparent rather than a new surface on purpose: --raise equals
+   --surface in the light theme, so raising the box would have made every
+   un-framed box invisible on white. Quieting the frame solves the same
+   hierarchy problem and costs no theme. */
+.dg{display:flex;flex-direction:column;gap:var(--s3)}
+.dg-row{display:flex;flex-wrap:wrap;gap:var(--s3);align-items:stretch}
+.dg-col{display:flex;flex-direction:column;gap:var(--s2);flex:1 1 0}
+
+/* the OBJECT — the thing the figure is actually about */
+.dg-box{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:var(--s2);
+  padding:var(--s4);border-radius:var(--r-sm);background:var(--surface2);
+  border:1px solid var(--border);border-top:3px solid var(--border)}
+.dg-box[data-owner="main"]{border-top-color:var(--main-thread)}
+.dg-box[data-owner="node"]{border-top-color:var(--node)}
+.dg-box[data-owner="kernel"]{border-top-color:var(--kernel)}
+.dg-box[data-owner="worker"]{border-top-color:var(--worker)}
+.dg-box[data-owner="hw"]{border-top-color:var(--hardware)}
+.dg-box.ghost{border-style:dashed;opacity:.55}
+/* the kicker names the owner; the value carries the meaning */
+.dg-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.13em;
+  text-transform:uppercase;color:var(--text-2)}
+.dg-box[data-owner="main"] .dg-k{color:var(--main-thread)}
+.dg-box[data-owner="node"] .dg-k{color:var(--node)}
+.dg-box[data-owner="kernel"] .dg-k{color:var(--kernel)}
+.dg-box[data-owner="worker"] .dg-k{color:var(--worker)}
+.dg-v{font-family:var(--sans);font-size:var(--f-sm);line-height:var(--lh-ui);
+  color:var(--text-hi)}
+.dg-s{font-family:var(--mono);font-size:var(--f-micro);line-height:var(--lh-ui);
+  color:var(--text-2);margin-top:auto;padding-top:var(--s1)}
+.dg-arrow{align-self:center;flex:0 0 auto;font-family:var(--mono);font-size:var(--f-sm);
+  color:var(--text-2);padding:0 var(--s1)}
+.dg-arrow em{display:block;font-style:normal;font-size:var(--f-micro);
+  letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim)}
+
+/* nesting: what lives inside what. GROUND, not another object.
+   flex-basis 0 (equal shares), and this was measured rather than assumed.
+   Content-proportional (flex:1 1 auto) reads better in p10 §6 — it stops
+   a 3-box frame squeezing until its kickers wrap mid-label — but it then
+   squeezed a sibling box in p9 §3 until its text CLIPPED. A wrapped label
+   is ugly; clipped text is unreadable, and the reader cannot tell it is
+   missing. Equal shares clip nothing at any width tested, so equal shares
+   it is. The min-content floor plus the strip's min-width stop collapse. */
+.dg-frame{flex:1 1 0;display:flex;flex-direction:column;gap:var(--s3);
+  padding:var(--s4);border:1px solid var(--border);border-radius:var(--r-md);
+  background:transparent}
+.dg-frame[data-owner="main"]{--dg-accent:var(--main-thread)}
+.dg-frame[data-owner="node"]{--dg-accent:var(--node)}
+.dg-frame[data-owner="kernel"]{--dg-accent:var(--kernel)}
+.dg-frame[data-owner="worker"]{--dg-accent:var(--worker)}
+.dg-frame[data-owner="hw"]{--dg-accent:var(--hardware)}
+/* in flow, so it measures — see the note above */
+.dg-frame-k{display:flex;align-items:center;gap:var(--s2);
+  font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.15em;
+  text-transform:uppercase;color:var(--text-dim);
+  padding-bottom:var(--s3);border-bottom:1px solid var(--hairline)}
+.dg-frame-k::before{content:"";flex:0 0 auto;width:14px;height:2px;
+  border-radius:1px;background:var(--dg-accent,var(--border-hi))}
+
+/* proportional strip with a marked window */
+.dg-strip{position:relative;display:flex;height:30px;min-width:150px;
+  border-radius:var(--r-sm);overflow:hidden;background:var(--raise);
+  border:1px solid var(--border-hi)}
+.dg-seg{display:block;height:100%}
+.dg-seg[data-fill="mine"]{background:var(--node)}
+.dg-seg[data-fill="theirs"]{background:var(--worker-soft);
+  border-right:1px solid var(--worker)}
+.dg-seg[data-fill="rest"]{background:var(--surface3)}
+.dg-legend{display:flex;flex-wrap:wrap;gap:var(--s3)}
+.dg-key{display:inline-flex;align-items:center;gap:var(--s2);
+  font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.08em;color:var(--text-2)}
+.dg-key::before{content:"";width:10px;height:10px;border-radius:2px;
+  border:1px solid var(--border-hi);background:var(--surface3)}
+.dg-key[data-fill="mine"]::before{background:var(--node);border-color:var(--node)}
+.dg-key[data-fill="theirs"]::before{background:var(--worker-soft);border-color:var(--worker)}
+/* chips in a row, for arrays and queues */
+.dg-chips{display:flex;flex-wrap:wrap;gap:var(--s2);align-items:center}
+.dg-chip{font-family:var(--mono);font-size:var(--f-xs);padding:var(--s2) var(--s3);
+  border-radius:var(--r-sm);border:1px solid var(--border-hi);color:var(--text-2)}
+.dg-chip[data-state="on"]{color:var(--node);border-color:var(--node);background:var(--node-soft)}
+.dg-chip[data-state="off"]{border-style:dashed;color:var(--text-2)}
+.dg-chip[data-state="bad"]{color:var(--worker);border-color:var(--worker);
+  background:var(--worker-soft);text-decoration:line-through}
+.dg-cap{font-family:var(--sans);font-size:var(--f-xs);line-height:var(--lh-ui);
+  color:var(--text-2);border-left:2px solid var(--border-hi);padding-left:var(--s3)}
+/* 940, not 880: the roomier padding and the larger .dg-v mean a row of
+   frames runs out of width sooner than it used to. Measured — at 900px
+   one element clipped that did not clip before the revision. 900px is
+   below the supported width and respo.js only measures there rather
+   than asserting, which is exactly why it would have been easy to leave. */
+@media (max-width:940px){ .dg-row{flex-direction:column} .dg-arrow{transform:rotate(90deg)} }
+
+/* ─────────── P10-4. the window, moved (§1) ─────────── */
+.vw{display:flex;flex-direction:column;gap:var(--s3)}
+.vw-ctl{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.vw-b{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.06em;
+  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  transition:background var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
+.vw-b:hover{background:var(--surface3);border-color:var(--border-hi)}
+.vw-b-primary{background:var(--node);border-color:var(--node);color:var(--on-accent)}
+.vw-strip{padding:var(--s3) var(--s4);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-md)}
+.vw-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-dim);margin-bottom:var(--s2)}
+.vw-grid{display:grid;grid-template-columns:repeat(var(--n),minmax(26px,1fr));gap:var(--s2) 3px}
+.vw-byte{grid-row:1;display:flex;flex-direction:column;align-items:center;gap:1px;
+  padding:var(--s1) 0;border-radius:3px;background:var(--raise);
+  border:1px solid var(--border);transition:border-color var(--dur-1) var(--ease)}
+.vw-byte.in{border-color:var(--node);background:var(--node-soft)}
+.vw-byte em{font-style:normal;font-family:var(--mono);font-size:var(--f-micro);color:var(--hardware)}
+.vw-byte i{font-style:normal;font-family:var(--sans);font-size:var(--f-xs);color:var(--text-2)}
+.vw-byte.in i{color:var(--node)}
+.vw-win{grid-row:2;display:flex;align-items:center;justify-content:center;height:22px;
+  border:1px solid var(--node);border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm);
+  transition:all var(--dur-2) var(--ease)}
+.vw-win em{font-style:normal;font-family:var(--mono);font-size:var(--f-micro);
+  letter-spacing:.06em;color:var(--node)}
+.vw-owner{grid-row:3;display:flex;align-items:center;justify-content:center;height:20px;
+  border:1px dashed var(--border-hi);border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm)}
+.vw-owner em{font-style:normal;font-family:var(--mono);font-size:var(--f-micro);
+  letter-spacing:.06em;color:var(--text-2)}
+.vw-meters{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.vw-meter{display:flex;flex-direction:column;gap:2px;flex:1 1 180px;
+  padding:var(--s2) var(--s3);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-sm)}
+.vw-m-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-dim)}
+.vw-m-v{font-family:var(--mono);font-size:var(--f-sm);color:var(--text-hi)}
+.vw-m-v.yes{color:var(--node)}
+.vw-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
+  color:var(--text);border-left:2px solid var(--border-hi);
+  padding:var(--s2) 0 var(--s2) var(--s4);min-height:4.4em;max-width:var(--measure)}
+.vw.is-wrote .vw-say{border-left-color:var(--node)}
+
+/* ─────────── SVG FIGURES ───────────
+   The vocabulary so far is rectangles in rows, which is the right shape for a
+   table and the wrong shape for containment, indirection, or a quantity against
+   a ceiling. These are drawn instead: concentric nesting, pointer graphs with
+   real arrowheads, and dials. Rule 4 still holds — flat fills, no gradient, no
+   glow — and every colour is a token so both themes are solved at once. */
+.svgfig{width:100%;height:auto;display:block;overflow:visible}
+.svgfig text{font-family:var(--mono);fill:var(--text-2)}
+.svgfig .sv-t{font-size:11px;letter-spacing:.09em;text-transform:uppercase}
+.svgfig .sv-lab{font-size:12.5px;fill:var(--text-hi);letter-spacing:.02em}
+.svgfig .sv-sub{font-size:10.5px;fill:var(--text-2);letter-spacing:.06em}
+.svgfig .sv-num{font-size:19px;fill:var(--text-hi);letter-spacing:.02em}
+.svgfig .sv-plate{fill:var(--surface2);stroke:var(--border)}
+.svgfig .sv-raise{fill:var(--raise);stroke:var(--border-hi)}
+.svgfig .sv-hollow{fill:none}
+.svgfig .sv-line{stroke:var(--border-hi);fill:none}
+.svgfig .sv-dash{stroke-dasharray:5 4}
+.svgfig [data-owner="main"]{stroke:var(--main-thread)}
+.svgfig [data-owner="node"]{stroke:var(--node)}
+.svgfig [data-owner="kernel"]{stroke:var(--kernel)}
+.svgfig [data-owner="worker"]{stroke:var(--worker)}
+.svgfig [data-owner="hw"]{stroke:var(--hardware)}
+.svgfig text[data-owner="main"]{fill:var(--main-thread);stroke:none}
+.svgfig text[data-owner="node"]{fill:var(--node);stroke:none}
+.svgfig text[data-owner="kernel"]{fill:var(--kernel);stroke:none}
+.svgfig text[data-owner="worker"]{fill:var(--worker);stroke:none}
+.svgfig text[data-owner="hw"]{fill:var(--hardware);stroke:none}
+.svgfig .sv-fill-main{fill:var(--main-thread-soft)}
+.svgfig .sv-fill-node{fill:var(--node-soft)}
+.svgfig .sv-fill-kernel{fill:var(--kernel-soft)}
+.svgfig .sv-fill-worker{fill:var(--worker-soft)}
+.svgfig .sv-fill-hw{fill:var(--hardware-soft)}
+.svgfig .sv-arrow{stroke:var(--text-2);fill:none;marker-end:url(#sv-head)}
+.svgfig .sv-head{fill:var(--text-2);stroke:none}
+.svg-wrap{padding:var(--s4);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-md)}
+.svg-cap{margin-top:var(--s3);font-family:var(--sans);font-size:var(--f-xs);
+  line-height:var(--lh-ui);color:var(--text-2);
+  border-left:2px solid var(--border-hi);padding-left:var(--s3)}
+
 /* ── clickable code annotations (explain.js) ── */
 .code-body pre .cline{cursor:pointer;border-radius:3px}
 .code-body pre .cline:hover{background:var(--surface2)}
@@ -4564,25 +5051,40 @@ html.light .gpop-stacked{box-shadow:0 18px 48px rgba(0,0,0,.22)}
 <div class="grain"></div>
 <div class="progress" id="progress"></div>
 <header>
-<div class="eyebrow">Part 06 · Node.js Internals Series</div>
-<h1>The <span class="accent">thread pool</span> — four subsystems, <span class="accent2">one queue</span>, and four threads by default</h1>
-<p class="subtitle">Part 5 introduced the pool as the thing that makes fs.readFile asynchronous, and every part since has called it "the pool". That is true and incomplete: <strong style="color:var(--text-hi)">four unrelated subsystems share it</strong> — the filesystem, DNS name resolution, several crypto functions and all of zlib — and by default they share four threads and one first-in-first-out queue.</p>
-<div class="meta-row"><span>8 sections</span><span>7 figures</span><span>four members</span><span>fs · dns · crypto · zlib</span></div>
+<div class="eyebrow">Mission 03 · Node.js Internals Campaign</div>
+<h1><span class="code">Buffer</span> — a <span class="accent">window</span> onto memory <span class="accent2">outside the V8 heap</span></h1>
+<p class="subtitle">Every read in this series has handed you one. A Buffer is a Uint8Array whose bytes live in a C++ allocation rather than in the JavaScript heap — <strong style="color:var(--text-hi)">because the kernel needs an address that does not move and a garbage collector cannot promise one</strong>. Pooling, encodings and allocUnsafe are all consequences of living outside the heap.</p>
+<div class="meta-row"><span>9 sections</span><span>13 figures</span><span>one window</span><span>alloc · pool · encodings · concat</span></div>
 </header>
-<nav class="section-nav" id="snav"><div class="section-nav-inner"><button class="section-btn active" data-section="foundations"><span class="num">01</span>Foundations</button><button class="section-btn" data-section="users"><span class="num">02</span>Who Uses It</button><button class="section-btn" data-section="collide"><span class="num">03</span>When They Collide</button><button class="section-btn" data-section="synthesis"><span class="num">04</span>Synthesis</button>
+<nav class="section-nav" id="snav"><div class="section-nav-inner"><button class="section-btn active" data-section="foundations"><span class="num">01</span>Foundations</button><button class="section-btn" data-section="memory"><span class="num">02</span>The Memory</button><button class="section-btn" data-section="text"><span class="num">03</span>Bytes and Text</button><button class="section-btn" data-section="cost"><span class="num">04</span>Cost</button><button class="section-btn" data-section="synthesis"><span class="num">05</span>Synthesis</button>
 <div class="theme-toggle" id="themeToggle"><span class="knob"></span><span>Light</span></div>
 </div></nav>
-<main><div class="major-section active" id="sec-foundations"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-f-short">0 · The Short Answer</button><button class="sub-tab" data-sub="sub-f-why">1 · What Qualifies</button></div><div class="sub-panel active" id="sub-f-short"><div class="card main-edge"><div class="secnum">§ 0 · THE SHORT ANSWER FIRST</div><h2>Four unrelated subsystems, four threads, one queue</h2><p>Part 5 introduced the thread pool as the thing that makes <code>fs.readFile</code> asynchronous, and every part since has referred to it as "the pool". That framing is true and incomplete, and the incompleteness is where the production surprises come from.</p><p><strong>Four different subsystems share it</strong> — the filesystem, DNS name resolution, several crypto functions and all of zlib — and by default they share <strong>four threads</strong>. They have nothing to do with each other, they queue together, and none of them knows the others exist.</p><div class="code-block"><div class="code-header"><span class="code-lang">JAVASCRIPT</span><span class="code-meta">THE COLLISION NOBODY EXPECTS</span></div><div class="code-body"><pre>zlib.gzip(bigBuffer, () =&gt; {});     // ×4, one per pool thread
-zlib.gzip(bigBuffer, () =&gt; {});
-zlib.gzip(bigBuffer, () =&gt; {});
-zlib.gzip(bigBuffer, () =&gt; {});
+<main><div class="major-section active" id="sec-foundations"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-f-short">0 · The Short Answer</button><button class="sub-tab" data-sub="sub-f-shape">1 · Three Things, Not One</button></div><div class="sub-panel active" id="sub-f-short"><div class="card main-edge"><div class="secnum">§ 0 · THE SHORT ANSWER FIRST</div><h2>A Buffer is a view onto memory outside the V8 heap</h2><p>Every read in this series has handed you one. <code>fs.readFile</code> in Part 5, <code>socket.on("data")</code> in Part 8, the request body in Part 9 — all Buffers, and the reason is the same in every case.</p><p><strong>A Buffer is a <code>Uint8Array</code> whose bytes live in a C++ allocation rather than in the JavaScript heap.</strong> It is a normal typed array in every other respect: indexable, iterable, with a length. What is unusual is where the bytes are, and that one difference explains the rest of this part.</p><div class="code-block"><div class="code-header"><span class="code-lang">JAVASCRIPT</span><span class="code-meta">IT REALLY IS A TYPED ARRAY</span></div><div class="code-body"><pre>const buf = Buffer.from(&quot;hi&quot;);
 
-dns.lookup(&quot;api.example.com&quot;, () =&gt; {});   // now waits for a compression job</pre></div></div><p>Nothing there is misconfigured. The DNS lookup is queued behind four compression jobs because compression and name resolution are served by the same four threads, and the queue is first-in, first-out.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>The pool is not "the filesystem pool". It is a general work queue for blocking C code, and every subsystem that uses it competes with every other one for the same four threads.</p></div></div></div><div class="sub-panel" id="sub-f-why"><div class="card main-edge"><div class="secnum">§ 1 · WHY THESE FOUR AND NOTHING ELSE</div><h2>No readiness interface means no other option</h2><p>Part 0 §8 and Part 8 established the rule that decides this. A socket can be watched: you ask the kernel to tell you when it is ready, and one thread can hold ten thousand of them. A regular file cannot — it is <em>always</em> ready, so the answer is useless and the only way to find out how long a read takes is to make it and see.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What sends work to the pool</span></div><span class="badge">§1 · the test</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">does it have a readiness interface?</div><div class="hf-node-sub">can epoll watch it?</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">If yes, the loop watches it and no thread is needed — that is every socket in Parts 8, 9 and 11. If no, someone has to sit and wait, and it cannot be the main thread.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">is the work pure CPU in C?</div><div class="hf-node-sub">compression, key derivation</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Then there is nothing to watch at all. It is not waiting, it is computing — and a thread that computes for 200ms is exactly as unavailable as one that waits for 200ms.</div></div><div class="hf-node" data-owner="worker"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">is it your JavaScript?</div><div class="hf-node-sub">then the pool cannot take it</div></div><div class="hf-node-tag t-worker">worker</div></div><div class="hf-node-detail">Pool threads have no V8 isolate, as Part 10 spends a figure on. A CPU-heavy loop of yours needs a <code>worker_thread</code>, not this.</div></div></div></div><div class="hfdiag-foot"><span class="hint">blocking C with no readiness interface — that is the whole membership test</span></div></div><p>Which is why the membership list looks arbitrary until you apply the test, and then looks inevitable.</p></div></div></div><div class="major-section" id="sec-users"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-u-four">2 · The Four Users</button><button class="sub-tab" data-sub="sub-u-dns">3 · The One That Surprises</button></div><div class="sub-panel active" id="sub-u-four"><div class="card main-edge"><div class="secnum">§ 2 · THE WHOLE MEMBERSHIP LIST</div><h2>fs, dns.lookup, some crypto, all zlib</h2><p>Here is everything in Node that hands work to the pool, and the shape of what it submits.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What each one submits</span></div><span class="badge">§2 · the members</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">fs — every asynchronous operation</div><div class="hf-node-sub">read, write, stat, readdir, open, close</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Part 5's subject. Each call is one job. A <code>readFile</code> of a large file is one job that holds a thread for the whole read, which is why a directory walk of thousands of files saturates the pool so easily.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">dns.lookup</div><div class="hf-node-sub">getaddrinfo — the OS resolver</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">The one that surprises people, and §3 is entirely about it. It is a BLOCKING C call into the system resolver, so it needs a thread — even though what it is doing is network work.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">crypto — the async forms only</div><div class="hf-node-sub">pbkdf2, scrypt, randomBytes, randomFill</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Pure CPU, deliberately handed to the pool so it does not block the loop. The <code>Sync</code> variants of all of these run on the main thread instead, which is the trap.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">zlib — everything</div><div class="hf-node-sub">gzip, deflate, brotli, and their streams</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">All compression is pool work. A streaming gzip submits a job per chunk, so one large response can occupy a thread repeatedly rather than once.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">and nothing else</div><div class="hf-node-sub">not net, not http, not tls, not timers</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">Sockets are watched, not waited on. Timers are a number passed to epoll_wait. Your JavaScript runs on the main thread. None of these touch the pool.</div></div></div></div><div class="hfdiag-foot"><span class="hint">four members · one queue · four threads by default</span></div></div><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>If you have ever wondered why a Node service gets slower during a burst of gzip, and the slowdown shows up as DNS timeouts, this list is the reason. They are the same queue.</p></div></div></div><div class="sub-panel" id="sub-u-dns"><div class="card main-edge"><div class="secnum">§ 3 · DNS.LOOKUP VS DNS.RESOLVE</div><h2>The same answer by two completely different routes</h2><p>These two functions look like variants of one thing. They are not: one takes a pool thread and one does not touch the pool at all.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Which one uses a thread?</span></div><span class="badge">§3 · two routes to a name</span></div><div class="hfdiag-body"><div data-instrument="dns"></div></div><div class="hfdiag-foot"><span class="hint">the control is the one that quietly consumes your pool under load</span></div></div><p>Almost everything resolves names through <code>dns.lookup</code> without asking for it: <code>http.request</code>, <code>fetch</code>, database drivers, every client library that takes a hostname. So a service making many outbound connections is submitting pool jobs constantly, and it never appears in the code as a pool operation.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p><code>dns.lookup</code> consults the operating system — hosts file, nsswitch, everything — and that API is blocking, so it needs a thread. <code>dns.resolve</code> sends a DNS query over a socket, which the loop can watch like any other socket. Same question, opposite mechanism.</p></div></div></div></div><div class="major-section" id="sec-collide"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-c-sat">4 · Head-of-Line Blocking</button><button class="sub-tab" data-sub="sub-c-size">5 · UV_THREADPOOL_SIZE</button></div><div class="sub-panel active" id="sub-c-sat"><div class="card main-edge"><div class="secnum">§ 4 · FOUR THREADS, ONE QUEUE</div><h2>A compression job can delay a name lookup</h2><p>Part 5 showed the pool saturating with file reads. That figure held one subsystem constant; this one is about what happens when the jobs come from <em>different</em> subsystems, because that is the case nobody plans for.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Mixed work, four threads</span></div><span class="badge">§4 · the shared queue</span></div><div class="hfdiag-body"><div data-instrument="sat"></div></div><div class="hfdiag-foot"><span class="hint">the control raises the pool size — and shows what that does and does not fix</span></div></div><p>The queue is first-in, first-out and jobs are not preemptible. A <code>pbkdf2</code> at high iteration counts holds a thread for as long as it takes, and everything behind it waits — including a DNS lookup that would have taken a millisecond.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>The symptom almost never names the cause. You see slow DNS, or slow file reads, and the actual culprit is a different subsystem entirely that happens to share the queue.</p></div></div></div><div class="sub-panel" id="sub-c-size"><div class="card main-edge"><div class="secnum">§ 5 · THE ONE KNOB, AND ITS RULES</div><h2>Read once, at first use, and never again</h2><p>The pool size is set by an environment variable, defaults to 4, and has two properties that make it easy to set ineffectively.</p><div class="code-block"><div class="code-header"><span class="code-lang">JAVASCRIPT</span><span class="code-meta">TOO LATE — THE POOL IS ALREADY SIZED</span></div><div class="code-body"><pre>const fs = require(&quot;fs&quot;);
-fs.readFile(__filename, () =&gt; {});        // pool created HERE, with 4 threads
+buf instanceof Uint8Array;   // true
+buf[0];                      // 104
+buf.length;                  // 2
 
-process.env.UV_THREADPOOL_SIZE = 16;      // no effect, ever</pre></div></div><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What the knob actually does</span></div><span class="badge">§5 · the rules</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">it is read ONCE, at first pool use</div><div class="hf-node-sub">not per call, not per module</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">The pool is created lazily, and its size is fixed the moment the first job is submitted. Setting the variable after that changes nothing, and nothing warns you.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">so set it before anything uses it</div><div class="hf-node-sub">the environment, or the very first line</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">In practice that means the shell, a process manager, or the top of your entry file before any require that might touch fs.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the maximum is 1024</div><div class="hf-node-sub">and that is not the useful number</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">These are real OS threads. Past your core count they compete for the same cores — Part 11's cost curve, with the same shape and the same conclusion.</div></div><div class="hf-node" data-owner="worker"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">it does not help I/O-bound work</div><div class="hf-node-sub">because that work was never here</div></div><div class="hf-node-tag t-worker">worker</div></div><div class="hf-node-detail">More threads only help if jobs are actually queueing. Sockets never queue here at all, so a socket-heavy server sees nothing from raising it.</div></div></div></div><div class="hfdiag-foot"><span class="hint">one number, fixed at first use, capped at 1024</span></div></div></div></div></div><div class="major-section" id="sec-synthesis"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-y-models">6 · Wrong vs Correct</button><button class="sub-tab" data-sub="sub-y-lock">7 · Lock It In</button></div><div class="sub-panel active" id="sub-y-models"><div class="card main-edge"><div class="secnum">§ 6 · THE MODELS WORTH CORRECTING</div><h2>Ten claims about the pool</h2><p>These are the beliefs that make pool exhaustion so hard to diagnose — mostly because they scope the pool too narrowly.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Which of these are true?</span></div><span class="badge">§6 · mental models</span></div><div class="hfdiag-body"><div data-instrument="models"></div></div><div class="hfdiag-foot"><span class="hint">sort before you check — a guess you have committed to is worth more than a correction you read</span></div></div><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>Nearly every wrong take here assumes the pool belongs to one subsystem. It belongs to four, they share one queue, and the one that saturates it is rarely the one that looks slow.</p></div></div></div><div class="sub-panel" id="sub-y-lock"><div class="card main-edge"><div class="secnum">§ 7 · THE FOUR SENTENCES WORTH KEEPING</div><h2>If you remember nothing else</h2><p>The pool is a general work queue for blocking C code, not a filesystem feature.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What to carry away</span></div><span class="badge">§7 · the four sentences</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">four subsystems, one queue, four threads</div><div class="hf-node-sub">§0 · §2</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">fs, dns.lookup, the async crypto functions and all of zlib. They compete, and the symptom rarely names the cause.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">dns.lookup uses a thread; dns.resolve does not</div><div class="hf-node-sub">§3</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">And almost every client library uses lookup without saying so, which is how a service submits pool jobs it never wrote.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the size is fixed at first use</div><div class="hf-node-sub">§5</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">Set <code>UV_THREADPOOL_SIZE</code> in the environment, not after a require has already warmed the pool.</div></div><div class="hf-node" data-owner="worker"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">sockets were never here</div><div class="hf-node-sub">§1</div></div><div class="hf-node-tag t-worker">worker</div></div><div class="hf-node-detail">They have a readiness interface, so the loop watches them. Raising the pool size does nothing for a socket-bound server.</div></div></div></div><div class="hfdiag-foot"><span class="hint">four sentences, one queue</span></div></div><p>That completes the picture Part 5 started. Part 5 followed one call into the pool and back; this part is everything else that was already in there with it.</p></div></div></div></main>
-<footer><div>Part 06 of the Node.js Internals series &nbsp;·&nbsp; the libuv thread pool · <code>fs</code> · <code>dns.lookup</code> · <code>crypto</code> · <code>zlib</code></div>
-<div>One queue, shared by four strangers</div></footer>
+// and the bytes are NOT in the V8 heap:
+buf.buffer;                  // an ArrayBuffer allocated by C++</pre></div></div><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>The object and the bytes live apart</span></div><span class="badge">§0 · which side of the fence</span></div><div class="hfdiag-body"><div class="dg"><div class="dg-row"><div class="dg-frame" data-owner="node"><span class="dg-frame-k">the V8 heap · collected, and MOVED</span><div class="dg-row"><div class="dg-box" data-owner="main"><span class="dg-k">the Buffer object</span><span class="dg-v">a few dozen bytes of header</span><span class="dg-s">an offset and a length, nothing more</span></div></div></div><div class="dg-arrow">&rarr;<em>points at</em></div><div class="dg-frame" data-owner="hw"><span class="dg-frame-k">outside the heap · never moved</span><div class="dg-row"><div class="dg-box" data-owner="kernel"><span class="dg-k">the bytes</span><span class="dg-v">a C++ allocation at a fixed address</span><span class="dg-s">what a syscall is handed a pointer to</span></div></div></div></div><div class="dg-cap">A collector that relocates objects cannot hand a stable address to a pool thread that will write into it while your JavaScript is not running. That is the entire reason for the fence.</div></div></div><div class="hfdiag-foot"><span class="hint">the object is collected and may move · the bytes are neither</span></div></div><p>The reason is Part 5's and Part 8's mechanism. A pool thread or the kernel is going to write into this memory while your JavaScript is not running, and V8's garbage collector moves objects around inside its heap. An address the collector may relocate is useless to a syscall.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>Buffers exist because the kernel needs a stable address and V8 cannot promise one. Everything else — pooling, encodings, allocUnsafe — is a consequence of living outside the heap.</p></div></div></div><div class="sub-panel" id="sub-f-shape"><div class="card main-edge"><div class="secnum">§ 1 · WHAT YOU ARE ACTUALLY HOLDING</div><h2>A view, a window, and the memory itself</h2><p>A Buffer looks like one object and is really a small stack of three, which is why two Buffers can share bytes without either of them knowing.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>One allocation, two views, no copying</span></div><span class="badge">§1 · move the window</span></div><div class="hfdiag-body"><div data-instrument="view"></div></div><div class="hfdiag-foot"><span class="hint">slide the offset, then write through the view and watch the original change</span></div></div><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What a Buffer is made of</span></div><span class="badge">§1 · the same thing as a list</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the Buffer</div><div class="hf-node-sub">a Uint8Array subclass, in the V8 heap</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">The JS object itself IS in the heap and is tiny — a few dozen bytes of header. What it holds is not the data but a reference to it, plus an offset and a length.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">byteOffset and length</div><div class="hf-node-sub">the window this view can see</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Where this view starts inside the underlying memory, and how far it extends. <code>subarray()</code> makes a new view with a different window over the SAME memory — no copying, and no isolation either.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the ArrayBuffer</div><div class="hf-node-sub">the bytes, allocated by C++</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Outside the V8 heap, at an address that does not move. This is what a pool thread writes into, and what a syscall is handed a pointer to.</div></div></div></div><div class="hfdiag-foot"><span class="hint">the object is in the heap; the bytes are not</span></div></div><div class="code-block"><div class="code-header"><span class="code-lang">JAVASCRIPT</span><span class="code-meta">TWO VIEWS, ONE ALLOCATION</span></div><div class="code-body"><pre>const buf  = Buffer.from(&quot;hello world&quot;);
+const view = buf.subarray(0, 5);        // no copy
+
+view[0] = 72;                            // &#x27;H&#x27;
+console.log(buf.toString());             // &quot;Hello world&quot;   &lt;- buf changed too
+
+console.log(view.buffer === buf.buffer); // true — same memory</pre></div></div><p>That is the first thing to internalise, because it is the source of the most confusing bug in this part: a Buffer you were handed may be a window onto memory somebody else is still using.</p></div></div></div><div class="major-section" id="sec-memory"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-m-alloc">2 · How Allocation Differs</button><button class="sub-tab" data-sub="sub-m-pool">3 · What the Pool Costs You</button></div><div class="sub-panel active" id="sub-m-alloc"><div class="card main-edge"><div class="secnum">§ 2 · ALLOC, ALLOCUNSAFE, AND THE POOL</div><h2>Three ways to get bytes, with different costs and hazards</h2><p>Node gives you several constructors and they are not interchangeable. The differences are about zero-filling and about whether your bytes are carved out of a shared block.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Pick an allocation and see what you got</span></div><span class="badge">§2 · where the bytes come from</span></div><div class="hfdiag-body"><div data-instrument="alloc"></div></div><div class="hfdiag-foot"><span class="hint">the control is allocUnsafe — the one that can hand you somebody else's data</span></div></div><p>The pool is the part worth understanding, because it is invisible until it is not. Node keeps an 8KB slab and carves small <code>allocUnsafe</code> requests out of it; a Buffer under 4KB is usually a window onto that slab, sharing an <code>ArrayBuffer</code> with unrelated Buffers allocated near it in time.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p><code>allocUnsafe</code> is not unsafe because it might crash. It is unsafe because the memory has a PREVIOUS OCCUPANT, and if you do not overwrite every byte you keep whatever was there.</p></div></div></div><div class="sub-panel" id="sub-m-pool"><div class="card main-edge"><div class="secnum">§ 3 · WHY BUF.BUFFER IS RARELY WHAT YOU EXPECT</div><h2>Sharing an ArrayBuffer with strangers</h2><p>Because pooled Buffers are views onto a shared slab, the underlying <code>ArrayBuffer</code> is almost never the size of your Buffer — and passing it around exposes more than you meant.</p><div class="code-block"><div class="code-header"><span class="code-lang">JAVASCRIPT</span><span class="code-meta">THE SIZE MISMATCH THAT SURPRISES PEOPLE</span></div><div class="code-body"><pre>const a = Buffer.allocUnsafe(100);
+
+a.length;              // 100      &lt;- your view
+a.buffer.byteLength;   // 8192     &lt;- the whole pool slab
+a.byteOffset;          // 168      &lt;- where your window starts
+
+// so this hands somebody EIGHT KILOBYTES, most of it other people&#x27;s data:
+someApi(a.buffer);
+
+// this hands them your hundred bytes:
+someApi(a.buffer.slice(a.byteOffset, a.byteOffset + a.length));</pre></div></div><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What buf.buffer measures, against what you meant</span></div><span class="badge">§3 · to scale, and magnified</span></div><div class="hfdiag-body"><div class="svg-wrap"><svg class="svgfig" viewBox="0 0 900 340" preserveAspectRatio="xMidYMid meet" role="img"><defs><marker id="sv-head" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sv-head" d="M0 0 L8 4 L0 8 z"/></marker></defs><rect x="40" y="92" width="820" height="46" rx="6" class="sv-raise" stroke-width="1.5"/><rect x="40.0" y="92" width="16.8" height="46" class="sv-plate sv-fill-worker" data-owner="worker" stroke-width="1"/><rect x="56.8" y="92" width="10.0" height="46" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1"/><text class="sv-t" x="40" y="76">the slab · one ArrayBuffer · 8192 bytes</text><line class="sv-line" x1="40" y1="150" x2="40" y2="166" stroke-width="1.5"/><line class="sv-line" x1="860" y1="150" x2="860" y2="166" stroke-width="1.5"/><line class="sv-line" x1="40" y1="158" x2="860" y2="158" stroke-width="1.5"/><text class="sv-sub" x="450" y="184" text-anchor="middle">buf.buffer.byteLength = 8192</text><line class="sv-line sv-dash" x1="56.8" y1="138" x2="260" y2="232" stroke-width="1.5"/><line class="sv-line sv-dash" x1="66.8" y1="138" x2="700" y2="232" stroke-width="1.5"/><rect x="260" y="232" width="440" height="44" rx="6" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-lab" x="480" y="260" text-anchor="middle">your 100 bytes</text><text class="sv-t" data-owner="worker" x="40" y="250">byteOffset 168</text><text class="sv-sub" x="40" y="268">earlier allocations</text><text class="sv-t" data-owner="node" x="720" y="250">buf.length = 100</text><text class="sv-sub" x="720" y="268">magnified 80x</text><text class="sv-sub" x="40" y="316">hand over .buffer and the whole bar goes with it — not the highlighted sliver</text></svg><div class="svg-cap">Drawn to scale, with the window magnified because it is 1.2% of the bar. The dimension line measures what buf.buffer actually is; the small block is what you meant to pass. Eighty-one times more memory, most of it belonging to allocations you never saw.</div></div></div><div class="hfdiag-foot"><span class="hint">the dimension line is buf.buffer · the small block is buf</span></div></div><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Your window, and everything around it</span></div><span class="badge">§3 · what buf.buffer actually hands over</span></div><div class="hfdiag-body"><div class="dg"><div class="dg-strip"><span class="dg-seg" data-fill="theirs" style="width:2.1%"></span><span class="dg-seg" data-fill="mine" style="width:1.2%"></span><span class="dg-seg" data-fill="rest" style="width:96.7%"></span></div><div class="dg-legend"><span class="dg-key" data-fill="mine">buf — your 100 bytes</span><span class="dg-key" data-fill="theirs">earlier allocations, byteOffset 168</span><span class="dg-key" data-fill="rest">whatever is allocated next</span></div><div class="dg-row"><div class="dg-box" data-owner="node"><span class="dg-k">buf.length</span><span class="dg-v">100</span><span class="dg-s">what you think you are passing</span></div><div class="dg-box" data-owner="worker"><span class="dg-k">buf.buffer.byteLength</span><span class="dg-v">8192</span><span class="dg-s">what you are ACTUALLY passing</span></div><div class="dg-box" data-owner="kernel"><span class="dg-k">the difference</span><span class="dg-v">81× more memory than you meant</span><span class="dg-s">most of it other people's data</span></div></div><div class="dg-cap">The green sliver is your Buffer. Everything else in that bar goes with it the moment you reach for <code>.buffer</code>.</div></div></div><div class="hfdiag-foot"><span class="hint">the slab is the unit of allocation — your Buffer is a window onto it</span></div></div><p>This is the same distinction as the transfer list in Part 10, arriving from the other side. There, transferring an <code>ArrayBuffer</code> moved the whole allocation; here, reaching for <code>.buffer</code> on a pooled Buffer reaches past your window into everything sharing the slab.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p><code>buf.buffer</code> is the SLAB, not your bytes. Use <code>byteOffset</code> and <code>length</code>, or copy — and prefer <code>Buffer.alloc</code> when the buffer is going to be handed to code you do not control.</p></div></div></div></div><div class="major-section" id="sec-text"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-t-enc">4 · An Encoding Is a Reading</button><button class="sub-tab" data-sub="sub-t-split">5 · A Character Split in Half</button></div><div class="sub-panel active" id="sub-t-enc"><div class="card main-edge"><div class="secnum">§ 4 · THE BYTES NEVER CHANGE</div><h2>toString does not convert anything</h2><p>A Buffer holds bytes and nothing else. An encoding name does not transform them — it tells <code>toString</code> how to interpret them, and the same bytes read two ways give two different strings without anything in memory changing.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>The same bytes, interpreted differently</span></div><span class="badge">§4 · one buffer, five readings</span></div><div class="hfdiag-body"><div data-instrument="encode"></div></div><div class="hfdiag-foot"><span class="hint">the control is the reading that loses information — and does it silently</span></div></div><p>The lossy case is the one to watch. <code>utf8</code> is not a passive interpretation: bytes that are not valid UTF-8 are replaced with U+FFFD, and the replacement is not reversible. Reading arbitrary binary as a string and writing it back out is how binary data gets quietly corrupted.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>An encoding is a lens, not a conversion — except <code>utf8</code>, which will substitute characters for bytes it cannot read and tell you nothing.</p></div></div></div><div class="sub-panel" id="sub-t-split"><div class="card main-edge"><div class="secnum">§ 5 · THE BUG THAT ONLY APPEARS WITH MULTI-BYTE TEXT</div><h2>Chunk boundaries do not respect characters</h2><p>Parts 8 and 9 established that a chunk boundary lands wherever the network put it. Combine that with UTF-8, where a character can be up to four bytes, and a character can arrive split across two <code>data</code> events.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What each strategy produces</span></div><span class="badge">§5 · a character across a boundary</span></div><div class="hfdiag-body"><div data-instrument="split"></div></div><div class="hfdiag-foot"><span class="hint">the control is per-chunk toString — correct on ASCII, and wrong the moment it is not</span></div></div><p>This is why <code>StringDecoder</code> exists, and why it is not optional anywhere text arrives in chunks. It holds back the incomplete bytes at the end of a chunk and prepends them to the next one — the same idea as the HTTP parser holding partial headers in Part 9.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>Concatenating Buffers and decoding ONCE is always correct. Decoding each chunk separately is correct only while your test data is ASCII.</p></div></div></div></div><div class="major-section" id="sec-cost"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-c-concat">6 · Copying and Not Copying</button></div><div class="sub-panel active" id="sub-c-concat"><div class="card main-edge"><div class="secnum">§ 6 · WHICH OPERATIONS MOVE BYTES</div><h2>subarray shares, concat copies, and one loop is quadratic</h2><p>Buffer operations divide cleanly into those that make a new window and those that move bytes, and the division is worth memorising because one of them turns a loop into an O(n²) loop.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Per operation</span></div><span class="badge">§6 · what copies</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">subarray / slice</div><div class="hf-node-sub">NO copy — a new view</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Constant time regardless of size. It also means the new Buffer keeps the whole underlying allocation alive, which is how a 10-byte slice of a 10MB read can hold 10MB resident.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">Buffer.concat([a, b])</div><div class="hf-node-sub">copies every byte, once</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">Allocates a new buffer of the combined length and copies both in. Called once at the end, this is the right thing.</div></div><div class="hf-node" data-owner="worker"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">acc = Buffer.concat([acc, chunk])</div><div class="hf-node-sub">copies EVERYTHING, every chunk</div></div><div class="hf-node-tag t-worker">worker</div></div><div class="hf-node-detail">The quadratic trap. Ten thousand 1KB chunks accumulated this way copies about 50 GB to build a 10 MB buffer. Push into an array and concat ONCE.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">buf.toString()</div><div class="hf-node-sub">copies into the V8 heap</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">A string is a heap object. Decoding a 100MB buffer allocates a ~100MB string beside it, and both are live until one is dropped.</div></div></div></div><div class="hfdiag-foot"><span class="hint">views are free · copies are not · accumulating is worse than both</span></div></div><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Where the bytes actually go</span></div><span class="badge">§6 · the same three chunks, three ways</span></div><div class="hfdiag-body"><div class="dg"><div class="dg-row"><div class="dg-frame" data-owner="node"><span class="dg-frame-k">subarray — no copy</span><div class="dg-row"><div class="dg-box" data-owner="node"><span class="dg-k">view A</span><span class="dg-v">offset 0, len 4</span></div><div class="dg-box" data-owner="node"><span class="dg-k">view B</span><span class="dg-v">offset 4, len 4</span></div></div></div><div class="dg-frame" data-owner="node"><span class="dg-frame-k">concat once — one copy</span><div class="dg-row"><div class="dg-box" data-owner="main"><span class="dg-k">a new buffer</span><span class="dg-v">every byte moved, exactly once</span></div></div></div><div class="dg-frame" data-owner="kernel"><span class="dg-frame-k">concat per chunk — n copies</span><div class="dg-row"><div class="dg-box" data-owner="worker"><span class="dg-k">copy 1</span><span class="dg-v">1 KB</span></div><div class="dg-box" data-owner="worker"><span class="dg-k">copy 2</span><span class="dg-v">2 KB</span></div><div class="dg-box" data-owner="worker"><span class="dg-k">copy 3</span><span class="dg-v">3 KB</span></div></div></div></div><div class="dg-chips"><span class="dg-chip" data-state="on">views share one allocation</span><span class="dg-chip" data-state="on">one concat moves n bytes</span><span class="dg-chip" data-state="bad">n concats move n² / 2 bytes</span></div><div class="dg-cap">Read the third frame as a staircase: each step copies everything received so far. Ten thousand 1KB chunks is about 50 GB of copying to assemble 10 MB.</div></div></div><div class="hfdiag-foot"><span class="hint">two of these are linear · the third is the one that reaches production</span></div></div><p>The last row is the one that shows up in production, because it is invisible at small sizes. The loop is correct, the output is correct, and the cost is quadratic in the number of chunks — which is a property of the network, not of your data.</p></div></div></div><div class="major-section" id="sec-synthesis"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-y-models">7 · Wrong vs Correct</button><button class="sub-tab" data-sub="sub-y-lock">8 · Lock It In</button></div><div class="sub-panel active" id="sub-y-models"><div class="card main-edge"><div class="secnum">§ 7 · THE MODELS WORTH CORRECTING</div><h2>Ten claims about Buffers</h2><p>Most of these come from treating a Buffer as a string that happens to hold bytes, rather than as a window onto memory.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Which of these are true?</span></div><span class="badge">§7 · mental models</span></div><div class="hfdiag-body"><div data-instrument="models"></div></div><div class="hfdiag-foot"><span class="hint">sort before you check — a guess you have committed to is worth more than a correction you read</span></div></div><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>A Buffer is a view. Ask "whose memory is this, and who else can see it" and the surprises in this part stop being surprising.</p></div></div></div><div class="sub-panel" id="sub-y-lock"><div class="card main-edge"><div class="secnum">§ 8 · THE FOUR SENTENCES WORTH KEEPING</div><h2>If you remember nothing else</h2><p>The bytes are outside the heap, and you are holding a window onto them.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What to carry away</span></div><span class="badge">§8 · the four sentences</span></div><div class="hfdiag-body"><div class="dg"><div class="dg-row"><div class="dg-box" data-owner="kernel"><span class="dg-k">the bytes live outside the heap</span><span class="dg-v">the kernel needs a fixed address</span><span class="dg-s">§0 · §2</span></div><div class="dg-box" data-owner="worker"><span class="dg-k">allocUnsafe hands you a previous occupant</span><span class="dg-v">and buf.buffer is the slab</span><span class="dg-s">§2 · §3</span></div></div><div class="dg-row"><div class="dg-box" data-owner="node"><span class="dg-k">an encoding is a reading</span><span class="dg-v">and utf8 loses data silently</span><span class="dg-s">§4 · §5</span></div><div class="dg-box" data-owner="main"><span class="dg-k">subarray shares, concat copies</span><span class="dg-v">and per-chunk concat is quadratic</span><span class="dg-s">§6</span></div></div><div class="dg-cap">Four sentences, one window. Ask "whose memory is this, and who else can see it" and the surprises in this part stop being surprising.</div></div></div><div class="hfdiag-foot"><span class="hint">four sentences, one window</span></div></div><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What to carry away</span></div><span class="badge">§8 · the same thing as a list</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the bytes live outside the V8 heap</div><div class="hf-node-sub">§0 · §2</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Because the kernel needs an address that does not move and a garbage collector cannot promise one.</div></div><div class="hf-node" data-owner="worker"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">allocUnsafe hands you a previous occupant</div><div class="hf-node-sub">§2</div></div><div class="hf-node-tag t-worker">worker</div></div><div class="hf-node-detail">And small allocations are windows onto a shared 8KB slab, so <code>buf.buffer</code> is the slab rather than your bytes.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">an encoding is a reading, not a conversion</div><div class="hf-node-sub">§4 · §5</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">And <code>utf8</code> is the one that loses data silently — including when a character is split across two chunks.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">subarray shares, concat copies</div><div class="hf-node-sub">§6</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">Accumulating with <code>concat</code> in a loop is quadratic in the number of chunks. Collect into an array and concat once.</div></div></div></div><div class="hfdiag-foot"><span class="hint">four sentences, one window</span></div></div><p>Part 7 is about the thing that hands you these chunks in the first place: a stream is an EventEmitter from Part 2 with a queue of Buffers and a rule about when to stop filling it.</p></div></div></div></main>
+<footer><div>Mission 03 of the Node.js Internals campaign &nbsp;·&nbsp; <code>Buffer</code> · <code>allocUnsafe</code> · the 8KB pool · encodings · <code>concat</code></div>
+<div>The object is in the heap; the bytes are not</div></footer>
 <div class="glossary-pop" id="gpop"></div>
 <script>
 (function () {
@@ -4735,8 +5237,64 @@ process.env.UV_THREADPOOL_SIZE = 16;      // no effect, ever</pre></div></div><d
     "fs.readFile":       { cat:"node",   kind:"js", title:"fs.readFile()", body:"Part 5's subject: one pool job that holds a thread for the whole read. A readFile of a large file occupies its thread until the read completes." },
   });
 
+  Object.assign(glossary, {
+    "EventEmitter":      { cat:"main",   title:"EventEmitter",        body:"An object with a map from event name to an array of functions. on() pushes, emit() walks the array and calls each one — synchronously, on the caller's stack. Nearly every asynchronous API in Node is one." },
+    "emit":              { cat:"main",   kind:"js", title:"emit()",              body:"Walks the listener array for one event name and calls each function in registration order. It is a plain function call: it queues nothing and does not return until the last listener has finished." },
+    "_events":           { cat:"main",   title:"_events",             body:"The emitter's internal map, created with Object.create(null) so an event called \"constructor\" cannot collide with Object's prototype. One listener is stored as the function itself; two or more become an array." },
+    "_eventsCount":      { cat:"main",   title:"_eventsCount",        body:"An integer kept beside _events so that asking \"does this emitter have any listeners at all\" does not require walking the object." },
+    "once":              { cat:"node",   kind:"js", title:"once()",              body:"Registers a WRAPPER that removes itself and then calls your function. Removal happens first, which is why re-emitting the same event from inside a once handler does not re-enter it." },
+    "removeListener":    { cat:"node",   kind:"js", title:"removeListener()",    body:"Takes a listener off the array for one event. A removal during an emit does not affect that emit, because the loop is walking a copy taken before the first listener ran." },
+    "listener":          { cat:"main",   title:"a listener",          body:"An ordinary function in an emitter's array. It runs on the stack of whoever called emit, so a slow listener blocks that caller — the event name changes nothing about which thread runs it." },
+    "the error event":   { cat:"worker", title:"the error event",     body:"The only event name emit treats specially: with no listener registered for it, emit THROWS the error object instead of returning. On a stack inside libuv there is nothing above to catch it, so the process exits." },
+    "MaxListenersExceededWarning": { cat:"kernel", title:"MaxListenersExceededWarning", body:"Printed when an eleventh listener is added for one event on one emitter. It is a WARNING, not a limit — the listener is added and works. The threshold is a guess that an array growing without bound is a leak." },
+    "setMaxListeners":   { cat:"kernel", kind:"js", title:"setMaxListeners()",   body:"Raises or removes the warning threshold. Worth doing on the ONE emitter that legitimately needs many listeners; doing it process-wide removes the only signal a real leak produces." },
+    "uncaughtException": { cat:"worker", title:"uncaughtException",   body:"What an unhandled throw becomes when nothing on the stack catches it. By default it terminates the process — which is what an error event with no listener produces." },
+  });
+
+  Object.assign(glossary, {
+    "res.end":  { cat:"main", kind:"js", title:"res.end()", body:"Finishes the response and, once the bytes reach the socket, causes the response to emit finish. It means YOU are done writing — not that the client received anything." },
+  });
+
+  Object.assign(glossary, {
+    "Buffer":          { cat:"node",   title:"Buffer",            body:"A Uint8Array subclass whose bytes live in a C++ allocation outside the V8 heap — because the kernel needs an address that does not move and a garbage collector cannot promise one." },
+    "allocUnsafe":     { cat:"worker", kind:"js", title:"Buffer.allocUnsafe()", body:"Skips the zero-fill and, under 4KB, carves your bytes out of a shared 8KB slab. The memory has a PREVIOUS OCCUPANT: overwrite every byte you intend to send, or use Buffer.alloc." },
+    "Buffer.alloc":    { cat:"node",   kind:"js", title:"Buffer.alloc()",    body:"Its own allocation, zero-filled before you see it. The zeroing is the whole cost difference from allocUnsafe, and it is the right default for anything handed to code you do not control." },
+    "subarray":        { cat:"node",   kind:"js", title:"subarray()",        body:"Makes a new VIEW over the same memory — no copy, constant time. Writing through one is visible through the other, and the small view keeps the whole underlying allocation alive." },
+    "byteOffset":      { cat:"main",   title:"byteOffset",        body:"Where this view starts inside the underlying ArrayBuffer. For a pooled Buffer it is rarely 0, which is why buf.buffer is the slab rather than your bytes." },
+    ".buffer":         { cat:"kernel", title:"buf.buffer",        body:"The underlying ArrayBuffer — for a pooled Buffer, the whole 8KB slab shared with unrelated Buffers. Handing it to an API hands over everything sharing that slab, not just your bytes." },
+    "ArrayBuffer":     { cat:"kernel", title:"ArrayBuffer",       body:"A block of raw bytes outside the V8 heap. A Buffer is a window onto one, described by a byteOffset and a length." },
+    "Buffer.concat":   { cat:"main",   kind:"js", title:"Buffer.concat()",   body:"Allocates a new buffer of the combined length and copies every input into it. Correct called once at the end; quadratic if called per chunk in a loop." },
+    "StringDecoder":   { cat:"node",   title:"StringDecoder",     body:"Holds back the incomplete bytes at the end of a chunk and prepends them to the next one, so a multi-byte character split by a chunk boundary decodes correctly." },
+    "toString":        { cat:"main",   kind:"js", title:"buf.toString()",    body:"READS the bytes under an encoding and allocates a string in the V8 heap. Nothing in the buffer changes — and decoding a 100MB buffer leaves you holding roughly 200MB." },
+    "utf8":            { cat:"node",   title:"utf8",              body:"One to four bytes per character. The only reading here that can LOSE data: invalid sequences become U+FFFD, nothing warns, and the substitution is not reversible." },
+    "latin1":          { cat:"node",   title:"latin1",            body:"One byte, one character, all 256 of them — lossless in both directions. The reading to use when arbitrary bytes must pass through a string-shaped API intact." },
+    "poolSize":        { cat:"kernel", title:"Buffer.poolSize",   body:"The size of the slab allocUnsafe carves from, 8KB by default. Requests over half of it get their own allocation instead of a window onto the shared block." },
+  });
+
   const aliases = {};
   Object.keys(glossary).forEach(function (k) { aliases[k.toLowerCase()] = k; });
+  Object.assign(aliases, {
+    "buffer":"Buffer", "a buffer":"Buffer", "buffers":"Buffer",
+    "buffer.allocunsafe":"allocUnsafe", "allocunsafe":"allocUnsafe", "allocunsafe()":"allocUnsafe",
+    "buffer.alloc":"Buffer.alloc", "buffer.alloc()":"Buffer.alloc", "alloc":"Buffer.alloc",
+    "subarray":"subarray", "subarray()":"subarray", "slice":"subarray",
+    "byteoffset":"byteOffset", "buf.buffer":".buffer", ".buffer":".buffer",
+    "arraybuffer":"ArrayBuffer", "buffer.concat":"Buffer.concat", "buffer.concat()":"Buffer.concat",
+    "concat":"Buffer.concat", "stringdecoder":"StringDecoder",
+    "tostring":"toString", "tostring()":"toString", "buf.tostring()":"toString",
+    "utf8":"utf8", "latin1":"latin1", "poolsize":"poolSize", "buffer.poolsize":"poolSize",
+  });
+  Object.assign(aliases, { "res.end":"res.end", "res.end()":"res.end", });
+  Object.assign(aliases, {
+    "eventemitter":"EventEmitter", "an eventemitter":"EventEmitter", "emitter":"EventEmitter",
+    "emit()":"emit", "emit":"emit", "on()":"listener", "once()":"once",
+    "removelistener":"removeListener", "removelistener()":"removeListener",
+    "_events":"_events", "_eventscount":"_eventsCount",
+    "\'error\'":"the error event", "error event":"the error event",
+    "setmaxlisteners":"setMaxListeners", "setmaxlisteners()":"setMaxListeners",
+    "maxlistenersexceededwarning":"MaxListenersExceededWarning",
+    "uncaught exception":"uncaughtException", "uncaughtexception":"uncaughtException",
+  });
   Object.assign(aliases, {
     "uv_threadpool_size":"UV_THREADPOOL_SIZE",
     "worker_thread":"worker_thread", "worker_threads":"worker_thread",
@@ -4947,7 +5505,11 @@ process.env.UV_THREADPOOL_SIZE = 16;      // no effect, ever</pre></div></div><d
        diagram. The extension had gone into parts 10 and 11 only. */
     document.querySelectorAll(".card p, .card li, .cv-line, .cv-foot, .cv-legend, " +
                              ".cv-sched-detail, .cv-cap, .hf-node-detail, " +
-                             ".hf-node-title, .hf-node-sub")
+                             ".hf-node-title, .hf-node-sub, " +
+                             /* the diagram vocabulary and the state instruments
+                                introduce terms of their own — they are labels in a
+                                figure, and a reader wants the same doors there */
+                             ".dg-v, .dg-s, .dg-cap, .es-field, .ss-hwm, .vw-k")
       .forEach(function (host) {
       if (host.closest("pre, .code-block")) return;
       /* <em> carries terms too — "the worker pool", "socket" — and was never
@@ -6418,224 +6980,341 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
   else setTimeout(highlightAll, 0);
 
   /* ══════════════════════════════════════════════════════════════════
-     INSTRUMENT · "two routes to a name"  (§3)
-     dns.lookup and dns.resolve look like variants of one function and
-     are not: one takes a pool thread, one is watched by the loop like
-     any other socket. The control is lookup, because it is the one
-     almost every client library calls without saying so.
+     INSTRUMENT · "where the bytes come from"  (§2)
+     alloc, allocUnsafe and the 8KB pool differ in two ways that matter:
+     whether the memory is zero-filled, and whether it is a window onto
+     a slab shared with unrelated Buffers. The control is allocUnsafe,
+     because it is the one that hands you a previous occupant.
      ══════════════════════════════════════════════════════════════════ */
-  const DN_ROUTES = [
-    { id:"lookup", label:"dns.lookup('api.example.com')", control:true,
-      lane:"pool", thread:"one pool thread, held until it answers",
-      consults:"the operating system — hosts file, nsswitch, mDNS, everything",
-      queues:"yes — behind fs, crypto and zlib",
-      why:"<strong>The control.</strong> It calls <code>getaddrinfo</code>, the system " +
-          "resolver, and that API is BLOCKING — so it needs a thread even though the " +
-          "work is network work. This is the route <code>http.request</code>, " +
-          "<code>fetch</code> and almost every database driver take when you give them a " +
-          "hostname, which means a service making many outbound connections submits pool " +
-          "jobs it never wrote." },
-    { id:"resolve", label:"dns.resolve('api.example.com')", control:false,
-      lane:"loop", thread:"none — no thread is involved at all",
-      consults:"a DNS server directly, over UDP or TCP",
-      queues:"no — it never enters the pool queue",
-      why:"It sends a DNS query over a socket, and a socket has a readiness interface, " +
-          "so the loop watches it exactly as it watches everything in Parts 8 and 9. " +
-          "Same question, opposite mechanism — and it skips the hosts file, which is " +
-          "sometimes the reason to choose it and sometimes the reason not to." },
-    { id:"cached", label:"the same lookup, second time", control:false,
-      lane:"pool", thread:"a pool thread again — Node does not cache",
-      consults:"the OS resolver again (which may have its own cache)",
-      queues:"yes — every call is a fresh job",
-      why:"Node keeps no DNS cache of its own. Any caching happens below it, in the " +
-          "system resolver, so from the pool's point of view the tenth lookup costs a " +
-          "thread exactly like the first." },
+  const AL_POOL = 8192;
+  const AL_CASES = [
+    { id:"alloc", label:"Buffer.alloc(100)", control:false,
+      size:100, slab:100, offset:0, zeroed:true, pooled:false,
+      cost:"allocates 100 bytes, then writes 100 zeros",
+      note:"Its own allocation, zero-filled before you see it. The zeroing is the whole " +
+           "cost difference — a memset over the length you asked for — and it is what " +
+           "makes this the right default for anything you will hand to code you do not " +
+           "control." },
+    { id:"unsafe", label:"Buffer.allocUnsafe(100)", control:true,
+      size:100, slab:AL_POOL, offset:168, zeroed:false, pooled:true,
+      cost:"carves 100 bytes out of the existing slab",
+      note:"<strong>The control.</strong> No zeroing and no fresh allocation: you get a " +
+           "window onto the shared 8KB pool, starting wherever the last allocation " +
+           "ended. The bytes are whatever the PREVIOUS OCCUPANT left — a fragment of an " +
+           "earlier request, a decoded token, anything. Overwrite every byte you intend " +
+           "to send, or use alloc." },
+    { id:"unsafebig", label:"Buffer.allocUnsafe(64 * 1024)", control:false,
+      size:65536, slab:65536, offset:0, zeroed:false, pooled:false,
+      cost:"allocates 64KB directly, no zeroing",
+      note:"Above half the pool size, Node stops carving and allocates directly — so a " +
+           "large allocUnsafe is its OWN ArrayBuffer, not a window. Still not zeroed, " +
+           "but at least nothing else is looking at the same slab." },
+    { id:"from", label:'Buffer.from("hello")', control:false,
+      size:5, slab:AL_POOL, offset:168, zeroed:true, pooled:true,
+      cost:"carves 5 bytes and writes your data over all of them",
+      note:"Pooled like allocUnsafe, but every byte is written by the copy, so there is " +
+           "no previous occupant left to leak. The lesson is not <em>from is safe</em> " +
+           "but <em>fully overwritten is safe</em> — the same rule stated positively." },
   ];
-  const DN_LANES = { pool:"the libuv pool", loop:"the event loop, no thread" };
 
-  function mountDns() {
-    const host = document.querySelector('[data-instrument="dns"]');
+  function mountAlloc() {
+    const host = document.querySelector('[data-instrument="alloc"]');
     if (!host) return false;
     const wrap = document.createElement("div");
-    wrap.className = "dn";
+    wrap.className = "al";
     wrap.innerHTML =
-      '<div class="dn-pick">' + DN_ROUTES.map(function (r, i) {
-        return '<button class="dn-btn' + (i === 0 ? " on" : "") + '" data-route="' + r.id + '">' +
-          r.label + (r.control ? '<span class="dn-ctrlmark">control</span>' : "") + "</button>"; }).join("") +
+      '<div class="al-pick">' + AL_CASES.map(function (c, i) {
+        return '<button class="al-btn' + (i === 0 ? " on" : "") + '" data-case="' + c.id + '">' +
+          c.label + (c.control ? '<span class="al-ctrlmark">control</span>' : "") + "</button>"; }).join("") +
       "</div>" +
-      '<div class="dn-lanes"></div>' +
-      '<div class="dn-facts"></div>' +
-      '<div class="dn-say"></div>';
+      '<div class="al-slab"></div>' +
+      '<div class="al-meters"></div>' +
+      '<div class="al-say"></div>';
     host.appendChild(wrap);
 
-    let r = DN_ROUTES[0];
+    let c = AL_CASES[0];
     function render() {
-      wrap.querySelector(".dn-lanes").innerHTML = Object.keys(DN_LANES).map(function (k) {
-        return '<span class="dn-lane' + (k === r.lane ? " on" : "") + '" data-lane="' + k + '">' +
-          DN_LANES[k] + "</span>"; }).join("");
-      const cell = function (k, v, bad) {
-        return '<div class="dn-cell"><span class="dn-cell-k">' + k + '</span>' +
-          '<span class="dn-cell-v' + (bad ? " no" : "") + '">' + v + "</span></div>"; };
-      wrap.querySelector(".dn-facts").innerHTML =
-        cell("thread cost", r.thread, r.lane === "pool") +
-        cell("what it asks", r.consults) +
-        cell("queues with fs / crypto / zlib", r.queues, r.queues.indexOf("yes") === 0);
-      wrap.querySelector(".dn-say").innerHTML = r.why;
+      const pct = function (n) { return Math.max(0.6, (n / c.slab) * 100); };
+      wrap.querySelector(".al-slab").innerHTML =
+        '<div class="al-bar" data-pooled="' + (c.pooled ? "1" : "0") + '">' +
+          (c.offset ? '<span class="al-prev" style="width:' + pct(c.offset) + '%"></span>' : "") +
+          '<span class="al-yours" style="width:' + pct(c.size) + '%"></span>' +
+          (c.pooled && c.slab > c.size + c.offset
+            ? '<span class="al-rest" style="width:' + pct(c.slab - c.size - c.offset) + '%"></span>' : "") +
+        "</div>" +
+        '<div class="al-legend">' +
+          (c.offset ? '<span class="al-key al-key-prev">earlier allocations</span>' : "") +
+          '<span class="al-key al-key-yours">your ' + c.size + ' bytes</span>' +
+          (c.pooled && c.slab > c.size + c.offset
+            ? '<span class="al-key al-key-rest">the rest of the slab</span>' : "") +
+        "</div>";
+      const m = function (l, v, good) {
+        return '<div class="al-meter"><span class="al-m-k">' + l + '</span><span class="al-m-v' +
+          (good === true ? " yes" : good === false ? " no" : "") + '">' + v + "</span></div>"; };
+      wrap.querySelector(".al-meters").innerHTML =
+        m("buf.length", String(c.size)) +
+        m("buf.buffer.byteLength", String(c.slab), !c.pooled) +
+        m("zero-filled before you see it", c.zeroed ? "yes" : "NO", c.zeroed) +
+        m("what it costs", c.cost);
+      wrap.querySelector(".al-say").innerHTML = c.note;
+      wrap.classList.toggle("is-control", !!c.control);
+    }
+    wrap.addEventListener("click", function (e) {
+      const b = e.target.closest("[data-case]"); if (!b) return;
+      wrap.querySelectorAll("[data-case]").forEach(function (x) { x.classList.remove("on"); });
+      b.classList.add("on");
+      c = AL_CASES.find(function (x) { return x.id === b.dataset.case; });
+      render();
+    });
+    render();
+    window.__alCases = AL_CASES; window.__alPool = AL_POOL;
+    return true;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     INSTRUMENT · "one buffer, five readings"  (§4)
+     The bytes never change. An encoding tells toString how to read
+     them. The control is utf8 over bytes that are not valid UTF-8,
+     because it is the only reading that LOSES information — and it
+     does it without saying so.
+     ══════════════════════════════════════════════════════════════════ */
+  const EN_BYTES = [0x48, 0x65, 0x6c, 0x6c, 0x6f, 0xf0, 0x9f, 0x91, 0x8b];
+  const EN_BAD   = [0x48, 0x69, 0xff, 0xfe, 0x80];
+  const EN_READINGS = [
+    { id:"utf8",   label:"utf8",   bytes:EN_BYTES, out:'"Hello\u{1F44B}"', lossy:false,
+      groups:[1,1,1,1,1,4], glyphs:["H","e","l","l","o","\u{1F44B}"],
+      note:"The default, and the only multi-byte reading here. Those last four bytes are " +
+           "ONE character — which is exactly why a chunk boundary can land in the middle " +
+           "of it, and why §5 exists." },
+    { id:"ascii",  label:"ascii",  bytes:EN_BYTES, out:'"Hello p\\u0019\\u0011\\b"', lossy:true,
+      groups:[1,1,1,1,1,1,1,1,1], glyphs:["H","e","l","l","o","p","\u2400","\u2400","\u2400"],
+      note:"Takes the low seven bits of every byte and discards the eighth. It never " +
+           "fails and never warns; it simply produces different characters for anything " +
+           "above 127." },
+    { id:"latin1", label:"latin1", bytes:EN_BYTES, out:'"Helloð\\u009f\\u0091\\u008b"', lossy:false,
+      note:"One byte, one character, all 256 of them. Lossless in BOTH directions, which " +
+           "makes it the reading to reach for when you need to move arbitrary bytes " +
+           "through a string-shaped API without corrupting them." },
+    { id:"hex",    label:"hex",    bytes:EN_BYTES, out:'"48656c6c6ff09f918b"', lossy:false,
+      groups:[1,1,1,1,1,1,1,1,1], glyphs:["48","65","6c","6c","6f","f0","9f","91","8b"],
+      note:"Two characters per byte, so the output is exactly twice the input and " +
+           "always lossless. This is the reading to reach for when you want to LOOK " +
+           "at bytes rather than interpret them — a checksum, a key, a protocol " +
+           "header you are debugging. Nothing here is text; it is a rendering of " +
+           "numbers." },
+    { id:"base64", label:"base64", bytes:EN_BYTES, out:'"SGVsbG/wn5GL"', lossy:false,
+      groups:[3,3,3], glyphs:["SGVs","bG/w","n5GL"],
+      note:"Three bytes become four characters. Lossless and about a third larger — the " +
+           "usual choice for putting binary inside JSON, which cannot hold bytes." },
+    { id:"lossy",  label:"utf8, over invalid bytes", bytes:EN_BAD, out:'"Hi\\uFFFD\\uFFFD\\uFFFD"',
+      lossy:true, control:true,
+      groups:[1,1,1,1,1], glyphs:["H","i","\uFFFD","\uFFFD","\uFFFD"],
+      note:"<strong>The control.</strong> 0xff, 0xfe and 0x80 are not valid UTF-8, so " +
+           "each becomes U+FFFD, the replacement character. Nothing throws and nothing " +
+           "warns — and the substitution is NOT reversible, so writing this string back " +
+           "out produces different bytes than came in. This is how binary data gets " +
+           "quietly corrupted by a round trip through a string." },
+  ];
+
+  function mountEncode() {
+    const host = document.querySelector('[data-instrument="encode"]');
+    if (!host) return false;
+    const wrap = document.createElement("div");
+    wrap.className = "en";
+    wrap.innerHTML =
+      '<div class="en-pick">' + EN_READINGS.map(function (r, i) {
+        return '<button class="en-btn' + (i === 0 ? " on" : "") + '" data-enc="' + r.id + '">' +
+          r.label + (r.control ? '<span class="en-ctrlmark">control</span>' : "") + "</button>"; }).join("") +
+      "</div>" +
+      '<div class="en-bytes"></div>' +
+      '<div class="en-out"></div>' +
+      '<div class="en-say"></div>';
+    host.appendChild(wrap);
+
+    let r = EN_READINGS[0];
+    function render() {
+      /* ── THE GRID ─────────────────────────────────────────────────
+         An encoding is a READING, so draw the reading: each output unit
+         sits under the bytes it consumed, spanning them. utf8 grouping
+         four bytes into one glyph while hex takes them one at a time is
+         the entire idea, and it is visible at a glance rather than
+         asserted in a caption. */
+      let cells = "", gi = 0, consumed = 0;
+      r.bytes.forEach(function (b, k) {
+        cells += '<span class="en-byte" style="grid-column:' + (k + 1) + '">' +
+          b.toString(16).padStart(2, "0") + "</span>";
+      });
+      let spans = "";
+      (r.groups || r.bytes.map(function () { return 1; })).forEach(function (n) {
+        const glyph = (r.glyphs && r.glyphs[gi] !== undefined) ? r.glyphs[gi] : "?";
+        spans += '<span class="en-glyph' + (n > 1 ? " multi" : "") +
+          (r.lossy && glyph === "\uFFFD" ? " bad" : "") +
+          '" style="grid-column:' + (consumed + 1) + " / span " + n + '">' +
+          '<em>' + glyph + "</em>" +
+          '<i>' + n + (n > 1 ? " bytes" : " byte") + "</i></span>";
+        consumed += n; gi++;
+      });
+      wrap.querySelector(".en-bytes").innerHTML =
+        '<div class="en-k">the bytes, unchanged</div>' +
+        '<div class="en-grid" style="--n:' + r.bytes.length + '">' + cells + spans + "</div>" +
+        '<div class="en-k en-k2">what one <code>toString("' +
+          (r.id === "lossy" ? "utf8" : r.id) + '")</code> reads out of them</div>';
+      wrap.querySelector(".en-out").innerHTML =
+        '<span class="en-k">buf.toString("' + (r.id === "lossy" ? "utf8" : r.id) + '")</span>' +
+        '<code class="en-val' + (r.lossy ? " lossy" : "") + '">' + r.out + "</code>" +
+        '<span class="en-tag' + (r.lossy ? " lossy" : "") + '">' +
+          (r.lossy ? "LOSSY — not reversible" : "lossless") + "</span>";
+      wrap.querySelector(".en-say").innerHTML = r.note;
       wrap.classList.toggle("is-control", !!r.control);
     }
     wrap.addEventListener("click", function (e) {
-      const b = e.target.closest("[data-route]"); if (!b) return;
-      wrap.querySelectorAll("[data-route]").forEach(function (x) { x.classList.remove("on"); });
+      const b = e.target.closest("[data-enc]"); if (!b) return;
+      wrap.querySelectorAll("[data-enc]").forEach(function (x) { x.classList.remove("on"); });
       b.classList.add("on");
-      r = DN_ROUTES.find(function (x) { return x.id === b.dataset.route; });
+      r = EN_READINGS.find(function (x) { return x.id === b.dataset.enc; });
       render();
     });
     render();
-    window.__dnRoutes = DN_ROUTES; window.__dnLanes = DN_LANES;
+    window.__enReadings = EN_READINGS;
     return true;
   }
 
   /* ══════════════════════════════════════════════════════════════════
-     INSTRUMENT · "four threads, one queue"  (§4)
-     Part 5 saturated the pool with file reads — one subsystem, held
-     constant. This one mixes subsystems, because a queue shared by
-     strangers is the case nobody plans for: the job that saturates it
-     is rarely the one that looks slow.
+     INSTRUMENT · "a character across a boundary"  (§5)
+     Two chunks split a four-byte emoji down the middle. Three
+     strategies, and the control is the one that looks correct on every
+     ASCII test you will ever write.
      ══════════════════════════════════════════════════════════════════ */
-  const SA_JOBS = [
-    { id:"gzip1", sub:"zlib",   label:"gzip 8MB",        ms:180 },
-    { id:"gzip2", sub:"zlib",   label:"gzip 8MB",        ms:180 },
-    { id:"gzip3", sub:"zlib",   label:"gzip 8MB",        ms:180 },
-    { id:"pbkdf", sub:"crypto", label:"pbkdf2 600k",     ms:240 },
-    { id:"dns1",  sub:"dns",    label:"dns.lookup",      ms:2   },
-    { id:"read1", sub:"fs",     label:"readFile 2MB",    ms:20  },
-    { id:"dns2",  sub:"dns",    label:"dns.lookup",      ms:2   },
-  ];
-  const SA_MODES = [
-    { id:"four",  size:4,  label:"the default · 4 threads", control:false,
-      note:"Four threads, seven jobs, one first-in-first-out queue. The two DNS lookups " +
-           "take two milliseconds of actual work each — and they are submitted behind " +
-           "three compressions and a key derivation, so that is not what they cost." },
-    { id:"eight", size:8,  label:"UV_THREADPOOL_SIZE=8", control:false,
-      note:"Every job starts immediately because there are more threads than jobs. This " +
-           "is what raising the size buys: it does not make any job faster, it stops jobs " +
-           "waiting for each other." },
-    { id:"one",   size:1,  label:"UV_THREADPOOL_SIZE=1", control:true,
-      note:"<strong>The control.</strong> One thread, and the queue becomes a straight " +
-           "line: every job waits for every job in front of it. The DNS lookup submitted " +
-           "last finishes after everything else, having done two milliseconds of work. " +
-           "The pool did not get slower — it got serialised, and the wait IS the cost." },
+  const SP_CHUNK_A = [0x48, 0x69, 0x20, 0xf0, 0x9f];   /* "Hi " + first half */
+  const SP_CHUNK_B = [0x91, 0x8b, 0x21];               /* second half + "!" */
+  const SP_STRATS = [
+    { id:"perchunk", label:"toString() on each chunk", control:true,
+      out:['"Hi \\uFFFD\\uFFFD"', '"\\uFFFD\\uFFFD!"'], joined:'"Hi \\uFFFD\\uFFFD\\uFFFD\\uFFFD!"',
+      correct:false,
+      note:"<strong>The control.</strong> Each chunk is decoded on its own, so the " +
+           "half-character at the end of the first becomes replacement characters — and " +
+           "so does the half at the start of the second. FOUR of them, where there should " +
+           "be one emoji. Every byte arrived intact; the decoding threw the character " +
+           "away. On ASCII test data this strategy is indistinguishable from correct." },
+    { id:"decoder", label:"a StringDecoder across chunks", control:false,
+      out:['"Hi "', '"\u{1F44B}!"'], joined:'"Hi \u{1F44B}!"', correct:true,
+      note:"The decoder holds back the incomplete bytes at the end of chunk one and " +
+           "prepends them to chunk two. Same idea as the HTTP parser holding partial " +
+           "headers in Part 9: a boundary in the byte stream is not a boundary in the " +
+           "data." },
+    { id:"concat", label:"collect, then decode once", control:false,
+      out:["(nothing yet)", '"Hi \u{1F44B}!"'], joined:'"Hi \u{1F44B}!"', correct:true,
+      note:"Push every chunk into an array, <code>Buffer.concat</code> at the end, decode " +
+           "the result. Always correct, and the simplest thing to reason about — at the " +
+           "cost of holding the whole payload in memory, which is precisely the trade the " +
+           "next part is about." },
   ];
 
-  function saSimulate(size) {
-    const free = new Array(size).fill(0);
-    const rows = SA_JOBS.map(function (j) {
-      let t = 0, k = 0;
-      for (let i = 1; i < size; i++) if (free[i] < free[k]) k = i;
-      t = free[k];
-      free[k] = t + j.ms;
-      return { id: j.id, sub: j.sub, label: j.label, ms: j.ms,
-               start: t, end: t + j.ms, wait: t, thread: k };
-    });
-    const dns = rows.filter(function (r) { return r.sub === "dns"; });
-    return { rows: rows, span: Math.max.apply(null, rows.map(function (r) { return r.end; })),
-             worstWait: Math.max.apply(null, rows.map(function (r) { return r.wait; })),
-             dnsWait: Math.max.apply(null, dns.map(function (r) { return r.wait; })),
-             dnsWork: Math.max.apply(null, dns.map(function (r) { return r.ms; })) };
-  }
-
-  function mountSat() {
-    const host = document.querySelector('[data-instrument="sat"]');
+  function mountSplit() {
+    const host = document.querySelector('[data-instrument="split"]');
     if (!host) return false;
     const wrap = document.createElement("div");
-    wrap.className = "sa";
+    wrap.className = "sp";
     wrap.innerHTML =
-      '<div class="sa-pick">' + SA_MODES.map(function (m, i) {
-        return '<button class="sa-btn' + (i === 0 ? " on" : "") + '" data-mode="' + m.id + '">' +
-          m.label + (m.control ? '<span class="sa-ctrlmark">control</span>' : "") + "</button>"; }).join("") +
+      '<div class="sp-pick">' + SP_STRATS.map(function (s, i) {
+        return '<button class="sp-btn' + (i === 0 ? " on" : "") + '" data-strat="' + s.id + '">' +
+          s.label + (s.control ? '<span class="sp-ctrlmark">control</span>' : "") + "</button>"; }).join("") +
       "</div>" +
-      '<div class="sa-rows"></div>' +
-      '<div class="sa-meters"></div>' +
-      '<div class="sa-say"></div>';
+      '<div class="sp-wire"></div>' +
+      '<div class="sp-rows"></div>' +
+      '<div class="sp-say"></div>';
     host.appendChild(wrap);
 
-    let mode = SA_MODES[0];
+    let s = SP_STRATS[0];
     function render() {
-      const sim = saSimulate(mode.size);
-      wrap.querySelector(".sa-rows").innerHTML = sim.rows.map(function (r) {
-        const w = (r.wait / sim.span) * 100, run = (r.ms / sim.span) * 100;
-        return '<div class="sa-row"><span class="sa-label" data-sub="' + r.sub + '">' +
-          r.label + "</span>" +
-          '<div class="sa-track"><span class="sa-wait" style="width:' + w + '%"></span>' +
-          '<span class="sa-run" data-sub="' + r.sub + '" style="width:' + Math.max(1.2, run) +
-          '%"></span></div>' +
-          '<span class="sa-num">' + (r.wait ? "+" + r.wait + "ms wait" : "starts now") +
-          "</span></div>"; }).join("");
-      const m = function (l, v, good) {
-        return '<div class="sa-meter"><span class="sa-m-k">' + l + '</span><span class="sa-m-v' +
-          (good === true ? " yes" : good === false ? " no" : "") + '">' + v + "</span></div>"; };
-      wrap.querySelector(".sa-meters").innerHTML =
-        m("pool threads", String(mode.size), mode.size >= SA_JOBS.length) +
-        m("a dns.lookup does", sim.dnsWork + " ms of work") +
-        m("but waits", sim.dnsWait + " ms", sim.dnsWait === 0) +
-        m("everything finished by", sim.span + " ms", false);
-      wrap.querySelector(".sa-say").innerHTML = mode.note;
-      wrap.classList.toggle("is-control", !!mode.control);
+      /* ── ONE TRACK, TWO CHUNKS, A CHARACTER SPANNING THE SEAM ────
+         The claim is that a character crosses a boundary. Two separate
+         rows of bytes cannot show a crossing, so both chunks are laid
+         out in ONE grid and the character is drawn as a bracket
+         SPANNING the seam — the seam being a line the grid runs
+         straight through. */
+      const A = SP_CHUNK_A, B = SP_CHUNK_B, n = A.length + B.length;
+      let cells = "";
+      A.concat(B).forEach(function (b, k) {
+        const half = (k >= 3 && k <= 6);
+        cells += '<span class="sp-byte' + (half ? " half" : "") +
+          '" style="grid-column:' + (k + 1) + '">' +
+          b.toString(16).padStart(2, "0") + "</span>";
+      });
+      wrap.querySelector(".sp-wire").innerHTML =
+        '<div class="sp-labels"><span>chunk 1 · ' + A.length + " bytes</span>" +
+          "<span>chunk 2 · " + B.length + " bytes</span></div>" +
+        '<div class="sp-grid" style="--n:' + n + '">' + cells +
+          '<span class="sp-seam" style="grid-column:' + (A.length + 1) + '"></span>' +
+          '<span class="sp-span" style="grid-column:4 / span 4"><em>one character</em></span>' +
+        "</div>" +
+        '<div class="sp-hint">the boundary falls INSIDE those four bytes — the seam is ' +
+        'where one <code>data</code> event ended and the next began</div>';
+
+      wrap.querySelector(".sp-rows").innerHTML =
+        '<div class="sp-row"><span class="sp-k">after chunk 1</span><code>' + s.out[0] + "</code></div>" +
+        '<div class="sp-row"><span class="sp-k">after chunk 2</span><code>' + s.out[1] + "</code></div>" +
+        '<div class="sp-row result"><span class="sp-k">what you end up with</span><code class="' +
+          (s.correct ? "ok" : "bad") + '">' + s.joined + "</code>" +
+          '<span class="sp-verdict ' + (s.correct ? "ok" : "bad") + '">' +
+          (s.correct ? "correct" : "CORRUPTED") + "</span></div>";
+      wrap.querySelector(".sp-say").innerHTML = s.note;
+      wrap.classList.toggle("is-control", !!s.control);
     }
     wrap.addEventListener("click", function (e) {
-      const b = e.target.closest("[data-mode]"); if (!b) return;
-      wrap.querySelectorAll("[data-mode]").forEach(function (x) { x.classList.remove("on"); });
+      const b = e.target.closest("[data-strat]"); if (!b) return;
+      wrap.querySelectorAll("[data-strat]").forEach(function (x) { x.classList.remove("on"); });
       b.classList.add("on");
-      mode = SA_MODES.find(function (x) { return x.id === b.dataset.mode; });
+      s = SP_STRATS.find(function (x) { return x.id === b.dataset.strat; });
       render();
     });
     render();
-    window.__saSimulate = saSimulate; window.__saModes = SA_MODES; window.__saJobs = SA_JOBS;
+    window.__spStrats = SP_STRATS; window.__spChunks = [SP_CHUNK_A, SP_CHUNK_B];
     return true;
   }
 
   /* ══════════════════════════════════════════════════════════════════
-     INSTRUMENT · "which of these are true?"  (§6)
+     INSTRUMENT · "which of these are true?"  (§7)
      ══════════════════════════════════════════════════════════════════ */
-  const TM_ITEMS = [
-    { id:"fsonly", t:"The thread pool exists for filesystem work.", ans:false,
-      why:"Four subsystems use it: fs, dns.lookup, the async crypto functions and all of " +
-          "zlib. They share one queue and four threads, and none of them knows the others " +
-          "are there." },
-    { id:"shared", t:"A zlib job can delay a DNS lookup.", ans:true,
-      why:"<strong>True</strong>, and it is the same fact as the statement above stated " +
-          "the right way round. The queue is first-in-first-out and jobs are not " +
-          "preemptible, so a lookup submitted behind four compressions waits for them." },
-    { id:"sockets", t:"Network sockets are handled by the pool.", ans:false,
-      why:"They are watched, not waited on. A socket has a readiness interface, so one " +
-          "thread holds ten thousand of them — Parts 8 and 9. Raising the pool size does " +
-          "nothing for a socket-bound server." },
-    { id:"dnslookup", t:"dns.lookup takes a pool thread; dns.resolve does not.", ans:true,
-      why:"<strong>True.</strong> lookup calls the blocking system resolver and needs a " +
-          "thread; resolve sends a query over a socket the loop can watch. Almost every " +
-          "client library uses lookup without saying so." },
-    { id:"cryptoall", t:"All crypto functions use the pool.", ans:false,
-      why:"Only the ASYNC forms. <code>pbkdf2Sync</code>, <code>scryptSync</code> and " +
-          "<code>randomBytesSync</code> run on the main thread and block the loop for " +
-          "their full duration — the same trap as readFileSync." },
-    { id:"sizelate", t:"Setting UV_THREADPOOL_SIZE at the top of your file always works.", ans:false,
-      why:"Only if nothing has used the pool yet. It is read ONCE, when the pool is " +
-          "created lazily at first use — so a require that touches fs above your line has " +
-          "already fixed the size, silently." },
-    { id:"nodecache", t:"Node caches DNS results, so repeat lookups are free.", ans:false,
-      why:"Node keeps no DNS cache. Any caching happens below it in the system resolver, " +
-          "so from the pool's point of view the tenth lookup costs a thread exactly like " +
-          "the first." },
-    { id:"morethreads", t:"Raising the pool size makes each job faster.", ans:false,
-      why:"It makes jobs stop WAITING for each other. Each job takes exactly as long as " +
-          "it did — and past your core count the threads compete for cores, which is Part " +
-          "6's curve with the same shape." },
-    { id:"nojs", t:"A CPU-heavy loop of your own can be sent to the pool.", ans:false,
-      why:"Pool threads have no V8 isolate, so they cannot run JavaScript at all. That is " +
-          "what a <code>worker_thread</code> is for — Part 10." },
-    { id:"symptom", t:"The subsystem that looks slow is usually the one saturating the pool.", ans:false,
-      why:"Usually the opposite. A cheap job queued behind expensive ones is the one that " +
-          "shows up as a timeout, so the symptom names the victim rather than the cause." },
+  const BF_ITEMS = [
+    { id:"heap", t:"A Buffer's bytes live in the V8 heap.", ans:false,
+      why:"They live in a C++ allocation outside it. The kernel and pool threads need an " +
+          "address that does not move, and a garbage collector that relocates objects " +
+          "cannot promise one." },
+    { id:"typed", t:"A Buffer is a Uint8Array.", ans:true,
+      why:"<strong>True</strong> — it is a subclass. Indexable, iterable, with a length, " +
+          "and <code>instanceof Uint8Array</code> returns true. The only unusual thing is " +
+          "where the bytes are." },
+    { id:"unsafezero", t:"allocUnsafe returns zeroed memory, just faster.", ans:false,
+      why:"It returns whatever the PREVIOUS OCCUPANT left. Skipping the zeroing is the " +
+          "entire speed difference — so if you do not overwrite every byte, you keep " +
+          "someone else's data." },
+    { id:"pool", t:"buf.buffer is an ArrayBuffer of exactly buf.length bytes.", ans:false,
+      why:"For a pooled Buffer it is the whole 8KB SLAB, and your bytes start at " +
+          "<code>byteOffset</code>. Handing <code>buf.buffer</code> to an API hands it " +
+          "everything sharing the slab." },
+    { id:"subarray", t:"subarray() copies the bytes into a new buffer.", ans:false,
+      why:"It makes a new VIEW over the same memory. Writing through one is visible " +
+          "through the other — and the small slice keeps the whole underlying allocation " +
+          "alive." },
+    { id:"encoding", t:"toString('hex') converts the buffer to hex.", ans:false,
+      why:"It READS the same bytes as hex. Nothing in memory changes — an encoding is a " +
+          "lens, and the buffer is identical before and after." },
+    { id:"utf8lossy", t:"Reading arbitrary bytes as utf8 can lose data silently.", ans:true,
+      why:"<strong>True.</strong> Invalid sequences become U+FFFD, nothing throws, and " +
+          "the substitution is not reversible — so a round trip through a string produces " +
+          "different bytes than came in." },
+    { id:"split", t:"A multi-byte character can be split across two data events.", ans:true,
+      why:"<strong>True</strong>, and it is why StringDecoder exists. A chunk boundary " +
+          "lands wherever the network put it, and it has no idea where your characters " +
+          "begin — Parts 8 and 9." },
+    { id:"concatloop", t:"Accumulating with Buffer.concat in a loop is fine.", ans:false,
+      why:"It is quadratic: every chunk copies everything received so far. Ten thousand " +
+          "1KB chunks copies about 50 GB to build 10 MB. Push into an array and concat " +
+          "ONCE." },
+    { id:"tostringfree", t:"buf.toString() is cheap because the bytes already exist.", ans:false,
+      why:"It allocates a string IN THE V8 HEAP and copies into it. Decoding a 100MB " +
+          "buffer leaves you holding roughly 200MB until one of them is dropped." },
   ];
 
   function mountModels() {
@@ -6643,11 +7322,11 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
     if (!host) return false;
     const wrap = document.createElement("div");
     wrap.className = "el";
-    const trueCount = TM_ITEMS.filter(function (i) { return i.ans; }).length;
+    const trueCount = BF_ITEMS.filter(function (i) { return i.ans; }).length;
     wrap.innerHTML =
-      '<p class="el-lede">' + TM_ITEMS.length + ' statements about the model this part has ' +
+      '<p class="el-lede">' + BF_ITEMS.length + ' statements about the model this part has ' +
       'been building. ' + trueCount + ' are true. Mark each one before you check.</p>' +
-      '<div class="el-rows">' + TM_ITEMS.map(function (it) {
+      '<div class="el-rows">' + BF_ITEMS.map(function (it) {
         return '<div class="el-row" data-id="' + it.id + '">' +
           '<span class="el-claim">' + it.t + "</span>" +
           '<span class="el-choice">' +
@@ -6666,7 +7345,7 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
 
     const picks = {}; let checked = false;
     function render() {
-      TM_ITEMS.forEach(function (it) {
+      BF_ITEMS.forEach(function (it) {
         const row = wrap.querySelector('[data-id="' + it.id + '"]');
         row.querySelectorAll(".el-opt").forEach(function (o) {
           o.classList.toggle("on", picks[it.id] === o.dataset.pick); });
@@ -6679,34 +7358,34 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
         else { row.classList.add("wrong"); mark.textContent = "✗"; }
         why.innerHTML = '<span class="el-ans">' + (it.ans ? "true" : "false") + "</span>" + it.why;
       });
-      const answered = TM_ITEMS.filter(function (i) { return picks[i.id]; }).length;
-      const right = TM_ITEMS.filter(function (i) { return picks[i.id] && (picks[i.id] === "true") === i.ans; }).length;
+      const answered = BF_ITEMS.filter(function (i) { return picks[i.id]; }).length;
+      const right = BF_ITEMS.filter(function (i) { return picks[i.id] && (picks[i.id] === "true") === i.ans; }).length;
       const m = function (l, v, good) {
         return '<div class="el-meter"><span class="el-m-k">' + l + '</span><span class="el-m-v' +
           (good === true ? " yes" : good === false ? " no" : "") + '">' + v + "</span></div>"; };
       wrap.querySelector(".el-meters").innerHTML =
-        m("marked", answered + " / " + TM_ITEMS.length, answered === TM_ITEMS.length) +
-        m("correct", checked ? right + " / " + TM_ITEMS.length : "—",
-          checked ? right === TM_ITEMS.length : undefined) +
-        m("true statements", trueCount + " of " + TM_ITEMS.length) +
-        m("wrong takes", (TM_ITEMS.length - trueCount) + " of " + TM_ITEMS.length);
+        m("marked", answered + " / " + BF_ITEMS.length, answered === BF_ITEMS.length) +
+        m("correct", checked ? right + " / " + BF_ITEMS.length : "—",
+          checked ? right === BF_ITEMS.length : undefined) +
+        m("true statements", trueCount + " of " + BF_ITEMS.length) +
+        m("wrong takes", (BF_ITEMS.length - trueCount) + " of " + BF_ITEMS.length);
       const say = wrap.querySelector(".el-say");
       if (!checked) {
         say.innerHTML = answered === 0
           ? "Nothing marked yet. The corrections are printed either way — the only thing " +
             "you lose by reading them first is finding out what you believed."
-          : answered + " of " + TM_ITEMS.length + " marked.";
+          : answered + " of " + BF_ITEMS.length + " marked.";
       } else {
-        const pairMiss = (picks["fsonly"] === "false") !== (picks["shared"] === "true");
-        say.innerHTML = "<strong>" + right + " of " + TM_ITEMS.length + ".</strong> " +
+        const pairMiss = (picks["subarray"] === "false") !== (picks["pool"] === "false");
+        say.innerHTML = "<strong>" + right + " of " + BF_ITEMS.length + ".</strong> " +
           (pairMiss
-            ? "You answered <em>\"the pool is for filesystem work\"</em> and <em>\"a zlib " +
-              "job can delay a DNS lookup\"</em> inconsistently — the second is only " +
-              "possible because the first is false, and that is the most useful place to " +
-              "have been caught out."
-            : "Nearly every wrong take here assumes the pool belongs to one subsystem. It " +
-              "belongs to four, they share one queue, and the one that saturates it is " +
-              "rarely the one that looks slow.");
+            ? "You answered the SUBARRAY and BUF.BUFFER rows inconsistently — both are " +
+              "the same fact, that a Buffer is a WINDOW rather than the memory, and " +
+              "getting one right while getting the other wrong is the most useful place " +
+              "to be caught out."
+            : "Most wrong takes here treat a Buffer as a string that happens to hold " +
+              "bytes. It is a window onto memory — ask whose memory, and who else can " +
+              "see it.");
       }
       wrap.classList.toggle("is-checked", checked);
     }
@@ -6720,19 +7399,104 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
     wrap.querySelector(".el-ctl").addEventListener("click", function (e) {
       const a = e.target.closest("[data-act]"); if (!a) return;
       if (a.dataset.act === "check") checked = true;
-      else if (a.dataset.act === "reveal") { TM_ITEMS.forEach(function (i) { picks[i.id] = i.ans ? "true" : "false"; }); checked = true; }
+      else if (a.dataset.act === "reveal") { BF_ITEMS.forEach(function (i) { picks[i.id] = i.ans ? "true" : "false"; }); checked = true; }
       else { Object.keys(picks).forEach(function (k) { delete picks[k]; }); checked = false; }
       render();
     });
     render();
-    window.__tmItems = TM_ITEMS;
+    window.__bfItems = BF_ITEMS;
+    return true;
+  }
+
+
+  /* ══════════════════════════════════════════════════════════════════
+     INSTRUMENT · "the window, moved"  (§1)
+     A Buffer is a VIEW: an offset and a length over memory somebody else
+     may also be looking at. That is a spatial relationship, so move it.
+     Sliding the window over a fixed strip of bytes — and showing a second
+     view that overlaps it — makes aliasing something you watch rather
+     than something you are told.
+     ══════════════════════════════════════════════════════════════════ */
+  const VW_BYTES = [0x68,0x65,0x6c,0x6c,0x6f,0x20,0x77,0x6f,0x72,0x6c,0x64,0x21];
+  const VW_TXT   = ["h","e","l","l","o"," ","w","o","r","l","d","!"];
+  function mountView() {
+    const host = document.querySelector('[data-instrument="view"]');
+    if (!host) return false;
+    const wrap = document.createElement("div");
+    wrap.className = "vw";
+    wrap.innerHTML =
+      '<div class="vw-ctl">' +
+        '<button class="vw-b" data-act="off-">byteOffset −</button>' +
+        '<button class="vw-b" data-act="off+">byteOffset +</button>' +
+        '<button class="vw-b" data-act="len-">length −</button>' +
+        '<button class="vw-b" data-act="len+">length +</button>' +
+        '<button class="vw-b vw-b-primary" data-act="write">view[0] = 72 ("H")</button>' +
+        '<button class="vw-b" data-act="reset">↺ Reset</button>' +
+      "</div>" +
+      '<div class="vw-strip"></div>' +
+      '<div class="vw-meters"></div>' +
+      '<div class="vw-say"></div>';
+    host.appendChild(wrap);
+
+    let off = 6, len = 5, bytes = VW_BYTES.slice(), txt = VW_TXT.slice(), wrote = false;
+
+    function render() {
+      const n = bytes.length;
+      let cells = "";
+      bytes.forEach(function (b, k) {
+        const inView = k >= off && k < off + len;
+        cells += '<span class="vw-byte' + (inView ? " in" : "") +
+          '" style="grid-column:' + (k + 1) + '">' +
+          '<em>' + b.toString(16).padStart(2, "0") + "</em>" +
+          '<i>' + txt[k] + "</i></span>";
+      });
+      wrap.querySelector(".vw-strip").innerHTML =
+        '<div class="vw-k">the ArrayBuffer — ' + n + ' bytes, one allocation</div>' +
+        '<div class="vw-grid" style="--n:' + n + '">' + cells +
+          '<span class="vw-win" style="grid-column:' + (off + 1) + " / span " + len + '">' +
+            '<em>buf.subarray(' + off + ", " + (off + len) + ")</em></span>" +
+          '<span class="vw-owner" style="grid-column:1 / span ' + n + '">' +
+            "<em>the original Buffer — the whole allocation</em></span>" +
+        "</div>";
+      const m = function (l, v, good) {
+        return '<div class="vw-meter"><span class="vw-m-k">' + l + '</span><span class="vw-m-v' +
+          (good === true ? " yes" : good === false ? " no" : "") + '">' + v + "</span></div>"; };
+      wrap.querySelector(".vw-meters").innerHTML =
+        m("view.byteOffset", String(off)) +
+        m("view.length", String(len)) +
+        m("view.buffer === buf.buffer", "true", true) +
+        m("bytes copied to make it", "0", true);
+      wrap.querySelector(".vw-say").innerHTML = wrote
+        ? "<strong>One write, two readers.</strong> You assigned through the VIEW and the " +
+          "original changed, because there is only ever one set of bytes — the view is an " +
+          "offset and a length, not a copy. Nothing in either object's type or shape tells " +
+          "you they overlap."
+        : "Move the window. The bytes underneath never change and nothing is copied: " +
+          "<code>subarray</code> hands you a different <code>byteOffset</code> and " +
+          "<code>length</code> over the SAME allocation. Then write through it.";
+      wrap.classList.toggle("is-wrote", wrote);
+    }
+
+    wrap.querySelector(".vw-ctl").addEventListener("click", function (e) {
+      const b = e.target.closest("[data-act]"); if (!b) return;
+      const a = b.dataset.act;
+      if (a === "off-") off = Math.max(0, off - 1);
+      else if (a === "off+") off = Math.min(bytes.length - len, off + 1);
+      else if (a === "len-") len = Math.max(1, len - 1);
+      else if (a === "len+") len = Math.min(bytes.length - off, len + 1);
+      else if (a === "write") { bytes[off] = 0x48; txt[off] = "H"; wrote = true; }
+      else { off = 6; len = 5; bytes = VW_BYTES.slice(); txt = VW_TXT.slice(); wrote = false; }
+      render();
+    });
+    render();
+    window.__vwState = function () { return { off: off, len: len, bytes: bytes.slice() }; };
     return true;
   }
 
   if (document.readyState === "loading")
     document.addEventListener("DOMContentLoaded", function () {
-      setTimeout(function () { mountDns(); mountSat(); mountModels(); }, 0); });
-  else setTimeout(function () { mountDns(); mountSat(); mountModels(); }, 0);
+      setTimeout(function () { mountView(); mountAlloc(); mountEncode(); mountSplit(); mountModels(); }, 0); });
+  else setTimeout(function () { mountView(); mountAlloc(); mountEncode(); mountSplit(); mountModels(); }, 0);
 
   /* ══════════════════════════════════════════════════════════════════
      SERIES NAVIGATION
@@ -6746,29 +7510,29 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
      omitting whichever does not exist.
      ══════════════════════════════════════════════════════════════════ */
   const SERIES = [
-    { n:0, file:"part-0-primitives.html",
+    { n:0, file:"node-primitives.html",
       title:"The primitives", sub:"descriptors, ports, sockets, and the objects behind the API" },
-    { n:1, file:"part-1-modules.html",
+    { n:1, file:"node-modules.html",
       title:"Modules", sub:"resolution, the cache, and the cost of cold start" },
-    { n:2, file:"part-2-event-emitter.html",
+    { n:2, file:"node-eventemitter.html",
       title:"EventEmitter", sub:"a map of arrays, a for loop, and no queue anywhere" },
-    { n:3, file:"part-3-buffers.html",
+    { n:3, file:"node-buffers.html",
       title:"Buffers", sub:"a window onto memory outside the V8 heap" },
-    { n:4, file:"part-4-event-loop-timers.html",
+    { n:4, file:"node-event-loop-timers.html",
       title:"The event loop", sub:"phases, the timer heap, and the two queues that jump them" },
-    { n:5, file:"part-5-fs-readFile.html",
+    { n:5, file:"node-fs-readfile.html",
       title:"fs.readFile()", sub:"CPU, OS, the libuv worker pool, and the callback return path" },
-    { n:6, file:"part-6-thread-pool.html",
+    { n:6, file:"node-thread-pool.html",
       title:"The thread pool", sub:"four subsystems, one queue, and four threads by default" },
-    { n:7, file:"part-7-streams.html",
+    { n:7, file:"node-streams.html",
       title:"Streams", sub:"an emitter, a queue of Buffers, and one advisory rule" },
-    { n:8, file:"part-8-tcp-net-create-server.html",
+    { n:8, file:"node-net-create-server.html",
       title:"net.createServer()", sub:"sockets, kernel queues, readiness, and the event loop" },
-    { n:9, file:"part-9-http-request-response.html",
+    { n:9, file:"node-http-create-server.html",
       title:"http.createServer()", sub:"a browser request, llhttp, and the path back to the wire" },
-    { n:10, file:"part-10-worker-threads.html",
+    { n:10, file:"node-worker-threads.html",
       title:"worker_threads", sub:"a second V8 isolate, a second event loop, and the boundary between them" },
-    { n:11, file:"part-11-cluster.html",
+    { n:11, file:"node-cluster.html",
       title:"cluster", sub:"four processes, one port, and a file descriptor in the post" },
   ];
 
@@ -6779,7 +7543,7 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
        0 is falsy. Test whether the MATCH exists, not whether the number is
        truthy. (This was fixed once in part 0's copy and then lost when the
        canonical file was propagated over it; it lives here now.) */
-    const m = kicker ? kicker.textContent.match(/Part\s*0*(\d+)/i) : null;
+    const m = kicker ? kicker.textContent.match(/(?:Mission|Part)\s*0*(\d+)/i) : null;
     if (!m) return false;
     const me = +m[1];
 
@@ -6790,16 +7554,16 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
     const card = function (s, dir) {
       return '<a class="series-card" href="' + s.file + '" data-dir="' + dir + '">' +
         '<span class="series-dir">' + (dir === "prev" ? "← Previous" : "Next →") + "</span>" +
-        '<span class="series-n">Part ' + String(s.n).padStart(2,'0') + "</span>" +
+        '<span class="series-n">Mission ' + String(s.n).padStart(2,'0') + "</span>" +
         '<span class="series-title">' + s.title + "</span>" +
         '<span class="series-sub">' + s.sub + "</span></a>";
     };
 
     const nav = document.createElement("nav");
     nav.className = "series-nav";
-    nav.setAttribute("aria-label", "Node.js internals series");
+    nav.setAttribute("aria-label", "Node.js Internals campaign");
     nav.innerHTML =
-      '<span class="series-k">Node.js internals series</span>' +
+      '<span class="series-k">Node.js Internals campaign</span>' +
       '<div class="series-row">' + (prev ? card(prev, "prev") : "") + (next ? card(next, "next") : "") + "</div>";
 
     const foot = document.querySelector("footer");
@@ -7121,7 +7885,7 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
     });
   };
 })();
-window.__NI_OFFLINE__={"l:zlib.gzip(bigBuffer, () => {}); // ×4, one per pool thread": "Queues one compression job on the libuv thread pool. Run four of these and every pool thread is busy — the pool defaults to `4`, so a fifth job of any kind waits in line behind the compressions.", "b:zlib.gzip(bigBuffer, () => {}); // ×4, one per pool thread": "Queues one compression job on the libuv thread pool. Run four of these and every pool thread is busy — the pool defaults to `4`, so a fifth job of any kind waits in line behind the compressions.", "l:zlib.gzip(bigBuffer, () => {});": "Compresses `bigBuffer` on a libuv pool thread, not on your JS thread. The callback runs later, back on the main thread, when the loop collects the finished job.", "b:zlib.gzip(bigBuffer, () => {});": "Compresses `bigBuffer` on a libuv pool thread, not on your JS thread. The callback runs later, back on the main thread, when the loop collects the finished job.", "l:dns.lookup(\"api.example.com\", () => {}); // now waits for a compression job": "`dns.lookup` also uses the thread pool — it is a blocking `getaddrinfo` call underneath. With all four threads busy compressing, this innocent-looking DNS query sits in the shared queue until one frees up.", "b:dns.lookup(\"api.example.com\", () => {}); // now waits for a compression job": "`dns.lookup` also uses the thread pool — it is a blocking `getaddrinfo` call underneath. With all four threads busy compressing, this innocent-looking DNS query sits in the shared queue until one frees up.", "l:const fs = require(\"fs\");": "Loads the `fs` module. Nothing about the thread pool exists yet — the pool is created lazily, the first time something actually needs it.", "b:const fs = require(\"fs\");": "Loads the `fs` module. Nothing about the thread pool exists yet — the pool is created lazily, the first time something actually needs it.", "l:fs.readFile(__filename, () => {}); // pool created HERE, with 4 threads": "The first pool-using call is the moment libuv creates the worker threads — and it reads `UV_THREADPOOL_SIZE` exactly once, right now. Whatever the variable says at this instant is the pool size for the life of the process.", "b:fs.readFile(__filename, () => {}); // pool created HERE, with 4 threads": "The first pool-using call is the moment libuv creates the worker threads — and it reads `UV_THREADPOOL_SIZE` exactly once, right now. Whatever the variable says at this instant is the pool size for the life of the process.", "l:process.env.UV_THREADPOOL_SIZE = 16; // no effect, ever": "Sets the variable from inside the program — too late if any pool call has already run, and even here it is a trap: the pool size is read when the pool is created, so this must be set in the shell **before** Node starts to be reliable.", "b:process.env.UV_THREADPOOL_SIZE = 16; // no effect, ever": "Sets the variable from inside the program — too late if any pool call has already run, and even here it is a trap: the pool size is read when the pool is created, so this must be set in the shell **before** Node starts to be reliable."};
+window.__NI_OFFLINE__={"l:const buf = Buffer.from(\"hi\");": "Encodes the string as UTF-8 bytes into freshly allocated memory **outside** the V8 heap. `buf` is the JS window onto those two bytes.", "b:const buf = Buffer.from(\"hi\");": "Encodes the string as UTF-8 bytes into freshly allocated memory **outside** the V8 heap. `buf` is the JS window onto those two bytes.", "l:buf instanceof Uint8Array; // true": "A `Buffer` **is** a `Uint8Array` — a subclass, not a parallel type. Every typed-array method and every API accepting a `Uint8Array` accepts a Buffer.", "b:buf instanceof Uint8Array; // true": "A `Buffer` **is** a `Uint8Array` — a subclass, not a parallel type. Every typed-array method and every API accepting a `Uint8Array` accepts a Buffer.", "l:buf[0]; // 104": "Indexing reads one byte as a number — 104 is the UTF-8 (and ASCII) code for `h`. No characters live in the buffer, only bytes.", "b:buf[0]; // 104": "Indexing reads one byte as a number — 104 is the UTF-8 (and ASCII) code for `h`. No characters live in the buffer, only bytes.", "l:buf.length; // 2": "Length is in **bytes**, not characters. For ASCII they coincide; one non-ASCII character would make them differ.", "b:buf.length; // 2": "Length is in **bytes**, not characters. For ASCII they coincide; one non-ASCII character would make them differ.", "l:// and the bytes are NOT in the V8 heap:": "The payload lives in memory Node allocated with the C++ allocator. V8's heap holds only the small object pointing at it — which is why huge Buffers barely move JS heap statistics.", "b:// and the bytes are NOT in the V8 heap:": "The payload lives in memory Node allocated with the C++ allocator. V8's heap holds only the small object pointing at it — which is why huge Buffers barely move JS heap statistics.", "l:buf.buffer; // an ArrayBuffer allocated by C++": "The backing store, reachable as a standard `ArrayBuffer`. `Buffer` is a view; `.buffer` is the actual memory — and with pooling it can be **bigger** than your view.", "b:buf.buffer; // an ArrayBuffer allocated by C++": "The backing store, reachable as a standard `ArrayBuffer`. `Buffer` is a view; `.buffer` is the actual memory — and with pooling it can be **bigger** than your view.", "l:const buf = Buffer.from(\"hello world\");": "Eleven UTF-8 bytes outside the heap, with `buf` as the full-width view over them.", "b:const buf = Buffer.from(\"hello world\");": "Eleven UTF-8 bytes outside the heap, with `buf` as the full-width view over them.", "l:const view = buf.subarray(0, 5); // no copy": "`subarray` allocates **nothing**: it returns a second window over the same five bytes. Cheap by design — and aliased by design.", "b:const view = buf.subarray(0, 5); // no copy": "`subarray` allocates **nothing**: it returns a second window over the same five bytes. Cheap by design — and aliased by design.", "l:view[0] = 72; // 'H'": "Writes one byte through the view. There is only one copy of the memory, so this is a write into `buf`'s bytes too.", "b:view[0] = 72; // 'H'": "Writes one byte through the view. There is only one copy of the memory, so this is a write into `buf`'s bytes too.", "l:console.log(buf.toString()); // \"Hello world\" <- buf changed too": "The original shows the mutation — proof the two objects share storage. If you needed independence, the tool was `Buffer.copyBytesFrom` or an explicit copy, not `subarray`.", "b:console.log(buf.toString()); // \"Hello world\" <- buf changed too": "The original shows the mutation — proof the two objects share storage. If you needed independence, the tool was `Buffer.copyBytesFrom` or an explicit copy, not `subarray`.", "l:console.log(view.buffer === buf.buffer); // true — same memory": "Both views report the **same** `ArrayBuffer`. Identity of `.buffer` is the test for aliasing — and the thing to check before handing memory across a boundary.", "b:console.log(view.buffer === buf.buffer); // true — same memory": "Both views report the **same** `ArrayBuffer`. Identity of `.buffer` is the test for aliasing — and the thing to check before handing memory across a boundary.", "l:const a = Buffer.allocUnsafe(100);": "Asks for 100 bytes fast: no zero-fill (the \"unsafe\"), and small requests are carved from a shared pre-allocated slab — the 8KB pool.", "b:const a = Buffer.allocUnsafe(100);": "Asks for 100 bytes fast: no zero-fill (the \"unsafe\"), and small requests are carved from a shared pre-allocated slab — the 8KB pool.", "l:a.length; // 100 <- your view": "Your window is exactly what you asked for. The surprise is underneath.", "b:a.length; // 100 <- your view": "Your window is exactly what you asked for. The surprise is underneath.", "l:a.buffer.byteLength; // 8192 <- the whole pool slab": "The backing `ArrayBuffer` is the entire 8KB pool slab — your hundred bytes are a slice of a shared allocation that also carries **other** Buffers' data.", "b:a.buffer.byteLength; // 8192 <- the whole pool slab": "The backing `ArrayBuffer` is the entire 8KB pool slab — your hundred bytes are a slice of a shared allocation that also carries **other** Buffers' data.", "l:a.byteOffset; // 168 <- where your window starts": "Where your slice begins inside the slab. `byteOffset` and `length` together define your window; everything outside it belongs to someone else.", "b:a.byteOffset; // 168 <- where your window starts": "Where your slice begins inside the slab. `byteOffset` and `length` together define your window; everything outside it belongs to someone else.", "l:// so this hands somebody EIGHT KILOBYTES, most of it other people's data:": "The leak shape: passing `.buffer` across a boundary exposes the whole slab — stale request bodies, other allocations, whatever the pool held. A privacy bug, not a crash.", "b:// so this hands somebody EIGHT KILOBYTES, most of it other people's data:": "The leak shape: passing `.buffer` across a boundary exposes the whole slab — stale request bodies, other allocations, whatever the pool held. A privacy bug, not a crash.", "l:someApi(a.buffer);": "Ships the entire 8KB backing store, not your hundred bytes. Any API that accepts an `ArrayBuffer` — `postMessage` transfers above all — is a place this goes wrong.", "b:someApi(a.buffer);": "Ships the entire 8KB backing store, not your hundred bytes. Any API that accepts an `ArrayBuffer` — `postMessage` transfers above all — is a place this goes wrong.", "l:// this hands them your hundred bytes:": "The correct move: cut your window out explicitly before sharing.", "b:// this hands them your hundred bytes:": "The correct move: cut your window out explicitly before sharing.", "l:someApi(a.buffer.slice(a.byteOffset, a.byteOffset + a.length));": "`ArrayBuffer.slice` **copies** — unlike `subarray` — producing a fresh buffer containing exactly your bytes. The copy is the point: nothing shared leaves the process boundary.", "b:someApi(a.buffer.slice(a.byteOffset, a.byteOffset + a.length));": "`ArrayBuffer.slice` **copies** — unlike `subarray` — producing a fresh buffer containing exactly your bytes. The copy is the point: nothing shared leaves the process boundary."};
 /* ══════════════════════════════════════════════════════════════════════
    SUBSECTION NAVIGATION — linear prev/next between panels, a header
    position control with a jump menu, and [ / ] keyboard stepping.

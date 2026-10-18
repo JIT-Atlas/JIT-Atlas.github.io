@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>The primitives — descriptors, ports, sockets, and the objects behind the API</title>
+<title>The thread pool — four subsystems, one queue, four threads</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&amp;family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
 <style>@layer base {
 
@@ -4197,119 +4197,6 @@ code,.ic,.card p code,.card li code,.hf-node-title code,.hf-node-detail code,
 @media (max-width:880px){ .el-row{grid-template-columns:minmax(0,1fr) auto} .el-mark{display:none} }
 
 
-
-/* ─────────── P0-1. the five layers (§1) ─────────── */
-.ly{display:flex;flex-direction:column;gap:var(--s3)}
-.ly-chain{display:flex;flex-direction:column;gap:var(--s1);align-items:flex-start}
-.ly-step{font-family:var(--mono);font-size:var(--f-xs);letter-spacing:.06em;
-  padding:var(--s2) var(--s4);border-radius:var(--r-sm);cursor:pointer;text-align:left;
-  background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--border);
-  color:var(--text-2);min-width:230px;
-  transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
-.ly-step:hover{background:var(--surface3);color:var(--text-hi)}
-.ly-step.on{background:var(--raise);color:var(--text-hi)}
-.ly-step[data-tag="main"].on{border-left-color:var(--main-thread)}
-.ly-step[data-tag="node"].on{border-left-color:var(--node)}
-.ly-step[data-tag="kernel"].on{border-left-color:var(--kernel)}
-.ly-arr{font-family:var(--mono);font-size:var(--f-micro);color:var(--text-dim);padding-left:var(--s4)}
-.ly-facts{display:flex;flex-wrap:wrap;gap:var(--s2)}
-.ly-cell{display:flex;flex-direction:column;gap:2px;flex:1 1 220px;
-  padding:var(--s2) var(--s3);background:var(--surface2);
-  border:1px solid var(--border);border-radius:var(--r-sm)}
-.ly-cell-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
-  text-transform:uppercase;color:var(--text-dim)}
-.ly-cell-v{font-family:var(--mono);font-size:var(--f-sm);color:var(--text-hi)}
-.ly-is{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
-  color:var(--text);padding:var(--s3) var(--s4);max-width:var(--measure);
-  background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-md)}
-.ly-gone{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
-  color:var(--text);border-left:2px solid var(--hardware);
-  padding:var(--s2) 0 var(--s2) var(--s4);max-width:var(--measure)}
-.ly-gone-k{display:block;font-family:var(--mono);font-size:var(--f-micro);
-  letter-spacing:.14em;text-transform:uppercase;color:var(--text-2);margin-bottom:var(--s1)}
-
-/* ─────────── P0-2. the four-tuple (§6) ─────────── */
-.tp{display:flex;flex-direction:column;gap:var(--s3)}
-.tp-pick{display:flex;flex-wrap:wrap;gap:var(--s2)}
-.tp-btn{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.06em;
-  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
-  background:var(--surface2);border:1px solid var(--border);color:var(--text-2);
-  display:inline-flex;align-items:center;gap:var(--s2);
-  transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
-.tp-btn:hover{background:var(--surface3);color:var(--text-hi)}
-.tp-btn.on{background:var(--node);border-color:var(--node);color:var(--on-accent)}
-.tp-ctrlmark{font-size:var(--f-micro);letter-spacing:.14em;padding:0 var(--s1);
-  border:1px solid currentColor;border-radius:2px;color:var(--text-2)}
-.tp-btn.on .tp-ctrlmark{color:var(--on-accent)}
-.tp-grid{display:flex;flex-wrap:wrap;gap:var(--s2)}
-.tp-cell{display:flex;flex-direction:column;gap:2px;flex:1 1 170px;
-  padding:var(--s2) var(--s3);background:var(--surface2);
-  border:1px solid var(--border);border-left:3px solid var(--border);border-radius:var(--r-sm)}
-.tp-cell.changed{border-left-color:var(--node);background:var(--raise)}
-.tp-cell-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
-  text-transform:uppercase;color:var(--text-dim)}
-.tp-cell-v{font-family:var(--mono);font-size:var(--f-sm);color:var(--text-hi)}
-.tp-cell-d{font-family:var(--mono);font-size:var(--f-micro);color:var(--text-2)}
-.tp-cell.changed .tp-cell-d{color:var(--node)}
-.tp-verdict{display:flex;flex-wrap:wrap;gap:var(--s3);align-items:baseline;
-  padding:var(--s3) var(--s4);background:var(--surface2);
-  border:1px solid var(--border);border-radius:var(--r-md)}
-.tp-v-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
-  text-transform:uppercase;color:var(--text-dim)}
-.tp-v-n{font-family:var(--mono);font-size:var(--f-h3);font-weight:600}
-.tp-v-n.yes{color:var(--node)}
-.tp-v-n.no{color:var(--text-2)}
-.tp-v-s{font-family:var(--sans);font-size:var(--f-md);color:var(--text);margin-left:auto}
-.tp-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
-  color:var(--text);border-left:2px solid var(--border-hi);
-  padding:var(--s2) 0 var(--s2) var(--s4);min-height:4em;max-width:var(--measure)}
-.tp.is-control .tp-say{border-left-color:var(--worker)}
-
-/* ─────────── P0-3. the API chain (§10) ─────────── */
-.ch{display:flex;flex-direction:column;gap:var(--s3)}
-.ch-lines{display:flex;flex-direction:column;gap:var(--s2)}
-.ch-line{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--s3);align-items:center;
-  padding:var(--s2) var(--s3);border-radius:var(--r-sm);
-  background:var(--surface2);border:1px solid var(--border);
-  border-left:3px solid var(--border);opacity:.5;
-  transition:opacity var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
-.ch-line.on{opacity:1;background:var(--raise)}
-.ch-line.act{border-color:var(--text-2)}
-.ch-line[data-kind="js"].on{border-left-color:var(--main-thread)}
-.ch-line[data-kind="sys"].on{border-left-color:var(--kernel)}
-.ch-line[data-kind="loop"].on{border-left-color:var(--node)}
-.ch-line code{font-size:var(--f-xs)}
-.ch-kind{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.12em;
-  text-transform:uppercase;color:var(--text-2);white-space:nowrap}
-.ch-layers{display:flex;flex-wrap:wrap;gap:var(--s2);align-items:center;
-  padding:var(--s3) var(--s4);background:var(--surface2);
-  border:1px solid var(--border);border-radius:var(--r-md)}
-.ch-layer{font-family:var(--mono);font-size:var(--f-xs);
-  padding:var(--s1) var(--s3);border-radius:var(--r-sm);
-  border:1px dashed var(--border);color:var(--text-dim)}
-.ch-layer.on{border-style:solid;border-color:var(--node);color:var(--node);background:var(--node-soft)}
-.ch-sep{color:var(--text-dim)}
-.ch-facts{display:flex;flex-wrap:wrap;gap:var(--s2)}
-.ch-cell{display:flex;flex-direction:column;gap:2px;flex:1 1 200px;
-  padding:var(--s2) var(--s3);background:var(--surface2);
-  border:1px solid var(--border);border-radius:var(--r-sm)}
-.ch-cell-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
-  text-transform:uppercase;color:var(--text-dim)}
-.ch-cell-v{font-family:var(--mono);font-size:var(--f-sm);color:var(--text-hi)}
-.ch-cell-v.yes{color:var(--node)}
-.ch-cell-v.no{color:var(--worker)}
-.ch-ctl{display:flex;flex-wrap:wrap;gap:var(--s2);align-items:center}
-.ch-b{font-family:var(--mono);font-size:var(--f-xs);letter-spacing:.06em;
-  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
-  background:var(--surface2);border:1px solid var(--border);color:var(--text);
-  transition:background var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
-.ch-b:hover{background:var(--surface3);border-color:var(--border-hi)}
-.ch-b-primary{background:var(--node);border-color:var(--node);color:var(--on-accent)}
-.ch-count{font-family:var(--mono);font-size:var(--f-xs);color:var(--text-dim);margin-left:auto}
-.ch-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
-  color:var(--text);border-left:2px solid var(--border-hi);
-  padding:var(--s2) 0 var(--s2) var(--s4);min-height:4em;max-width:var(--measure)}
-
 /* ─────────── NODE TITLES CARRY THEIR OWNER'S HUE ───────────
    A flow node's title is the load-bearing technical name in the figure —
    "uv_tcp_t", "the accept queue", "a V8 isolate" — and it was rendering in
@@ -4323,6 +4210,120 @@ code,.ic,.card p code,.card li code,.hf-node-title code,.hf-node-detail code,
 .hf-node[data-owner="kernel"] .hf-node-title{color:var(--kernel)}
 .hf-node[data-owner="hw"]     .hf-node-title{color:var(--hardware)}
 .hf-node[data-owner="node"]   .hf-node-title{color:var(--node)}
+
+/* ─────────── P7-1. resolution cost (§3) ─────────── */
+.rs{display:flex;flex-direction:column;gap:var(--s3)}
+.rs-pick{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.rs-btn{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.06em;
+  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text-2);
+  display:inline-flex;align-items:center;gap:var(--s2);
+  transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
+.rs-btn:hover{background:var(--surface3);color:var(--text-hi)}
+.rs-btn.on{background:var(--node);border-color:var(--node);color:var(--on-accent)}
+.rs-ctrlmark{font-size:var(--f-micro);letter-spacing:.14em;padding:0 var(--s1);
+  border:1px solid currentColor;border-radius:2px;color:var(--text-2)}
+.rs-btn.on .rs-ctrlmark{color:var(--on-accent)}
+.rs-from{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text-2)}
+.rs-steps{display:flex;flex-direction:column;gap:2px;max-height:290px;overflow-y:auto;
+  padding:var(--s3);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-md)}
+.rs-step{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--s3);
+  align-items:baseline;padding:2px var(--s2);border-radius:var(--r-sm);
+  border-left:2px solid transparent}
+.rs-step.hit{background:var(--raise);border-left-color:var(--node)}
+.rs-step code{font-size:var(--f-xs);color:var(--text-2)}
+.rs-step.hit code{color:var(--text-hi)}
+.rs-note{font-family:var(--mono);font-size:var(--f-micro);color:var(--text-dim);white-space:nowrap}
+.rs-step.hit .rs-note{color:var(--node)}
+.rs-meters{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.rs-meter{display:flex;flex-direction:column;gap:2px;flex:1 1 180px;
+  padding:var(--s2) var(--s3);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-sm)}
+.rs-m-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-dim)}
+.rs-m-v{font-family:var(--mono);font-size:var(--f-sm);color:var(--text-hi)}
+.rs-m-v.yes{color:var(--node)}
+.rs-m-v.no{color:var(--worker)}
+.rs-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
+  color:var(--text);border-left:2px solid var(--border-hi);
+  padding:var(--s2) 0 var(--s2) var(--s4);min-height:4em;max-width:var(--measure)}
+.rs.is-control .rs-say{border-left-color:var(--worker)}
+
+/* ─────────── P7-2. the cache (§5) ─────────── */
+.ca{display:flex;flex-direction:column;gap:var(--s3)}
+.ca-pick{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.ca-btn{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.06em;
+  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text-2);
+  display:inline-flex;align-items:center;gap:var(--s2);
+  transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
+.ca-btn:hover{background:var(--surface3);color:var(--text-hi)}
+.ca-btn.on{background:var(--node);border-color:var(--node);color:var(--on-accent)}
+.ca-ctrlmark{font-size:var(--f-micro);letter-spacing:.14em;padding:0 var(--s1);
+  border:1px solid currentColor;border-radius:2px;color:var(--text-2)}
+.ca-btn.on .ca-ctrlmark{color:var(--on-accent)}
+.ca-rows{display:flex;flex-direction:column;gap:var(--s2)}
+.ca-row{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;gap:var(--s3);
+  align-items:baseline;padding:var(--s2) var(--s3);
+  background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-md)}
+.ca-arrow{color:var(--text-dim);font-family:var(--mono);font-size:var(--f-micro)}
+.ca-path{font-size:var(--f-xs)}
+.ca-path[data-key="0"]{color:var(--node)}
+.ca-path[data-key="1"]{color:var(--worker)}
+.ca-state{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.1em;
+  text-transform:uppercase;color:var(--text-2);white-space:nowrap}
+.ca-meters{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.ca-meter{display:flex;flex-direction:column;gap:2px;flex:1 1 170px;
+  padding:var(--s2) var(--s3);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-sm)}
+.ca-m-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-dim)}
+.ca-m-v{font-family:var(--mono);font-size:var(--f-sm);color:var(--text-hi)}
+.ca-m-v.yes{color:var(--node)}
+.ca-m-v.no{color:var(--worker)}
+.ca-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
+  color:var(--text);border-left:2px solid var(--border-hi);
+  padding:var(--s2) 0 var(--s2) var(--s4);min-height:4em;max-width:var(--measure)}
+.ca.is-control .ca-say{border-left-color:var(--worker)}
+@media (max-width:880px){ .ca-row{grid-template-columns:1fr} .ca-arrow{display:none} }
+
+/* ─────────── P7-3. a cycle (§7) ─────────── */
+.cy{display:flex;flex-direction:column;gap:var(--s3)}
+.cy-lines{display:flex;flex-direction:column;gap:var(--s1)}
+.cy-line{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--s3);
+  align-items:center;padding:var(--s2) var(--s3);border-radius:var(--r-sm);
+  background:var(--surface2);border:1px solid var(--border);
+  border-left:3px solid var(--border);opacity:.5;
+  transition:opacity var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
+.cy-line.on{opacity:1;background:var(--raise)}
+.cy-line.act{border-color:var(--text-2)}
+.cy-line.hit.on{border-left-color:var(--node)}
+.cy-line.undef.on{border-left-color:var(--worker)}
+.cy-line code{font-size:var(--f-xs)}
+.cy-file{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.1em;
+  color:var(--text-2);white-space:nowrap}
+.cy-state{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.cy-cell{display:flex;flex-direction:column;gap:2px;flex:1 1 200px;
+  padding:var(--s2) var(--s3);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-sm)}
+.cy-cell-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-dim)}
+.cy-cell-v{font-family:var(--mono);font-size:var(--f-sm);color:var(--text-hi)}
+.cy-cell-v.warn{color:var(--worker)}
+.cy-ctl{display:flex;flex-wrap:wrap;gap:var(--s2);align-items:center}
+.cy-b{font-family:var(--mono);font-size:var(--f-xs);letter-spacing:.06em;
+  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  transition:background var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
+.cy-b:hover{background:var(--surface3);border-color:var(--border-hi)}
+.cy-b-primary{background:var(--node);border-color:var(--node);color:var(--on-accent)}
+.cy-count{font-family:var(--mono);font-size:var(--f-xs);color:var(--text-dim);margin-left:auto}
+.cy-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
+  color:var(--text);border-left:2px solid var(--border-hi);
+  padding:var(--s2) 0 var(--s2) var(--s4);min-height:4.4em;max-width:var(--measure)}
+.cy.is-hit .cy-say{border-left-color:var(--node)}
 
 /* ─────────── ANNOTATED TERMS NEED A RESTING AFFORDANCE ───────────
    The rule above saves the underline for hover, which was defensible while
@@ -4367,6 +4368,84 @@ code,.ic,.card p code,.card li code,.hf-node-title code,.hf-node-detail code,
   text-decoration-style:solid;
 }
 
+/* ─────────── P8-1. two routes to a name (§3) ─────────── */
+.dn{display:flex;flex-direction:column;gap:var(--s3)}
+.dn-pick{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.dn-btn{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.06em;
+  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text-2);
+  display:inline-flex;align-items:center;gap:var(--s2);
+  transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
+.dn-btn:hover{background:var(--surface3);color:var(--text-hi)}
+.dn-btn.on{background:var(--node);border-color:var(--node);color:var(--on-accent)}
+.dn-ctrlmark{font-size:var(--f-micro);letter-spacing:.14em;padding:0 var(--s1);
+  border:1px solid currentColor;border-radius:2px;color:var(--text-2)}
+.dn-btn.on .dn-ctrlmark{color:var(--on-accent)}
+.dn-lanes{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.dn-lane{font-family:var(--mono);font-size:var(--f-xs);
+  padding:var(--s1) var(--s3);border-radius:var(--r-sm);
+  border:1px dashed var(--border);color:var(--text-2)}
+.dn-lane.on{border-style:solid}
+.dn-lane.on[data-lane="pool"]{border-color:var(--node);color:var(--node);background:var(--node-soft)}
+.dn-lane.on[data-lane="loop"]{border-color:var(--kernel);color:var(--kernel);background:var(--kernel-soft)}
+.dn-facts{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.dn-cell{display:flex;flex-direction:column;gap:2px;flex:1 1 210px;
+  padding:var(--s2) var(--s3);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-sm)}
+.dn-cell-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-dim)}
+.dn-cell-v{font-family:var(--sans);font-size:var(--f-xs);line-height:var(--lh-ui);color:var(--text-hi)}
+.dn-cell-v.no{color:var(--worker)}
+.dn-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
+  color:var(--text);border-left:2px solid var(--border-hi);
+  padding:var(--s2) 0 var(--s2) var(--s4);min-height:4.4em;max-width:var(--measure)}
+.dn.is-control .dn-say{border-left-color:var(--worker)}
+
+/* ─────────── P8-2. four threads, one queue (§4) ─────────── */
+.sa{display:flex;flex-direction:column;gap:var(--s3)}
+.sa-pick{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.sa-btn{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.06em;
+  padding:var(--s2) var(--s3);border-radius:var(--r-sm);cursor:pointer;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text-2);
+  display:inline-flex;align-items:center;gap:var(--s2);
+  transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
+.sa-btn:hover{background:var(--surface3);color:var(--text-hi)}
+.sa-btn.on{background:var(--node);border-color:var(--node);color:var(--on-accent)}
+.sa-ctrlmark{font-size:var(--f-micro);letter-spacing:.14em;padding:0 var(--s1);
+  border:1px solid currentColor;border-radius:2px;color:var(--text-2)}
+.sa-btn.on .sa-ctrlmark{color:var(--on-accent)}
+.sa-rows{display:flex;flex-direction:column;gap:var(--s2)}
+.sa-row{display:grid;grid-template-columns:132px minmax(0,1fr) 104px;gap:var(--s3);align-items:center}
+.sa-label{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.06em}
+.sa-label[data-sub="zlib"]{color:var(--node)}
+.sa-label[data-sub="crypto"]{color:var(--worker)}
+.sa-label[data-sub="dns"]{color:var(--kernel)}
+.sa-label[data-sub="fs"]{color:var(--main-thread)}
+.sa-track{display:flex;height:18px;border:1px solid var(--border);
+  border-radius:var(--r-sm);background:var(--surface2);overflow:hidden}
+.sa-wait{display:block;height:100%;background:var(--surface3);
+  transition:width var(--dur-2) var(--ease)}
+.sa-run{display:block;height:100%;transition:width var(--dur-2) var(--ease)}
+.sa-run[data-sub="zlib"]{background:var(--node)}
+.sa-run[data-sub="crypto"]{background:var(--worker)}
+.sa-run[data-sub="dns"]{background:var(--kernel)}
+.sa-run[data-sub="fs"]{background:var(--main-thread)}
+.sa-num{font-family:var(--mono);font-size:var(--f-micro);color:var(--text-2);text-align:right}
+.sa-meters{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.sa-meter{display:flex;flex-direction:column;gap:2px;flex:1 1 165px;
+  padding:var(--s2) var(--s3);background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-sm)}
+.sa-m-k{font-family:var(--mono);font-size:var(--f-micro);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-dim)}
+.sa-m-v{font-family:var(--mono);font-size:var(--f-sm);color:var(--text-hi)}
+.sa-m-v.yes{color:var(--node)}
+.sa-m-v.no{color:var(--worker)}
+.sa-say{font-family:var(--sans);font-size:var(--f-md);line-height:var(--lh-prose);
+  color:var(--text);border-left:2px solid var(--border-hi);
+  padding:var(--s2) 0 var(--s2) var(--s4);min-height:4.4em;max-width:var(--measure)}
+.sa.is-control .sa-say{border-left-color:var(--worker)}
+@media (max-width:880px){ .sa-row{grid-template-columns:1fr} .sa-num{text-align:left} }
+
 /* ─────────── PAGE-LEVEL JS / TS TOGGLE ─────────── */
 .lang-toggle{
   display:inline-flex;align-items:center;gap:var(--s2);cursor:pointer;
@@ -4407,46 +4486,6 @@ code,.ic,.card p code,.card li code,.hf-node-title code,.hf-node-detail code,
   box-shadow:0 18px 48px rgba(0,0,0,.55);
 }
 html.light .gpop-stacked{box-shadow:0 18px 48px rgba(0,0,0,.22)}
-
-/* ─────────── SVG FIGURES ───────────
-   The vocabulary so far is rectangles in rows, which is the right shape for a
-   table and the wrong shape for containment, indirection, or a quantity against
-   a ceiling. These are drawn instead: concentric nesting, pointer graphs with
-   real arrowheads, and dials. Rule 4 still holds — flat fills, no gradient, no
-   glow — and every colour is a token so both themes are solved at once. */
-.svgfig{width:100%;height:auto;display:block;overflow:visible}
-.svgfig text{font-family:var(--mono);fill:var(--text-2)}
-.svgfig .sv-t{font-size:11px;letter-spacing:.09em;text-transform:uppercase}
-.svgfig .sv-lab{font-size:12.5px;fill:var(--text-hi);letter-spacing:.02em}
-.svgfig .sv-sub{font-size:10.5px;fill:var(--text-2);letter-spacing:.06em}
-.svgfig .sv-num{font-size:19px;fill:var(--text-hi);letter-spacing:.02em}
-.svgfig .sv-plate{fill:var(--surface2);stroke:var(--border)}
-.svgfig .sv-raise{fill:var(--raise);stroke:var(--border-hi)}
-.svgfig .sv-hollow{fill:none}
-.svgfig .sv-line{stroke:var(--border-hi);fill:none}
-.svgfig .sv-dash{stroke-dasharray:5 4}
-.svgfig [data-owner="main"]{stroke:var(--main-thread)}
-.svgfig [data-owner="node"]{stroke:var(--node)}
-.svgfig [data-owner="kernel"]{stroke:var(--kernel)}
-.svgfig [data-owner="worker"]{stroke:var(--worker)}
-.svgfig [data-owner="hw"]{stroke:var(--hardware)}
-.svgfig text[data-owner="main"]{fill:var(--main-thread);stroke:none}
-.svgfig text[data-owner="node"]{fill:var(--node);stroke:none}
-.svgfig text[data-owner="kernel"]{fill:var(--kernel);stroke:none}
-.svgfig text[data-owner="worker"]{fill:var(--worker);stroke:none}
-.svgfig text[data-owner="hw"]{fill:var(--hardware);stroke:none}
-.svgfig .sv-fill-main{fill:var(--main-thread-soft)}
-.svgfig .sv-fill-node{fill:var(--node-soft)}
-.svgfig .sv-fill-kernel{fill:var(--kernel-soft)}
-.svgfig .sv-fill-worker{fill:var(--worker-soft)}
-.svgfig .sv-fill-hw{fill:var(--hardware-soft)}
-.svgfig .sv-arrow{stroke:var(--text-2);fill:none;marker-end:url(#sv-head)}
-.svgfig .sv-head{fill:var(--text-2);stroke:none}
-.svg-wrap{padding:var(--s4);background:var(--surface2);
-  border:1px solid var(--border);border-radius:var(--r-md)}
-.svg-cap{margin-top:var(--s3);font-family:var(--sans);font-size:var(--f-xs);
-  line-height:var(--lh-ui);color:var(--text-2);
-  border-left:2px solid var(--border-hi);padding-left:var(--s3)}
 
 /* ── clickable code annotations (explain.js) ── */
 .code-body pre .cline{cursor:pointer;border-radius:3px}
@@ -4525,37 +4564,25 @@ html.light .gpop-stacked{box-shadow:0 18px 48px rgba(0,0,0,.22)}
 <div class="grain"></div>
 <div class="progress" id="progress"></div>
 <header>
-<div class="eyebrow">Part 00 · Node.js Internals Series · start here</div>
-<h1><span class="accent">Descriptors</span>, <span class="accent2">ports</span> and <span class="code">sockets</span> — the five things behind <span class="code">.listen(3000)</span></h1>
-<p class="subtitle">The groundwork. The rest of this series uses four words constantly and defines none of them — <strong style="color:var(--text-hi)">"socket" appears nearly three hundred times across Parts 8 and 9</strong>. This part says what they are: what a file descriptor actually indexes, why a port is not an object, why a listening socket and a connected socket are different things wearing one name, and which of five layers each API call brings into existence.</p>
-<div class="meta-row"><span>14 sections</span><span>18 figures</span><span>five layers</span><span>fd · port · socket · handle</span></div>
+<div class="eyebrow">Mission 06 · Node.js Internals Campaign</div>
+<h1>The <span class="accent">thread pool</span> — four subsystems, <span class="accent2">one queue</span>, and four threads by default</h1>
+<p class="subtitle">Part 5 introduced the pool as the thing that makes fs.readFile asynchronous, and every part since has called it "the pool". That is true and incomplete: <strong style="color:var(--text-hi)">four unrelated subsystems share it</strong> — the filesystem, DNS name resolution, several crypto functions and all of zlib — and by default they share four threads and one first-in-first-out queue.</p>
+<div class="meta-row"><span>8 sections</span><span>7 figures</span><span>four members</span><span>fs · dns · crypto · zlib</span></div>
 </header>
-<nav class="section-nav" id="snav"><div class="section-nav-inner"><button class="section-btn active" data-section="foundations"><span class="num">01</span>Foundations</button><button class="section-btn" data-section="fds"><span class="num">02</span>File Descriptors</button><button class="section-btn" data-section="ports"><span class="num">03</span>Ports</button><button class="section-btn" data-section="sockets"><span class="num">04</span>Sockets</button><button class="section-btn" data-section="api"><span class="num">05</span>The API Chain</button><button class="section-btn" data-section="synthesis"><span class="num">06</span>Synthesis</button>
+<nav class="section-nav" id="snav"><div class="section-nav-inner"><button class="section-btn active" data-section="foundations"><span class="num">01</span>Foundations</button><button class="section-btn" data-section="users"><span class="num">02</span>Who Uses It</button><button class="section-btn" data-section="collide"><span class="num">03</span>When They Collide</button><button class="section-btn" data-section="synthesis"><span class="num">04</span>Synthesis</button>
 <div class="theme-toggle" id="themeToggle"><span class="knob"></span><span>Light</span></div>
 </div></nav>
-<main><div class="major-section active" id="sec-foundations"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-f-short">0 · The Short Answer</button><button class="sub-tab" data-sub="sub-f-chain">1 · The Five Layers</button></div><div class="sub-panel active" id="sub-f-short"><div class="card main-edge"><div class="secnum">§ 0 · THE SHORT ANSWER FIRST</div><h2>Five things, and only one of them is a socket</h2><p>The rest of this series uses four words constantly and defines none of them. "Socket" appears nearly three hundred times across Parts 8 and 9. This part is the one that says what they are.</p><p>When you write <code>net.createServer().listen(3000)</code>, five distinct things come into existence, in four different places, and people call at least three of them "the socket".</p><div class="code-block"><div class="code-header"><span class="code-lang">JAVASCRIPT</span><span class="code-meta">ONE LINE, FIVE OBJECTS</span></div><div class="code-body"><pre>const server = net.createServer();
-server.listen(3000);
+<main><div class="major-section active" id="sec-foundations"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-f-short">0 · The Short Answer</button><button class="sub-tab" data-sub="sub-f-why">1 · What Qualifies</button></div><div class="sub-panel active" id="sub-f-short"><div class="card main-edge"><div class="secnum">§ 0 · THE SHORT ANSWER FIRST</div><h2>Four unrelated subsystems, four threads, one queue</h2><p>Part 5 introduced the thread pool as the thing that makes <code>fs.readFile</code> asynchronous, and every part since has referred to it as "the pool". That framing is true and incomplete, and the incompleteness is where the production surprises come from.</p><p><strong>Four different subsystems share it</strong> — the filesystem, DNS name resolution, several crypto functions and all of zlib — and by default they share <strong>four threads</strong>. They have nothing to do with each other, they queue together, and none of them knows the others exist.</p><div class="code-block"><div class="code-header"><span class="code-lang">JAVASCRIPT</span><span class="code-meta">THE COLLISION NOBODY EXPECTS</span></div><div class="code-body"><pre>zlib.gzip(bigBuffer, () =&gt; {});     // ×4, one per pool thread
+zlib.gzip(bigBuffer, () =&gt; {});
+zlib.gzip(bigBuffer, () =&gt; {});
+zlib.gzip(bigBuffer, () =&gt; {});
 
-// server            a JS object in V8&#x27;s heap
-// server._handle    a C++ TCPWrap
-// (inside it)       a libuv uv_tcp_t
-// (inside that)     fd 17, an integer in your process
-// (behind that)     a socket, in the kernel</pre></div></div><p>They are not synonyms and they do not have the same lifetime. The JS object can exist with no socket behind it; the socket can outlive the process that created it; and the integer 17 means nothing outside your process.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>If you only take one thing: the file descriptor is a NUMBER, not a thing. It is an index into a table your process owns. Everything confusing about fds, from <code>dup()</code> to passing sockets between processes, follows from that one fact.</p></div></div></div><div class="sub-panel" id="sub-f-chain"><div class="card main-edge"><div class="secnum">§ 1 · ONE CHAIN, FOUR BOUNDARIES</div><h2>Which of these is the socket?</h2><p>Each layer holds a reference to the one below it and adds something the layer below does not have. Click through them and note where each one lives, because the boundaries are where the confusion is.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Four objects nested in your process, and one that is not</span></div><span class="badge">§1 · what contains what</span></div><div class="hfdiag-body"><div class="svg-wrap"><svg class="svgfig" viewBox="0 0 900 330" preserveAspectRatio="xMidYMid meet" role="img"><defs><marker id="sv-head" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sv-head" d="M0 0 L8 4 L0 8 z"/></marker></defs><rect x="16" y="16" width="540" height="250" rx="10" class="sv-plate sv-fill-main" data-owner="main" stroke-width="1.5"/><text class="sv-t" data-owner="main" x="29" y="40">net.Server</text><text class="sv-sub" x="121" y="40">a JS object in V8's heap</text><rect x="42" y="56" width="488" height="190" rx="10" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-t" data-owner="node" x="55" y="80">TCPWrap</text><text class="sv-sub" x="147" y="80">server._handle, a C++ object</text><rect x="68" y="96" width="436" height="130" rx="10" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-t" data-owner="node" x="81" y="120">uv_tcp_t</text><text class="sv-sub" x="173" y="120">a libuv handle</text><rect x="94" y="136" width="384" height="70" rx="10" class="sv-plate sv-fill-kernel" data-owner="kernel" stroke-width="1.5"/><text class="sv-t" data-owner="kernel" x="107" y="160">fd 17</text><text class="sv-sub" x="199" y="160">an integer in your fd table</text><text class="sv-sub" x="566" y="126">refers to</text><line class="sv-arrow" x1="568" y1="152" x2="644" y2="152" stroke-width="1.5"/><rect x="658" y="74" width="228" height="158" rx="10" class="sv-plate sv-fill-kernel" data-owner="kernel" stroke-width="1.5"/><text class="sv-t" data-owner="kernel" x="676" y="102">the socket</text><text class="sv-lab" x="676" y="130">in the kernel</text><text class="sv-sub" x="676" y="152">· buffers</text><text class="sv-sub" x="676" y="172">· a state machine</text><text class="sv-sub" x="676" y="192">· a four-tuple</text><text class="sv-sub" x="676" y="212">· a queue</text><text class="sv-sub" x="658" y="252">outlives every layer left of it</text><line class="sv-line sv-dash" x1="618" y1="26" x2="618" y2="106" stroke-width="1.5"/><line class="sv-line sv-dash" x1="618" y1="140" x2="618" y2="258" stroke-width="1.5"/><text class="sv-t" x="392" y="300">your process</text><text class="sv-t" data-owner="kernel" x="660" y="300">the kernel</text></svg><div class="svg-cap">Four of the five live inside each other in your process, each holding the next. Only the innermost — an integer — reaches across the boundary. Closing it drops ONE reference: if another process holds a descriptor for the same socket, the socket carries on serving.</div></div><div class="hf-flow"><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">buffers</div><div class="hf-node-sub">a receive buffer and a send buffer</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Bytes that arrived and are waiting for your <code>read()</code>, and bytes you wrote that are waiting for the network. Both are kernel memory charged to the socket — §9 walks them.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">a state machine</div><div class="hf-node-sub">ESTABLISHED, TIME_WAIT and the rest</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Advanced by segments arriving and by your calls — which is why closing a connection is a negotiation rather than an event. Part 8 walks the full diagram.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">a four-tuple</div><div class="hf-node-sub">source IP · source port · dest IP · dest port</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">The connection's identity in the kernel's lookup table. Change any one of the four fields and it is a different connection — §6 is built on this.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">a queue</div><div class="hf-node-sub">two of them, on listening sockets</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">The SYN queue for half-open handshakes and the accept queue for completed ones, sized by the backlog argument. §9 places them; Part 8 is largely about them.</div></div></div></div><div class="hfdiag-foot"><span class="hint">the arrow crosses the only boundary that matters — everything left of it is yours</span></div></div><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Five layers, four boundaries</span></div><span class="badge">§1 · the identity chain</span></div><div class="hfdiag-body"><div data-instrument="layers"></div></div><div class="hfdiag-foot"><span class="hint">the boundaries are where each layer stops meaning anything</span></div></div><p>The two boundaries worth naming now: <strong>the fd is meaningless outside your process</strong>, and <strong>the socket is meaningless outside the kernel</strong>. Everything above the fd is Node's bookkeeping; everything below it is the operating system's.</p></div></div></div><div class="major-section" id="sec-fds"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-d-what">2 · What an fd Actually Is</button><button class="sub-tab" data-sub="sub-d-share">3 · Three Ways to Share One</button><button class="sub-tab" data-sub="sub-d-limits">4 · Running Out</button></div><div class="sub-panel active" id="sub-d-what"><div class="card main-edge"><div class="secnum">§ 2 · THREE LEVELS, NOT ONE</div><h2>A number, a description, and the thing itself</h2><p>Almost every confusing thing about descriptors comes from collapsing three levels into one. There are three, and they are shared differently.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>From the integer to the thing</span></div><span class="badge">§2 · three levels of indirection</span></div><div class="hfdiag-body"><div class="svg-wrap"><svg class="svgfig" viewBox="0 0 900 300" preserveAspectRatio="xMidYMid meet" role="img"><defs><marker id="sv-head" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sv-head" d="M0 0 L8 4 L0 8 z"/></marker></defs><text class="sv-t" x="30" y="40">one process's view</text><text class="sv-sub" x="30" y="62">the same integer in another process refers to something else entirely</text><rect x="30" y="96" width="200" height="118" rx="10" class="sv-plate sv-fill-main" data-owner="main" stroke-width="1.5"/><text class="sv-t" data-owner="main" x="46" y="124">fd 3</text><text class="sv-lab" x="46" y="150">a small integer</text><text class="sv-sub" x="46" y="172">an index into YOUR table</text><text class="sv-sub" x="46" y="190">per process</text><line class="sv-arrow" x1="236" y1="155" x2="316" y2="155" stroke-width="1.5"/><text class="sv-sub" x="246" y="130">indexes</text><text class="sv-sub" x="258" y="146">into</text><rect x="322" y="96" width="250" height="118" rx="10" class="sv-plate sv-fill-kernel" data-owner="kernel" stroke-width="1.5"/><text class="sv-t" data-owner="kernel" x="338" y="124">the open file description</text><text class="sv-lab" x="338" y="150">offset · mode · flags</text><text class="sv-sub" x="338" y="172">ONE object, shared by</text><text class="sv-sub" x="338" y="190">dup() and fork()</text><line class="sv-arrow" x1="578" y1="155" x2="650" y2="155" stroke-width="1.5"/><text class="sv-sub" x="582" y="146">points at</text><rect x="656" y="96" width="214" height="118" rx="10" class="sv-plate sv-fill-kernel" data-owner="kernel" stroke-width="1.5"/><text class="sv-t" data-owner="kernel" x="672" y="124">the inode / the socket</text><text class="sv-lab" x="672" y="150">the thing itself</text><text class="sv-sub" x="672" y="172">reference-counted — dies</text><text class="sv-sub" x="672" y="190">with the last reference</text><text class="sv-sub" x="30" y="262">two arrows, three lifetimes — and close() only touches the first arrow</text></svg><div class="svg-cap">Three levels of indirection behind one integer. The number is an index into your process's table; the entry points at a shared kernel object holding the offset; that object points at the thing itself, which lives until its last reference goes.</div></div><div class="hf-flow"><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the file descriptor</div><div class="hf-node-sub">a small integer · per process</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">An index into your process's descriptor table. 0, 1 and 2 are stdin, stdout and stderr by convention; the kernel hands out the lowest free number. The same integer in another process refers to something completely different.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the open file description</div><div class="hf-node-sub">a kernel object · shared by dup and fork</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">What the entry points at. It holds the FILE OFFSET, the access mode and the status flags. Two descriptors that share one of these share their read position — which is why <code>dup()</code> behaves the way it does.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the inode or socket</div><div class="hf-node-sub">the thing itself</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">The actual file on disk, or the actual socket with its buffers and its state machine. Many open file descriptions can point at one of these; the object stays alive until the last reference goes.</div></div></div></div><div class="hfdiag-foot"><span class="hint">the table is per process · the description is shared · the object is shared harder</span></div></div><div class="code-block"><div class="code-header"><span class="code-lang">C</span><span class="code-meta">THE DIFFERENCE THAT MATTERS</span></div><div class="code-body"><pre>int a = open(&quot;f&quot;, O_RDONLY);
-int b = dup(a);          // same open file description: SHARED offset
-int c = open(&quot;f&quot;, O_RDONLY);   // new description: INDEPENDENT offset
+dns.lookup(&quot;api.example.com&quot;, () =&gt; {});   // now waits for a compression job</pre></div></div><p>Nothing there is misconfigured. The DNS lookup is queued behind four compression jobs because compression and name resolution are served by the same four threads, and the queue is first-in, first-out.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>The pool is not "the filesystem pool". It is a general work queue for blocking C code, and every subsystem that uses it competes with every other one for the same four threads.</p></div></div></div><div class="sub-panel" id="sub-f-why"><div class="card main-edge"><div class="secnum">§ 1 · WHY THESE FOUR AND NOTHING ELSE</div><h2>No readiness interface means no other option</h2><p>Part 0 §8 and Part 8 established the rule that decides this. A socket can be watched: you ask the kernel to tell you when it is ready, and one thread can hold ten thousand of them. A regular file cannot — it is <em>always</em> ready, so the answer is useless and the only way to find out how long a read takes is to make it and see.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What sends work to the pool</span></div><span class="badge">§1 · the test</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">does it have a readiness interface?</div><div class="hf-node-sub">can epoll watch it?</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">If yes, the loop watches it and no thread is needed — that is every socket in Parts 8, 9 and 11. If no, someone has to sit and wait, and it cannot be the main thread.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">is the work pure CPU in C?</div><div class="hf-node-sub">compression, key derivation</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Then there is nothing to watch at all. It is not waiting, it is computing — and a thread that computes for 200ms is exactly as unavailable as one that waits for 200ms.</div></div><div class="hf-node" data-owner="worker"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">is it your JavaScript?</div><div class="hf-node-sub">then the pool cannot take it</div></div><div class="hf-node-tag t-worker">worker</div></div><div class="hf-node-detail">Pool threads have no V8 isolate, as Part 10 spends a figure on. A CPU-heavy loop of yours needs a <code>worker_thread</code>, not this.</div></div></div></div><div class="hfdiag-foot"><span class="hint">blocking C with no readiness interface — that is the whole membership test</span></div></div><p>Which is why the membership list looks arbitrary until you apply the test, and then looks inevitable.</p></div></div></div><div class="major-section" id="sec-users"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-u-four">2 · The Four Users</button><button class="sub-tab" data-sub="sub-u-dns">3 · The One That Surprises</button></div><div class="sub-panel active" id="sub-u-four"><div class="card main-edge"><div class="secnum">§ 2 · THE WHOLE MEMBERSHIP LIST</div><h2>fs, dns.lookup, some crypto, all zlib</h2><p>Here is everything in Node that hands work to the pool, and the shape of what it submits.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What each one submits</span></div><span class="badge">§2 · the members</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">fs — every asynchronous operation</div><div class="hf-node-sub">read, write, stat, readdir, open, close</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Part 5's subject. Each call is one job. A <code>readFile</code> of a large file is one job that holds a thread for the whole read, which is why a directory walk of thousands of files saturates the pool so easily.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">dns.lookup</div><div class="hf-node-sub">getaddrinfo — the OS resolver</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">The one that surprises people, and §3 is entirely about it. It is a BLOCKING C call into the system resolver, so it needs a thread — even though what it is doing is network work.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">crypto — the async forms only</div><div class="hf-node-sub">pbkdf2, scrypt, randomBytes, randomFill</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Pure CPU, deliberately handed to the pool so it does not block the loop. The <code>Sync</code> variants of all of these run on the main thread instead, which is the trap.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">zlib — everything</div><div class="hf-node-sub">gzip, deflate, brotli, and their streams</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">All compression is pool work. A streaming gzip submits a job per chunk, so one large response can occupy a thread repeatedly rather than once.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">and nothing else</div><div class="hf-node-sub">not net, not http, not tls, not timers</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">Sockets are watched, not waited on. Timers are a number passed to epoll_wait. Your JavaScript runs on the main thread. None of these touch the pool.</div></div></div></div><div class="hfdiag-foot"><span class="hint">four members · one queue · four threads by default</span></div></div><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>If you have ever wondered why a Node service gets slower during a burst of gzip, and the slowdown shows up as DNS timeouts, this list is the reason. They are the same queue.</p></div></div></div><div class="sub-panel" id="sub-u-dns"><div class="card main-edge"><div class="secnum">§ 3 · DNS.LOOKUP VS DNS.RESOLVE</div><h2>The same answer by two completely different routes</h2><p>These two functions look like variants of one thing. They are not: one takes a pool thread and one does not touch the pool at all.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Which one uses a thread?</span></div><span class="badge">§3 · two routes to a name</span></div><div class="hfdiag-body"><div data-instrument="dns"></div></div><div class="hfdiag-foot"><span class="hint">the control is the one that quietly consumes your pool under load</span></div></div><p>Almost everything resolves names through <code>dns.lookup</code> without asking for it: <code>http.request</code>, <code>fetch</code>, database drivers, every client library that takes a hostname. So a service making many outbound connections is submitting pool jobs constantly, and it never appears in the code as a pool operation.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p><code>dns.lookup</code> consults the operating system — hosts file, nsswitch, everything — and that API is blocking, so it needs a thread. <code>dns.resolve</code> sends a DNS query over a socket, which the loop can watch like any other socket. Same question, opposite mechanism.</p></div></div></div></div><div class="major-section" id="sec-collide"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-c-sat">4 · Head-of-Line Blocking</button><button class="sub-tab" data-sub="sub-c-size">5 · UV_THREADPOOL_SIZE</button></div><div class="sub-panel active" id="sub-c-sat"><div class="card main-edge"><div class="secnum">§ 4 · FOUR THREADS, ONE QUEUE</div><h2>A compression job can delay a name lookup</h2><p>Part 5 showed the pool saturating with file reads. That figure held one subsystem constant; this one is about what happens when the jobs come from <em>different</em> subsystems, because that is the case nobody plans for.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Mixed work, four threads</span></div><span class="badge">§4 · the shared queue</span></div><div class="hfdiag-body"><div data-instrument="sat"></div></div><div class="hfdiag-foot"><span class="hint">the control raises the pool size — and shows what that does and does not fix</span></div></div><p>The queue is first-in, first-out and jobs are not preemptible. A <code>pbkdf2</code> at high iteration counts holds a thread for as long as it takes, and everything behind it waits — including a DNS lookup that would have taken a millisecond.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>The symptom almost never names the cause. You see slow DNS, or slow file reads, and the actual culprit is a different subsystem entirely that happens to share the queue.</p></div></div></div><div class="sub-panel" id="sub-c-size"><div class="card main-edge"><div class="secnum">§ 5 · THE ONE KNOB, AND ITS RULES</div><h2>Read once, at first use, and never again</h2><p>The pool size is set by an environment variable, defaults to 4, and has two properties that make it easy to set ineffectively.</p><div class="code-block"><div class="code-header"><span class="code-lang">JAVASCRIPT</span><span class="code-meta">TOO LATE — THE POOL IS ALREADY SIZED</span></div><div class="code-body"><pre>const fs = require(&quot;fs&quot;);
+fs.readFile(__filename, () =&gt; {});        // pool created HERE, with 4 threads
 
-read(a, buf, 10);        // offset now 10 for BOTH a and b
-                         // c is still at 0</pre></div></div><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>A descriptor is a reference, and the object behind it is reference-counted. <code>close()</code> does not close anything — it drops one reference. The socket goes away when the last reference does, wherever that reference happens to live.</p></div></div></div><div class="sub-panel" id="sub-d-share"><div class="card main-edge"><div class="secnum">§ 3 · DUP, FORK, AND THE POST</div><h2>How two descriptors end up pointing at one thing</h2><p>There are exactly three ways a second descriptor comes to refer to something that already exists, and Part 11's socket passing is the third of them.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Descriptors point at a shared object, not at the file</span></div><span class="badge">§3 · two arrows deep</span></div><div class="hfdiag-body"><div class="svg-wrap"><svg class="svgfig" viewBox="0 0 900 330" preserveAspectRatio="xMidYMid meet" role="img"><defs><marker id="sv-head" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sv-head" d="M0 0 L8 4 L0 8 z"/></marker></defs><rect x="16" y="40" width="210" height="56" rx="8" class="sv-plate sv-fill-main" data-owner="main" stroke-width="1.5"/><text class="sv-t" data-owner="main" x="30" y="61">process A</text><text class="sv-lab" x="30" y="82">fd 17</text><path class="sv-arrow" d="M226 68 C 300 68 320 168 392 168" stroke-width="1.5"/><rect x="16" y="118" width="210" height="56" rx="8" class="sv-plate sv-fill-main" data-owner="main" stroke-width="1.5"/><text class="sv-t" data-owner="main" x="30" y="139">process A</text><text class="sv-lab" x="30" y="160">fd 23</text><path class="sv-arrow" d="M226 146 C 300 146 320 168 392 168" stroke-width="1.5"/><rect x="16" y="196" width="210" height="56" rx="8" class="sv-plate sv-fill-main" data-owner="main" stroke-width="1.5"/><text class="sv-t" data-owner="main" x="30" y="217">process B</text><text class="sv-lab" x="30" y="238">fd 5</text><path class="sv-arrow" d="M226 224 C 300 224 320 168 392 168" stroke-width="1.5"/><rect x="398" y="112" width="230" height="112" rx="10" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-t" data-owner="node" x="414" y="138">open file description</text><text class="sv-lab" x="414" y="164">one shared object</text><text class="sv-sub" x="414" y="186">holds the file OFFSET</text><text class="sv-sub" x="414" y="204">and the access mode</text><path class="sv-arrow" d="M628 168 L700 168" stroke-width="1.5"/><rect x="708" y="112" width="176" height="112" rx="10" class="sv-plate sv-fill-kernel" data-owner="kernel" stroke-width="1.5"/><text class="sv-t" data-owner="kernel" x="724" y="138">the inode</text><text class="sv-lab" x="724" y="164">or the socket</text><text class="sv-sub" x="724" y="186">the thing itself</text><text class="sv-t" x="16" y="272">dup() · fork() · SCM_RIGHTS</text><text class="sv-sub" x="16" y="294">three ways to arrive at the middle box —</text><text class="sv-sub" x="16" y="312">and all three SHARE the offset that lives there</text><text class="sv-sub" x="398" y="252">seek in one, and the others move too</text><text class="sv-sub" x="708" y="252">closes only when the last</text><text class="sv-sub" x="708" y="270">reference is gone</text></svg><div class="svg-cap">Three descriptors, in two processes, all pointing at ONE open file description — which is why a seek through one is visible through the others, and why closing a descriptor is a decrement rather than a shutdown. Two arrows deep, not one.</div></div></div><div class="hfdiag-foot"><span class="hint">the middle box is why dup, fork and SCM_RIGHTS all behave the same way</span></div></div><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>How a second reference is created</span></div><span class="badge">§3 · the three doors</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">dup() / dup2()</div><div class="hf-node-sub">within one process</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">A second entry in the same table pointing at the same open file description. This is how shell redirection works: <code>dup2(fd, 1)</code> makes descriptor 1 refer to your file, so everything that writes to stdout writes there.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">fork()</div><div class="hf-node-sub">to a child process</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">The child gets a COPY of the descriptor table, so the same numbers refer to the same descriptions. Parent and child share file offsets — which surprises people the first time two processes interleave writes to one log.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">sendmsg() with SCM_RIGHTS</div><div class="hf-node-sub">to any process</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Ancillary data on a unix domain socket. The integer does not travel; the kernel installs a reference to the same open file description in the receiver, under whatever number is free THERE. This is the mechanism Part 11 is built on.</div></div></div></div><div class="hfdiag-foot"><span class="hint">in all three, one object gains a reference — nothing is copied</span></div></div><p>Note what is absent from that list: there is no way to name someone else's descriptor. You cannot ask for "fd 17 in process 4821". The number is only meaningful inside the table that contains it, which is why passing one requires the kernel's cooperation rather than just sending an integer.</p></div></div><div class="sub-panel" id="sub-d-limits"><div class="card main-edge"><div class="secnum">§ 4 · THE TABLE HAS A SIZE</div><h2>EMFILE, and why servers hit it</h2><p>The descriptor table is finite and the limit is per process. Every connection your server accepts consumes one entry, and so does every file, every pipe and every watcher.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>A finite table, and what full looks like</span></div><span class="badge">§4 · the ceiling</span></div><div class="hfdiag-body"><div class="svg-wrap"><svg class="svgfig" viewBox="0 0 900 330" preserveAspectRatio="xMidYMid meet" role="img"><defs><marker id="sv-head" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sv-head" d="M0 0 L8 4 L0 8 z"/></marker></defs><text class="sv-t" x="30" y="36">your process's descriptor table</text><text class="sv-sub" x="30" y="58">one slot per descriptor — every file, socket, pipe and watcher</text><rect x="30" y="80" width="40" height="44" rx="6" class="sv-plate sv-fill-main" data-owner="main" stroke-width="1.5"/><text class="sv-sub" x="42" y="107">0</text><rect x="76" y="80" width="40" height="44" rx="6" class="sv-plate sv-fill-main" data-owner="main" stroke-width="1.5"/><text class="sv-sub" x="88" y="107">1</text><rect x="122" y="80" width="40" height="44" rx="6" class="sv-plate sv-fill-main" data-owner="main" stroke-width="1.5"/><text class="sv-sub" x="134" y="107">2</text><rect x="168" y="80" width="40" height="44" rx="6" class="sv-plate sv-fill-main" data-owner="main" stroke-width="1.5"/><text class="sv-sub" x="180" y="107">3</text><rect x="214" y="80" width="40" height="44" rx="6" class="sv-plate sv-fill-main" data-owner="main" stroke-width="1.5"/><text class="sv-sub" x="226" y="107">4</text><rect x="260" y="80" width="40" height="44" rx="6" class="sv-plate sv-fill-main" data-owner="main" stroke-width="1.5"/><text class="sv-sub" x="272" y="107">5</text><rect x="306" y="80" width="40" height="44" rx="6" class="sv-plate sv-fill-main" data-owner="main" stroke-width="1.5"/><text class="sv-sub" x="318" y="107">6</text><rect x="352" y="80" width="40" height="44" rx="6" class="sv-plate sv-fill-main" data-owner="main" stroke-width="1.5"/><text class="sv-sub" x="364" y="107">7</text><rect x="398" y="80" width="40" height="44" rx="6" class="sv-plate sv-fill-main" data-owner="main" stroke-width="1.5"/><text class="sv-sub" x="410" y="107">8</text><rect x="444" y="80" width="40" height="44" rx="6" class="sv-plate sv-fill-main" data-owner="main" stroke-width="1.5"/><text class="sv-sub" x="456" y="107">9</text><rect x="490" y="80" width="40" height="44" rx="6" class="sv-plate sv-fill-main" data-owner="main" stroke-width="1.5"/><text class="sv-sub" x="502" y="107">10</text><rect x="536" y="80" width="40" height="44" rx="6" class="sv-hollow" data-owner="main" stroke-width="1.5"/><rect x="582" y="80" width="40" height="44" rx="6" class="sv-hollow" data-owner="main" stroke-width="1.5"/><text class="sv-sub" x="30" y="146">0 1 2 · stdin stdout stderr</text><text class="sv-sub" x="240" y="146">connections · files · pipes</text><text class="sv-sub" x="540" y="146">free</text><line class="sv-line" x1="30" y1="168" x2="628" y2="168" stroke-width="1.5"/><line class="sv-line" x1="30" y1="162" x2="30" y2="168" stroke-width="1.5"/><line class="sv-line" x1="628" y1="162" x2="628" y2="168" stroke-width="1.5"/><text class="sv-lab" x="644" y="172">ulimit -n = 1024</text><text class="sv-sub" x="644" y="192">the whole table, connections included</text><rect x="30" y="214" width="300" height="88" rx="10" class="sv-plate sv-fill-kernel" data-owner="kernel" stroke-width="1.5"/><text class="sv-t" data-owner="kernel" x="46" y="240">the accept queue</text><text class="sv-sub" x="46" y="264">completed handshakes, still</text><text class="sv-sub" x="46" y="282">arriving while the table is full</text><line class="sv-arrow" x1="336" y1="258" x2="428" y2="258" stroke-width="1.5"/><text class="sv-lab" x="348" y="249">accept()</text><rect x="434" y="236" width="150" height="44" rx="8" class="sv-hollow" data-owner="worker" stroke-width="1.5"/><text class="sv-t" data-owner="worker" x="450" y="263">EMFILE</text><text class="sv-sub" x="600" y="250">no free slot — the client sees</text><text class="sv-sub" x="600" y="268">a hang, not a refusal</text></svg><div class="svg-cap">Thirteen slots drawn; a common default is 1024. The queue keeps taking completed handshakes even when the table is full — accept() fails with EMFILE, nothing is refused, and the client waits on a connection your process can never pick up.</div></div></div><div class="hfdiag-foot"><span class="hint">an idle connection costs a slot and some kernel memory, not CPU</span></div></div><div class="code-block"><div class="code-header"><span class="code-lang">BASH</span><span class="code-meta">THE NUMBER THAT DECIDES HOW MANY CONNECTIONS YOU CAN HOLD</span></div><div class="code-body"><pre>$ ulimit -n
-1024                      # a common default — 1024 CONNECTIONS, not 1024 requests
-
-$ ls /proc/self/fd        # your process&#x27;s table, as files
-0  1  2  3  17  18  19</pre></div></div><p>When the table is full, <code>accept()</code> fails with <code>EMFILE</code> — and the connection stays in the accept queue rather than being refused, so the client sees a hang rather than an error. A server that leaks descriptors degrades slowly and then stops accepting entirely, with no crash to point at.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>An idle connection costs a descriptor and some kernel memory, not CPU. That is why an event-loop server holds tens of thousands of them happily — and why the descriptor limit, not the CPU, is usually what caps it.</p></div></div></div></div><div class="major-section" id="sec-ports"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-p-what">5 · What a Port Is</button><button class="sub-tab" data-sub="sub-p-tuple">6 · What Identifies a Connection</button><button class="sub-tab" data-sub="sub-p-ephemeral">7 · Ephemeral Ports</button></div><div class="sub-panel active" id="sub-p-what"><div class="card main-edge"><div class="secnum">§ 5 · SIXTEEN BITS IN A HEADER</div><h2>Not an object, not owned, not a resource the OS allocates</h2><p>A port is a number in a range: 0 to 65535, because the field in the TCP header is sixteen bits wide. That is the whole definition. It is not a device, not a file, and not something the kernel creates.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>A port is a field, not a thing</span></div><span class="badge">§5 · where the number lives</span></div><div class="hfdiag-body"><div class="svg-wrap"><svg class="svgfig" viewBox="0 0 900 340" preserveAspectRatio="xMidYMid meet" role="img"><defs><marker id="sv-head" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sv-head" d="M0 0 L8 4 L0 8 z"/></marker></defs><text class="sv-t" x="30" y="36">one TCP segment, first four bytes</text><text class="sv-sub" x="30" y="58">the only place a port physically exists</text><text class="sv-sub" x="80" y="92">bit 0</text><text class="sv-sub" x="404" y="92">15</text><text class="sv-sub" x="460" y="92">16</text><text class="sv-sub" x="800" y="92">31</text><rect x="80" y="100" width="360" height="76" rx="8" class="sv-plate sv-fill-hw" data-owner="hw" stroke-width="1.5"/><text class="sv-t" data-owner="hw" x="96" y="126">source port</text><text class="sv-num" x="96" y="160">54321</text><rect x="460" y="100" width="360" height="76" rx="8" class="sv-plate sv-fill-hw" data-owner="hw" stroke-width="1.5"/><text class="sv-t" data-owner="hw" x="476" y="126">destination port</text><text class="sv-num" x="476" y="160">3000</text><text class="sv-sub" x="80" y="202">sixteen bits each · 0 to 65535 · that is the whole definition</text><line class="sv-arrow" x1="640" y1="182" x2="640" y2="222" stroke-width="1.5"/><text class="sv-sub" x="652" y="206">looked up on arrival</text><rect x="460" y="228" width="360" height="92" rx="10" class="sv-plate sv-fill-kernel" data-owner="kernel" stroke-width="1.5"/><text class="sv-t" data-owner="kernel" x="476" y="254">the kernel's lookup table</text><text class="sv-sub" x="476" y="278">3000 → the LISTENING socket</text><text class="sv-sub" x="476" y="296">8080 → (no entry · RST back)</text><text class="sv-lab" x="80" y="254">bind(3000)</text><text class="sv-sub" x="80" y="278">= INSERT INTO the table</text><text class="sv-sub" x="80" y="296">EADDRINUSE = duplicate key</text></svg><div class="svg-cap">Two sixteen-bit fields in every segment, and one table in the kernel. A port is never created or destroyed — binding inserts a row mapping the number to your socket, and an arriving segment's destination field is the key the kernel looks up.</div></div><div class="hf-flow"><div class="hf-node" data-owner="hw"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">16 bits in the TCP header</div><div class="hf-node-sub">two of them, source and destination</div></div><div class="hf-node-tag t-hw">hw</div></div><div class="hf-node-detail">Every segment carries both. That is the only place a port physically exists — in the bytes on the wire.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the kernel keeps a lookup table</div><div class="hf-node-sub">from port to socket</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">"Binding" a port means inserting an entry into that table. <code>EADDRINUSE</code> is a duplicate-key error, nothing more exotic.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">below 1024 is privileged</div><div class="hf-node-sub">a policy, not a mechanism</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">A convention enforced by the kernel: you need root or <code>CAP_NET_BIND_SERVICE</code> to bind one. Nothing about port 80 is technically different from port 8080.</div></div></div></div><div class="hfdiag-foot"><span class="hint">binding is an insert · EADDRINUSE is a duplicate key</span></div></div><p>Which raises the question the next panel answers: if a port is just a number in a table, how can one of them serve ten thousand simultaneous connections without ambiguity?</p></div></div><div class="sub-panel" id="sub-p-tuple"><div class="card main-edge"><div class="secnum">§ 6 · THE FOUR-TUPLE</div><h2>Not the port — the pair of pairs</h2><p>A connection is identified by four values together: source address, source port, destination address, destination port. The kernel demultiplexes incoming segments by looking up that tuple, and any two connections that differ in <em>any one</em> of the four are distinct.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Three connections, and what separates them</span></div><span class="badge">§6 · four fields, one identity</span></div><div class="hfdiag-body"><div class="svg-wrap"><svg class="svgfig" viewBox="0 0 900 330" preserveAspectRatio="xMidYMid meet" role="img"><defs><marker id="sv-head" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sv-head" d="M0 0 L8 4 L0 8 z"/></marker></defs><text class="sv-t" x="150" y="34">source IP</text><text class="sv-t" x="330" y="34">source port</text><text class="sv-t" x="490" y="34">dest IP</text><text class="sv-t" x="700" y="34">dest port</text><text class="sv-t" data-owner="main" x="16" y="90">connection A</text><rect x="150" y="60" width="168" height="44" rx="7" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-lab" x="164" y="88">203.0.113.7</text><rect x="330" y="60" width="146" height="44" rx="7" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-lab" x="344" y="88">54321</text><rect x="490" y="60" width="196" height="44" rx="7" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-lab" x="504" y="88">198.51.100.9</text><rect x="700" y="60" width="116" height="44" rx="7" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-lab" x="714" y="88">3000</text><path class="sv-line" d="M150 112 h666" data-owner="main" stroke-width="1.5"/><text class="sv-t" data-owner="main" x="16" y="164">connection B</text><rect x="150" y="134" width="168" height="44" rx="7" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-lab" x="164" y="162">203.0.113.7</text><rect x="330" y="134" width="146" height="44" rx="7" class="sv-plate sv-fill-worker" data-owner="worker" stroke-width="1.5"/><text class="sv-lab" x="344" y="162">54322</text><rect x="490" y="134" width="196" height="44" rx="7" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-lab" x="504" y="162">198.51.100.9</text><rect x="700" y="134" width="116" height="44" rx="7" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-lab" x="714" y="162">3000</text><path class="sv-line" d="M150 186 h666" data-owner="main" stroke-width="1.5"/><text class="sv-t" data-owner="main" x="16" y="238">connection C</text><rect x="150" y="208" width="168" height="44" rx="7" class="sv-plate sv-fill-worker" data-owner="worker" stroke-width="1.5"/><text class="sv-lab" x="164" y="236">198.51.100.4</text><rect x="330" y="208" width="146" height="44" rx="7" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-lab" x="344" y="236">54321</text><rect x="490" y="208" width="196" height="44" rx="7" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-lab" x="504" y="236">198.51.100.9</text><rect x="700" y="208" width="116" height="44" rx="7" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-lab" x="714" y="236">3000</text><path class="sv-line" d="M150 260 h666" data-owner="main" stroke-width="1.5"/><text class="sv-sub" x="150" y="284">each row is ONE connection — the four together are its identity</text><text class="sv-t" data-owner="worker" x="150" y="310">one field differs · therefore a different connection</text></svg><div class="svg-cap">Three connections to the SAME server port. A and B differ only in the source port; A and C only in the source address. Change any one of the four and it is a different connection — which is why one listening port can serve thousands at once, and why the ephemeral range is the field that runs out.</div></div></div><div class="hfdiag-foot"><span class="hint">change any one of the four and it is a different connection</span></div></div><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What makes two connections different</span></div><span class="badge">§6 · the tuple</span></div><div class="hfdiag-body"><div data-instrument="tuple"></div></div><div class="hfdiag-foot"><span class="hint">change any one of the four and it is a different connection</span></div></div><p>That is why your server needs exactly one listening socket on port 3000 to serve ten thousand clients. Every one of those connections has destination port 3000, and they are told apart entirely by the client's address and port.</p><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>A listening socket is identified by a PAIR — local address and local port. A connected socket is identified by all FOUR. That difference is the reason the two are different kinds of object, which is §9.</p></div></div></div><div class="sub-panel" id="sub-p-ephemeral"><div class="card main-edge"><div class="secnum">§ 7 · THE CLIENT SIDE OF THE NUMBER</div><h2>Where the other port comes from, and how you run out</h2><p>The client never chooses its port. The kernel picks one from the ephemeral range when you <code>connect()</code>, and on Linux that range is about twenty-eight thousand numbers wide.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Which numbers the kernel will actually pick</span></div><span class="badge">§7 · the port space, to scale</span></div><div class="hfdiag-body"><div class="svg-wrap"><svg class="svgfig" viewBox="0 0 900 330" preserveAspectRatio="xMidYMid meet" role="img"><defs><marker id="sv-head" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sv-head" d="M0 0 L8 4 L0 8 z"/></marker></defs><path d="M240.0 250.0 A190 190 0 0 1 240.2 240.7" class="sv-hollow" data-owner="kernel" stroke-width="18" stroke-linecap="butt"/><path d="M240.2 240.7 A190 190 0 0 1 430.0 60.0" class="sv-hollow" data-owner="node" stroke-width="18" stroke-linecap="butt"/><path d="M430.0 60.0 A190 190 0 0 1 615.5 209.0" class="sv-hollow" data-owner="worker" stroke-width="30" stroke-linecap="butt"/><path d="M615.5 209.0 A190 190 0 0 1 620.0 250.0" class="sv-hollow" data-owner="main" stroke-width="18" stroke-linecap="butt"/><text class="sv-num" x="430" y="198" text-anchor="middle">28,232</text><text class="sv-t" x="430" y="220" text-anchor="middle">ephemeral ports</text><text class="sv-sub" x="430" y="242" text-anchor="middle">per destination · 32768 to 60999</text><rect x="40" y="290" width="12" height="12" rx="3" class="sv-hollow" data-owner="kernel" stroke-width="2"/><text class="sv-sub" x="60" y="300">ports 0–1023</text><text class="sv-t" data-owner="kernel" x="60" y="318">privileged</text><rect x="256" y="290" width="12" height="12" rx="3" class="sv-hollow" data-owner="node" stroke-width="2"/><text class="sv-sub" x="276" y="300">ports 1024–32767</text><text class="sv-t" data-owner="node" x="276" y="318">registered</text><rect x="472" y="290" width="12" height="12" rx="3" class="sv-hollow" data-owner="worker" stroke-width="2"/><text class="sv-sub" x="492" y="300">ports 32768–60999</text><text class="sv-t" data-owner="worker" x="492" y="318">THE EPHEMERAL RANGE</text><rect x="688" y="290" width="12" height="12" rx="3" class="sv-hollow" data-owner="main" stroke-width="2"/><text class="sv-sub" x="708" y="300">ports 61000–65535</text><text class="sv-t" data-owner="main" x="708" y="318">above the range</text><text class="sv-t" data-owner="worker" x="670" y="120">TIME_WAIT</text><text class="sv-sub" x="670" y="144">holds a tuple for ~60s</text><text class="sv-sub" x="670" y="162">after close, so you reach</text><text class="sv-sub" x="670" y="180">the ceiling sooner than</text><text class="sv-sub" x="670" y="198">the arithmetic suggests</text></svg><div class="svg-cap">The whole port space, drawn to scale. The thick band is the only part the kernel draws from when it needs a source port — about 28,000 of 65,536 — and it is per DESTINATION, not per machine. Connections to two different servers do not compete for it.</div></div></div><div class="hfdiag-foot"><span class="hint">the thick band is the only part in play · and it is per destination, not per machine</span></div></div><div class="code-block"><div class="code-header"><span class="code-lang">BASH</span><span class="code-meta">THE RANGE, AND WHAT IT LIMITS</span></div><div class="code-body"><pre>$ cat /proc/sys/net/ipv4/ip_local_port_range
-32768   60999            # 28,232 ports
-
-# so ONE client can hold ~28k simultaneous connections
-# to ONE (destination ip, destination port) — and no more</pre></div></div><p>The limit is per destination, not global, because the tuple includes the destination. Twenty-eight thousand connections to one upstream service exhausts it; the same client can open twenty-eight thousand more to a different one.</p><p>And this is where Part 11's <code>TIME_WAIT</code> comes back. A closed connection holds its tuple for roughly sixty seconds, so a client that opens and closes connections fast enough can exhaust the range with connections that are already finished. That is the shape of most "cannot assign requested address" incidents.</p></div></div></div><div class="major-section" id="sec-sockets"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-s-two">8 · Two Kinds, One Word</button><button class="sub-tab" data-sub="sub-s-owns">9 · What a Socket Owns</button></div><div class="sub-panel active" id="sub-s-two"><div class="card main-edge"><div class="secnum">§ 8 · THE OVERLOAD THAT CAUSES THE CONFUSION</div><h2>A listening socket is not a connection</h2><p>"Socket" names two different objects with different fields, different lifetimes and different state machines. Almost every muddle in this area is these two being treated as the same thing.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What accept() actually produces</span></div><span class="badge">§8 · one of these, many of those</span></div><div class="hfdiag-body"><div class="svg-wrap"><svg class="svgfig" viewBox="0 0 900 360" preserveAspectRatio="xMidYMid meet" role="img"><defs><marker id="sv-head" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sv-head" d="M0 0 L8 4 L0 8 z"/></marker></defs><rect x="20" y="112" width="230" height="130" rx="10" class="sv-plate sv-fill-kernel" data-owner="kernel" stroke-width="1.5"/><text class="sv-t" data-owner="kernel" x="38" y="140">the LISTENING socket</text><text class="sv-lab" x="38" y="168">*:3000</text><text class="sv-sub" x="38" y="192">never carries data</text><text class="sv-sub" x="38" y="210">holds two queues</text><text class="sv-sub" x="38" y="230">one per process, forever</text><text class="sv-t" x="20" y="88">ONE of these</text><path class="sv-arrow" d="M256 177 C 330 177 340 74 418 74" stroke-width="1.5"/><rect x="428" y="48" width="330" height="52" rx="8" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-t" data-owner="node" x="446" y="70">connected socket</text><text class="sv-sub" x="600" y="70">203.0.113.7:54321</text><text class="sv-sub" x="446" y="90">its own buffers · its own state</text><path class="sv-arrow" d="M256 177 C 330 177 340 164 418 164" stroke-width="1.5"/><rect x="428" y="138" width="330" height="52" rx="8" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-t" data-owner="node" x="446" y="160">connected socket</text><text class="sv-sub" x="600" y="160">203.0.113.7:54322</text><text class="sv-sub" x="446" y="180">its own buffers · its own state</text><path class="sv-arrow" d="M256 177 C 330 177 340 254 418 254" stroke-width="1.5"/><rect x="428" y="228" width="330" height="52" rx="8" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-t" data-owner="node" x="446" y="250">connected socket</text><text class="sv-sub" x="600" y="250">198.51.100.4:54321</text><text class="sv-sub" x="446" y="270">its own buffers · its own state</text><path class="sv-arrow sv-dash" d="M256 177 C 330 177 340 344 418 344" stroke-width="1.5"/><rect x="428" y="318" width="330" height="52" rx="8" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-t" data-owner="node" x="446" y="340">connected socket</text><text class="sv-sub" x="600" y="340">… thousands more</text><text class="sv-sub" x="446" y="360">its own buffers · its own state</text><text class="sv-t" data-owner="node" x="428" y="26">MANY of these</text><text class="sv-sub" x="270" y="150">accept()</text></svg><div class="svg-cap">One word, two objects. The listening socket exists once and never carries a byte; every accept() produces a NEW connected socket with its own buffers, its own state machine and its own four-tuple — all of them sharing the same local port, because the other three fields differ.</div></div></div><div class="hfdiag-foot"><span class="hint">the listening socket never carries a byte · every accept makes a new object</span></div></div><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Listening vs connected</span></div><span class="badge">§8 · not the same object</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">a listening socket</div><div class="hf-node-sub">identified by (local ip, local port)</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Owns the SYN queue and the accept queue that Part 8 takes up. Has no peer, no send buffer, no receive buffer, and never carries a single byte of your data. Its only job is to manufacture connected sockets.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">a connected socket</div><div class="hf-node-sub">identified by all four tuple fields</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Owns a send buffer and a receive buffer, has a peer, and runs the TCP state machine Part 8 walks — ESTABLISHED, CLOSE_WAIT, TIME_WAIT and the rest. This is the one that carries your bytes.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">accept() is the factory</div><div class="hf-node-sub">one in, one out</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Called on the listening socket; returns a NEW descriptor for a NEW connected socket. The listening socket is unchanged and keeps listening — accept does not consume it.</div></div></div></div><div class="hfdiag-foot"><span class="hint">one has queues · the other has buffers · they are never the same object</span></div></div><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>When someone says "the socket closed", ask which one. A connected socket closing ends one conversation; the listening socket closing means your server stops accepting, and that is a completely different outage.</p></div></div></div><div class="sub-panel" id="sub-s-owns"><div class="card main-edge"><div class="secnum">§ 9 · THE MEMORY BEHIND THE DESCRIPTOR</div><h2>Buffers, queues, and who is allowed to touch them</h2><p>Behind the descriptor is a kernel structure with real memory attached, and knowing which memory belongs to which object explains several things the rest of the series takes for granted.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What actually sits behind the fd</span></div><span class="badge">§9 · the memory</span></div><div class="hfdiag-body"><div class="svg-wrap"><svg class="svgfig" viewBox="0 0 900 360" preserveAspectRatio="xMidYMid meet" role="img"><defs><marker id="sv-head" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sv-head" d="M0 0 L8 4 L0 8 z"/></marker></defs><text class="sv-t" data-owner="main" x="60" y="30">your process</text><line class="sv-line sv-dash" x1="250" y1="44" x2="250" y2="330" stroke-width="1.5"/><text class="sv-t" x="764" y="30">the network</text><line class="sv-line sv-dash" x1="740" y1="44" x2="740" y2="330" stroke-width="1.5"/><rect x="280" y="54" width="430" height="276" rx="10" class="sv-plate sv-fill-kernel" data-owner="kernel" stroke-width="1.5"/><text class="sv-t" data-owner="kernel" x="298" y="82">the socket</text><text class="sv-sub" x="298" y="106">kernel memory, charged to the socket</text><rect x="304" y="124" width="382" height="64" rx="8" class="sv-plate sv-fill-kernel" data-owner="kernel" stroke-width="1.5"/><text class="sv-t" data-owner="kernel" x="318" y="148">the receive buffer</text><text class="sv-sub" x="318" y="170">bytes that arrived, not yet read</text><line class="sv-arrow" x1="746" y1="156" x2="692" y2="156" stroke-width="1.5"/><text class="sv-sub" x="752" y="147">segments</text><text class="sv-sub" x="752" y="165">arrive</text><line class="sv-arrow" x1="304" y1="156" x2="262" y2="156" stroke-width="1.5"/><text class="sv-sub" x="64" y="147">read()</text><text class="sv-sub" x="64" y="165">drains it</text><rect x="304" y="204" width="382" height="64" rx="8" class="sv-plate sv-fill-kernel" data-owner="kernel" stroke-width="1.5"/><text class="sv-t" data-owner="kernel" x="318" y="228">the send buffer</text><text class="sv-sub" x="318" y="250">bytes you wrote, not yet sent</text><line class="sv-arrow" x1="262" y1="236" x2="304" y2="236" stroke-width="1.5"/><text class="sv-sub" x="64" y="227">write()</text><text class="sv-sub" x="64" y="245">fills it</text><line class="sv-arrow" x1="686" y1="236" x2="746" y2="236" stroke-width="1.5"/><text class="sv-sub" x="752" y="227">drained as</text><text class="sv-sub" x="752" y="245">the peer allows</text><rect x="304" y="276" width="186" height="40" rx="8" class="sv-hollow" data-owner="kernel" stroke-width="1.5"/><text class="sv-sub" x="316" y="292">the state machine</text><text class="sv-sub" x="316" y="308">connected sockets only</text><rect x="500" y="276" width="186" height="40" rx="8" class="sv-hollow" data-owner="kernel" stroke-width="1.5"/><text class="sv-sub" x="512" y="292">SYN + accept queues</text><text class="sv-sub" x="512" y="308">listening sockets only</text></svg><div class="svg-cap">Two buffers, one state machine, and — on listening sockets — two queues. All of it is kernel memory charged to the socket, none of it in V8's heap: read() and write() are the only doors your process has into it.</div></div><div class="hf-flow"><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the receive buffer</div><div class="hf-node-sub">bytes that arrived, not yet read</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Filled by the kernel from the network, drained by your <code>read()</code>. When it is empty, a non-blocking read gives you <code>EAGAIN</code> — Part 9's whole §6.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the send buffer</div><div class="hf-node-sub">bytes you wrote, not yet sent</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Filled by your <code>write()</code>, drained by the kernel as the peer's window and congestion control allow. When it is full, <code>write()</code> returns short — which is where Part 9's backpressure comes from.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the SYN and accept queues</div><div class="hf-node-sub">listening sockets only</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Half-open and completed handshakes waiting for <code>accept()</code>. Sized by the backlog argument. Part 8 is largely about these two.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the state machine</div><div class="hf-node-sub">connected sockets only</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">ESTABLISHED, FIN_WAIT, TIME_WAIT and the rest, advanced by segments arriving and by your calls. Part 8's §21 walks it.</div></div></div></div><div class="hfdiag-foot"><span class="hint">every buffer here is KERNEL memory, not your heap</span></div></div><p>None of this memory is in V8's heap, which is why a Node process holding ten thousand idle connections shows modest RSS and large kernel memory. The buffers are charged to the socket, not to your JavaScript.</p></div></div></div><div class="major-section" id="sec-api"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-a-chain">10 · From JS to Syscall</button><button class="sub-tab" data-sub="sub-a-accept">11 · Where Connections Come From</button></div><div class="sub-panel active" id="sub-a-chain"><div class="card main-edge"><div class="secnum">§ 10 · WHICH CALL CREATES WHICH LAYER</div><h2>Step the lines and watch the five layers appear</h2><p>Now the two halves meet. Here is what each line of the opening example actually does, in terms of the five layers from §1 — which object comes into existence, which syscall fires, and what the kernel knows afterwards.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Which of them cross into the kernel</span></div><span class="badge">§10 · two lines, six calls</span></div><div class="hfdiag-body"><div class="svg-wrap"><svg class="svgfig" viewBox="0 0 900 440" preserveAspectRatio="xMidYMid meet" role="img"><defs><marker id="sv-head" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sv-head" d="M0 0 L8 4 L0 8 z"/></marker></defs><text class="sv-t" data-owner="main" x="90" y="26" text-anchor="middle">your JavaScript</text><line class="sv-line sv-dash" x1="90" y1="40" x2="90" y2="382" stroke-width="1.5"/><text class="sv-t" data-owner="node" x="300" y="26" text-anchor="middle">Node C++</text><line class="sv-line sv-dash" x1="300" y1="40" x2="300" y2="382" stroke-width="1.5"/><text class="sv-t" data-owner="node" x="510" y="26" text-anchor="middle">libuv</text><line class="sv-line sv-dash" x1="510" y1="40" x2="510" y2="382" stroke-width="1.5"/><text class="sv-t" data-owner="kernel" x="730" y="26" text-anchor="middle">the kernel</text><line class="sv-line sv-dash" x1="730" y1="40" x2="730" y2="382" stroke-width="1.5"/><line class="sv-arrow" x1="96" y1="78" x2="292" y2="78" stroke-width="1.5"/><text class="sv-lab" x="108" y="69">createServer()</text><text class="sv-sub" x="108" y="96">one JS object · 0 syscalls</text><line class="sv-arrow" x1="96" y1="136" x2="292" y2="136" stroke-width="1.5"/><text class="sv-lab" x="108" y="127">listen(3000)</text><text class="sv-sub" x="108" y="154">now everything happens</text><line class="sv-arrow" x1="306" y1="194" x2="502" y2="194" stroke-width="1.5"/><text class="sv-lab" x="318" y="185">uv_tcp_bind</text><text class="sv-sub" x="318" y="212">still no syscall</text><line class="sv-arrow" x1="516" y1="252" x2="722" y2="252" stroke-width="1.5"/><text class="sv-lab" x="528" y="243">socket()</text><text class="sv-sub" x="528" y="270">the fd appears here</text><line class="sv-arrow" x1="516" y1="310" x2="722" y2="310" stroke-width="1.5"/><text class="sv-lab" x="528" y="301">bind()</text><text class="sv-sub" x="528" y="328">the row in the lookup table</text><line class="sv-arrow" x1="516" y1="368" x2="722" y2="368" stroke-width="1.5"/><text class="sv-lab" x="528" y="359">listen()</text><text class="sv-sub" x="528" y="386">the queues are allocated</text><rect x="40" y="400" width="820" height="28" rx="6" class="sv-plate" stroke-width="1.5"/><text class="sv-sub" x="58" y="418">three of these six lines are syscalls — and all three land on the last lane</text></svg><div class="svg-cap">Read it downward: two lines of your code produce six calls, and only the ones reaching the right-hand lane cost a transition into the kernel. createServer creates ONE layer and fires nothing; listen fires three syscalls, and every layer below the JS object appears at once.</div></div></div><div class="hfdiag-foot"><span class="hint">lanes are layers · every arrow reaching the right-hand lane is a syscall</span></div></div><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>One line at a time, five layers deep</span></div><span class="badge">§10 · the chain</span></div><div class="hfdiag-body"><div data-instrument="chain"></div></div><div class="hfdiag-foot"><span class="hint">three of these five lines are syscalls · the other two are bookkeeping</span></div></div><p>The shape to notice is how much of this is bookkeeping. <code>createServer</code> touches nothing outside V8. <code>listen</code> is where three syscalls fire in a row and every layer below the JS object comes into existence at once.</p></div></div><div class="sub-panel" id="sub-a-accept"><div class="card main-edge"><div class="secnum">§ 11 · THE FACTORY, ONE LEVEL DOWN</div><h2>accept() gives you a descriptor; Node gives you a Socket</h2><p>A connection arriving does not create a JS object by itself. Something has to call <code>accept()</code>, take the descriptor it returns, and build the layers back up — and that is the same five-layer chain in reverse.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>From a ready fd to a net.Socket</span></div><span class="badge">§11 · building a connection</span></div><div class="hfdiag-body"><div class="svg-wrap"><svg class="svgfig" viewBox="0 0 900 400" preserveAspectRatio="xMidYMid meet" role="img"><defs><marker id="sv-head" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sv-head" d="M0 0 L8 4 L0 8 z"/></marker></defs><text class="sv-t" x="30" y="40">the five layers, rebuilt</text><text class="sv-sub" x="30" y="62">for THIS connection only — fd 17 stays as it is</text><text class="sv-sub" x="30" y="80">and goes straight back to listening</text><rect x="30" y="240" width="230" height="120" rx="10" class="sv-plate sv-fill-kernel" data-owner="kernel" stroke-width="1.5"/><text class="sv-t" data-owner="kernel" x="46" y="268">the LISTENING socket</text><text class="sv-lab" x="46" y="292">*:3000 · fd 17</text><text class="sv-sub" x="46" y="316">accept queue: one completed</text><text class="sv-sub" x="46" y="334">handshake waiting</text><path class="sv-arrow" d="M266 300 C 320 300 330 349 384 349" stroke-width="1.5"/><text class="sv-lab" x="272" y="286">accept(17)</text><rect x="390" y="324" width="300" height="50" rx="8" class="sv-plate sv-fill-kernel" data-owner="kernel" stroke-width="1.5"/><text class="sv-t" data-owner="kernel" x="404" y="345">the connected socket</text><text class="sv-sub" x="404" y="365">its own buffers · state · four-tuple</text><line class="sv-arrow" x1="540" y1="322" x2="540" y2="304" stroke-width="1.5"/><rect x="390" y="250" width="300" height="50" rx="8" class="sv-plate sv-fill-kernel" data-owner="kernel" stroke-width="1.5"/><text class="sv-t" data-owner="kernel" x="404" y="271">fd 23</text><text class="sv-sub" x="404" y="291">a new integer in your table</text><line class="sv-arrow" x1="540" y1="248" x2="540" y2="230" stroke-width="1.5"/><rect x="390" y="176" width="300" height="50" rx="8" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-t" data-owner="node" x="404" y="197">uv_tcp_t</text><text class="sv-sub" x="404" y="217">registered with epoll for readiness</text><line class="sv-arrow" x1="540" y1="174" x2="540" y2="156" stroke-width="1.5"/><rect x="390" y="102" width="300" height="50" rx="8" class="sv-plate sv-fill-node" data-owner="node" stroke-width="1.5"/><text class="sv-t" data-owner="node" x="404" y="123">TCPWrap</text><text class="sv-sub" x="404" y="143">a C++ wrap around the handle</text><line class="sv-arrow" x1="540" y1="100" x2="540" y2="82" stroke-width="1.5"/><rect x="390" y="28" width="300" height="50" rx="8" class="sv-plate sv-fill-main" data-owner="main" stroke-width="1.5"/><text class="sv-t" data-owner="main" x="404" y="49">net.Socket</text><text class="sv-sub" x="404" y="69">handed to your connection handler</text></svg><div class="svg-cap">The chain from §1, built in reverse for one connection. The listening socket never becomes any of this — it manufactures the connected socket, accept() hands you the descriptor, and Node rebuilds the layers on top until your handler is called with a net.Socket.</div></div><div class="hf-flow"><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the loop wakes: fd 17 is readable</div><div class="hf-node-sub">a completed handshake is waiting</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Part 8's accept queue is non-empty, so the kernel marks the LISTENING socket readable. "Readable" on a listening socket means "a connection is waiting", not "there is data".</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">accept(17) → fd 23</div><div class="hf-node-sub">a new descriptor for a new socket</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">A new connected socket with its own four-tuple, its own buffers and its own state machine. fd 17 is untouched and still listening.</div></div><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">libuv wraps fd 23 in a uv_tcp_t</div><div class="hf-node-sub">a handle for the loop</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">Registered with epoll so the loop learns when this connection has data.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">C++ builds a TCPWrap, JS builds a net.Socket</div><div class="hf-node-sub">the layers, rebuilt</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">Now the same five-layer chain exists for this one connection, and your <code>connection</code> handler is called with the top of it.</div></div></div></div><div class="hfdiag-foot"><span class="hint">the listening socket makes sockets · it never becomes one</span></div></div><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>Every connected socket in your process has its own descriptor, its own buffers and its own entry in the kernel's tuple table. Ten thousand connections is ten thousand of each — which is why §4's descriptor limit is usually the ceiling.</p></div></div></div></div><div class="major-section" id="sec-synthesis"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-y-models">12 · Wrong vs Correct</button><button class="sub-tab" data-sub="sub-y-lock">13 · Lock It In</button></div><div class="sub-panel active" id="sub-y-models"><div class="card main-edge"><div class="secnum">§ 12 · THE MODELS WORTH CORRECTING</div><h2>Ten claims about the primitives</h2><p>These are the beliefs that make the rest of the series harder than it needs to be.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Which of these are true?</span></div><span class="badge">§12 · mental models</span></div><div class="hfdiag-body"><div data-instrument="models"></div></div><div class="hfdiag-foot"><span class="hint">sort before you check — a guess you have committed to is worth more than a correction you read</span></div></div><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>Nearly every wrong take here treats a NAME as a THING. A descriptor is a name for a description; a port is a name in a lookup table; "socket" is one name for two different objects.</p></div></div></div><div class="sub-panel" id="sub-y-lock"><div class="card main-edge"><div class="secnum">§ 13 · THE FIVE SENTENCES WORTH KEEPING</div><h2>If you remember nothing else</h2><p>Everything the rest of this series says about I/O sits on top of these.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What to carry away</span></div><span class="badge">§13 · the five sentences</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">a descriptor is an index, not an object</div><div class="hf-node-sub">§2</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">Per process, meaningless elsewhere, and pointing at a reference-counted kernel object through one more level of indirection you can share.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">a port is a number in a lookup table</div><div class="hf-node-sub">§5</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Sixteen bits in a header. Binding inserts a key; <code>EADDRINUSE</code> is a duplicate.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the four-tuple identifies a connection</div><div class="hf-node-sub">§6</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">Which is how one listening port serves ten thousand of them, and why the client side runs out at about twenty-eight thousand per destination.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">listening and connected sockets are different objects</div><div class="hf-node-sub">§8</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">One has queues and no peer; the other has buffers and a state machine. <code>accept()</code> turns one into the other without consuming it.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">createServer creates nothing outside V8</div><div class="hf-node-sub">§10</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">The five layers below the JS object all come into existence at <code>listen()</code>, in three syscalls.</div></div></div></div><div class="hfdiag-foot"><span class="hint">five sentences, one chain</span></div></div><p>Part 1 picks up from here with module resolution. Part 5 then follows a single <code>fs.readFile</code> down through these same layers to the disk and back.</p></div></div></div></main>
-<footer><div>Part 00 of the Node.js Internals series &nbsp;·&nbsp; file descriptors · ports · sockets · the API chain</div>
-<div>A descriptor is an index, not an object</div></footer>
+process.env.UV_THREADPOOL_SIZE = 16;      // no effect, ever</pre></div></div><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What the knob actually does</span></div><span class="badge">§5 · the rules</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">it is read ONCE, at first pool use</div><div class="hf-node-sub">not per call, not per module</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">The pool is created lazily, and its size is fixed the moment the first job is submitted. Setting the variable after that changes nothing, and nothing warns you.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">so set it before anything uses it</div><div class="hf-node-sub">the environment, or the very first line</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">In practice that means the shell, a process manager, or the top of your entry file before any require that might touch fs.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the maximum is 1024</div><div class="hf-node-sub">and that is not the useful number</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">These are real OS threads. Past your core count they compete for the same cores — Part 11's cost curve, with the same shape and the same conclusion.</div></div><div class="hf-node" data-owner="worker"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">it does not help I/O-bound work</div><div class="hf-node-sub">because that work was never here</div></div><div class="hf-node-tag t-worker">worker</div></div><div class="hf-node-detail">More threads only help if jobs are actually queueing. Sockets never queue here at all, so a socket-heavy server sees nothing from raising it.</div></div></div></div><div class="hfdiag-foot"><span class="hint">one number, fixed at first use, capped at 1024</span></div></div></div></div></div><div class="major-section" id="sec-synthesis"><div class="sub-tabs"><button class="sub-tab active" data-sub="sub-y-models">6 · Wrong vs Correct</button><button class="sub-tab" data-sub="sub-y-lock">7 · Lock It In</button></div><div class="sub-panel active" id="sub-y-models"><div class="card main-edge"><div class="secnum">§ 6 · THE MODELS WORTH CORRECTING</div><h2>Ten claims about the pool</h2><p>These are the beliefs that make pool exhaustion so hard to diagnose — mostly because they scope the pool too narrowly.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>Which of these are true?</span></div><span class="badge">§6 · mental models</span></div><div class="hfdiag-body"><div data-instrument="models"></div></div><div class="hfdiag-foot"><span class="hint">sort before you check — a guess you have committed to is worth more than a correction you read</span></div></div><div class="lock"><div class="lock-head"><span class="lock-mark">!</span>Lock this in</div><p>Nearly every wrong take here assumes the pool belongs to one subsystem. It belongs to four, they share one queue, and the one that saturates it is rarely the one that looks slow.</p></div></div></div><div class="sub-panel" id="sub-y-lock"><div class="card main-edge"><div class="secnum">§ 7 · THE FOUR SENTENCES WORTH KEEPING</div><h2>If you remember nothing else</h2><p>The pool is a general work queue for blocking C code, not a filesystem feature.</p><div class="hfdiag"><div class="hfdiag-head"><div class="lhs"><span class="dot"></span><span>What to carry away</span></div><span class="badge">§7 · the four sentences</span></div><div class="hfdiag-body"><div class="hf-flow"><div class="hf-node" data-owner="node"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">four subsystems, one queue, four threads</div><div class="hf-node-sub">§0 · §2</div></div><div class="hf-node-tag t-node">node</div></div><div class="hf-node-detail">fs, dns.lookup, the async crypto functions and all of zlib. They compete, and the symptom rarely names the cause.</div></div><div class="hf-node" data-owner="kernel"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">dns.lookup uses a thread; dns.resolve does not</div><div class="hf-node-sub">§3</div></div><div class="hf-node-tag t-kernel">kernel</div></div><div class="hf-node-detail">And almost every client library uses lookup without saying so, which is how a service submits pool jobs it never wrote.</div></div><div class="hf-node" data-owner="main"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">the size is fixed at first use</div><div class="hf-node-sub">§5</div></div><div class="hf-node-tag t-main">main</div></div><div class="hf-node-detail">Set <code>UV_THREADPOOL_SIZE</code> in the environment, not after a require has already warmed the pool.</div></div><div class="hf-node" data-owner="worker"><div class="hf-node-row"><div class="hf-node-icon"></div><div class="hf-node-content"><div class="hf-node-title">sockets were never here</div><div class="hf-node-sub">§1</div></div><div class="hf-node-tag t-worker">worker</div></div><div class="hf-node-detail">They have a readiness interface, so the loop watches them. Raising the pool size does nothing for a socket-bound server.</div></div></div></div><div class="hfdiag-foot"><span class="hint">four sentences, one queue</span></div></div><p>That completes the picture Part 5 started. Part 5 followed one call into the pool and back; this part is everything else that was already in there with it.</p></div></div></div></main>
+<footer><div>Mission 06 of the Node.js Internals campaign &nbsp;·&nbsp; the libuv thread pool · <code>fs</code> · <code>dns.lookup</code> · <code>crypto</code> · <code>zlib</code></div>
+<div>One queue, shared by four strangers</div></footer>
 <div class="glossary-pop" id="gpop"></div>
 <script>
 (function () {
@@ -4691,8 +4718,38 @@ $ ls /proc/self/fd        # your process&#x27;s table, as files
     "import()": { cat:"node", kind:"js", title:"dynamic import()", body:"Returns a promise for a module. Because it is asynchronous it gives ESM's evaluation phase somewhere to live — which is why `await import()` works from CommonJS while `require()` of an ESM module does not." },
   });
 
+  Object.assign(glossary, {
+    "dns.lookup":        { cat:"kernel", kind:"js", title:"dns.lookup()", body:"Calls getaddrinfo, the BLOCKING system resolver, so it needs a pool thread. It consults the hosts file and everything else the OS does — and it is what http.request, fetch and most database drivers use when given a hostname." },
+    "dns.resolve":       { cat:"node",   kind:"js", title:"dns.resolve()", body:"Sends a DNS query over a socket, which the loop can watch like any other socket — so it uses NO pool thread. It skips the hosts file, which is sometimes the reason to choose it and sometimes the reason not to." },
+    "getaddrinfo":       { cat:"kernel", kind:"syscall", title:"getaddrinfo()", body:"The POSIX name-resolution call. It is synchronous by contract, which is why Node has to run it on a pool thread rather than watching it." },
+    "http.request":      { cat:"node",   kind:"js", title:"http.request()", body:"Resolves its hostname through dns.lookup before connecting — so every outbound request quietly submits a pool job you never wrote." },
+    "pbkdf2":            { cat:"node",   kind:"js", title:"crypto.pbkdf2()", body:"Key derivation: deliberately expensive CPU work, handed to the pool so it does not block the loop. The Sync form runs on the main thread and blocks everything for its full duration." },
+    "zlib":              { cat:"node",   title:"zlib", body:"All of Node's compression — gzip, deflate, brotli and their streams. Every operation is pool work, and a streaming compressor submits a job per chunk rather than one job overall." },
+    "readdir":           { cat:"node",   kind:"js", title:"fs.readdir()", body:"Lists a directory, on a pool thread like every other async fs call. A recursive walk submits one job per directory, which is the easiest way to saturate the pool by accident." },
+  });
+
+  Object.assign(glossary, {
+    "UV_THREADPOOL_SIZE":{ cat:"node", title:"UV_THREADPOOL_SIZE", body:"The size of libuv's thread pool. Defaults to 4, is read ONCE when the pool is created at first use, and does not track the core count — so setting it after a require has already touched fs changes nothing." },
+    "worker_thread":     { cat:"worker", title:"a worker_thread", body:"A second Node runtime on a second OS thread inside the same process: its own V8 isolate, heap and event loop. The only extra thread that can run your JavaScript — Part 10." },
+    "V8 isolate":        { cat:"node",   title:"a V8 isolate", body:"One independent JavaScript runtime: its own heap, garbage collector and built-ins. Pool threads have none, which is exactly why they cannot run your code." },
+    "fs.readFile":       { cat:"node",   kind:"js", title:"fs.readFile()", body:"Part 5's subject: one pool job that holds a thread for the whole read. A readFile of a large file occupies its thread until the read completes." },
+  });
+
   const aliases = {};
   Object.keys(glossary).forEach(function (k) { aliases[k.toLowerCase()] = k; });
+  Object.assign(aliases, {
+    "uv_threadpool_size":"UV_THREADPOOL_SIZE",
+    "worker_thread":"worker_thread", "worker_threads":"worker_thread",
+    "a v8 isolate":"V8 isolate", "v8 isolate":"V8 isolate", "isolate":"V8 isolate",
+    "fs.readfile":"fs.readFile", "fs.readfile()":"fs.readFile",
+  });
+  Object.assign(aliases, {
+    "dns.lookup":"dns.lookup", "dns.lookup()":"dns.lookup",
+    "dns.resolve":"dns.resolve", "dns.resolve()":"dns.resolve",
+    "getaddrinfo":"getaddrinfo", "http.request":"http.request",
+    "pbkdf2":"pbkdf2", "crypto.pbkdf2":"pbkdf2", "pbkdf2sync":"pbkdf2",
+    "zlib.gzip":"zlib", "readdir":"readdir", "fs.readdir":"readdir",
+  });
   Object.assign(aliases, { "import()":"import()", "import(variable)":"import()", "await import()":"import()", });
   Object.assign(aliases, {
     "net.server":"net.Server", "createserver":"createServer",
@@ -6361,310 +6418,224 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
   else setTimeout(highlightAll, 0);
 
   /* ══════════════════════════════════════════════════════════════════
-     INSTRUMENT · "which of these is the socket?"  (§1)
-     Five layers get called "the socket" by somebody. Pick one and read
-     what it actually is, where it lives, what identifies it, and — the
-     useful column — what happens if it alone goes away.
+     INSTRUMENT · "two routes to a name"  (§3)
+     dns.lookup and dns.resolve look like variants of one function and
+     are not: one takes a pool thread, one is watched by the loop like
+     any other socket. The control is lookup, because it is the one
+     almost every client library calls without saying so.
      ══════════════════════════════════════════════════════════════════ */
-  const LY_LAYERS = [
-    { id:"js", label:"net.Server", where:"V8 heap · your process", ident:"a JS reference",
-      is:"An ordinary JavaScript object with an <code>_events</code> map and a " +
-         "<code>_handle</code> property. Before <code>listen()</code> that property is " +
-         "<code>null</code> and this object is the ONLY layer that exists.",
-      gone:"Garbage collected like any object — but only once nothing references it. If " +
-           "the handle below is still open, the loop still holds a reference and nothing " +
-           "is collected.", tag:"main" },
-    { id:"wrap", label:"TCPWrap (C++)", where:"C++ · your process", ident:"a C++ pointer",
-      is:"Node's binding object. It owns the libuv handle below and knows how to call " +
-         "back into JavaScript when that handle reports something. This is the layer that " +
-         "translates between two worlds and belongs to neither.",
-      gone:"Cannot go independently — it owns the handle and is owned by the JS object. " +
-           "It is a lifetime bridge, which is why <code>_handle</code> being null is " +
-           "meaningful.", tag:"node" },
-    { id:"uv", label:"uv_tcp_t (libuv)", where:"libuv · your process", ident:"a struct address",
-      is:"The loop's view of the thing. It carries the fd, the callbacks, and the flags " +
-         "epoll needs. Registering this with the loop is what makes the fd's readiness " +
-         "turn into one of Part 4's poll-phase callbacks.",
-      gone:"The loop stops watching. The fd stays open and the socket stays alive — you " +
-           "have simply stopped being told about it, which is a descriptor leak with no " +
-           "error message.", tag:"node" },
-    { id:"fd", label:"fd 17", where:"your process's descriptor table", ident:"a small integer",
-      is:"An index. Not an object, not a handle, not a pointer — just a number that means " +
-         "something in exactly one table. The number 17 in another process refers to " +
-         "something else entirely.",
-      gone:"<code>close(17)</code> removes the entry and drops ONE reference. If another " +
-           "process holds a descriptor for the same socket — Part 11's fd passing — the " +
-           "socket carries on serving, and your close changed nothing about it.", tag:"kernel" },
-    { id:"sock", label:"the socket", where:"kernel memory", ident:"(local ip, port) or the four-tuple",
-      is:"The actual object: buffers or queues, a state machine if it is connected, and " +
-         "an entry in the kernel's lookup table. THIS is the socket. Everything above it " +
-         "is a way of naming it.",
-      gone:"Only when the last reference goes, wherever that reference lives. Then the " +
-           "port leaves the lookup table — after TIME_WAIT, if this end closed first.", tag:"kernel" },
+  const DN_ROUTES = [
+    { id:"lookup", label:"dns.lookup('api.example.com')", control:true,
+      lane:"pool", thread:"one pool thread, held until it answers",
+      consults:"the operating system — hosts file, nsswitch, mDNS, everything",
+      queues:"yes — behind fs, crypto and zlib",
+      why:"<strong>The control.</strong> It calls <code>getaddrinfo</code>, the system " +
+          "resolver, and that API is BLOCKING — so it needs a thread even though the " +
+          "work is network work. This is the route <code>http.request</code>, " +
+          "<code>fetch</code> and almost every database driver take when you give them a " +
+          "hostname, which means a service making many outbound connections submits pool " +
+          "jobs it never wrote." },
+    { id:"resolve", label:"dns.resolve('api.example.com')", control:false,
+      lane:"loop", thread:"none — no thread is involved at all",
+      consults:"a DNS server directly, over UDP or TCP",
+      queues:"no — it never enters the pool queue",
+      why:"It sends a DNS query over a socket, and a socket has a readiness interface, " +
+          "so the loop watches it exactly as it watches everything in Parts 8 and 9. " +
+          "Same question, opposite mechanism — and it skips the hosts file, which is " +
+          "sometimes the reason to choose it and sometimes the reason not to." },
+    { id:"cached", label:"the same lookup, second time", control:false,
+      lane:"pool", thread:"a pool thread again — Node does not cache",
+      consults:"the OS resolver again (which may have its own cache)",
+      queues:"yes — every call is a fresh job",
+      why:"Node keeps no DNS cache of its own. Any caching happens below it, in the " +
+          "system resolver, so from the pool's point of view the tenth lookup costs a " +
+          "thread exactly like the first." },
   ];
+  const DN_LANES = { pool:"the libuv pool", loop:"the event loop, no thread" };
 
-  function mountLayers() {
-    const host = document.querySelector('[data-instrument="layers"]');
+  function mountDns() {
+    const host = document.querySelector('[data-instrument="dns"]');
     if (!host) return false;
     const wrap = document.createElement("div");
-    wrap.className = "ly";
+    wrap.className = "dn";
     wrap.innerHTML =
-      '<div class="ly-chain">' + LY_LAYERS.map(function (l, i) {
-        return '<button class="ly-step' + (i === 0 ? " on" : "") + '" data-layer="' + l.id +
-          '" data-tag="' + l.tag + '">' + l.label + "</button>"; })
-        .join('<span class="ly-arr">↓</span>') + "</div>" +
-      '<div class="ly-facts"></div>' +
-      '<div class="ly-is"></div>' +
-      '<div class="ly-gone"></div>';
-    host.appendChild(wrap);
-
-    let cur = LY_LAYERS[0];
-    function render() {
-      wrap.querySelectorAll("[data-layer]").forEach(function (b) {
-        b.classList.toggle("on", b.dataset.layer === cur.id); });
-      const cell = function (k, v) {
-        return '<div class="ly-cell"><span class="ly-cell-k">' + k + '</span>' +
-          '<span class="ly-cell-v">' + v + "</span></div>"; };
-      wrap.querySelector(".ly-facts").innerHTML =
-        cell("lives in", cur.where) + cell("identified by", cur.ident);
-      wrap.querySelector(".ly-is").innerHTML = cur.is;
-      wrap.querySelector(".ly-gone").innerHTML =
-        '<span class="ly-gone-k">if this layer alone goes away</span>' + cur.gone;
-    }
-    wrap.addEventListener("click", function (e) {
-      const b = e.target.closest("[data-layer]"); if (!b) return;
-      cur = LY_LAYERS.find(function (l) { return l.id === b.dataset.layer; });
-      render();
-    });
-    render();
-    window.__lyLayers = LY_LAYERS;
-    return true;
-  }
-
-  /* ══════════════════════════════════════════════════════════════════
-     INSTRUMENT · "what identifies a connection?"  (§6)
-     Change one field of the four-tuple at a time. Two connections are
-     the same connection only if all four match — which is why one
-     listening port serves ten thousand clients, and why the CLIENT
-     side is the one that runs out.
-     ══════════════════════════════════════════════════════════════════ */
-  const TP_BASE = { sip:"203.0.113.7", sport:49512, dip:"10.0.0.4", dport:3000 };
-  const TP_CASES = [
-    { id:"same", label:"the same connection", field:null,
-      t:{ sip:"203.0.113.7", sport:49512, dip:"10.0.0.4", dport:3000 },
-      note:"Identical in all four fields, so this is not a second connection — it is the " +
-           "same one. A second <code>connect()</code> producing this exact tuple would be " +
-           "refused, because the kernel already has it." },
-    { id:"sport", label:"a second connection, same client", field:"sport",
-      t:{ sip:"203.0.113.7", sport:49513, dip:"10.0.0.4", dport:3000 },
-      note:"One field differs — the client's ephemeral port — and that is enough. This is " +
-           "how a single browser opens six connections to one server, and how one " +
-           "listening port serves ten thousand clients at once." },
-    { id:"sip", label:"a different client", field:"sip",
-      t:{ sip:"198.51.100.22", sport:49512, dip:"10.0.0.4", dport:3000 },
-      note:"A different source address, and the ephemeral port may well collide with " +
-           "another client's — which does not matter at all, because the addresses differ." },
-    { id:"dport", label:"same client, different service", field:"dport",
-      t:{ sip:"203.0.113.7", sport:49512, dip:"10.0.0.4", dport:5432 },
-      note:"The destination port differs, so the client may reuse the same ephemeral " +
-           "port. This is why exhaustion is PER DESTINATION rather than global." },
-    { id:"exhaust", label:"28,232 connections to one service", field:"sport", control:true,
-      t:{ sip:"203.0.113.7", sport:60999, dip:"10.0.0.4", dport:3000 },
-      note:"<strong>The control.</strong> Three of the four fields are pinned, so the only " +
-           "thing left to vary is the client's ephemeral port — and Linux's default range " +
-           "is 32768 to 60999, which is 28,232 numbers. At that point the client cannot " +
-           "open another connection TO THIS SERVICE, no matter how idle the server is. " +
-           "Add <code>TIME_WAIT</code> holding tuples for a further sixty seconds after " +
-           "close and you reach it sooner than the arithmetic suggests.", exhausted:true },
-  ];
-
-  function mountTuple() {
-    const host = document.querySelector('[data-instrument="tuple"]');
-    if (!host) return false;
-    const wrap = document.createElement("div");
-    wrap.className = "tp";
-    wrap.innerHTML =
-      '<div class="tp-pick">' + TP_CASES.map(function (c, i) {
-        return '<button class="tp-btn' + (i === 0 ? " on" : "") + '" data-case="' + c.id + '">' +
-          c.label + (c.control ? '<span class="tp-ctrlmark">control</span>' : "") + "</button>"; }).join("") +
+      '<div class="dn-pick">' + DN_ROUTES.map(function (r, i) {
+        return '<button class="dn-btn' + (i === 0 ? " on" : "") + '" data-route="' + r.id + '">' +
+          r.label + (r.control ? '<span class="dn-ctrlmark">control</span>' : "") + "</button>"; }).join("") +
       "</div>" +
-      '<div class="tp-grid"></div>' +
-      '<div class="tp-verdict"></div>' +
-      '<div class="tp-say"></div>';
+      '<div class="dn-lanes"></div>' +
+      '<div class="dn-facts"></div>' +
+      '<div class="dn-say"></div>';
     host.appendChild(wrap);
 
-    let c = TP_CASES[0];
+    let r = DN_ROUTES[0];
     function render() {
-      const F = [["source address", "sip"], ["source port", "sport"],
-                 ["destination address", "dip"], ["destination port", "dport"]];
-      wrap.querySelector(".tp-grid").innerHTML = F.map(function (f) {
-        const changed = c.field === f[1] && String(c.t[f[1]]) !== String(TP_BASE[f[1]]);
-        return '<div class="tp-cell' + (changed ? " changed" : "") + '">' +
-          '<span class="tp-cell-k">' + f[0] + "</span>" +
-          '<span class="tp-cell-v">' + c.t[f[1]] + "</span>" +
-          '<span class="tp-cell-d">' + (changed ? "differs" : "same") + "</span></div>"; }).join("");
-      const differs = ["sip", "sport", "dip", "dport"]
-        .filter(function (k) { return String(c.t[k]) !== String(TP_BASE[k]); }).length;
-      wrap.querySelector(".tp-verdict").innerHTML =
-        '<span class="tp-v-k">fields differing</span>' +
-        '<span class="tp-v-n ' + (differs ? "yes" : "no") + '">' + differs + " of 4</span>" +
-        '<span class="tp-v-s">' + (differs
-          ? "a DIFFERENT connection" + (c.exhausted ? " · and the last one available" : "")
-          : "the SAME connection") + "</span>";
-      wrap.querySelector(".tp-say").innerHTML = c.note;
-      wrap.classList.toggle("is-control", !!c.control);
+      wrap.querySelector(".dn-lanes").innerHTML = Object.keys(DN_LANES).map(function (k) {
+        return '<span class="dn-lane' + (k === r.lane ? " on" : "") + '" data-lane="' + k + '">' +
+          DN_LANES[k] + "</span>"; }).join("");
+      const cell = function (k, v, bad) {
+        return '<div class="dn-cell"><span class="dn-cell-k">' + k + '</span>' +
+          '<span class="dn-cell-v' + (bad ? " no" : "") + '">' + v + "</span></div>"; };
+      wrap.querySelector(".dn-facts").innerHTML =
+        cell("thread cost", r.thread, r.lane === "pool") +
+        cell("what it asks", r.consults) +
+        cell("queues with fs / crypto / zlib", r.queues, r.queues.indexOf("yes") === 0);
+      wrap.querySelector(".dn-say").innerHTML = r.why;
+      wrap.classList.toggle("is-control", !!r.control);
     }
     wrap.addEventListener("click", function (e) {
-      const b = e.target.closest("[data-case]"); if (!b) return;
-      wrap.querySelectorAll("[data-case]").forEach(function (x) { x.classList.remove("on"); });
+      const b = e.target.closest("[data-route]"); if (!b) return;
+      wrap.querySelectorAll("[data-route]").forEach(function (x) { x.classList.remove("on"); });
       b.classList.add("on");
-      c = TP_CASES.find(function (x) { return x.id === b.dataset.case; });
+      r = DN_ROUTES.find(function (x) { return x.id === b.dataset.route; });
       render();
     });
     render();
-    window.__tpCases = TP_CASES; window.__tpBase = TP_BASE;
+    window.__dnRoutes = DN_ROUTES; window.__dnLanes = DN_LANES;
     return true;
   }
 
   /* ══════════════════════════════════════════════════════════════════
-     INSTRUMENT · "from JS to syscall"  (§10)
-     Step the lines and watch the five layers of §1 come into existence.
-     Only two of these lines touch the kernel at all.
+     INSTRUMENT · "four threads, one queue"  (§4)
+     Part 5 saturated the pool with file reads — one subsystem, held
+     constant. This one mixes subsystems, because a queue shared by
+     strangers is the case nobody plans for: the job that saturates it
+     is rarely the one that looks slow.
      ══════════════════════════════════════════════════════════════════ */
-  const CH_STEPS = [
-    { code:'const server = net.createServer()', kind:"js",
-      have:["js"], syscalls:[], kernel:"knows nothing",
-      why:"A <code>net.Server</code> in V8's heap, with your listener in its " +
-          "<code>_events</code> map and <code>_handle</code> set to <code>null</code>. " +
-          "One of the five layers exists. Nothing outside this process has been told " +
-          "anything." },
-    { code:'server.listen(3000)  →  socket(AF_INET, SOCK_STREAM)', kind:"sys",
-      have:["js", "wrap", "uv", "fd"], syscalls:["socket()"], kernel:"has an unbound socket",
-      why:"Node builds a <code>TCPWrap</code> and a <code>uv_tcp_t</code>, then makes the " +
-          "first syscall. <code>socket()</code> returns a descriptor — fd 17 — for a " +
-          "socket with no address yet. Four of the five layers now exist." },
-    { code:'…  →  bind(17, 0.0.0.0:3000)', kind:"sys",
-      have:["js", "wrap", "uv", "fd", "sock"], syscalls:["socket()", "bind()"],
-      kernel:"port 3000 is in the lookup table",
-      why:"The insert from §5. From this instant the port is taken, and a second process " +
-          "attempting the same bind gets <code>EADDRINUSE</code> — which is the whole of " +
-          "Part 8's §10 and Part 11's §0." },
-    { code:'…  →  listen(17, backlog)', kind:"sys",
-      have:["js", "wrap", "uv", "fd", "sock"], syscalls:["socket()", "bind()", "listen()"],
-      kernel:"a LISTENING socket with two queues",
-      why:"This is the call that turns it into a listening socket: the SYN queue and the " +
-          "accept queue are allocated, and the state machine that a connected socket has " +
-          "is never given to this one. Part 8's §4 is about these two queues." },
-    { code:'…  →  registered with epoll · the loop sleeps', kind:"loop",
-      have:["js", "wrap", "uv", "fd", "sock"], syscalls:["socket()", "bind()", "listen()"],
-      kernel:"watching fd 17 for readability",
-      why:"The <code>uv_tcp_t</code> is handed to the loop, and Part 4's poll phase now " +
-          "includes fd 17 in its <code>epoll_wait</code>. Readable on a LISTENING socket " +
-          "means a connection is waiting, not that data arrived." },
+  const SA_JOBS = [
+    { id:"gzip1", sub:"zlib",   label:"gzip 8MB",        ms:180 },
+    { id:"gzip2", sub:"zlib",   label:"gzip 8MB",        ms:180 },
+    { id:"gzip3", sub:"zlib",   label:"gzip 8MB",        ms:180 },
+    { id:"pbkdf", sub:"crypto", label:"pbkdf2 600k",     ms:240 },
+    { id:"dns1",  sub:"dns",    label:"dns.lookup",      ms:2   },
+    { id:"read1", sub:"fs",     label:"readFile 2MB",    ms:20  },
+    { id:"dns2",  sub:"dns",    label:"dns.lookup",      ms:2   },
+  ];
+  const SA_MODES = [
+    { id:"four",  size:4,  label:"the default · 4 threads", control:false,
+      note:"Four threads, seven jobs, one first-in-first-out queue. The two DNS lookups " +
+           "take two milliseconds of actual work each — and they are submitted behind " +
+           "three compressions and a key derivation, so that is not what they cost." },
+    { id:"eight", size:8,  label:"UV_THREADPOOL_SIZE=8", control:false,
+      note:"Every job starts immediately because there are more threads than jobs. This " +
+           "is what raising the size buys: it does not make any job faster, it stops jobs " +
+           "waiting for each other." },
+    { id:"one",   size:1,  label:"UV_THREADPOOL_SIZE=1", control:true,
+      note:"<strong>The control.</strong> One thread, and the queue becomes a straight " +
+           "line: every job waits for every job in front of it. The DNS lookup submitted " +
+           "last finishes after everything else, having done two milliseconds of work. " +
+           "The pool did not get slower — it got serialised, and the wait IS the cost." },
   ];
 
-  function mountChain() {
-    const host = document.querySelector('[data-instrument="chain"]');
+  function saSimulate(size) {
+    const free = new Array(size).fill(0);
+    const rows = SA_JOBS.map(function (j) {
+      let t = 0, k = 0;
+      for (let i = 1; i < size; i++) if (free[i] < free[k]) k = i;
+      t = free[k];
+      free[k] = t + j.ms;
+      return { id: j.id, sub: j.sub, label: j.label, ms: j.ms,
+               start: t, end: t + j.ms, wait: t, thread: k };
+    });
+    const dns = rows.filter(function (r) { return r.sub === "dns"; });
+    return { rows: rows, span: Math.max.apply(null, rows.map(function (r) { return r.end; })),
+             worstWait: Math.max.apply(null, rows.map(function (r) { return r.wait; })),
+             dnsWait: Math.max.apply(null, dns.map(function (r) { return r.wait; })),
+             dnsWork: Math.max.apply(null, dns.map(function (r) { return r.ms; })) };
+  }
+
+  function mountSat() {
+    const host = document.querySelector('[data-instrument="sat"]');
     if (!host) return false;
     const wrap = document.createElement("div");
-    wrap.className = "ch";
+    wrap.className = "sa";
     wrap.innerHTML =
-      '<div class="ch-lines"></div>' +
-      '<div class="ch-layers"></div>' +
-      '<div class="ch-facts"></div>' +
-      '<div class="ch-ctl">' +
-        '<button class="ch-b ch-b-primary" data-act="next">Next line ▸</button>' +
-        '<button class="ch-b" data-act="prev">◂ Back</button>' +
-        '<button class="ch-b" data-act="end">Run it</button>' +
-        '<button class="ch-b" data-act="reset">↺ Reset</button>' +
-        '<span class="ch-count" data-m="step">1 / ' + CH_STEPS.length + "</span>" +
+      '<div class="sa-pick">' + SA_MODES.map(function (m, i) {
+        return '<button class="sa-btn' + (i === 0 ? " on" : "") + '" data-mode="' + m.id + '">' +
+          m.label + (m.control ? '<span class="sa-ctrlmark">control</span>' : "") + "</button>"; }).join("") +
       "</div>" +
-      '<div class="ch-say"></div>';
+      '<div class="sa-rows"></div>' +
+      '<div class="sa-meters"></div>' +
+      '<div class="sa-say"></div>';
     host.appendChild(wrap);
 
-    let i = 0;
-    const NAMES = { js:"net.Server", wrap:"TCPWrap", uv:"uv_tcp_t", fd:"fd 17", sock:"socket" };
+    let mode = SA_MODES[0];
     function render() {
-      const s = CH_STEPS[i];
-      wrap.querySelector(".ch-lines").innerHTML = CH_STEPS.map(function (st, n) {
-        return '<div class="ch-line' + (n <= i ? " on" : "") + (n === i ? " act" : "") +
-          '" data-kind="' + st.kind + '"><code>' + st.code + "</code>" +
-          '<span class="ch-kind">' + (st.kind === "js" ? "JS only" :
-            st.kind === "sys" ? "syscall" : "event loop") + "</span></div>"; }).join("");
-
-      wrap.querySelector(".ch-layers").innerHTML = ["js", "wrap", "uv", "fd", "sock"]
-        .map(function (k) {
-          const on = s.have.indexOf(k) >= 0;
-          return '<span class="ch-layer' + (on ? " on" : "") + '">' + NAMES[k] + "</span>"; })
-        .join('<span class="ch-sep">·</span>');
-
-      const cell = function (k, v, good) {
-        return '<div class="ch-cell"><span class="ch-cell-k">' + k + '</span>' +
-          '<span class="ch-cell-v' + (good === false ? " no" : good === true ? " yes" : "") +
-          '">' + v + "</span></div>"; };
-      wrap.querySelector(".ch-facts").innerHTML =
-        cell("layers that exist", s.have.length + " of 5", s.have.length === 5) +
-        cell("syscalls so far", s.syscalls.length ? s.syscalls.join(" · ") : "none", s.syscalls.length > 0) +
-        cell("the kernel", s.kernel, !/knows nothing/.test(s.kernel));
-
-      wrap.querySelector('[data-m="step"]').textContent = (i + 1) + " / " + CH_STEPS.length;
-      wrap.querySelector(".ch-say").innerHTML = s.why;
+      const sim = saSimulate(mode.size);
+      wrap.querySelector(".sa-rows").innerHTML = sim.rows.map(function (r) {
+        const w = (r.wait / sim.span) * 100, run = (r.ms / sim.span) * 100;
+        return '<div class="sa-row"><span class="sa-label" data-sub="' + r.sub + '">' +
+          r.label + "</span>" +
+          '<div class="sa-track"><span class="sa-wait" style="width:' + w + '%"></span>' +
+          '<span class="sa-run" data-sub="' + r.sub + '" style="width:' + Math.max(1.2, run) +
+          '%"></span></div>' +
+          '<span class="sa-num">' + (r.wait ? "+" + r.wait + "ms wait" : "starts now") +
+          "</span></div>"; }).join("");
+      const m = function (l, v, good) {
+        return '<div class="sa-meter"><span class="sa-m-k">' + l + '</span><span class="sa-m-v' +
+          (good === true ? " yes" : good === false ? " no" : "") + '">' + v + "</span></div>"; };
+      wrap.querySelector(".sa-meters").innerHTML =
+        m("pool threads", String(mode.size), mode.size >= SA_JOBS.length) +
+        m("a dns.lookup does", sim.dnsWork + " ms of work") +
+        m("but waits", sim.dnsWait + " ms", sim.dnsWait === 0) +
+        m("everything finished by", sim.span + " ms", false);
+      wrap.querySelector(".sa-say").innerHTML = mode.note;
+      wrap.classList.toggle("is-control", !!mode.control);
     }
     wrap.addEventListener("click", function (e) {
-      const a = e.target.closest("[data-act]"); if (!a) return;
-      if (a.dataset.act === "next") i = Math.min(CH_STEPS.length - 1, i + 1);
-      else if (a.dataset.act === "prev") i = Math.max(0, i - 1);
-      else if (a.dataset.act === "end") i = CH_STEPS.length - 1;
-      else i = 0;
+      const b = e.target.closest("[data-mode]"); if (!b) return;
+      wrap.querySelectorAll("[data-mode]").forEach(function (x) { x.classList.remove("on"); });
+      b.classList.add("on");
+      mode = SA_MODES.find(function (x) { return x.id === b.dataset.mode; });
       render();
     });
     render();
-    window.__chSteps = CH_STEPS;
+    window.__saSimulate = saSimulate; window.__saModes = SA_MODES; window.__saJobs = SA_JOBS;
     return true;
   }
 
   /* ══════════════════════════════════════════════════════════════════
-     INSTRUMENT · "which of these are true?"  (§12)
+     INSTRUMENT · "which of these are true?"  (§6)
      ══════════════════════════════════════════════════════════════════ */
-  const PM_ITEMS = [
-    { id:"fd-object", t:"A file descriptor is a handle to a socket object.", ans:false,
-      why:"It is an INDEX into your process's descriptor table. The entry points at an " +
-          "open file description, which points at the socket. Three levels, and the " +
-          "integer is meaningful only inside one table." },
-    { id:"fd-index", t:"The number 17 means something different in another process.", ans:true,
+  const TM_ITEMS = [
+    { id:"fsonly", t:"The thread pool exists for filesystem work.", ans:false,
+      why:"Four subsystems use it: fs, dns.lookup, the async crypto functions and all of " +
+          "zlib. They share one queue and four threads, and none of them knows the others " +
+          "are there." },
+    { id:"shared", t:"A zlib job can delay a DNS lookup.", ans:true,
       why:"<strong>True</strong>, and it is the same fact as the statement above stated " +
-          "the right way round. It is why passing a socket between processes needs the " +
-          "kernel's help rather than sending an integer." },
-    { id:"close", t:"Calling close() on a descriptor closes the socket.", ans:false,
-      why:"It drops one reference. The socket goes away when the LAST reference does — " +
-          "which may be in another process entirely, if the descriptor was passed with " +
-          "<code>SCM_RIGHTS</code> or inherited through <code>fork()</code>." },
-    { id:"port-object", t:"A port is a resource the operating system allocates to you.", ans:false,
-      why:"It is sixteen bits in a header and a key in a lookup table. Binding inserts a " +
-          "row; <code>EADDRINUSE</code> is a duplicate key. Nothing is allocated." },
-    { id:"tuple", t:"Two connections differing only in the client's port are different connections.", ans:true,
-      why:"<strong>True.</strong> The identity is the four-tuple, and any one field is " +
-          "enough. That is how one listening port serves ten thousand clients." },
-    { id:"one-conn", t:"A server needs one socket per connection on the listening port.", ans:false,
-      why:"One LISTENING socket, plus one CONNECTED socket per accepted connection. They " +
-          "are different objects: the listening one has queues and no peer and never " +
-          "carries a byte." },
-    { id:"accept-consume", t:"accept() consumes the listening socket.", ans:false,
-      why:"It returns a NEW descriptor for a new connected socket and leaves the listening " +
-          "socket untouched and still listening. It is a factory, not a transformation." },
-    { id:"ephemeral", t:"A client can hold about 28,000 connections to one service, then stops.", ans:true,
-      why:"<strong>True</strong> on Linux defaults: the ephemeral range is 32768–60999. " +
-          "The limit is per destination, because the destination is part of the tuple — " +
-          "and TIME_WAIT holds tuples after close, so you reach it sooner than the " +
-          "arithmetic suggests." },
-    { id:"createserver", t:"net.createServer() creates a socket.", ans:false,
-      why:"It creates one JavaScript object and nothing else. <code>_handle</code> is " +
-          "null, no descriptor exists, no port is reserved, and the kernel has not been " +
-          "told anything. All of that happens at <code>listen()</code>." },
-    { id:"buffers", t:"A socket's send and receive buffers live in your process's heap.", ans:false,
-      why:"They are KERNEL memory, charged to the socket. That is why a Node process " +
-          "holding ten thousand idle connections shows modest RSS — the bytes are not in " +
-          "V8's heap at all." },
+          "the right way round. The queue is first-in-first-out and jobs are not " +
+          "preemptible, so a lookup submitted behind four compressions waits for them." },
+    { id:"sockets", t:"Network sockets are handled by the pool.", ans:false,
+      why:"They are watched, not waited on. A socket has a readiness interface, so one " +
+          "thread holds ten thousand of them — Parts 8 and 9. Raising the pool size does " +
+          "nothing for a socket-bound server." },
+    { id:"dnslookup", t:"dns.lookup takes a pool thread; dns.resolve does not.", ans:true,
+      why:"<strong>True.</strong> lookup calls the blocking system resolver and needs a " +
+          "thread; resolve sends a query over a socket the loop can watch. Almost every " +
+          "client library uses lookup without saying so." },
+    { id:"cryptoall", t:"All crypto functions use the pool.", ans:false,
+      why:"Only the ASYNC forms. <code>pbkdf2Sync</code>, <code>scryptSync</code> and " +
+          "<code>randomBytesSync</code> run on the main thread and block the loop for " +
+          "their full duration — the same trap as readFileSync." },
+    { id:"sizelate", t:"Setting UV_THREADPOOL_SIZE at the top of your file always works.", ans:false,
+      why:"Only if nothing has used the pool yet. It is read ONCE, when the pool is " +
+          "created lazily at first use — so a require that touches fs above your line has " +
+          "already fixed the size, silently." },
+    { id:"nodecache", t:"Node caches DNS results, so repeat lookups are free.", ans:false,
+      why:"Node keeps no DNS cache. Any caching happens below it in the system resolver, " +
+          "so from the pool's point of view the tenth lookup costs a thread exactly like " +
+          "the first." },
+    { id:"morethreads", t:"Raising the pool size makes each job faster.", ans:false,
+      why:"It makes jobs stop WAITING for each other. Each job takes exactly as long as " +
+          "it did — and past your core count the threads compete for cores, which is Part " +
+          "6's curve with the same shape." },
+    { id:"nojs", t:"A CPU-heavy loop of your own can be sent to the pool.", ans:false,
+      why:"Pool threads have no V8 isolate, so they cannot run JavaScript at all. That is " +
+          "what a <code>worker_thread</code> is for — Part 10." },
+    { id:"symptom", t:"The subsystem that looks slow is usually the one saturating the pool.", ans:false,
+      why:"Usually the opposite. A cheap job queued behind expensive ones is the one that " +
+          "shows up as a timeout, so the symptom names the victim rather than the cause." },
   ];
 
   function mountModels() {
@@ -6672,11 +6643,11 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
     if (!host) return false;
     const wrap = document.createElement("div");
     wrap.className = "el";
-    const trueCount = PM_ITEMS.filter(function (i) { return i.ans; }).length;
+    const trueCount = TM_ITEMS.filter(function (i) { return i.ans; }).length;
     wrap.innerHTML =
-      '<p class="el-lede">' + PM_ITEMS.length + ' statements about the primitives. ' +
-      trueCount + ' are true. Mark each one before you check.</p>' +
-      '<div class="el-rows">' + PM_ITEMS.map(function (it) {
+      '<p class="el-lede">' + TM_ITEMS.length + ' statements about the model this part has ' +
+      'been building. ' + trueCount + ' are true. Mark each one before you check.</p>' +
+      '<div class="el-rows">' + TM_ITEMS.map(function (it) {
         return '<div class="el-row" data-id="' + it.id + '">' +
           '<span class="el-claim">' + it.t + "</span>" +
           '<span class="el-choice">' +
@@ -6695,7 +6666,7 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
 
     const picks = {}; let checked = false;
     function render() {
-      PM_ITEMS.forEach(function (it) {
+      TM_ITEMS.forEach(function (it) {
         const row = wrap.querySelector('[data-id="' + it.id + '"]');
         row.querySelectorAll(".el-opt").forEach(function (o) {
           o.classList.toggle("on", picks[it.id] === o.dataset.pick); });
@@ -6708,33 +6679,34 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
         else { row.classList.add("wrong"); mark.textContent = "✗"; }
         why.innerHTML = '<span class="el-ans">' + (it.ans ? "true" : "false") + "</span>" + it.why;
       });
-      const answered = PM_ITEMS.filter(function (i) { return picks[i.id]; }).length;
-      const right = PM_ITEMS.filter(function (i) { return picks[i.id] && (picks[i.id] === "true") === i.ans; }).length;
+      const answered = TM_ITEMS.filter(function (i) { return picks[i.id]; }).length;
+      const right = TM_ITEMS.filter(function (i) { return picks[i.id] && (picks[i.id] === "true") === i.ans; }).length;
       const m = function (l, v, good) {
         return '<div class="el-meter"><span class="el-m-k">' + l + '</span><span class="el-m-v' +
           (good === true ? " yes" : good === false ? " no" : "") + '">' + v + "</span></div>"; };
       wrap.querySelector(".el-meters").innerHTML =
-        m("marked", answered + " / " + PM_ITEMS.length, answered === PM_ITEMS.length) +
-        m("correct", checked ? right + " / " + PM_ITEMS.length : "—",
-          checked ? right === PM_ITEMS.length : undefined) +
-        m("true statements", trueCount + " of " + PM_ITEMS.length) +
-        m("wrong takes", (PM_ITEMS.length - trueCount) + " of " + PM_ITEMS.length);
+        m("marked", answered + " / " + TM_ITEMS.length, answered === TM_ITEMS.length) +
+        m("correct", checked ? right + " / " + TM_ITEMS.length : "—",
+          checked ? right === TM_ITEMS.length : undefined) +
+        m("true statements", trueCount + " of " + TM_ITEMS.length) +
+        m("wrong takes", (TM_ITEMS.length - trueCount) + " of " + TM_ITEMS.length);
       const say = wrap.querySelector(".el-say");
       if (!checked) {
         say.innerHTML = answered === 0
           ? "Nothing marked yet. The corrections are printed either way — the only thing " +
             "you lose by reading them first is finding out what you believed."
-          : answered + " of " + PM_ITEMS.length + " marked.";
+          : answered + " of " + TM_ITEMS.length + " marked.";
       } else {
-        const pairMiss = (picks["fd-object"] === "false") !== (picks["fd-index"] === "true");
-        say.innerHTML = "<strong>" + right + " of " + PM_ITEMS.length + ".</strong> " +
+        const pairMiss = (picks["fsonly"] === "false") !== (picks["shared"] === "true");
+        say.innerHTML = "<strong>" + right + " of " + TM_ITEMS.length + ".</strong> " +
           (pairMiss
-            ? "You answered <em>\"a descriptor is a handle\"</em> and <em>\"17 means " +
-              "something else elsewhere\"</em> inconsistently — they are the same fact " +
-              "stated two ways, and that is the most useful place to have been caught out."
-            : "Nearly every wrong take here treats a NAME as a THING. A descriptor is a " +
-              "name for a description; a port is a name in a lookup table; \"socket\" is " +
-              "one name for two different objects.");
+            ? "You answered <em>\"the pool is for filesystem work\"</em> and <em>\"a zlib " +
+              "job can delay a DNS lookup\"</em> inconsistently — the second is only " +
+              "possible because the first is false, and that is the most useful place to " +
+              "have been caught out."
+            : "Nearly every wrong take here assumes the pool belongs to one subsystem. It " +
+              "belongs to four, they share one queue, and the one that saturates it is " +
+              "rarely the one that looks slow.");
       }
       wrap.classList.toggle("is-checked", checked);
     }
@@ -6748,19 +6720,19 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
     wrap.querySelector(".el-ctl").addEventListener("click", function (e) {
       const a = e.target.closest("[data-act]"); if (!a) return;
       if (a.dataset.act === "check") checked = true;
-      else if (a.dataset.act === "reveal") { PM_ITEMS.forEach(function (i) { picks[i.id] = i.ans ? "true" : "false"; }); checked = true; }
+      else if (a.dataset.act === "reveal") { TM_ITEMS.forEach(function (i) { picks[i.id] = i.ans ? "true" : "false"; }); checked = true; }
       else { Object.keys(picks).forEach(function (k) { delete picks[k]; }); checked = false; }
       render();
     });
     render();
-    window.__pmItems = PM_ITEMS;
+    window.__tmItems = TM_ITEMS;
     return true;
   }
 
   if (document.readyState === "loading")
     document.addEventListener("DOMContentLoaded", function () {
-      setTimeout(function () { mountLayers(); mountTuple(); mountChain(); mountModels(); }, 0); });
-  else setTimeout(function () { mountLayers(); mountTuple(); mountChain(); mountModels(); }, 0);
+      setTimeout(function () { mountDns(); mountSat(); mountModels(); }, 0); });
+  else setTimeout(function () { mountDns(); mountSat(); mountModels(); }, 0);
 
   /* ══════════════════════════════════════════════════════════════════
      SERIES NAVIGATION
@@ -6774,29 +6746,29 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
      omitting whichever does not exist.
      ══════════════════════════════════════════════════════════════════ */
   const SERIES = [
-    { n:0, file:"part-0-primitives.html",
+    { n:0, file:"node-primitives.html",
       title:"The primitives", sub:"descriptors, ports, sockets, and the objects behind the API" },
-    { n:1, file:"part-1-modules.html",
+    { n:1, file:"node-modules.html",
       title:"Modules", sub:"resolution, the cache, and the cost of cold start" },
-    { n:2, file:"part-2-event-emitter.html",
+    { n:2, file:"node-eventemitter.html",
       title:"EventEmitter", sub:"a map of arrays, a for loop, and no queue anywhere" },
-    { n:3, file:"part-3-buffers.html",
+    { n:3, file:"node-buffers.html",
       title:"Buffers", sub:"a window onto memory outside the V8 heap" },
-    { n:4, file:"part-4-event-loop-timers.html",
+    { n:4, file:"node-event-loop-timers.html",
       title:"The event loop", sub:"phases, the timer heap, and the two queues that jump them" },
-    { n:5, file:"part-5-fs-readFile.html",
+    { n:5, file:"node-fs-readfile.html",
       title:"fs.readFile()", sub:"CPU, OS, the libuv worker pool, and the callback return path" },
-    { n:6, file:"part-6-thread-pool.html",
+    { n:6, file:"node-thread-pool.html",
       title:"The thread pool", sub:"four subsystems, one queue, and four threads by default" },
-    { n:7, file:"part-7-streams.html",
+    { n:7, file:"node-streams.html",
       title:"Streams", sub:"an emitter, a queue of Buffers, and one advisory rule" },
-    { n:8, file:"part-8-tcp-net-create-server.html",
+    { n:8, file:"node-net-create-server.html",
       title:"net.createServer()", sub:"sockets, kernel queues, readiness, and the event loop" },
-    { n:9, file:"part-9-http-request-response.html",
+    { n:9, file:"node-http-create-server.html",
       title:"http.createServer()", sub:"a browser request, llhttp, and the path back to the wire" },
-    { n:10, file:"part-10-worker-threads.html",
+    { n:10, file:"node-worker-threads.html",
       title:"worker_threads", sub:"a second V8 isolate, a second event loop, and the boundary between them" },
-    { n:11, file:"part-11-cluster.html",
+    { n:11, file:"node-cluster.html",
       title:"cluster", sub:"four processes, one port, and a file descriptor in the post" },
   ];
 
@@ -6807,7 +6779,7 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
        0 is falsy. Test whether the MATCH exists, not whether the number is
        truthy. (This was fixed once in part 0's copy and then lost when the
        canonical file was propagated over it; it lives here now.) */
-    const m = kicker ? kicker.textContent.match(/Part\s*0*(\d+)/i) : null;
+    const m = kicker ? kicker.textContent.match(/(?:Mission|Part)\s*0*(\d+)/i) : null;
     if (!m) return false;
     const me = +m[1];
 
@@ -6818,16 +6790,16 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
     const card = function (s, dir) {
       return '<a class="series-card" href="' + s.file + '" data-dir="' + dir + '">' +
         '<span class="series-dir">' + (dir === "prev" ? "← Previous" : "Next →") + "</span>" +
-        '<span class="series-n">Part ' + String(s.n).padStart(2,'0') + "</span>" +
+        '<span class="series-n">Mission ' + String(s.n).padStart(2,'0') + "</span>" +
         '<span class="series-title">' + s.title + "</span>" +
         '<span class="series-sub">' + s.sub + "</span></a>";
     };
 
     const nav = document.createElement("nav");
     nav.className = "series-nav";
-    nav.setAttribute("aria-label", "Node.js internals series");
+    nav.setAttribute("aria-label", "Node.js Internals campaign");
     nav.innerHTML =
-      '<span class="series-k">Node.js internals series</span>' +
+      '<span class="series-k">Node.js Internals campaign</span>' +
       '<div class="series-row">' + (prev ? card(prev, "prev") : "") + (next ? card(next, "next") : "") + "</div>";
 
     const foot = document.querySelector("footer");
@@ -7149,7 +7121,7 @@ process.env.UV_THREADPOOL_SIZE = "16";    // no effect, ever
     });
   };
 })();
-window.__NI_OFFLINE__={"l:const server = net.createServer();": "Creates exactly one of the five layers: a JS object in V8's heap. No handle, no descriptor, no socket — zero syscalls fire on this line.", "b:const server = net.createServer();": "Creates exactly one of the five layers: a JS object in V8's heap. No handle, no descriptor, no socket — zero syscalls fire on this line.", "l:server.listen(3000);": "The moment everything real happens: `socket()`, `bind()` and `listen()` fire in a row, the port gets its row in the kernel's lookup table, and the accept queue is allocated. Before this line the server existed only in V8's heap.", "b:server.listen(3000);": "The moment everything real happens: `socket()`, `bind()` and `listen()` fire in a row, the port gets its row in the kernel's lookup table, and the accept queue is allocated. Before this line the server existed only in V8's heap.", "l:// server a JS object in V8's heap": "Layer one: the thing your variable points at. It can exist with nothing behind it — and it does, until `listen()`.", "b:// server a JS object in V8's heap": "Layer one: the thing your variable points at. It can exist with nothing behind it — and it does, until `listen()`.", "l:// server._handle a C++ TCPWrap": "Layer two: the C++ object bridging JS to libuv. `_handle` is `null` right now — it appears when the server actually binds.", "b:// server._handle a C++ TCPWrap": "Layer two: the C++ object bridging JS to libuv. `_handle` is `null` right now — it appears when the server actually binds.", "l:// (inside it) a libuv uv_tcp_t": "Layer three: libuv's handle, the structure its event loop actually watches. Owned by the TCPWrap above it.", "b:// (inside it) a libuv uv_tcp_t": "Layer three: libuv's handle, the structure its event loop actually watches. Owned by the TCPWrap above it.", "l:// (inside that) fd 17, an integer in your process": "Layer four: the descriptor — a small integer indexing your process's table. Meaningless in any other process; the same number there refers to something else entirely.", "b:// (inside that) fd 17, an integer in your process": "Layer four: the descriptor — a small integer indexing your process's table. Meaningless in any other process; the same number there refers to something else entirely.", "l:// (behind that) a socket, in the kernel": "Layer five, the only one outside your process: the kernel object with the buffers, the state machine, the four-tuple and the queues. It can outlive everything above it.", "b:// (behind that) a socket, in the kernel": "Layer five, the only one outside your process: the kernel object with the buffers, the state machine, the four-tuple and the queues. It can outlive everything above it.", "l:int a = open(\"f\", O_RDONLY);": "Opens the file: a new descriptor in your table, pointing at a **new** open file description in the kernel, which holds the read offset.", "b:int a = open(\"f\", O_RDONLY);": "Opens the file: a new descriptor in your table, pointing at a **new** open file description in the kernel, which holds the read offset.", "l:int b = dup(a); // same open file description: SHARED offset": "`dup` adds a second table entry pointing at the **same** open file description — so `a` and `b` share one offset. This is the mechanism behind shell redirection and fd passing.", "b:int b = dup(a); // same open file description: SHARED offset": "`dup` adds a second table entry pointing at the **same** open file description — so `a` and `b` share one offset. This is the mechanism behind shell redirection and fd passing.", "l:int c = open(\"f\", O_RDONLY); // new description: INDEPENDENT offset": "A second `open` of the same path is different from `dup`: it creates a **fresh** open file description with its own offset at 0. Same file, independent read position.", "b:int c = open(\"f\", O_RDONLY); // new description: INDEPENDENT offset": "A second `open` of the same path is different from `dup`: it creates a **fresh** open file description with its own offset at 0. Same file, independent read position.", "l:read(a, buf, 10); // offset now 10 for BOTH a and b": "Reading through `a` advances the shared description's offset — so a later read through `b` continues at byte 10. The offset lives in the middle object, not in the descriptor.", "b:read(a, buf, 10); // offset now 10 for BOTH a and b": "Reading through `a` advances the shared description's offset — so a later read through `b` continues at byte 10. The offset lives in the middle object, not in the descriptor.", "l:// c is still at 0": "`c`'s description was created separately, so its offset never moved. Two descriptors, two behaviours — decided entirely by which middle object they point at.", "b:// c is still at 0": "`c`'s description was created separately, so its offset never moved. Two descriptors, two behaviours — decided entirely by which middle object they point at.", "l:$ ulimit -n": "Asks the shell for this process's descriptor-table size — the ceiling on everything that consumes an fd: files, sockets, pipes, watchers.", "b:$ ulimit -n": "Asks the shell for this process's descriptor-table size — the ceiling on everything that consumes an fd: files, sockets, pipes, watchers.", "l:1024 # a common default — 1024 CONNECTIONS, not 1024 requests": "The default is small and it counts **connections held**, not requests served: ten thousand idle keep-alive clients need ten thousand slots. This number, not CPU, is usually what caps an event-loop server.", "b:1024 # a common default — 1024 CONNECTIONS, not 1024 requests": "The default is small and it counts **connections held**, not requests served: ten thousand idle keep-alive clients need ten thousand slots. This number, not CPU, is usually what caps an event-loop server.", "l:$ ls /proc/self/fd # your process's table, as files": "Linux exposes your own descriptor table as a directory — each entry is one open descriptor, inspectable while the process runs.", "b:$ ls /proc/self/fd # your process's table, as files": "Linux exposes your own descriptor table as a directory — each entry is one open descriptor, inspectable while the process runs.", "l:0 1 2 3 17 18 19": "Slots 0–2 are stdin, stdout and stderr by convention; the rest are whatever the process opened. The kernel always hands out the lowest free number.", "b:0 1 2 3 17 18 19": "Slots 0–2 are stdin, stdout and stderr by convention; the rest are whatever the process opened. The kernel always hands out the lowest free number.", "l:$ cat /proc/sys/net/ipv4/ip_local_port_range": "Asks the kernel which ports it draws from when a **client** connection needs a source port — the ephemeral range.", "b:$ cat /proc/sys/net/ipv4/ip_local_port_range": "Asks the kernel which ports it draws from when a **client** connection needs a source port — the ephemeral range.", "l:32768 60999 # 28,232 ports": "About 28k ephemeral ports — and the limit is per **destination**, because the four-tuple includes the destination pair. Connections to different servers do not compete for them.", "b:32768 60999 # 28,232 ports": "About 28k ephemeral ports — and the limit is per **destination**, because the four-tuple includes the destination pair. Connections to different servers do not compete for them.", "l:# so ONE client can hold ~28k simultaneous connections": "The arithmetic of the tuple: with source IP, destination IP and destination port fixed, only the source port varies — so one client machine tops out near the range size against one service.", "b:# so ONE client can hold ~28k simultaneous connections": "The arithmetic of the tuple: with source IP, destination IP and destination port fixed, only the source port varies — so one client machine tops out near the range size against one service.", "l:# to ONE (destination ip, destination port) — and no more": "The ceiling is per destination pair, and `TIME_WAIT` makes it arrive sooner than the arithmetic suggests — closed connections hold their tuple for about a minute.", "b:# to ONE (destination ip, destination port) — and no more": "The ceiling is per destination pair, and `TIME_WAIT` makes it arrive sooner than the arithmetic suggests — closed connections hold their tuple for about a minute."};
+window.__NI_OFFLINE__={"l:zlib.gzip(bigBuffer, () => {}); // ×4, one per pool thread": "Queues one compression job on the libuv thread pool. Run four of these and every pool thread is busy — the pool defaults to `4`, so a fifth job of any kind waits in line behind the compressions.", "b:zlib.gzip(bigBuffer, () => {}); // ×4, one per pool thread": "Queues one compression job on the libuv thread pool. Run four of these and every pool thread is busy — the pool defaults to `4`, so a fifth job of any kind waits in line behind the compressions.", "l:zlib.gzip(bigBuffer, () => {});": "Compresses `bigBuffer` on a libuv pool thread, not on your JS thread. The callback runs later, back on the main thread, when the loop collects the finished job.", "b:zlib.gzip(bigBuffer, () => {});": "Compresses `bigBuffer` on a libuv pool thread, not on your JS thread. The callback runs later, back on the main thread, when the loop collects the finished job.", "l:dns.lookup(\"api.example.com\", () => {}); // now waits for a compression job": "`dns.lookup` also uses the thread pool — it is a blocking `getaddrinfo` call underneath. With all four threads busy compressing, this innocent-looking DNS query sits in the shared queue until one frees up.", "b:dns.lookup(\"api.example.com\", () => {}); // now waits for a compression job": "`dns.lookup` also uses the thread pool — it is a blocking `getaddrinfo` call underneath. With all four threads busy compressing, this innocent-looking DNS query sits in the shared queue until one frees up.", "l:const fs = require(\"fs\");": "Loads the `fs` module. Nothing about the thread pool exists yet — the pool is created lazily, the first time something actually needs it.", "b:const fs = require(\"fs\");": "Loads the `fs` module. Nothing about the thread pool exists yet — the pool is created lazily, the first time something actually needs it.", "l:fs.readFile(__filename, () => {}); // pool created HERE, with 4 threads": "The first pool-using call is the moment libuv creates the worker threads — and it reads `UV_THREADPOOL_SIZE` exactly once, right now. Whatever the variable says at this instant is the pool size for the life of the process.", "b:fs.readFile(__filename, () => {}); // pool created HERE, with 4 threads": "The first pool-using call is the moment libuv creates the worker threads — and it reads `UV_THREADPOOL_SIZE` exactly once, right now. Whatever the variable says at this instant is the pool size for the life of the process.", "l:process.env.UV_THREADPOOL_SIZE = 16; // no effect, ever": "Sets the variable from inside the program — too late if any pool call has already run, and even here it is a trap: the pool size is read when the pool is created, so this must be set in the shell **before** Node starts to be reliable.", "b:process.env.UV_THREADPOOL_SIZE = 16; // no effect, ever": "Sets the variable from inside the program — too late if any pool call has already run, and even here it is a trap: the pool size is read when the pool is created, so this must be set in the shell **before** Node starts to be reliable."};
 /* ══════════════════════════════════════════════════════════════════════
    SUBSECTION NAVIGATION — linear prev/next between panels, a header
    position control with a jump menu, and [ / ] keyboard stepping.

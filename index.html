@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>JIT-Atlas</title>
-<meta name="description" content="Interactive Side quests that model software systems as navigable flows. Open one at the wall you just hit.">
+<meta name="description" content="Interactive quests that model software systems as navigable flows. Open one at the wall you just hit.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
@@ -13,7 +13,7 @@
   try { var t = localStorage.getItem("jit-atlas-theme"); if (t) document.documentElement.className = t; } catch (e) {}
 </script>
 <style>
-  /* Tokens from the Side quests' shared scaffold (Full-Node series). Dark is the base. */
+  /* Tokens from the quests' shared scaffold (Node.js Internals campaign). Dark is the base. */
   :root {
     --bg:#07090a; --surface:#0d1011; --surface2:#141819; --border:#232a2c; --border-hi:#333c3f; --hairline:#1a2022;
     --text-hi:#f2f5f3; --text:#c3cbc6; --text-2:#9ba59f; --text-dim:#89938d;
@@ -90,6 +90,8 @@
   .alt.runtime { color:var(--node); background:var(--node-soft); }
   .alt.fw { color:var(--code); background:var(--code-soft); }
   .alt.build { color:var(--worker); background:var(--worker-soft); }
+  .mission { grid-column:1; font:600 11px/1.4 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--main-thread); }
+  .lede { max-width:var(--measure); color:var(--text-2); margin:4px 0 0; }
   .empty { padding:48px 0; color:var(--text-2); }
   [hidden] { display:none !important; }
 
@@ -107,22 +109,23 @@
 
 <header class="masthead">
   <div class="shell">
-    <p class="brand">Side quest catalogue</p>
+    <p class="brand">Quest catalogue</p>
     <h1>JIT-Atlas</h1>
     <p class="motto">the side quests that turn out to be critical</p>
-    <p class="intro">Each Side quest is an interactive, single-file document that models one software system as a navigable flow: what runs where, what crosses each boundary, what happens at each stage, and where the common failures come from. Open one at the wall you just hit, land on the whole flow, and drill into the stage you need.</p>
+    <p class="intro">Each quest is an interactive, single-file document that models one software system as a navigable flow: what runs where, what crosses each boundary, what happens at each stage, and where the common failures come from. Side quests stand alone; campaigns are missions built to be taken in order. Open one at the wall you just hit, land on the whole flow, and drill into the stage you need.</p>
   </div>
 </header>
 
 <div class="bar">
   <div class="shell">
     <label class="search">
-      <input id="q" type="search" placeholder="Filter by mechanism, e.g. streams, RSC, kernel…" aria-label="Filter Side quests" autocomplete="off" spellcheck="false">
+      <input id="q" type="search" placeholder="Filter by mechanism, e.g. streams, RSC, kernel…" aria-label="Filter quests" autocomplete="off" spellcheck="false">
       <kbd>/</kbd>
     </label>
-    <span class="count" id="count" aria-live="polite">81 Side quests</span>
+    <span class="count" id="count" aria-live="polite">81 quests</span>
     <button class="theme" id="theme" type="button" aria-label="Toggle light or dark theme">◐ theme</button>
     <nav class="jump" aria-label="Domains">
+      <a href="#campaigns">Campaigns</a>
       <a href="#os-hardware">OS &amp; hardware</a>
       <a href="#javascript-the-web-platform">JavaScript &amp; the Web platform</a>
       <a href="#node-js">Node.js</a>
@@ -137,22 +140,103 @@
 <main>
   <div class="shell">
 
+    <section class="domain campaigns" id="campaigns">
+      <h2>Campaigns</h2>
+      <p class="lede">Missions built to be taken in order. Every mission is also listed in its own category below, so you can open any one of them at the wall you hit.</p>
+      <div class="sub" data-cat="Campaigns Node.js Internals campaign mission">
+        <h3>Node.js Internals · 12 missions</h3>
+        <ul class="list">
+          <li class="sq"><a href="quests/node-primitives.html">
+            <span class="mission">Mission 00</span>
+            <span class="title">The Primitives</span>
+            <p class="tagline" data-draft>Descriptors, ports, sockets, and the objects behind the API.</p>
+            <span class="alt runtime">Runtime</span>
+          </a></li>
+          <li class="sq"><a href="quests/node-modules.html">
+            <span class="mission">Mission 01</span>
+            <span class="title">Modules</span>
+            <p class="tagline" data-draft>Resolution, the module cache, and the cost of cold start.</p>
+            <span class="alt runtime">Runtime</span>
+          </a></li>
+          <li class="sq"><a href="quests/node-eventemitter.html">
+            <span class="mission">Mission 02</span>
+            <span class="title">EventEmitter</span>
+            <p class="tagline" data-draft>emit is a for loop, and everything follows from that.</p>
+            <span class="alt runtime">Runtime</span>
+          </a></li>
+          <li class="sq"><a href="quests/node-buffers.html">
+            <span class="mission">Mission 03</span>
+            <span class="title">Buffers</span>
+            <p class="tagline" data-draft>A window onto memory outside the V8 heap.</p>
+            <span class="alt runtime">Runtime</span>
+          </a></li>
+          <li class="sq"><a href="quests/node-event-loop-timers.html">
+            <span class="mission">Mission 04</span>
+            <span class="title">The Event Loop</span>
+            <p class="tagline" data-draft>Phases, timers, and the two queues that jump them.</p>
+            <span class="alt runtime">Runtime</span>
+          </a></li>
+          <li class="sq"><a href="quests/node-fs-readfile.html">
+            <span class="mission">Mission 05</span>
+            <span class="title">fs.readFile()</span>
+            <p class="tagline" data-draft>CPU, OS, the libuv worker pool, and the callback return path.</p>
+            <span class="alt runtime">Runtime</span>
+          </a></li>
+          <li class="sq"><a href="quests/node-thread-pool.html">
+            <span class="mission">Mission 06</span>
+            <span class="title">The Thread Pool</span>
+            <p class="tagline" data-draft>Four subsystems, one queue, four threads: what libuv&#x27;s pool runs and why it saturates.</p>
+            <span class="alt runtime">Runtime</span>
+          </a></li>
+          <li class="sq"><a href="quests/node-streams.html">
+            <span class="mission">Mission 07</span>
+            <span class="title">Streams</span>
+            <p class="tagline" data-draft>An emitter, a queue of Buffers, and one advisory rule.</p>
+            <span class="alt runtime">Runtime</span>
+          </a></li>
+          <li class="sq"><a href="quests/node-net-create-server.html">
+            <span class="mission">Mission 08</span>
+            <span class="title">net.createServer()</span>
+            <p class="tagline" data-draft>Sockets, kernel queues, readiness, and the event loop.</p>
+            <span class="alt runtime">Runtime</span>
+          </a></li>
+          <li class="sq"><a href="quests/node-http-create-server.html">
+            <span class="mission">Mission 09</span>
+            <span class="title">http.createServer()</span>
+            <p class="tagline" data-draft>A browser request, llhttp, and the path back to the wire.</p>
+            <span class="alt runtime">Runtime</span>
+          </a></li>
+          <li class="sq"><a href="quests/node-worker-threads.html">
+            <span class="mission">Mission 10</span>
+            <span class="title">worker_threads</span>
+            <p class="tagline" data-draft>A second Node inside your process.</p>
+            <span class="alt runtime">Runtime</span>
+          </a></li>
+          <li class="sq"><a href="quests/node-cluster.html">
+            <span class="mission">Mission 11</span>
+            <span class="title">cluster</span>
+            <p class="tagline" data-draft>Four processes, one port, and a file descriptor in the post.</p>
+            <span class="alt runtime">Runtime</span>
+          </a></li>
+        </ul>
+      </div>
+    </section>
     <section class="domain" id="os-hardware">
       <h2>OS &amp; hardware</h2>
       <div class="sub" data-cat="OS &amp; hardware Linux">
         <h3>Linux</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/linux-architecture-map.html">
+          <li class="sq"><a href="quests/linux-architecture-map.html">
             <span class="title">Linux OS Architecture · Map</span>
             <p class="tagline" data-draft>The layers of a Linux system, from hardware and kernel to user space, laid out to read.</p>
             <span class="alt hw">Hardware &amp; OS</span>
           </a></li>
-          <li class="sq"><a href="side-quests/linux-architecture-walkthrough.html">
+          <li class="sq"><a href="quests/linux-architecture-walkthrough.html">
             <span class="title">Linux OS Architecture · Walkthrough</span>
             <p class="tagline" data-draft>Watch data travel the stack, from a user-space call down through the kernel to the device.</p>
             <span class="alt hw">Hardware &amp; OS</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-and-the-kernel-network-stack.html">
+          <li class="sq"><a href="quests/node-and-the-kernel-network-stack.html">
             <span class="title">Where Node Ends and the Kernel Begins</span>
             <p class="tagline" data-draft>Protocols, layers, and who implements what in the network stack.</p>
             <span class="alt hw">Hardware &amp; OS</span>
@@ -162,12 +246,12 @@
       <div class="sub" data-cat="OS &amp; hardware Hardware &amp; storage">
         <h3>Hardware &amp; storage</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/mechanical-sympathy-c.html">
+          <li class="sq"><a href="quests/mechanical-sympathy-c.html">
             <span class="title">Mechanical Sympathy in C</span>
             <p class="tagline" data-draft>Hardware-shaped code: how caches, alignment and memory layout decide what is fast.</p>
             <span class="alt hw">Hardware &amp; OS</span>
           </a></li>
-          <li class="sq"><a href="side-quests/sqlite-stack.html">
+          <li class="sq"><a href="quests/sqlite-stack.html">
             <span class="title">The SQLite Stack</span>
             <p class="tagline" data-draft>From db.prepare() down to NAND flash: every layer a query passes through.</p>
             <span class="alt hw">Hardware &amp; OS</span>
@@ -180,12 +264,12 @@
       <div class="sub" data-cat="JavaScript &amp; the Web platform Engine &amp; execution">
         <h3>Engine &amp; execution</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/js-engine-pipeline.html">
+          <li class="sq"><a href="quests/js-engine-pipeline.html">
             <span class="title">The JavaScript Engine Pipeline</span>
             <p class="tagline" data-draft>Source to silicon: parsing, bytecode, the interpreter and the optimising compiler.</p>
             <span class="alt engine">Engine</span>
           </a></li>
-          <li class="sq"><a href="side-quests/js-async-await-traced.html">
+          <li class="sq"><a href="quests/js-async-await-traced.html">
             <span class="title">Async JavaScript: One await, Traced</span>
             <p class="tagline" data-draft>Closure → iterator → generator → promise → microtask: what await does at runtime.</p>
             <span class="alt engine">Engine</span>
@@ -195,17 +279,17 @@
       <div class="sub" data-cat="JavaScript &amp; the Web platform Binary data">
         <h3>Binary data</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/binary-data-same-bytes.html">
+          <li class="sq"><a href="quests/binary-data-same-bytes.html">
             <span class="title">The Same Bytes</span>
             <p class="tagline" data-draft>Binary data from first principles: one sequence of bytes, many interpretations.</p>
             <span class="alt engine">Engine</span>
           </a></li>
-          <li class="sq"><a href="side-quests/js-bytes-own-view-move.html">
+          <li class="sq"><a href="quests/js-bytes-own-view-move.html">
             <span class="title">Own · View · Move</span>
             <p class="tagline" data-draft>How JavaScript holds bytes: who owns the memory, who views it, and what moves it.</p>
             <span class="alt engine">Engine</span>
           </a></li>
-          <li class="sq"><a href="side-quests/arraybuffer-typedarray-dataview.html">
+          <li class="sq"><a href="quests/arraybuffer-typedarray-dataview.html">
             <span class="title">ArrayBuffer, TypedArrays and DataView</span>
             <p class="tagline" data-draft>JavaScript&#x27;s binary containers, and how different views read the same buffer.</p>
             <span class="alt engine">Engine</span>
@@ -215,7 +299,7 @@
       <div class="sub" data-cat="JavaScript &amp; the Web platform Modules">
         <h3>Modules</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/esm-vs-commonjs-bundling.html">
+          <li class="sq"><a href="quests/esm-vs-commonjs-bundling.html">
             <span class="title">ESM vs CommonJS</span>
             <p class="tagline" data-draft>Two module systems, and what each means for loading, bundling and tree-shaking.</p>
             <span class="alt build">Framework (build)</span>
@@ -225,27 +309,27 @@
       <div class="sub" data-cat="JavaScript &amp; the Web platform Browser APIs">
         <h3>Browser APIs</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/fetch-end-to-end.html">
+          <li class="sq"><a href="quests/fetch-end-to-end.html">
             <span class="title">fetch(): End-to-End Mental Model</span>
             <p class="tagline" data-draft>One fetch() call across JS, WebIDL, the C++ engine, the network and a Node server, and back to the promise.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/fetch-to-the-wire.html">
+          <li class="sq"><a href="quests/fetch-to-the-wire.html">
             <span class="title">fetch() → the Wire</span>
             <p class="tagline" data-draft>The internals between calling fetch() and bytes leaving the machine.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/events-interrupt-to-react.html">
+          <li class="sq"><a href="quests/events-interrupt-to-react.html">
             <span class="title">Events: From Interrupt to React</span>
             <p class="tagline" data-draft>A click&#x27;s journey from a hardware interrupt through the OS and browser to a React handler.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/browser-tab-url-state.html">
+          <li class="sq"><a href="quests/browser-tab-url-state.html">
             <span class="title">Inside the Browser Tab: The URL Is Your State</span>
             <p class="tagline" data-draft>Why the URL is the state store a browser tab already gives you.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/two-stream-object-models.html">
+          <li class="sq"><a href="quests/two-stream-object-models.html">
             <span class="title">Two Stream Object Models</span>
             <p class="tagline" data-draft>Node streams and Web streams side by side: the same idea, two object models.</p>
             <span class="alt runtime">Runtime</span>
@@ -258,12 +342,12 @@
       <div class="sub" data-cat="Node.js Architecture">
         <h3>Architecture</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/node-architecture-map.html">
+          <li class="sq"><a href="quests/node-architecture-map.html">
             <span class="title">The Anatomy of Node.js · Map</span>
             <p class="tagline" data-draft>The layers of the Node runtime: JavaScript APIs, bindings, V8 and libuv.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-architecture-walkthrough.html">
+          <li class="sq"><a href="quests/node-architecture-walkthrough.html">
             <span class="title">Node.js Architecture · Walkthrough</span>
             <p class="tagline" data-draft>Watch one request travel the Node stack, layer by layer.</p>
             <span class="alt runtime">Runtime</span>
@@ -273,12 +357,13 @@
       <div class="sub" data-cat="Node.js Modules">
         <h3>Modules</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/node-modules.html">
+          <li class="sq"><a href="quests/node-modules.html">
+            <span class="mission">Mission 01 of 12 · Node.js Internals</span>
             <span class="title">Modules</span>
             <p class="tagline" data-draft>Resolution, the module cache, and the cost of cold start.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/esm-vs-commonjs-bundling.html">
+          <li class="sq"><a href="quests/esm-vs-commonjs-bundling.html">
             <span class="title">ESM vs CommonJS</span>
             <p class="tagline" data-draft>Two module systems, and what each means for loading, bundling and tree-shaking.</p>
             <span class="alt build">Framework (build)</span>
@@ -288,32 +373,34 @@
       <div class="sub" data-cat="Node.js Event loop &amp; dispatch">
         <h3>Event loop &amp; dispatch</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/node-how-node-finds-out.html">
+          <li class="sq"><a href="quests/node-how-node-finds-out.html">
             <span class="title">How Node.js Finds Out</span>
             <p class="tagline" data-draft>A wakeup or a call: the path from a softirq to a JavaScript listener.</p>
             <span class="alt hw">Hardware &amp; OS</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-who-calls-your-callback.html">
+          <li class="sq"><a href="quests/node-who-calls-your-callback.html">
             <span class="title">Who Calls Your Callback</span>
             <p class="tagline" data-draft>The dispatch chain from the kernel to your handler.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-handle-pointer.html">
+          <li class="sq"><a href="quests/node-handle-pointer.html">
             <span class="title">handle ⟶ pointer</span>
             <p class="tagline" data-draft>The indirection between a JavaScript handle and the native object behind it.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-event-loop-timers.html">
+          <li class="sq"><a href="quests/node-event-loop-timers.html">
+            <span class="mission">Mission 04 of 12 · Node.js Internals</span>
             <span class="title">The Event Loop</span>
             <p class="tagline" data-draft>Phases, timers, and the two queues that jump them.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-event-loop-internals.html">
+          <li class="sq"><a href="quests/node-event-loop-internals.html">
             <span class="title">Node.js Event Loop: Deep Internals</span>
             <p class="tagline" data-draft>Each phase of the loop and what runs in it.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-thread-pool.html">
+          <li class="sq"><a href="quests/node-thread-pool.html">
+            <span class="mission">Mission 06 of 12 · Node.js Internals</span>
             <span class="title">The Thread Pool</span>
             <p class="tagline" data-draft>Four subsystems, one queue, four threads: what libuv&#x27;s pool runs and why it saturates.</p>
             <span class="alt runtime">Runtime</span>
@@ -323,27 +410,28 @@
       <div class="sub" data-cat="Node.js Bytes &amp; Buffers">
         <h3>Bytes &amp; Buffers</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/node-bytes-and-the-kernel.html">
+          <li class="sq"><a href="quests/node-bytes-and-the-kernel.html">
             <span class="title">bytes ↔ the Kernel</span>
             <p class="tagline" data-draft>How Node moves binary data across the boundary into the kernel and back.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-buffers.html">
+          <li class="sq"><a href="quests/node-buffers.html">
+            <span class="mission">Mission 03 of 12 · Node.js Internals</span>
             <span class="title">Buffers</span>
             <p class="tagline" data-draft>A window onto memory outside the V8 heap.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-bytes-to-text.html">
+          <li class="sq"><a href="quests/node-bytes-to-text.html">
             <span class="title">bytes → text</span>
             <p class="tagline" data-draft>Encodings and decoding: how Node turns bytes into strings, and where it breaks.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-whose-bytes.html">
+          <li class="sq"><a href="quests/node-whose-bytes.html">
             <span class="title">Whose Bytes Are These?</span>
             <p class="tagline" data-draft>One byte, followed from the socket to the response.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-where-are-my-bytes.html">
+          <li class="sq"><a href="quests/node-where-are-my-bytes.html">
             <span class="title">Where Are My Bytes Right Now?</span>
             <p class="tagline" data-draft>Custody of data across the Node.js stack, stage by stage.</p>
             <span class="alt runtime">Runtime</span>
@@ -353,12 +441,13 @@
       <div class="sub" data-cat="Node.js Events">
         <h3>Events</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/node-eventemitter.html">
+          <li class="sq"><a href="quests/node-eventemitter.html">
+            <span class="mission">Mission 02 of 12 · Node.js Internals</span>
             <span class="title">EventEmitter</span>
             <p class="tagline" data-draft>emit is a for loop, and everything follows from that.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-eventemitter-listeners.html">
+          <li class="sq"><a href="quests/node-eventemitter-listeners.html">
             <span class="title">emit ↻ listeners</span>
             <p class="tagline" data-draft>EventEmitter from first principles: registration, order and synchronous dispatch.</p>
             <span class="alt runtime">Runtime</span>
@@ -368,42 +457,43 @@
       <div class="sub" data-cat="Node.js Streams">
         <h3>Streams</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/node-streams.html">
+          <li class="sq"><a href="quests/node-streams.html">
+            <span class="mission">Mission 07 of 12 · Node.js Internals</span>
             <span class="title">Streams</span>
             <p class="tagline" data-draft>An emitter, a queue of Buffers, and one advisory rule.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-streams-backpressure.html">
+          <li class="sq"><a href="quests/node-streams-backpressure.html">
             <span class="title">Backpressure</span>
             <p class="tagline" data-draft>Streams from first principles, with backpressure as the spine.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-stream-readable.html">
+          <li class="sq"><a href="quests/node-stream-readable.html">
             <span class="title">stream.Readable</span>
             <p class="tagline" data-draft>The map, the trident, the machine: the modes and states of a Readable.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-streams-producer-events.html">
+          <li class="sq"><a href="quests/node-streams-producer-events.html">
             <span class="title">The Producer Names an Event</span>
             <p class="tagline" data-draft>Why a stream producer emits events instead of calling its consumer.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-streams-both-ends.html">
+          <li class="sq"><a href="quests/node-streams-both-ends.html">
             <span class="title">Node Streams, Both Ends</span>
             <p class="tagline" data-draft>The readable and writable sides together, and what happens between them.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-data-flow-producer-consumer.html">
+          <li class="sq"><a href="quests/node-data-flow-producer-consumer.html">
             <span class="title">Node.js Data Flow</span>
             <p class="tagline" data-draft>Producer, buffer, consumer: the shape every Node data path shares.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/two-stream-object-models.html">
+          <li class="sq"><a href="quests/two-stream-object-models.html">
             <span class="title">Two Stream Object Models</span>
             <p class="tagline" data-draft>Node streams and Web streams side by side: the same idea, two object models.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/one-socket-two-objects.html">
+          <li class="sq"><a href="quests/one-socket-two-objects.html">
             <span class="title">One Socket, Two Objects</span>
             <p class="tagline" data-draft>How one TCP socket becomes the req and res streams.</p>
             <span class="alt runtime">Runtime</span>
@@ -413,12 +503,13 @@
       <div class="sub" data-cat="Node.js File system">
         <h3>File system</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/node-fs-readfile.html">
+          <li class="sq"><a href="quests/node-fs-readfile.html">
+            <span class="mission">Mission 05 of 12 · Node.js Internals</span>
             <span class="title">fs.readFile()</span>
             <p class="tagline" data-draft>CPU, OS, the libuv worker pool, and the callback return path.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-fs-module.html">
+          <li class="sq"><a href="quests/node-fs-module.html">
             <span class="title">The fs Module</span>
             <p class="tagline" data-draft>Node&#x27;s file system API from first principles, down to the bytes.</p>
             <span class="alt runtime">Runtime</span>
@@ -428,22 +519,24 @@
       <div class="sub" data-cat="Node.js Sockets &amp; networking">
         <h3>Sockets &amp; networking</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/node-and-the-kernel-network-stack.html">
+          <li class="sq"><a href="quests/node-and-the-kernel-network-stack.html">
             <span class="title">Where Node Ends and the Kernel Begins</span>
             <p class="tagline" data-draft>Protocols, layers, and who implements what in the network stack.</p>
             <span class="alt hw">Hardware &amp; OS</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-primitives.html">
+          <li class="sq"><a href="quests/node-primitives.html">
+            <span class="mission">Mission 00 of 12 · Node.js Internals</span>
             <span class="title">The Primitives</span>
             <p class="tagline" data-draft>Descriptors, ports, sockets, and the objects behind the API.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-which-is-the-socket.html">
+          <li class="sq"><a href="quests/node-which-is-the-socket.html">
             <span class="title">Which of These Is the Socket?</span>
             <p class="tagline" data-draft>Sockets, descriptors, ports, and what accept() makes.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-net-create-server.html">
+          <li class="sq"><a href="quests/node-net-create-server.html">
+            <span class="mission">Mission 08 of 12 · Node.js Internals</span>
             <span class="title">net.createServer()</span>
             <p class="tagline" data-draft>Sockets, kernel queues, readiness, and the event loop.</p>
             <span class="alt runtime">Runtime</span>
@@ -453,32 +546,33 @@
       <div class="sub" data-cat="Node.js HTTP">
         <h3>HTTP</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/fetch-end-to-end.html">
+          <li class="sq"><a href="quests/fetch-end-to-end.html">
             <span class="title">fetch(): End-to-End Mental Model</span>
             <p class="tagline" data-draft>One fetch() call across JS, WebIDL, the C++ engine, the network and a Node server, and back to the promise.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-http-create-server.html">
+          <li class="sq"><a href="quests/node-http-create-server.html">
+            <span class="mission">Mission 09 of 12 · Node.js Internals</span>
             <span class="title">http.createServer()</span>
             <p class="tagline" data-draft>A browser request, llhttp, and the path back to the wire.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-http-request-life.html">
+          <li class="sq"><a href="quests/node-http-request-life.html">
             <span class="title">The Life of One HTTP Request</span>
             <p class="tagline" data-draft>A single request through Node.js, from connection to response.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/one-socket-two-objects.html">
+          <li class="sq"><a href="quests/one-socket-two-objects.html">
             <span class="title">One Socket, Two Objects</span>
             <p class="tagline" data-draft>How one TCP socket becomes the req and res streams.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-http-first-principles.html">
+          <li class="sq"><a href="quests/node-http-first-principles.html">
             <span class="title">Node.js HTTP: First Principles</span>
             <p class="tagline" data-draft>The http module underneath, and how Hono and Express build on it.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/req-res-bloodlines.html">
+          <li class="sq"><a href="quests/req-res-bloodlines.html">
             <span class="title">Two Bloodlines of req &amp; res</span>
             <p class="tagline" data-draft>Where req and res come from across Node, Express and Next.js.</p>
             <span class="alt fw">Framework (runtime)</span>
@@ -488,12 +582,14 @@
       <div class="sub" data-cat="Node.js Concurrency">
         <h3>Concurrency</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/node-worker-threads.html">
+          <li class="sq"><a href="quests/node-worker-threads.html">
+            <span class="mission">Mission 10 of 12 · Node.js Internals</span>
             <span class="title">worker_threads</span>
             <p class="tagline" data-draft>A second Node inside your process.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/node-cluster.html">
+          <li class="sq"><a href="quests/node-cluster.html">
+            <span class="mission">Mission 11 of 12 · Node.js Internals</span>
             <span class="title">cluster</span>
             <p class="tagline" data-draft>Four processes, one port, and a file descriptor in the post.</p>
             <span class="alt runtime">Runtime</span>
@@ -506,37 +602,37 @@
       <div class="sub" data-cat="HTTP frameworks Express">
         <h3>Express</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/express-architecture-map.html">
+          <li class="sq"><a href="quests/express-architecture-map.html">
             <span class="title">The Anatomy of Express · Map</span>
             <p class="tagline" data-draft>Express internals laid out: application, router, layers and the req/res prototypes.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/express-architecture-walkthrough.html">
+          <li class="sq"><a href="quests/express-architecture-walkthrough.html">
             <span class="title">Express Architecture · Walkthrough</span>
             <p class="tagline" data-draft>Watch a request travel the whole stack, from Node&#x27;s http server through Express.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/express-library-anatomy.html">
+          <li class="sq"><a href="quests/express-library-anatomy.html">
             <span class="title">Express.js: Anatomy of the Library</span>
             <p class="tagline" data-draft>What the Express package is made of, module by module.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/express-req-res-powers.html">
+          <li class="sq"><a href="quests/express-req-res-powers.html">
             <span class="title">Where req &amp; res Get Their Powers</span>
             <p class="tagline" data-draft>How Express extends Node&#x27;s request and response objects.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/express-request-pipeline.html">
+          <li class="sq"><a href="quests/express-request-pipeline.html">
             <span class="title">When Does req.body Exist?</span>
             <p class="tagline" data-draft>The Express request pipeline, and when each property becomes available.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/express-router.html">
+          <li class="sq"><a href="quests/express-router.html">
             <span class="title">Router, Layer, Route</span>
             <p class="tagline" data-draft>Express router internals: how routes are stored and matched.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/express-app-get-dispatch.html">
+          <li class="sq"><a href="quests/express-app-get-dispatch.html">
             <span class="title">What Happens Under app.get</span>
             <p class="tagline" data-draft>Express dispatch internals, from registration to handler call.</p>
             <span class="alt fw">Framework (runtime)</span>
@@ -546,7 +642,7 @@
       <div class="sub" data-cat="HTTP frameworks Fastify">
         <h3>Fastify</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/fastify-compiled-before-request.html">
+          <li class="sq"><a href="quests/fastify-compiled-before-request.html">
             <span class="title">Fastify: Compiled Before the First Request</span>
             <p class="tagline" data-draft>What Fastify prepares at startup so each request does less.</p>
             <span class="alt fw">Framework (runtime)</span>
@@ -556,17 +652,17 @@
       <div class="sub" data-cat="HTTP frameworks Across frameworks">
         <h3>Across frameworks</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/node-http-first-principles.html">
+          <li class="sq"><a href="quests/node-http-first-principles.html">
             <span class="title">Node.js HTTP: First Principles</span>
             <p class="tagline" data-draft>The http module underneath, and how Hono and Express build on it.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/req-res-bloodlines.html">
+          <li class="sq"><a href="quests/req-res-bloodlines.html">
             <span class="title">Two Bloodlines of req &amp; res</span>
             <p class="tagline" data-draft>Where req and res come from across Node, Express and Next.js.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/next-vs-express-request-lifecycle.html">
+          <li class="sq"><a href="quests/next-vs-express-request-lifecycle.html">
             <span class="title">Express Decorates Node, Next Extends the Web</span>
             <p class="tagline" data-draft>The request lifecycle in Express and Next.js, mapped side by side.</p>
             <span class="alt fw">Framework (runtime)</span>
@@ -579,7 +675,7 @@
       <div class="sub" data-cat="React Foundations">
         <h3>Foundations</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/react-first-principles.html">
+          <li class="sq"><a href="quests/react-first-principles.html">
             <span class="title">React from First Principles</span>
             <p class="tagline" data-draft>Elements, components, rendering and reconciliation, built up from nothing.</p>
             <span class="alt fw">Framework (runtime)</span>
@@ -589,7 +685,7 @@
       <div class="sub" data-cat="React Events">
         <h3>Events</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/events-interrupt-to-react.html">
+          <li class="sq"><a href="quests/events-interrupt-to-react.html">
             <span class="title">Events: From Interrupt to React</span>
             <p class="tagline" data-draft>A click&#x27;s journey from a hardware interrupt through the OS and browser to a React handler.</p>
             <span class="alt runtime">Runtime</span>
@@ -602,37 +698,37 @@
       <div class="sub" data-cat="Next.js &amp; RSC Request">
         <h3>Request</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/req-res-bloodlines.html">
+          <li class="sq"><a href="quests/req-res-bloodlines.html">
             <span class="title">Two Bloodlines of req &amp; res</span>
             <p class="tagline" data-draft>Where req and res come from across Node, Express and Next.js.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/next-vs-express-request-lifecycle.html">
+          <li class="sq"><a href="quests/next-vs-express-request-lifecycle.html">
             <span class="title">Express Decorates Node, Next Extends the Web</span>
             <p class="tagline" data-draft>The request lifecycle in Express and Next.js, mapped side by side.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/next-request-anatomy.html">
+          <li class="sq"><a href="quests/next-request-anatomy.html">
             <span class="title">The Anatomy of a Next.js Request</span>
             <p class="tagline" data-draft>From socket to hydrated UI: routing, RSC, rendering, streaming and hydration.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/next-app-router-end-to-end.html">
+          <li class="sq"><a href="quests/next-app-router-end-to-end.html">
             <span class="title">The App Router, End to End</span>
             <p class="tagline" data-draft>One Next.js request through the App Router.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/next-streaming-two-renderers.html">
+          <li class="sq"><a href="quests/next-streaming-two-renderers.html">
             <span class="title">Two Renderers, One Request</span>
             <p class="tagline" data-draft>Streaming in the App Router: the RSC and HTML renderers working together.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/next-app-router-vs-pages-router.html">
+          <li class="sq"><a href="quests/next-app-router-vs-pages-router.html">
             <span class="title">App Router vs Pages Router</span>
             <p class="tagline" data-draft>Two Next.js architectures compared: routing, data and rendering.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/next16-vs-tanstack-start.html">
+          <li class="sq"><a href="quests/next16-vs-tanstack-start.html">
             <span class="title">Next.js 16 vs TanStack Start</span>
             <p class="tagline" data-draft>Two answers to one question about full-stack React.</p>
             <span class="alt fw">Framework (runtime)</span>
@@ -642,52 +738,52 @@
       <div class="sub" data-cat="Next.js &amp; RSC RSC &amp; Flight">
         <h3>RSC &amp; Flight</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/rsc-data-flow-map.html">
+          <li class="sq"><a href="quests/rsc-data-flow-map.html">
             <span class="title">RSC: The Data Flow · Map</span>
             <p class="tagline" data-draft>React Server Components&#x27; runtime data flow, laid out to read.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/rsc-data-flow-walkthrough.html">
+          <li class="sq"><a href="quests/rsc-data-flow-walkthrough.html">
             <span class="title">RSC: The Data Flow · Walkthrough</span>
             <p class="tagline" data-draft>Step through React Server Components&#x27; data flow, end to end.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/rsc-request-to-interactive.html">
+          <li class="sq"><a href="quests/rsc-request-to-interactive.html">
             <span class="title">Between Request and Interactive</span>
             <p class="tagline" data-draft>What happens between an RSC request arriving and the page becoming interactive.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/rsc-network-boundary.html">
+          <li class="sq"><a href="quests/rsc-network-boundary.html">
             <span class="title">Crossing the Network Boundary</span>
             <p class="tagline" data-draft>How React Server Components serialise across the server/client boundary.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/rsc-flight-payload.html">
+          <li class="sq"><a href="quests/rsc-flight-payload.html">
             <span class="title">The Flight Payload from First Principles</span>
             <p class="tagline" data-draft>self.__next_f.push as the spine: what the Flight stream carries.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/rsc-flight-pipeline.html">
+          <li class="sq"><a href="quests/rsc-flight-pipeline.html">
             <span class="title">RootLayout → HTML + Flight</span>
             <p class="tagline" data-draft>How one layout becomes both HTML and a Flight payload.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/rsc-exact-order.html">
+          <li class="sq"><a href="quests/rsc-exact-order.html">
             <span class="title">The Exact Order</span>
             <p class="tagline" data-draft>RSC → Flight → HTML → paint → hydrate, from first principles.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/rsc-async-server-components.html">
+          <li class="sq"><a href="quests/rsc-async-server-components.html">
             <span class="title">The Renderer Parks It</span>
             <p class="tagline" data-draft>Async Server Components: tasks, rows, and what the renderer does while it waits.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/rsc-client-reference-bridge.html">
+          <li class="sq"><a href="quests/rsc-client-reference-bridge.html">
             <span class="title">The Client-Reference Bridge</span>
             <p class="tagline" data-draft>&lt;Counter/&gt; → proxy → manifest → Flight metadata → __webpack_require__ → hydrate.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/next-use-client-boundary.html">
+          <li class="sq"><a href="quests/next-use-client-boundary.html">
             <span class="title">The &#x27;use client&#x27; Doorway</span>
             <p class="tagline" data-draft>What the directive does in Next.js 16, and where the module graph splits.</p>
             <span class="alt build">Framework (build)</span>
@@ -697,12 +793,12 @@
       <div class="sub" data-cat="Next.js &amp; RSC Data plumbing">
         <h3>Data plumbing</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/next-data-plumbing-three-doorways.html">
+          <li class="sq"><a href="quests/next-data-plumbing-three-doorways.html">
             <span class="title">Three Doorways into One Server</span>
             <p class="tagline" data-draft>Next.js data plumbing: Server Components, Server Actions and Route Handlers.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/next-server-primitives-dal.html">
+          <li class="sq"><a href="quests/next-server-primitives-dal.html">
             <span class="title">Server Primitives and the DAL</span>
             <p class="tagline" data-draft>Next.js server primitives and a layered data-access architecture.</p>
             <span class="alt fw">Framework (runtime)</span>
@@ -712,17 +808,17 @@
       <div class="sub" data-cat="Next.js &amp; RSC Build">
         <h3>Build</h3>
         <ul class="list">
-          <li class="sq"><a href="side-quests/next-build-anatomy.html">
+          <li class="sq"><a href="quests/next-build-anatomy.html">
             <span class="title">The Anatomy of a Next.js 16 Build</span>
             <p class="tagline" data-draft>Route discovery, the server/client graph split, chunking, static rendering and output.</p>
             <span class="alt build">Framework (build)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/next-build-command.html">
+          <li class="sq"><a href="quests/next-build-command.html">
             <span class="title">The Anatomy of next build</span>
             <p class="tagline" data-draft>What runs, and in what order, when you run next build.</p>
             <span class="alt build">Framework (build)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/next-build-compiler-field-guide.html">
+          <li class="sq"><a href="quests/next-build-compiler-field-guide.html">
             <span class="title">Next.js 16 Build Pipeline</span>
             <p class="tagline" data-draft>A field guide to the compiler pipeline.</p>
             <span class="alt build">Framework (build)</span>
@@ -734,32 +830,32 @@
       <h2>Comparisons &amp; decisions</h2>
       <div class="sub" data-cat="Comparisons &amp; decisions">
         <ul class="list">
-          <li class="sq"><a href="side-quests/runtime-royal-rumble.html">
+          <li class="sq"><a href="quests/runtime-royal-rumble.html">
             <span class="title">The Runtime Royal Rumble</span>
             <p class="tagline" data-draft>Languages × runtimes: how their execution models compare.</p>
             <span class="alt runtime">Runtime</span>
           </a></li>
-          <li class="sq"><a href="side-quests/req-res-bloodlines.html">
+          <li class="sq"><a href="quests/req-res-bloodlines.html">
             <span class="title">Two Bloodlines of req &amp; res</span>
             <p class="tagline" data-draft>Where req and res come from across Node, Express and Next.js.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/next-vs-express-request-lifecycle.html">
+          <li class="sq"><a href="quests/next-vs-express-request-lifecycle.html">
             <span class="title">Express Decorates Node, Next Extends the Web</span>
             <p class="tagline" data-draft>The request lifecycle in Express and Next.js, mapped side by side.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/next-app-router-vs-pages-router.html">
+          <li class="sq"><a href="quests/next-app-router-vs-pages-router.html">
             <span class="title">App Router vs Pages Router</span>
             <p class="tagline" data-draft>Two Next.js architectures compared: routing, data and rendering.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/next16-vs-tanstack-start.html">
+          <li class="sq"><a href="quests/next16-vs-tanstack-start.html">
             <span class="title">Next.js 16 vs TanStack Start</span>
             <p class="tagline" data-draft>Two answers to one question about full-stack React.</p>
             <span class="alt fw">Framework (runtime)</span>
           </a></li>
-          <li class="sq"><a href="side-quests/esm-vs-commonjs-bundling.html">
+          <li class="sq"><a href="quests/esm-vs-commonjs-bundling.html">
             <span class="title">ESM vs CommonJS</span>
             <p class="tagline" data-draft>Two module systems, and what each means for loading, bundling and tree-shaking.</p>
             <span class="alt build">Framework (build)</span>
@@ -767,13 +863,13 @@
         </ul>
       </div>
     </section>
-    <p class="empty" id="empty" hidden>No Side quest matches that. Try a mechanism (streams, hydration, socket) or an altitude (Runtime, Engine).</p>
+    <p class="empty" id="empty" hidden>No quest matches that. Try a mechanism (streams, hydration, socket) or an altitude (Runtime, Engine).</p>
   </div>
 </main>
 
 <footer>
   <div class="shell">
-    © 2026 Aryscene Violabian · Side quests licensed <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a>
+    © 2026 Aryscene Violabian · Quests licensed <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a>
   </div>
 </footer>
 
@@ -807,7 +903,7 @@
         if (link) link.hidden = off;
       });
       empty.hidden = shown.size > 0;
-      count.textContent = terms.length ? shown.size + " of " + total + " Side quests" : total + " Side quests";
+      count.textContent = terms.length ? shown.size + " of " + total + " quests" : total + " quests";
     }
 
     q.addEventListener("input", apply);
