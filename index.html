@@ -85,7 +85,7 @@ a.by:hover{color:var(--red)}
 .band-runtime .band-btn{background:repeating-linear-gradient(-45deg,var(--runtime-d) 0 1px,transparent 1px 9px) var(--runtime)}
 .band-fw-runtime .band-btn{background:radial-gradient(var(--fw-runtime-d) 1px,transparent 1.6px) 0 0/8px 8px var(--fw-runtime)}
 .band-fw-build .band-btn{background:repeating-linear-gradient(0deg,var(--fw-build-d) 0 1px,transparent 1px 5px) var(--fw-build)}
-.plate{z-index:2;display:inline-grid;grid-template-columns:auto auto;align-items:baseline;column-gap:14px;row-gap:6px;background:var(--paper);border:1px solid var(--ink);padding:7px 12px 8px;width:252px;position:relative}
+.plate{z-index:3;display:inline-grid;grid-template-columns:auto auto;align-items:baseline;column-gap:14px;row-gap:6px;background:var(--paper);border:1px solid var(--ink);padding:7px 12px 8px;width:252px;position:relative}
 .word{font:600 15px/1.2 var(--sans)}
 .n{justify-self:end;font:500 13px var(--sans);color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
 .n b{color:var(--ink);font-weight:700}
@@ -99,7 +99,15 @@ a.by:hover{color:var(--red)}
 .band-btn[aria-pressed="true"] .meter span{background:var(--paper)}
 /* A soft-focus layer between the hatch and the plate: the pattern reads as texture, the label stays crisp. */
 .band-btn::after{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;-webkit-backdrop-filter:blur(1px);backdrop-filter:blur(1px)}
-.band.is-empty .band-btn::before{content:"";position:absolute;inset:0;background:var(--veil)}
+/* The veil is always there and fades, so emptying a band is a dim, not a flash. */
+.band-btn::before{content:"";position:absolute;inset:0;z-index:2;background:var(--veil);opacity:0;pointer-events:none;transition:opacity .3s ease}
+.band.is-empty .band-btn::before{opacity:1}
+.plate,.plate .n,.plate .n b{transition:background-color .25s ease,color .25s ease,border-color .25s ease}
+.band-btn:hover .plate{transition-duration:.15s}
+/* After an altitude is picked, the catalogue settles into its new contents. */
+@keyframes cat-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+main.is-refresh :is(.domain:not([hidden]),.empty:not([hidden])){animation:cat-in .34s cubic-bezier(.22,.8,.25,1) both}
+main.is-refresh .domain:not([hidden]):nth-of-type(n+3){animation-delay:.05s}
 .band.is-empty .word{text-decoration:line-through;text-decoration-thickness:1px}
 .core{position:absolute;right:24px;top:10px;bottom:10px;display:flex;gap:6px;text-decoration:none;color:var(--ink)}
 .core-lab{writing-mode:vertical-rl;transform:rotate(180deg);background:var(--paper);border:1px solid var(--ink);padding:8px 3px;font:600 12px var(--sans);letter-spacing:.02em;text-align:center}
@@ -912,7 +920,9 @@ mark{background:var(--mark);color:var(--mark-ink);padding:0 1px}
   bands.forEach(b => b.addEventListener('click', () => {
     alt = alt === b.dataset.alt ? null : b.dataset.alt;
     apply();
-    if (alt && window.matchMedia('(max-width:980px)').matches === false) $('#find').scrollIntoView({block: 'start'});
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches, main = $('main');
+    if (!still) { main.classList.remove('is-refresh'); void main.offsetWidth; main.classList.add('is-refresh'); }
+    if (alt && window.matchMedia('(max-width:980px)').matches === false) $('#find').scrollIntoView({block: 'start', behavior: still ? 'auto' : 'smooth'});
   }));
   clearBtns.forEach(c => c.addEventListener('click', () => { input.value = ''; alt = null; apply(); input.focus(); }));
 
